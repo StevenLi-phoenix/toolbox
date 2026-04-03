@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hex File Viewer — Online Binary & Hex Dump Inspector</title>
+    <meta name="description" content="Free online hex file viewer. Drag and drop any file to inspect its binary contents as a hex dump with ASCII sidebar. Search bytes, jump to offsets, and export.">
+    <meta name="keywords" content="hex viewer, hex dump, binary viewer, file inspector, hex editor, byte viewer, online hex dump, binary file viewer">
+    <meta property="og:title" content="Hex File Viewer — Online Binary & Hex Dump Inspector">
+    <meta property="og:description" content="Free online hex viewer. Drop any file to see its hex dump with ASCII sidebar, search bytes, jump to offsets, and export.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/hexview.html">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Hex File Viewer — Online Hex Dump Inspector">
+    <meta name="twitter:description" content="Inspect any file's binary contents as a hex dump with ASCII sidebar. Free, private, runs in your browser.">
+    <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hexview.html">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f1117;
+            color: #e1e4ea;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            background: #161822;
+            border-bottom: 1px solid #2a2d3a;
+            padding: 1rem 1.5rem;
+            text-align: center;
+        }
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #f0f0f0;
+        }
+        header h1 span { color: #6c9eff; }
+        header p { color: #8b8fa3; font-size: 0.85rem; margin-top: 0.3rem; }
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 1.5rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .drop-zone {
+            border: 2px dashed #3a3d4e;
+            border-radius: 12px;
+            padding: 3rem 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #181a24;
+            margin-bottom: 1rem;
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: #6c9eff;
+            background: #1a1f30;
+        }
+        .drop-zone .icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+        .drop-zone .label { color: #8b8fa3; font-size: 0.95rem; }
+        .drop-zone .label strong { color: #6c9eff; }
+        .file-info {
+            display: none;
+            background: #181a24;
+            border: 1px solid #2a2d3a;
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            color: #8b8fa3;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .file-info.visible { display: flex; }
+        .file-info .fname { color: #e1e4ea; font-weight: 600; }
+        .file-info .sep { color: #3a3d4e; }
+        .toolbar {
+            display: none;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .toolbar.visible { display: flex; }
+        .toolbar input, .toolbar select, .toolbar button {
+            background: #1e2030;
+            border: 1px solid #2a2d3a;
+            color: #e1e4ea;
+            padding: 0.45rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            outline: none;
+        }
+        .toolbar input:focus, .toolbar select:focus {
+            border-color: #6c9eff;
+        }
+        .toolbar button {
+            cursor: pointer;
+            background: #6c9eff;
+            color: #0f1117;
+            font-weight: 600;
+            border: none;
+            transition: background 0.2s;
+        }
+        .toolbar button:hover { background: #88b4ff; }
+        .toolbar button.secondary {
+            background: #2a2d3a;
+            color: #e1e4ea;
+        }
+        .toolbar button.secondary:hover { background: #3a3d4e; }
+        .toolbar .spacer { flex: 1; }
+        .toolbar label { color: #8b8fa3; font-size: 0.8rem; }
+        #search-input { width: 180px; }
+        #goto-input { width: 120px; }
+        .hex-wrapper {
+            display: none;
+            flex: 1;
+            overflow: auto;
+            background: #12141e;
+            border: 1px solid #2a2d3a;
+            border-radius: 10px;
+        }
+        .hex-wrapper.visible { display: block; }
+        .hex-table {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.82rem;
+            line-height: 1.6;
+            width: 100%;
+            padding: 0.75rem;
+            white-space: pre;
+        }
+        .hex-row {
+            display: flex;
+        }
+        .hex-offset {
+            color: #6c9eff;
+            min-width: 8ch;
+            user-select: none;
+            flex-shrink: 0;
+        }
+        .hex-bytes {
+            flex: 1;
+            color: #c8ccd8;
+            margin: 0 1ch;
+            word-spacing: 0.3ch;
+        }
+        .hex-ascii {
+            color: #8be9a0;
+            min-width: 16ch;
+            flex-shrink: 0;
+            border-left: 1px solid #2a2d3a;
+            padding-left: 1ch;
+        }
+        .hex-bytes .hl, .hex-ascii .hl {
+            background: #6c9eff33;
+            color: #fff;
+            border-radius: 2px;
+        }
+        .hex-bytes .null { color: #4a4d5e; }
+        .hex-ascii .non-print { color: #4a4d5e; }
+        .status-bar {
+            display: none;
+            background: #161822;
+            border-top: 1px solid #2a2d3a;
+            padding: 0.5rem 1.5rem;
+            font-size: 0.8rem;
+            color: #8b8fa3;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .status-bar.visible { display: flex; }
+        footer {
+            text-align: center;
+            padding: 1.25rem;
+            border-top: 1px solid #2a2d3a;
+            background: #161822;
+        }
+        footer a {
+            color: #6c9eff;
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+        footer a:hover { text-decoration: underline; }
+        .pagination {
+            display: none;
+            gap: 0.5rem;
+            align-items: center;
+            justify-content: center;
+            margin-top: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .pagination.visible { display: flex; }
+        .pagination button {
+            background: #2a2d3a;
+            color: #e1e4ea;
+            border: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.82rem;
+        }
+        .pagination button:hover { background: #3a3d4e; }
+        .pagination button:disabled { opacity: 0.4; cursor: default; }
+        .pagination span { color: #8b8fa3; font-size: 0.82rem; }
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            .hex-table { font-size: 0.7rem; }
+            .hex-offset { min-width: 7ch; }
+            .hex-ascii { display: none; }
+            #search-input { width: 130px; }
+            #goto-input { width: 90px; }
+            .toolbar { gap: 0.4rem; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🔍 Hex <span>File Viewer</span></h1>
+        <p>Drop any file to inspect its binary contents</p>
+    </header>
+    <div class="container">
+        <div class="drop-zone" id="drop-zone">
+            <div class="icon">📂</div>
+            <div class="label">Drag & drop a file here or <strong>click to browse</strong></div>
+            <input type="file" id="file-input" style="display:none">
+        </div>
+        <div class="file-info" id="file-info">
+            <span class="fname" id="fname"></span>
+            <span class="sep">|</span>
+            <span id="fsize"></span>
+            <span class="sep">|</span>
+            <span id="ftype"></span>
+        </div>
+        <div class="toolbar" id="toolbar">
+            <input type="text" id="search-input" placeholder="Search hex (e.g. FF D8 FF)">
+            <button onclick="searchHex()" title="Search">Search</button>
+            <button class="secondary" onclick="clearSearch()" title="Clear search">Clear</button>
+            <span class="sep" style="color:#3a3d4e">|</span>
+            <input type="text" id="goto-input" placeholder="Go to offset (hex)">
+            <button class="secondary" onclick="gotoOffset()">Go</button>
+            <span class="spacer"></span>
+            <label>
+                Bytes/row:
+                <select id="bytes-per-row" onchange="renderPage()">
+                    <option value="16" selected>16</option>
+                    <option value="8">8</option>
+                    <option value="32">32</option>
+                </select>
+            </label>
+            <button class="secondary" onclick="exportDump()">Export</button>
+        </div>
+        <div class="hex-wrapper" id="hex-wrapper">
+            <div class="hex-table" id="hex-table"></div>
+        </div>
+        <div class="pagination" id="pagination">
+            <button id="btn-first" onclick="goPage(0)">⏮ First</button>
+            <button id="btn-prev" onclick="goPage(currentPage-1)">◀ Prev</button>
+            <span id="page-info"></span>
+            <button id="btn-next" onclick="goPage(currentPage+1)">Next ▶</button>
+            <button id="btn-last" onclick="goPage(totalPages-1)">Last ⏭</button>
+        </div>
+    </div>
+    <div class="status-bar" id="status-bar">
+        <span id="status-left">Ready</span>
+        <span id="status-right"></span>
+    </div>
+    <footer>
+        <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">☕ Buy Me a Coffee</a>
+    </footer>
+    <script>
+        let fileBuffer = null;
+        let currentPage = 0;
+        let totalPages = 0;
+        const ROWS_PER_PAGE = 256;
+        let highlightOffsets = new Set();
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', e => { if (e.target.files.length) loadFile(e.target.files[0]); });
+
+        function loadFile(file) {
+            document.getElementById('fname').textContent = file.name;
+            document.getElementById('fsize').textContent = formatSize(file.size);
+            document.getElementById('ftype').textContent = file.type || 'unknown type';
+            document.getElementById('file-info').classList.add('visible');
+            document.getElementById('toolbar').classList.add('visible');
+            document.getElementById('hex-wrapper').classList.add('visible');
+            document.getElementById('pagination').classList.add('visible');
+            document.getElementById('status-bar').classList.add('visible');
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                fileBuffer = new Uint8Array(e.target.result);
+                highlightOffsets.clear();
+                currentPage = 0;
+                renderPage();
+                updateStatus(`Loaded ${file.name} — ${formatSize(file.size)}`);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function getBytesPerRow() {
+            return parseInt(document.getElementById('bytes-per-row').value);
+        }
+
+        function renderPage() {
+            if (!fileBuffer) return;
+            const bpr = getBytesPerRow();
+            const bytesPerPage = bpr * ROWS_PER_PAGE;
+            totalPages = Math.ceil(fileBuffer.length / bytesPerPage);
+            if (currentPage >= totalPages) currentPage = totalPages - 1;
+            if (currentPage < 0) currentPage = 0;
+
+            const start = currentPage * bytesPerPage;
+            const end = Math.min(start + bytesPerPage, fileBuffer.length);
+            const offsetWidth = Math.max(8, fileBuffer.length.toString(16).length + 1);
+
+            let html = '';
+            for (let i = start; i < end; i += bpr) {
+                const rowEnd = Math.min(i + bpr, fileBuffer.length);
+                let hexParts = '';
+                let asciiParts = '';
+                for (let j = i; j < i + bpr; j++) {
+                    if (j < rowEnd) {
+                        const byte = fileBuffer[j];
+                        const hexStr = byte.toString(16).padStart(2, '0');
+                        const isHl = highlightOffsets.has(j);
+                        const isNull = byte === 0;
+                        if (isHl) {
+                            hexParts += `<span class="hl">${hexStr}</span> `;
+                        } else if (isNull) {
+                            hexParts += `<span class="null">${hexStr}</span> `;
+                        } else {
+                            hexParts += hexStr + ' ';
+                        }
+                        // ASCII
+                        const ch = (byte >= 32 && byte <= 126) ? String.fromCharCode(byte) : '.';
+                        const escaped = ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : ch;
+                        if (isHl) {
+                            asciiParts += `<span class="hl">${escaped}</span>`;
+                        } else if (byte < 32 || byte > 126) {
+                            asciiParts += `<span class="non-print">.</span>`;
+                        } else {
+                            asciiParts += escaped;
+                        }
+                    } else {
+                        hexParts += '   ';
+                        asciiParts += ' ';
+                    }
+                    // Group separator at half
+                    if ((j - i) === (bpr / 2 - 1) && j < i + bpr - 1) {
+                        hexParts += ' ';
+                    }
+                }
+                const offset = i.toString(16).padStart(offsetWidth, '0');
+                html += `<div class="hex-row"><span class="hex-offset">${offset}</span><span class="hex-bytes">${hexParts}</span><span class="hex-ascii">${asciiParts}</span></div>`;
+            }
+            document.getElementById('hex-table').innerHTML = html;
+
+            // Pagination
+            document.getElementById('page-info').textContent = `Page ${currentPage + 1} / ${totalPages}`;
+            document.getElementById('btn-first').disabled = currentPage === 0;
+            document.getElementById('btn-prev').disabled = currentPage === 0;
+            document.getElementById('btn-next').disabled = currentPage >= totalPages - 1;
+            document.getElementById('btn-last').disabled = currentPage >= totalPages - 1;
+
+            document.getElementById('status-right').textContent =
+                `Showing ${start.toString(16).toUpperCase()}–${(end - 1).toString(16).toUpperCase()} of ${(fileBuffer.length - 1).toString(16).toUpperCase()}`;
+        }
+
+        function goPage(n) {
+            currentPage = Math.max(0, Math.min(n, totalPages - 1));
+            renderPage();
+            document.getElementById('hex-wrapper').scrollTop = 0;
+        }
+
+        function searchHex() {
+            if (!fileBuffer) return;
+            const raw = document.getElementById('search-input').value.trim();
+            if (!raw) return;
+            const bytes = raw.split(/[\s,]+/).map(s => parseInt(s, 16)).filter(n => !isNaN(n) && n >= 0 && n <= 255);
+            if (bytes.length === 0) { updateStatus('Invalid hex search'); return; }
+
+            highlightOffsets.clear();
+            let count = 0;
+            let firstMatch = -1;
+            for (let i = 0; i <= fileBuffer.length - bytes.length; i++) {
+                let match = true;
+                for (let j = 0; j < bytes.length; j++) {
+                    if (fileBuffer[i + j] !== bytes[j]) { match = false; break; }
+                }
+                if (match) {
+                    if (firstMatch === -1) firstMatch = i;
+                    for (let j = 0; j < bytes.length; j++) highlightOffsets.add(i + j);
+                    count++;
+                }
+            }
+            if (count > 0) {
+                const bpr = getBytesPerRow();
+                const bytesPerPage = bpr * ROWS_PER_PAGE;
+                currentPage = Math.floor(firstMatch / bytesPerPage);
+                renderPage();
+                updateStatus(`Found ${count} match${count > 1 ? 'es' : ''}`);
+            } else {
+                renderPage();
+                updateStatus('No matches found');
+            }
+        }
+
+        function clearSearch() {
+            highlightOffsets.clear();
+            document.getElementById('search-input').value = '';
+            renderPage();
+            updateStatus('Search cleared');
+        }
+
+        function gotoOffset() {
+            if (!fileBuffer) return;
+            const raw = document.getElementById('goto-input').value.trim().replace(/^0x/i, '');
+            const offset = parseInt(raw, 16);
+            if (isNaN(offset) || offset < 0 || offset >= fileBuffer.length) {
+                updateStatus('Invalid offset'); return;
+            }
+            const bpr = getBytesPerRow();
+            const bytesPerPage = bpr * ROWS_PER_PAGE;
+            currentPage = Math.floor(offset / bytesPerPage);
+            renderPage();
+            updateStatus(`Jumped to offset 0x${offset.toString(16).toUpperCase()}`);
+        }
+
+        function exportDump() {
+            if (!fileBuffer) return;
+            const bpr = getBytesPerRow();
+            let text = '';
+            const offsetWidth = Math.max(8, fileBuffer.length.toString(16).length + 1);
+            for (let i = 0; i < fileBuffer.length; i += bpr) {
+                const rowEnd = Math.min(i + bpr, fileBuffer.length);
+                let hex = '';
+                let ascii = '';
+                for (let j = i; j < i + bpr; j++) {
+                    if (j < rowEnd) {
+                        hex += fileBuffer[j].toString(16).padStart(2, '0') + ' ';
+                        const b = fileBuffer[j];
+                        ascii += (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.';
+                    } else {
+                        hex += '   ';
+                        ascii += ' ';
+                    }
+                    if ((j - i) === (bpr / 2 - 1)) hex += ' ';
+                }
+                text += i.toString(16).padStart(offsetWidth, '0') + '  ' + hex + ' |' + ascii + '|\n';
+            }
+            const blob = new Blob([text], { type: 'text/plain' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'hexdump.txt';
+            a.click();
+            URL.revokeObjectURL(a.href);
+            updateStatus('Hex dump exported');
+        }
+
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 2 : 0) + ' ' + units[i];
+        }
+
+        function updateStatus(msg) {
+            document.getElementById('status-left').textContent = msg;
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', e => {
+            if (e.key === 'ArrowRight' && e.altKey) { goPage(currentPage + 1); e.preventDefault(); }
+            if (e.key === 'ArrowLeft' && e.altKey) { goPage(currentPage - 1); e.preventDefault(); }
+            if (e.key === 'Enter' && document.activeElement === document.getElementById('search-input')) searchHex();
+            if (e.key === 'Enter' && document.activeElement === document.getElementById('goto-input')) gotoOffset();
+        });
+    </script>
+</body>
+</html>
