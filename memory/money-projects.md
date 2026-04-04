@@ -249,9 +249,10 @@
 | 134 | API Pagination Simulator | toolbox/pagination.html | ✅ stevenli-phoenix.github.io/toolbox/pagination.html | ❌ |
 | 135 | CSP Policy Builder | toolbox/csp.html | ✅ stevenli-phoenix.github.io/toolbox/csp.html | ❌ |
 | 136 | Rate Limit Backoff Planner | toolbox/backoff.html | ✅ stevenli-phoenix.github.io/toolbox/backoff.html | ❌ |
+| 137 | Webhook Signature Verifier | toolbox/webhooksignature.html | ✅ stevenli-phoenix.github.io/toolbox/webhooksignature.html | ❌ |
 
 ## Queue
-137. (next tool TBD)
+138. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
