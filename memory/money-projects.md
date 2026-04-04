@@ -250,9 +250,10 @@
 | 135 | CSP Policy Builder | toolbox/csp.html | ✅ stevenli-phoenix.github.io/toolbox/csp.html | ❌ |
 | 136 | Rate Limit Backoff Planner | toolbox/backoff.html | ✅ stevenli-phoenix.github.io/toolbox/backoff.html | ❌ |
 | 137 | Webhook Signature Verifier | toolbox/webhooksignature.html | ✅ stevenli-phoenix.github.io/toolbox/webhooksignature.html | ❌ |
+| 138 | Cookie Parser & Set-Cookie Builder | toolbox/cookies.html | ✅ stevenli-phoenix.github.io/toolbox/cookies.html | ❌ |
 
 ## Queue
-138. (next tool TBD)
+139. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
