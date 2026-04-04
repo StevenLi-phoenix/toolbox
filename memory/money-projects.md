@@ -246,9 +246,10 @@
 | 131 | cURL to fetch() Converter | toolbox/curl2fetch.html | ✅ stevenli-phoenix.github.io/toolbox/curl2fetch.html | ❌ |
 | 132 | Webhook Payload Builder | toolbox/webhookbuilder.html | ✅ stevenli-phoenix.github.io/toolbox/webhookbuilder.html | ❌ |
 | 133 | Mock API Response Builder | toolbox/mockresponse.html | ✅ stevenli-phoenix.github.io/toolbox/mockresponse.html | ❌ |
+| 134 | API Pagination Simulator | toolbox/pagination.html | ✅ stevenli-phoenix.github.io/toolbox/pagination.html | ❌ |
 
 ## Queue
-134. (next tool TBD)
+135. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
