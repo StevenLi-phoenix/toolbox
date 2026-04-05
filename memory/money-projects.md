@@ -251,9 +251,20 @@
 | 136 | Rate Limit Backoff Planner | toolbox/backoff.html | ✅ stevenli-phoenix.github.io/toolbox/backoff.html | ❌ |
 | 137 | Webhook Signature Verifier | toolbox/webhooksignature.html | ✅ stevenli-phoenix.github.io/toolbox/webhooksignature.html | ❌ |
 | 138 | Cookie Parser & Set-Cookie Builder | toolbox/cookies.html | ✅ stevenli-phoenix.github.io/toolbox/cookies.html | ❌ |
+| 139 | Uptime & SLA Calculator | toolbox/sla.html | ✅ stevenli-phoenix.github.io/toolbox/sla.html | ❌ |
+| 140 | JSON Patch Builder | toolbox/jsonpatch.html | ✅ stevenli-phoenix.github.io/toolbox/jsonpatch.html | ❌ |
+| 141 | Date Range Calculator | toolbox/daterange.html | ✅ stevenli-phoenix.github.io/toolbox/daterange.html | ❌ |
+| 142 | Unicode Inspector & Normalizer | toolbox/unicode.html | ✅ stevenli-phoenix.github.io/toolbox/unicode.html | ❌ |
+| 143 | NDJSON Viewer & Formatter | toolbox/ndjson.html | ✅ stevenli-phoenix.github.io/toolbox/ndjson.html | ❌ |
+| 144 | HMAC Signer & Encoder | toolbox/hmac.html | ✅ stevenli-phoenix.github.io/toolbox/hmac.html | ❌ |
+| 145 | Cache-Control Header Builder | toolbox/cachecontrol.html | ✅ stevenli-phoenix.github.io/toolbox/cachecontrol.html | ❌ |
+| 146 | ETag Generator & Conditional Request Tester | toolbox/etag.html | ✅ stevenli-phoenix.github.io/toolbox/etag.html | ❌ |
+| 147 | CORS Header Builder & Preflight Tester | toolbox/cors.html | ✅ stevenli-phoenix.github.io/toolbox/cors.html | ❌ |
+| 148 | Redirect Rule Builder & Tester | toolbox/redirects.html | ✅ stevenli-phoenix.github.io/toolbox/redirects.html | ❌ |
+| 149 | Data URL Builder & Inspector | toolbox/dataurl.html | ✅ stevenli-phoenix.github.io/toolbox/dataurl.html | ❌ |
 
 ## Queue
-139. (next tool TBD)
+150. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
