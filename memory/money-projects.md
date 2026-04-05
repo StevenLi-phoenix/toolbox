@@ -297,9 +297,10 @@
 | 182 | PR Comment Triage | toolbox/prtriage.html | ✅ stevenli-phoenix.github.io/toolbox/prtriage.html | ❌ |
 | 183 | Dependency Upgrade Planner | toolbox/dependencyupgrade.html | ✅ stevenli-phoenix.github.io/toolbox/dependencyupgrade.html | ❌ |
 | 184 | Merge Readiness Checker | toolbox/mergeready.html | ✅ stevenli-phoenix.github.io/toolbox/mergeready.html | ❌ |
+| 185 | Standup Update Generator | toolbox/standup.html | ✅ stevenli-phoenix.github.io/toolbox/standup.html | ❌ |
 
 ## Queue
-185. (next tool TBD)
+186. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
