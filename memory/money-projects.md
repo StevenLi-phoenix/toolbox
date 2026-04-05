@@ -287,9 +287,10 @@
 | 172 | PR Review Checklist Generator | toolbox/prreview.html | ✅ stevenli-phoenix.github.io/toolbox/prreview.html | ❌ |
 | 173 | Issue Triage Assistant | toolbox/issuetriage.html | ✅ stevenli-phoenix.github.io/toolbox/issuetriage.html | ❌ |
 | 174 | Action Item Extractor | toolbox/actionitems.html | ✅ stevenli-phoenix.github.io/toolbox/actionitems.html | ❌ |
+| 175 | PR Brief Generator | toolbox/prbrief.html | ✅ stevenli-phoenix.github.io/toolbox/prbrief.html | ❌ |
 
 ## Queue
-175. (next tool TBD)
+176. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
