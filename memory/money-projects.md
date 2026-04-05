@@ -288,9 +288,12 @@
 | 173 | Issue Triage Assistant | toolbox/issuetriage.html | ✅ stevenli-phoenix.github.io/toolbox/issuetriage.html | ❌ |
 | 174 | Action Item Extractor | toolbox/actionitems.html | ✅ stevenli-phoenix.github.io/toolbox/actionitems.html | ❌ |
 | 175 | PR Brief Generator | toolbox/prbrief.html | ✅ stevenli-phoenix.github.io/toolbox/prbrief.html | ❌ |
+| 176 | Dev Handoff Pack Generator | toolbox/handoff.html | ✅ stevenli-phoenix.github.io/toolbox/handoff.html | ❌ |
+| 177 | Focus Session Planner | toolbox/focusplanner.html | ✅ stevenli-phoenix.github.io/toolbox/focusplanner.html | ❌ |
+| 178 | Stack Trace Explainer | toolbox/stacktrace.html | ✅ stevenli-phoenix.github.io/toolbox/stacktrace.html | ❌ |
 
 ## Queue
-176. (next tool TBD)
+179. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
