@@ -295,9 +295,10 @@
 | 180 | Git Worktree Planner | toolbox/worktree.html | ✅ stevenli-phoenix.github.io/toolbox/worktree.html | ❌ |
 | 181 | Release Note Diff Distiller | toolbox/releasenotemaker.html | ✅ stevenli-phoenix.github.io/toolbox/releasenotemaker.html | ❌ |
 | 182 | PR Comment Triage | toolbox/prtriage.html | ✅ stevenli-phoenix.github.io/toolbox/prtriage.html | ❌ |
+| 183 | Dependency Upgrade Planner | toolbox/dependencyupgrade.html | ✅ stevenli-phoenix.github.io/toolbox/dependencyupgrade.html | ❌ |
 
 ## Queue
-183. (next tool TBD)
+184. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
