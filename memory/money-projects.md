@@ -262,9 +262,15 @@
 | 147 | CORS Header Builder & Preflight Tester | toolbox/cors.html | ✅ stevenli-phoenix.github.io/toolbox/cors.html | ❌ |
 | 148 | Redirect Rule Builder & Tester | toolbox/redirects.html | ✅ stevenli-phoenix.github.io/toolbox/redirects.html | ❌ |
 | 149 | Data URL Builder & Inspector | toolbox/dataurl.html | ✅ stevenli-phoenix.github.io/toolbox/dataurl.html | ❌ |
+| 150 | Content-Disposition Header Builder & Filename Encoder | toolbox/contentdisposition.html | ✅ stevenli-phoenix.github.io/toolbox/contentdisposition.html | ❌ |
+| 151 | Link Header Builder & Resource Hint Generator | toolbox/linkheader.html | ✅ stevenli-phoenix.github.io/toolbox/linkheader.html | ❌ |
+| 152 | Permissions-Policy Header Builder & Feature Access Planner | toolbox/permissionspolicy.html | ✅ stevenli-phoenix.github.io/toolbox/permissionspolicy.html | ❌ |
+| 153 | Vary Header Builder & Cache Key Planner | toolbox/vary.html | ✅ stevenli-phoenix.github.io/toolbox/vary.html | ❌ |
+| 154 | Referrer-Policy Header Builder & Privacy Preview | toolbox/referrerpolicy.html | ✅ stevenli-phoenix.github.io/toolbox/referrerpolicy.html | ❌ |
+| 155 | PR Description Generator | toolbox/prdescription.html | ✅ stevenli-phoenix.github.io/toolbox/prdescription.html | ❌ |
 
 ## Queue
-150. (next tool TBD)
+156. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
