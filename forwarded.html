@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Forwarded Header Builder & Proxy Chain Inspector</title>
+  <meta name="description" content="Build RFC 7239 Forwarded headers, inspect X-Forwarded-* chains, simulate trusted proxy parsing, and generate copyable Node, Nginx, and Cloudflare snippets." />
+  <meta name="keywords" content="Forwarded header builder, X-Forwarded-For parser, proxy chain inspector, trusted proxy tool, RFC 7239, reverse proxy debugging, HTTP headers" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta property="og:title" content="Forwarded Header Builder & Proxy Chain Inspector" />
+  <meta property="og:description" content="Create and inspect Forwarded and X-Forwarded-* headers for reverse proxy debugging." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/forwarded.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Forwarded Header Builder & Proxy Chain Inspector" />
+  <meta name="twitter:description" content="Compose RFC 7239 Forwarded headers and inspect proxy chains with trust rules." />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Forwarded Header Builder & Proxy Chain Inspector",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Any",
+    "url": "https://stevenli-phoenix.github.io/toolbox/forwarded.html",
+    "description": "Build and inspect Forwarded and X-Forwarded-* headers for reverse proxy and CDN debugging.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-soft: #121933;
+      --panel: rgba(18, 25, 51, 0.88);
+      --panel-2: rgba(17, 24, 39, 0.95);
+      --text: #e8ecf7;
+      --muted: #9aa6c5;
+      --line: rgba(148, 163, 184, 0.18);
+      --accent: #7c9cff;
+      --accent-2: #5eead4;
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --good: #34d399;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(124, 156, 255, 0.22), transparent 30%),
+        radial-gradient(circle at top right, rgba(94, 234, 212, 0.14), transparent 28%),
+        linear-gradient(180deg, #0a0f1e 0%, #0b1020 100%);
+      min-height: 100vh;
+    }
+    a { color: var(--accent-2); }
+    .wrap {
+      width: min(1180px, calc(100% - 24px));
+      margin: 0 auto;
+      padding: 28px 0 56px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.35fr 0.95fr;
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+    .hero-main { padding: 24px; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(124, 156, 255, 0.12);
+      color: #c8d6ff;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid rgba(124, 156, 255, 0.22);
+    }
+    h1 {
+      margin: 14px 0 12px;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+      line-height: 1.02;
+    }
+    .lede {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.04rem;
+      max-width: 65ch;
+      line-height: 1.7;
+    }
+    .hero-side {
+      padding: 22px;
+      display: grid;
+      gap: 14px;
+    }
+    .hero-side h2, .panel h2, .panel h3 { margin: 0; }
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .mini-stat {
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid var(--line);
+    }
+    .mini-stat strong {
+      display: block;
+      font-size: 1.25rem;
+      margin-bottom: 6px;
+    }
+    .mini-stat span { color: var(--muted); font-size: 0.92rem; }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .stack { display: grid; gap: 18px; }
+    .panel { padding: 20px; }
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .subtle { color: var(--muted); font-size: 0.95rem; }
+    .grid-2, .grid-3 {
+      display: grid;
+      gap: 14px;
+    }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    label {
+      display: grid;
+      gap: 8px;
+      font-size: 0.92rem;
+      color: #d7ddf0;
+    }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(7, 11, 24, 0.72);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+      outline: none;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(124, 156, 255, 0.7);
+      box-shadow: 0 0 0 4px rgba(124, 156, 255, 0.14);
+    }
+    textarea { min-height: 120px; resize: vertical; }
+    .small { font-size: 0.83rem; color: var(--muted); }
+    .toggle-row, .btn-row, .chips, .checkbox-wrap {
+      display: flex; flex-wrap: wrap; gap: 10px;
+    }
+    .toggle, .chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 12px; border-radius: 999px;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--line);
+      color: var(--text); font-size: 0.9rem;
+    }
+    .toggle input, .checkbox-wrap input { width: auto; margin: 0; }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      color: #08111f;
+      background: linear-gradient(135deg, var(--accent-2), var(--accent));
+      box-shadow: 0 14px 28px rgba(92, 125, 255, 0.24);
+      transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 18px 34px rgba(92, 125, 255, 0.28); }
+    button.secondary {
+      color: var(--text);
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+    button.warn { background: linear-gradient(135deg, #fbbf24, #fb7185); }
+    .output {
+      background: rgba(5, 10, 20, 0.88);
+      border: 1px solid rgba(148,163,184,0.18);
+      border-radius: 16px;
+      padding: 14px;
+      min-height: 84px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92rem;
+      line-height: 1.65;
+    }
+    .summary {
+      display: grid; gap: 12px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 16px;
+    }
+    .summary .item {
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--line);
+    }
+    .item .k { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    .item .v { display: block; margin-top: 7px; font-weight: 700; font-size: 1rem; }
+    .list {
+      display: grid; gap: 10px;
+      margin: 0; padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 999px; font-size: 0.82rem;
+      border: 1px solid transparent;
+    }
+    .good { background: rgba(52, 211, 153, 0.12); color: #9ef0ca; border-color: rgba(52,211,153,0.22); }
+    .warn-badge { background: rgba(251,191,36,0.12); color: #fcd97d; border-color: rgba(251,191,36,0.25); }
+    .bad { background: rgba(248,113,113,0.12); color: #feb0b0; border-color: rgba(248,113,113,0.24); }
+    .table {
+      width: 100%; border-collapse: collapse; font-size: 0.92rem;
+      overflow: hidden; border-radius: 14px;
+      border: 1px solid var(--line);
+    }
+    .table th, .table td {
+      text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top;
+    }
+    .table th { color: #c7d2f4; background: rgba(255,255,255,0.035); }
+    .table td { color: var(--muted); }
+    .footer {
+      margin-top: 20px;
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+      color: var(--muted);
+    }
+    .coffee {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 12px 16px; border-radius: 999px;
+      text-decoration: none; color: #08111f; font-weight: 800;
+      background: linear-gradient(135deg, #fde68a, #fb923c);
+      box-shadow: 0 16px 28px rgba(251, 146, 60, 0.22);
+    }
+    @media (max-width: 1024px) {
+      .hero, .layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .wrap { width: min(100% - 16px, 1180px); padding-top: 16px; }
+      .hero-main, .hero-side, .panel { padding: 16px; }
+      .grid-2, .grid-3, .summary, .mini-grid { grid-template-columns: 1fr; }
+      h1 { font-size: 1.9rem; }
+      button { width: 100%; }
+      .btn-row > * { flex: 1 1 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="card hero-main">
+        <div class="eyebrow">Reverse proxy debugging · RFC 7239 · X-Forwarded-*</div>
+        <h1>Forwarded Header Builder & Proxy Chain Inspector</h1>
+        <p class="lede">Build canonical <code>Forwarded</code> headers, inspect legacy <code>X-Forwarded-*</code> values, model trusted proxy hops, and generate production-ready snippets for Node, Nginx, and edge environments.</p>
+      </div>
+      <aside class="card hero-side">
+        <h2>What it does</h2>
+        <div class="mini-grid">
+          <div class="mini-stat"><strong>Compose</strong><span>RFC 7239 header entries with <code>for</code>, <code>by</code>, <code>host</code>, and <code>proto</code>.</span></div>
+          <div class="mini-stat"><strong>Inspect</strong><span>Split proxy chains and surface likely client IPs under trust assumptions.</span></div>
+          <div class="mini-stat"><strong>Compare</strong><span>See <code>Forwarded</code> and <code>X-Forwarded-*</code> side by side.</span></div>
+          <div class="mini-stat"><strong>Ship</strong><span>Copy framework snippets with safe trust-proxy defaults.</span></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="layout">
+      <div class="stack">
+        <section class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2>1) Build a proxy chain</h2>
+              <div class="subtle">Add one or more hops. The first row represents the client-facing proxy entry.</div>
+            </div>
+            <span id="chainBadge" class="badge good">1 hop configured</span>
+          </div>
+          <div class="grid-2">
+            <label>
+              Client IP / <code>for</code>
+              <input id="forInput" value="203.0.113.9" placeholder="203.0.113.9 or [2001:db8::1]" />
+              <span class="small">Use <code>unknown</code>, obfuscated IDs, IPv4, or bracketed IPv6.</span>
+            </label>
+            <label>
+              Proxy IP / <code>by</code>
+              <input id="byInput" value="198.51.100.14" placeholder="198.51.100.14" />
+              <span class="small">Optional in real deployments, but useful for diagnostics.</span>
+            </label>
+            <label>
+              Original host
+              <input id="hostInput" value="api.example.com" placeholder="api.example.com" />
+            </label>
+            <label>
+              Protocol
+              <select id="protoInput">
+                <option value="https" selected>https</option>
+                <option value="http">http</option>
+                <option value="ws">ws</option>
+                <option value="wss">wss</option>
+              </select>
+            </label>
+          </div>
+          <div class="toggle-row" style="margin-top:14px;">
+            <label class="toggle"><input type="checkbox" id="quoteIpv6" checked /> Quote IPv6 / special tokens safely</label>
+            <label class="toggle"><input type="checkbox" id="appendLegacy" checked /> Generate matching X-Forwarded-* headers</label>
+          </div>
+          <div class="btn-row" style="margin-top:16px;">
+            <button id="addHopBtn">Add hop to chain</button>
+            <button id="loadPresetBtn" class="secondary">Load CDN → LB → App preset</button>
+            <button id="clearHopsBtn" class="secondary">Reset chain</button>
+          </div>
+          <div id="hopList" style="margin-top:16px;"></div>
+        </section>
+
+        <section class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2>2) Generated headers</h2>
+              <div class="subtle">Canonical output plus copyable legacy equivalents.</div>
+            </div>
+            <div class="btn-row">
+              <button class="secondary" data-copy="forwardedOut">Copy Forwarded</button>
+              <button class="secondary" data-copy="legacyOut">Copy X-Forwarded-*</button>
+            </div>
+          </div>
+          <label>
+            Forwarded header
+            <div id="forwardedOut" class="output"></div>
+          </label>
+          <div class="grid-2" style="margin-top:14px;">
+            <label>
+              Legacy headers
+              <div id="legacyOut" class="output"></div>
+            </label>
+            <label>
+              curl debug snippet
+              <div id="curlOut" class="output"></div>
+            </label>
+          </div>
+          <div class="summary" id="summaryStats"></div>
+        </section>
+
+        <section class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2>3) Inspect an incoming proxy chain</h2>
+              <div class="subtle">Paste raw headers and choose how many rightmost proxies are trusted.</div>
+            </div>
+            <span id="trustBadge" class="badge warn-badge">Trusting 1 proxy</span>
+          </div>
+          <div class="grid-2">
+            <label>
+              Raw Forwarded header
+              <textarea id="inspectForwarded" placeholder="for=203.0.113.9;proto=https;host=api.example.com, for=198.51.100.14;by=192.0.2.45;proto=https"></textarea>
+            </label>
+            <label>
+              Raw X-Forwarded-For chain
+              <textarea id="inspectXff">203.0.113.9, 198.51.100.14, 192.0.2.45</textarea>
+            </label>
+          </div>
+          <div class="grid-3" style="margin-top:14px;">
+            <label>
+              X-Forwarded-Proto
+              <input id="inspectProto" value="https" placeholder="https" />
+            </label>
+            <label>
+              X-Forwarded-Host
+              <input id="inspectHost" value="api.example.com" placeholder="api.example.com" />
+            </label>
+            <label>
+              Trusted proxy hops from the right
+              <input id="trustedCount" type="number" min="0" max="12" value="1" />
+            </label>
+          </div>
+          <div class="checkbox-wrap" style="margin-top:14px;">
+            <label class="toggle"><input type="checkbox" id="preferForwarded" checked /> Prefer RFC 7239 Forwarded when present</label>
+            <label class="toggle"><input type="checkbox" id="showPrivateHints" checked /> Flag private/reserved address ranges</label>
+          </div>
+          <div class="btn-row" style="margin-top:16px;">
+            <button id="inspectBtn">Inspect chain</button>
+            <button id="loadSampleInspect" class="secondary">Load suspicious sample</button>
+          </div>
+          <div class="grid-2" style="margin-top:16px;">
+            <div>
+              <h3>Inspector summary</h3>
+              <div id="inspectSummary" class="output"></div>
+            </div>
+            <div>
+              <h3>Advice</h3>
+              <div id="adviceOut" class="output"></div>
+            </div>
+          </div>
+          <div style="margin-top:16px; overflow:auto;">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Hop source</th>
+                  <th>Address / token</th>
+                  <th>Trusted?</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="hopTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <aside class="stack">
+        <section class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2>Implementation snippets</h2>
+              <div class="subtle">Safe defaults beat blindly trusting every hop.</div>
+            </div>
+            <button class="secondary" data-copy="snippetOut">Copy snippets</button>
+          </div>
+          <label>
+            Node / Nginx / Cloudflare starter snippets
+            <div id="snippetOut" class="output"></div>
+          </label>
+        </section>
+
+        <section class="card panel">
+          <h2>When to trust these headers</h2>
+          <ul class="list">
+            <li>Only trust forwarding headers from proxies or CDNs you actually control.</li>
+            <li>Rightmost entries usually represent the nearest upstream proxies; count trust from the right, not the left.</li>
+            <li>If untrusted clients can connect directly to the app, they can spoof <code>X-Forwarded-For</code> and <code>Forwarded</code>.</li>
+            <li><code>Forwarded</code> is standardized, but many stacks still rely on legacy headers. Handle both when debugging.</li>
+            <li>Prefer explicit allowlists or exact hop counts over <code>trust proxy = true</code> in production.</li>
+          </ul>
+        </section>
+
+        <section class="card panel">
+          <h2>Quick checks</h2>
+          <div id="healthChecks" class="output"></div>
+        </section>
+
+        <section class="card panel">
+          <h2>Support the toolbox</h2>
+          <p class="subtle">If this saved you a debugging session, fuel the next weirdly specific utility.</p>
+          <a class="coffee" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener noreferrer">Buy Me a Coffee</a>
+          <div class="footer">
+            <span>Single-file, client-side, mobile-friendly.</span>
+            <span>Built for reverse proxy sanity.</span>
+          </div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const hops = [];
+
+    const els = {
+      forInput: document.getElementById('forInput'),
+      byInput: document.getElementById('byInput'),
+      hostInput: document.getElementById('hostInput'),
+      protoInput: document.getElementById('protoInput'),
+      quoteIpv6: document.getElementById('quoteIpv6'),
+      appendLegacy: document.getElementById('appendLegacy'),
+      addHopBtn: document.getElementById('addHopBtn'),
+      loadPresetBtn: document.getElementById('loadPresetBtn'),
+      clearHopsBtn: document.getElementById('clearHopsBtn'),
+      hopList: document.getElementById('hopList'),
+      forwardedOut: document.getElementById('forwardedOut'),
+      legacyOut: document.getElementById('legacyOut'),
+      curlOut: document.getElementById('curlOut'),
+      summaryStats: document.getElementById('summaryStats'),
+      chainBadge: document.getElementById('chainBadge'),
+      inspectForwarded: document.getElementById('inspectForwarded'),
+      inspectXff: document.getElementById('inspectXff'),
+      inspectProto: document.getElementById('inspectProto'),
+      inspectHost: document.getElementById('inspectHost'),
+      trustedCount: document.getElementById('trustedCount'),
+      preferForwarded: document.getElementById('preferForwarded'),
+      showPrivateHints: document.getElementById('showPrivateHints'),
+      inspectBtn: document.getElementById('inspectBtn'),
+      loadSampleInspect: document.getElementById('loadSampleInspect'),
+      inspectSummary: document.getElementById('inspectSummary'),
+      adviceOut: document.getElementById('adviceOut'),
+      hopTableBody: document.getElementById('hopTableBody'),
+      snippetOut: document.getElementById('snippetOut'),
+      trustBadge: document.getElementById('trustBadge'),
+      healthChecks: document.getElementById('healthChecks')
+    };
+
+    function sanitizeToken(value) {
+      return String(value || '').trim();
+    }
+
+    function normalizeFor(value, quoted = true) {
+      const raw = sanitizeToken(value);
+      if (!raw) return '';
+      if (raw.toLowerCase() === 'unknown') return 'unknown';
+      const needsQuote = quoted && (/[:\s]/.test(raw) || raw.startsWith('_') || raw.includes('[') || raw.includes(']'));
+      const cleaned = raw.replace(/^"|"$/g, '');
+      return needsQuote ? `"${cleaned}"` : cleaned;
+    }
+
+    function normalizeParamValue(value, quoted = true) {
+      const raw = sanitizeToken(value);
+      if (!raw) return '';
+      const cleaned = raw.replace(/^"|"$/g, '');
+      const needsQuote = quoted && /[:\s;,]/.test(cleaned);
+      return needsQuote ? `"${cleaned}"` : cleaned;
+    }
+
+    function addHop(hop) {
+      hops.push({
+        for: sanitizeToken(hop.for),
+        by: sanitizeToken(hop.by),
+        host: sanitizeToken(hop.host),
+        proto: sanitizeToken(hop.proto) || 'https'
+      });
+      renderBuilder();
+    }
+
+    function buildForwardedHeader() {
+      const quoted = els.quoteIpv6.checked;
+      return hops.map((hop) => {
+        const parts = [];
+        if (hop.for) parts.push(`for=${normalizeFor(hop.for, quoted)}`);
+        if (hop.by) parts.push(`by=${normalizeParamValue(hop.by, quoted)}`);
+        if (hop.host) parts.push(`host=${normalizeParamValue(hop.host, quoted)}`);
+        if (hop.proto) parts.push(`proto=${normalizeParamValue(hop.proto, false)}`);
+        return parts.join(';');
+      }).filter(Boolean).join(', ');
+    }
+
+    function buildLegacyHeaders() {
+      const xff = hops.map((hop) => sanitizeToken(hop.for)).filter(Boolean).join(', ');
+      const first = hops[0] || {};
+      return [
+        `X-Forwarded-For: ${xff || '(none)'}`,
+        `X-Forwarded-Proto: ${first.proto || '(none)'}`,
+        `X-Forwarded-Host: ${first.host || '(none)'}`,
+        `X-Real-IP: ${sanitizeToken(first.for) || '(none)'}`
+      ].join('\n');
+    }
+
+    function renderHopCards() {
+      els.hopList.innerHTML = '';
+      hops.forEach((hop, index) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.padding = '14px';
+        card.style.marginBottom = '10px';
+        card.innerHTML = `
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+            <div>
+              <strong>Hop ${index + 1}</strong>
+              <div class="small" style="margin-top:6px;">for=${escapeHtml(hop.for || '—')} · by=${escapeHtml(hop.by || '—')} · host=${escapeHtml(hop.host || '—')} · proto=${escapeHtml(hop.proto || '—')}</div>
+            </div>
+            <div class="btn-row" style="min-width:140px;justify-content:flex-end;">
+              <button class="secondary" data-move-up="${index}">↑</button>
+              <button class="secondary" data-move-down="${index}">↓</button>
+              <button class="secondary" data-remove-hop="${index}">Remove</button>
+            </div>
+          </div>`;
+        els.hopList.appendChild(card);
+      });
+      els.hopList.querySelectorAll('[data-remove-hop]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          hops.splice(Number(btn.dataset.removeHop), 1);
+          if (!hops.length) seedDefault();
+          renderBuilder();
+        });
+      });
+      els.hopList.querySelectorAll('[data-move-up]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const index = Number(btn.dataset.moveUp);
+          if (index > 0) {
+            [hops[index - 1], hops[index]] = [hops[index], hops[index - 1]];
+            renderBuilder();
+          }
+        });
+      });
+      els.hopList.querySelectorAll('[data-move-down]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const index = Number(btn.dataset.moveDown);
+          if (index < hops.length - 1) {
+            [hops[index + 1], hops[index]] = [hops[index], hops[index + 1]];
+            renderBuilder();
+          }
+        });
+      });
+    }
+
+    function renderBuilder() {
+      const forwarded = buildForwardedHeader();
+      const legacy = buildLegacyHeaders();
+      const first = hops[0] || {};
+      const uniqueHosts = [...new Set(hops.map((hop) => hop.host).filter(Boolean))].length;
+      const protoSet = [...new Set(hops.map((hop) => hop.proto).filter(Boolean))];
+      els.forwardedOut.textContent = forwarded || '(no header generated yet)';
+      els.legacyOut.textContent = els.appendLegacy.checked ? legacy : 'Legacy generation disabled';
+      els.curlOut.textContent = `curl https://${first.host || 'example.com'}/ \\\n  -H 'Forwarded: ${forwarded || 'for=203.0.113.9;proto=https;host=example.com'}'${els.appendLegacy.checked ? ` \\\n  -H 'X-Forwarded-For: ${hops.map((hop) => hop.for).filter(Boolean).join(', ') || '203.0.113.9'}' \\\n  -H 'X-Forwarded-Proto: ${first.proto || 'https'}' \\\n  -H 'X-Forwarded-Host: ${first.host || 'example.com'}'` : ''}`;
+      els.summaryStats.innerHTML = [
+        { k: 'Hop count', v: `${hops.length}` },
+        { k: 'Distinct host values', v: `${uniqueHosts || 0}` },
+        { k: 'Protocols seen', v: protoSet.join(', ') || 'none' }
+      ].map((item) => `<div class="item"><span class="k">${item.k}</span><span class="v">${escapeHtml(item.v)}</span></div>`).join('');
+      els.chainBadge.className = `badge ${hops.length <= 2 ? 'good' : hops.length <= 4 ? 'warn-badge' : 'bad'}`;
+      els.chainBadge.textContent = `${hops.length} hop${hops.length === 1 ? '' : 's'} configured`;
+      renderHopCards();
+      renderSnippets();
+      renderHealthChecks();
+      seedInspectorFromBuilder();
+    }
+
+    function seedDefault() {
+      hops.length = 0;
+      addHop({ for: '203.0.113.9', by: '198.51.100.14', host: 'api.example.com', proto: 'https' });
+    }
+
+    function loadPreset() {
+      hops.length = 0;
+      addHop({ for: '198.51.100.44', by: '172.68.12.9', host: 'api.example.com', proto: 'https' });
+      addHop({ for: '172.68.12.9', by: '10.0.0.12', host: 'api.example.com', proto: 'https' });
+      addHop({ for: '10.0.0.12', by: '10.0.2.21', host: 'api.example.com', proto: 'http' });
+    }
+
+    function seedInspectorFromBuilder() {
+      els.inspectForwarded.value = buildForwardedHeader();
+      els.inspectXff.value = hops.map((hop) => hop.for).filter(Boolean).join(', ');
+      els.inspectProto.value = (hops[0] || {}).proto || 'https';
+      els.inspectHost.value = (hops[0] || {}).host || 'api.example.com';
+      inspectChain();
+    }
+
+    function parseForwarded(header) {
+      const entries = [];
+      if (!header.trim()) return entries;
+      const segments = header.split(/,(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/);
+      segments.forEach((segment) => {
+        const item = {};
+        segment.split(';').forEach((pair) => {
+          const [key, ...rest] = pair.split('=');
+          if (!key || !rest.length) return;
+          item[key.trim().toLowerCase()] = rest.join('=').trim().replace(/^"|"$/g, '');
+        });
+        if (Object.keys(item).length) entries.push(item);
+      });
+      return entries;
+    }
+
+    function parseXff(xff) {
+      return xff.split(',').map((part) => part.trim()).filter(Boolean);
+    }
+
+    function isPrivateOrReserved(ip) {
+      if (!ip) return false;
+      const value = ip.replace(/^\[|\]$/g, '').toLowerCase();
+      return /^(10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[0-1])\.|192\.168\.|::1$|fc|fd|fe80:|localhost$)/.test(value);
+    }
+
+    function inferClientCandidate(chain, trusted) {
+      if (!chain.length) return { client: '(none)', index: -1 };
+      const idx = Math.max(0, chain.length - trusted - 1);
+      return { client: chain[idx], index: idx };
+    }
+
+    function inspectChain() {
+      const trusted = Math.max(0, Number(els.trustedCount.value || 0));
+      els.trustBadge.textContent = `Trusting ${trusted} prox${trusted === 1 ? 'y' : 'ies'}`;
+      els.trustBadge.className = `badge ${trusted <= 1 ? 'good' : trusted <= 3 ? 'warn-badge' : 'bad'}`;
+
+      const forwardedEntries = parseForwarded(els.inspectForwarded.value);
+      const xffEntries = parseXff(els.inspectXff.value);
+      const useForwarded = els.preferForwarded.checked && forwardedEntries.length > 0;
+      const sourceChain = useForwarded
+        ? forwardedEntries.map((entry) => entry.for || '(missing for)')
+        : xffEntries;
+      const candidate = inferClientCandidate(sourceChain, trusted);
+      const notes = [];
+      if (!sourceChain.length) notes.push('No chain found. Your app may be seeing direct connections only.');
+      if (trusted >= sourceChain.length && sourceChain.length) notes.push('Trusted hop count reaches or exceeds the whole chain. You may be over-trusting.');
+      if (xffEntries.length && forwardedEntries.length && xffEntries.join('|') !== forwardedEntries.map((entry) => entry.for || '').join('|')) notes.push('Forwarded and X-Forwarded-For disagree. This often means header rewriting or spoofing.');
+      if (candidate.client && isPrivateOrReserved(candidate.client)) notes.push('Chosen client candidate is private/reserved. That is fine inside a service mesh, but suspicious at the public edge.');
+      if ((els.inspectProto.value || '').toLowerCase() !== 'https') notes.push('Proto is not HTTPS. Beware mixed trust assumptions for secure cookies and redirects.');
+
+      els.inspectSummary.textContent = [
+        `Source used: ${useForwarded ? 'Forwarded' : 'X-Forwarded-For'}`,
+        `Chain length: ${sourceChain.length}`,
+        `Trusted hops from right: ${trusted}`,
+        `Likely client: ${candidate.client || '(none)'}`,
+        `Forwarded host: ${els.inspectHost.value || '(none)'}`,
+        `Forwarded proto: ${els.inspectProto.value || '(none)'}`
+      ].join('\n');
+
+      els.adviceOut.textContent = notes.length
+        ? notes.map((line, idx) => `${idx + 1}. ${line}`).join('\n')
+        : 'No obvious red flags from the current trust settings. Still verify your edge only accepts traffic through known proxies.';
+
+      els.hopTableBody.innerHTML = '';
+      sourceChain.forEach((entry, index) => {
+        const trustedHop = index > sourceChain.length - trusted - 1;
+        const isCandidate = index === candidate.index;
+        const row = document.createElement('tr');
+        const privateHint = els.showPrivateHints.checked && isPrivateOrReserved(entry) ? 'Private/reserved range. ' : '';
+        row.innerHTML = `
+          <td>${index + 1}</td>
+          <td>${useForwarded ? 'Forwarded' : 'X-Forwarded-For'}</td>
+          <td>${escapeHtml(entry)}</td>
+          <td>${trustedHop ? 'Yes' : isCandidate ? 'Chosen client' : 'No'}</td>
+          <td>${escapeHtml(privateHint + (isCandidate ? 'Likely original client after trust trimming.' : trustedHop ? 'Inside your trusted proxy boundary.' : 'Left of trust boundary; user-controlled unless sanitized upstream.'))}</td>
+        `;
+        els.hopTableBody.appendChild(row);
+      });
+      if (!sourceChain.length) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="5">No parsed chain.</td>';
+        els.hopTableBody.appendChild(row);
+      }
+    }
+
+    function renderSnippets() {
+      const trusted = Math.max(0, Number(els.trustedCount.value || 0));
+      const host = sanitizeToken(els.inspectHost.value || (hops[0] || {}).host || 'api.example.com');
+      els.snippetOut.textContent = `// Express / Node\napp.set('trust proxy', ${trusted || 1});\napp.get('/debug', (req, res) => {\n  res.json({\n    ip: req.ip,\n    ips: req.ips,\n    protocol: req.protocol,\n    hostname: req.hostname,\n    forwarded: req.headers['forwarded'],\n    xForwardedFor: req.headers['x-forwarded-for']\n  });\n});\n\n# Nginx\nproxy_set_header Forwarded \"for=$remote_addr;proto=$scheme;host=$host\";\nproxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\nproxy_set_header X-Forwarded-Proto $scheme;\nproxy_set_header X-Forwarded-Host $host;\n\n# Cloudflare Worker (debug pass-through)\nconst forwarded = request.headers.get('Forwarded');\nconst xff = request.headers.get('X-Forwarded-For');\nreturn new Response(JSON.stringify({ host: '${host}', forwarded, xff }, null, 2), {\n  headers: { 'content-type': 'application/json' }\n});`;
+    }
+
+    function renderHealthChecks() {
+      const forwarded = buildForwardedHeader();
+      const warnings = [];
+      if (!forwarded) warnings.push('No Forwarded header yet.');
+      if (hops.some((hop) => !hop.proto)) warnings.push('Some hops are missing proto.');
+      if (hops.some((hop) => !hop.host)) warnings.push('Some hops are missing host.');
+      if (hops.length > 3) warnings.push('Long chains are normal with CDNs, but debug carefully before trusting them all.');
+      if (hops.some((hop) => isPrivateOrReserved(hop.for))) warnings.push('At least one for= address is private/reserved. This may be internal-only or a sign you should inspect trust boundaries.');
+      els.healthChecks.textContent = warnings.length ? warnings.map((w, i) => `${i + 1}. ${w}`).join('\n') : 'Looks tidy: the current builder state includes host + proto across all hops.';
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function copyFrom(id) {
+      const text = document.getElementById(id).textContent.trim();
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+
+    els.addHopBtn.addEventListener('click', () => {
+      addHop({
+        for: els.forInput.value,
+        by: els.byInput.value,
+        host: els.hostInput.value,
+        proto: els.protoInput.value
+      });
+    });
+    els.loadPresetBtn.addEventListener('click', loadPreset);
+    els.clearHopsBtn.addEventListener('click', seedDefault);
+    els.inspectBtn.addEventListener('click', inspectChain);
+    els.loadSampleInspect.addEventListener('click', () => {
+      els.inspectForwarded.value = 'for=198.51.100.44;proto=https;host=app.example.com, for=10.0.0.5;by=10.0.1.9;proto=http';
+      els.inspectXff.value = '203.0.113.250, 198.51.100.44, 10.0.0.5';
+      els.inspectProto.value = 'http';
+      els.inspectHost.value = 'app.example.com';
+      els.trustedCount.value = 1;
+      inspectChain();
+    });
+
+    document.querySelectorAll('[data-copy]').forEach((btn) => {
+      btn.addEventListener('click', () => copyFrom(btn.dataset.copy));
+    });
+
+    ['change', 'input'].forEach((eventName) => {
+      [els.quoteIpv6, els.appendLegacy, els.trustedCount, els.preferForwarded, els.showPrivateHints, els.inspectHost, els.inspectProto, els.inspectForwarded, els.inspectXff].forEach((el) => {
+        el.addEventListener(eventName, () => {
+          renderBuilder();
+          inspectChain();
+        });
+      });
+    });
+
+    seedDefault();
+  </script>
+</body>
+</html>
