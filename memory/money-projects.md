@@ -286,9 +286,10 @@
 | 171 | Feature Flag Rollout Planner | toolbox/rollout.html | ✅ stevenli-phoenix.github.io/toolbox/rollout.html | ❌ |
 | 172 | PR Review Checklist Generator | toolbox/prreview.html | ✅ stevenli-phoenix.github.io/toolbox/prreview.html | ❌ |
 | 173 | Issue Triage Assistant | toolbox/issuetriage.html | ✅ stevenli-phoenix.github.io/toolbox/issuetriage.html | ❌ |
+| 174 | Action Item Extractor | toolbox/actionitems.html | ✅ stevenli-phoenix.github.io/toolbox/actionitems.html | ❌ |
 
 ## Queue
-174. (next tool TBD)
+175. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
