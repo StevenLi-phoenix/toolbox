@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Idempotency Key Builder & Retry Safety Planner</title>
+  <meta name="description" content="Generate safe idempotency keys, fingerprint API requests, plan retry windows, preview replay behavior, and copy server/client snippets for Stripe-style idempotent APIs.">
+  <meta name="keywords" content="idempotency key builder, retry safety planner, api retry tool, idempotent post request, developer utility">
+  <meta name="author" content="Steven Li">
+  <meta name="robots" content="index,follow">
+  <meta property="og:title" content="Idempotency Key Builder & Retry Safety Planner">
+  <meta property="og:description" content="Build idempotency keys, preview replay outcomes, and copy implementation snippets for safer write APIs.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/idempotency.html">
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Idempotency Key Builder & Retry Safety Planner">
+  <meta name="twitter:description" content="Generate strong idempotency keys, compare request fingerprints, and plan safe API retries.">
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/idempotency.html">
+  <style>
+    :root {
+      --bg: #071018;
+      --bg-2: #0b1625;
+      --panel: rgba(11, 19, 34, 0.9);
+      --panel-2: rgba(15, 28, 48, 0.94);
+      --text: #edf4ff;
+      --muted: #9fb4d1;
+      --border: rgba(159, 180, 209, 0.17);
+      --accent: #7aa2ff;
+      --accent-2: #43d1ff;
+      --good: #3dd89d;
+      --warn: #f2c45a;
+      --bad: #ff7c93;
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+    html { color-scheme: dark; scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(67, 209, 255, 0.15), transparent 28%),
+        radial-gradient(circle at top right, rgba(122, 162, 255, 0.16), transparent 24%),
+        linear-gradient(180deg, var(--bg), var(--bg-2) 58%, #060c14);
+    }
+
+    a { color: var(--accent-2); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+    .wrap {
+      width: min(1240px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 26px 0 56px;
+    }
+
+    .hero, .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      padding: 30px;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -70px;
+      bottom: -90px;
+      width: 260px;
+      height: 260px;
+      background: radial-gradient(circle, rgba(67, 209, 255, 0.2), transparent 68%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(122, 162, 255, 0.14);
+      color: #dbe8ff;
+      font-size: .8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    h1 {
+      margin: 16px 0 10px;
+      font-size: clamp(2rem, 4vw, 3.3rem);
+      line-height: 1.05;
+    }
+
+    .lead {
+      margin: 0;
+      max-width: 820px;
+      color: var(--muted);
+      line-height: 1.72;
+      font-size: 1.03rem;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 14px;
+      margin-top: 24px;
+    }
+
+    .stat {
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .stat span {
+      display: block;
+      color: var(--muted);
+      font-size: .88rem;
+      margin-bottom: 8px;
+    }
+
+    .stat strong { font-size: 1.25rem; }
+
+    .layout {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.06fr) minmax(0, 0.94fr);
+      gap: 22px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 22px;
+    }
+
+    .panel {
+      border-radius: var(--radius);
+      padding: 22px;
+    }
+
+    .panel h2, .panel h3 { margin: 0 0 10px; }
+    .muted { color: var(--muted); line-height: 1.65; }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .col-12 { grid-column: span 12; }
+    .col-8 { grid-column: span 8; }
+    .col-7 { grid-column: span 7; }
+    .col-6 { grid-column: span 6; }
+    .col-5 { grid-column: span 5; }
+    .col-4 { grid-column: span 4; }
+    .col-3 { grid-column: span 3; }
+
+    label {
+      font-size: .93rem;
+      font-weight: 600;
+      color: #dce8ff;
+    }
+
+    input, select, textarea, button {
+      font: inherit;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(159, 180, 209, 0.24);
+      background: rgba(6, 12, 22, 0.92);
+      color: var(--text);
+      padding: 12px 14px;
+      outline: none;
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+
+    textarea {
+      min-height: 124px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: .92rem;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: rgba(122, 162, 255, 0.8);
+      box-shadow: 0 0 0 4px rgba(122, 162, 255, 0.14);
+    }
+
+    .button-row, .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    button, .button-link {
+      border: 0;
+      cursor: pointer;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-weight: 700;
+      color: #071018;
+      background: linear-gradient(135deg, var(--accent-2), var(--accent));
+      box-shadow: 0 12px 28px rgba(67, 209, 255, 0.18);
+      transition: transform .15s ease, filter .15s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button.secondary, .button-link.secondary {
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      box-shadow: none;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    button:hover, .button-link:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.03);
+    }
+
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .check {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .check input {
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      accent-color: var(--accent-2);
+    }
+
+    .check small {
+      display: block;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+
+    .mini-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .mini-card strong, .score strong {
+      display: block;
+      font-size: 1.1rem;
+      margin-bottom: 6px;
+    }
+
+    .score {
+      border-radius: 18px;
+      padding: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+    }
+
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+
+    .output {
+      background: rgba(4, 9, 18, 0.95);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      padding: 16px;
+      min-height: 74px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      line-height: 1.62;
+      font-size: .92rem;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      color: #061018;
+      background: linear-gradient(135deg, var(--accent-2), var(--accent));
+    }
+
+    .step-body {
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: .94rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      vertical-align: top;
+    }
+
+    th { color: #dce8ff; }
+    td { color: var(--muted); }
+
+    .footer {
+      margin-top: 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: .95rem;
+    }
+
+    .footer a { font-weight: 700; }
+
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      .wrap { width: min(100% - 20px, 1240px); padding: 18px 0 34px; }
+      .hero, .panel { border-radius: 22px; }
+      .hero { padding: 22px; }
+      .panel { padding: 18px; }
+      .row { grid-template-columns: repeat(1, 1fr); }
+      .col-12, .col-8, .col-7, .col-6, .col-5, .col-4, .col-3 { grid-column: span 1; }
+      h1 { font-size: 2.15rem; }
+      .button-row, .pill-row { flex-direction: column; }
+      button, .button-link { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Developer utility · safer write APIs</div>
+      <h1>Idempotency Key Builder & Retry Safety Planner</h1>
+      <p class="lead">Stop accidental double-charges, duplicated orders, and flaky retry behavior. Generate strong idempotency keys, fingerprint incoming requests, preview replay outcomes, and copy server/client snippets for a polished implementation.</p>
+      <div class="hero-grid">
+        <div class="stat"><span>Best for</span><strong>POST / payment / create APIs</strong></div>
+        <div class="stat"><span>Includes</span><strong>Key generator + request fingerprinting</strong></div>
+        <div class="stat"><span>Output</span><strong>Headers, TTL plan, snippets, replay advice</strong></div>
+        <div class="stat"><span>Client-side</span><strong>No request data leaves your browser</strong></div>
+      </div>
+    </section>
+
+    <div class="layout">
+      <div class="stack">
+        <section class="panel">
+          <h2>1) Request profile</h2>
+          <p class="muted">Describe the operation you want to protect. The tool will create a key prefix, request fingerprint, storage TTL guidance, and replay behavior recommendations.</p>
+
+          <div class="row">
+            <div class="field col-6">
+              <label for="resource">Resource / workflow</label>
+              <input id="resource" value="checkout-payment" placeholder="checkout-payment">
+            </div>
+            <div class="field col-6">
+              <label for="method">HTTP method</label>
+              <select id="method">
+                <option>POST</option>
+                <option>PUT</option>
+                <option>PATCH</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field col-8">
+              <label for="endpoint">Endpoint path</label>
+              <input id="endpoint" value="/v1/payments" placeholder="/v1/orders">
+            </div>
+            <div class="field col-4">
+              <label for="tenant">Tenant / account scope</label>
+              <input id="tenant" value="acct_2048" placeholder="acct_2048">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field col-4">
+              <label for="ttl">Key retention window</label>
+              <select id="ttl">
+                <option value="5m">5 minutes</option>
+                <option value="30m">30 minutes</option>
+                <option value="24h" selected>24 hours</option>
+                <option value="48h">48 hours</option>
+                <option value="7d">7 days</option>
+              </select>
+            </div>
+            <div class="field col-4">
+              <label for="responseMode">Replay strategy</label>
+              <select id="responseMode">
+                <option value="same-status-body" selected>Return same status + body</option>
+                <option value="same-status-header">Return same status + replay header</option>
+                <option value="202-pending">Return pending while original runs</option>
+                <option value="409-mismatch">Reject mismatched replays</option>
+              </select>
+            </div>
+            <div class="field col-4">
+              <label for="conflictCode">Mismatch status</label>
+              <select id="conflictCode">
+                <option value="409" selected>409 Conflict</option>
+                <option value="422">422 Unprocessable Content</option>
+                <option value="400">400 Bad Request</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field col-12">
+            <label>Duplicate protection signals</label>
+            <div class="checkbox-grid">
+              <label class="check"><input type="checkbox" id="protectBody" checked><span><strong>Hash normalized body</strong><small>Detect same key reused with different payload fields.</small></span></label>
+              <label class="check"><input type="checkbox" id="protectUser" checked><span><strong>Bind to tenant/user</strong><small>Prevent cross-account collisions when clients pick weak keys.</small></span></label>
+              <label class="check"><input type="checkbox" id="protectMethod" checked><span><strong>Include method + route</strong><small>Reuse across different endpoints should not replay silently.</small></span></label>
+              <label class="check"><input type="checkbox" id="allowPending" checked><span><strong>Track in-flight requests</strong><small>Useful when a second request arrives before the first finishes.</small></span></label>
+            </div>
+          </div>
+
+          <div class="field col-12" style="margin-top:14px;">
+            <label for="body">Canonical request body / important fields</label>
+            <textarea id="body" placeholder='{"amount":1299,"currency":"usd","customerId":"cus_123","cartHash":"4b7f..."}'>{
+  "amount": 1299,
+  "currency": "usd",
+  "customerId": "cus_123",
+  "paymentMethod": "pm_card_visa",
+  "cartHash": "cart_48f9a0"
+}</textarea>
+          </div>
+
+          <div class="button-row">
+            <button id="generateBtn">Generate plan</button>
+            <button class="secondary" id="randomizeBtn">New random key</button>
+            <button class="secondary" id="sampleMismatchBtn">Load mismatch example</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>2) Generated key, header, and replay plan</h2>
+          <div class="card-grid">
+            <div class="mini-card">
+              <strong>Idempotency-Key</strong>
+              <div id="keyOutput" class="output"></div>
+              <div class="button-row"><button class="secondary copy-btn" data-copy-target="keyOutput">Copy key</button></div>
+            </div>
+            <div class="mini-card">
+              <strong>Request fingerprint</strong>
+              <div id="fingerprintOutput" class="output"></div>
+              <div class="button-row"><button class="secondary copy-btn" data-copy-target="fingerprintOutput">Copy fingerprint</button></div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:14px;">
+            <div class="field col-12">
+              <label for="headerOutput">HTTP request example</label>
+              <textarea id="headerOutput" readonly></textarea>
+            </div>
+          </div>
+          <div class="button-row">
+            <button class="secondary copy-btn" data-copy-target="headerOutput">Copy request</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>3) Retry simulator</h2>
+          <p class="muted">Model what should happen when the same key comes back. This helps clarify whether to replay, block, or wait.</p>
+          <div class="row">
+            <div class="field col-4">
+              <label for="attemptGap">Time since first request</label>
+              <select id="attemptGap">
+                <option value="2s">2 seconds</option>
+                <option value="18s" selected>18 seconds</option>
+                <option value="4m">4 minutes</option>
+                <option value="10h">10 hours</option>
+                <option value="26h">26 hours</option>
+              </select>
+            </div>
+            <div class="field col-4">
+              <label for="originalState">Original request state</label>
+              <select id="originalState">
+                <option value="completed" selected>Completed successfully</option>
+                <option value="inflight">Still processing</option>
+                <option value="failed-safe">Failed before side effects</option>
+                <option value="failed-unknown">Timed out after possible side effect</option>
+              </select>
+            </div>
+            <div class="field col-4">
+              <label for="retryPayload">Retry payload</label>
+              <select id="retryPayload">
+                <option value="same" selected>Exactly the same</option>
+                <option value="different">Changed body / parameters</option>
+              </select>
+            </div>
+          </div>
+          <div id="retrySummary" class="output"></div>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="panel">
+          <h2>Risk score</h2>
+          <div id="scoreCard" class="score"></div>
+          <table>
+            <thead>
+              <tr><th>Area</th><th>Recommendation</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Client</td><td id="clientAdvice"></td></tr>
+              <tr><td>API server</td><td id="serverAdvice"></td></tr>
+              <tr><td>Storage</td><td id="storageAdvice"></td></tr>
+              <tr><td>Replay rules</td><td id="replayAdvice"></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <h2>Implementation snippets</h2>
+          <div class="field col-12">
+            <label for="snippetSelect">Snippet preset</label>
+            <select id="snippetSelect">
+              <option value="curl">cURL</option>
+              <option value="fetch">fetch()</option>
+              <option value="node" selected>Node / Express middleware sketch</option>
+              <option value="sql">SQL table schema</option>
+            </select>
+          </div>
+          <div id="snippetOutput" class="output"></div>
+          <div class="button-row"><button class="secondary copy-btn" data-copy-target="snippetOutput">Copy snippet</button></div>
+        </section>
+
+        <section class="panel">
+          <h2>Recommended flow</h2>
+          <div class="timeline">
+            <div class="step"><div class="badge">1</div><div class="step-body"><strong>Require a unique key on every unsafe create operation.</strong><br><span class="muted">Have the client generate it before sending the request, then reuse that same key when retrying due to timeouts or 5xx/network failures.</span></div></div>
+            <div class="step"><div class="badge">2</div><div class="step-body"><strong>Store both the response and a fingerprint.</strong><br><span class="muted">Fingerprint the normalized request body plus route/method/account so the same key cannot silently create a different resource.</span></div></div>
+            <div class="step"><div class="badge">3</div><div class="step-body"><strong>Handle in-flight duplicates explicitly.</strong><br><span class="muted">If the original call is still running, return a predictable pending response or ask the client to retry later.</span></div></div>
+            <div class="step"><div class="badge">4</div><div class="step-body"><strong>Replay the original success, not a second side effect.</strong><br><span class="muted">A duplicate request with the same fingerprint should produce the original status/body or a replay marker header.</span></div></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>What to store per key</h2>
+          <div class="pill-row">
+            <span class="check"><span><strong>key</strong><small>Raw client header or normalized variant.</small></span></span>
+            <span class="check"><span><strong>fingerprint</strong><small>Tenant + route + method + canonical body hash.</small></span></span>
+            <span class="check"><span><strong>status</strong><small>in_progress / completed / failed_safe / failed_unknown</small></span></span>
+            <span class="check"><span><strong>response snapshot</strong><small>Status code, headers subset, JSON body, resource id.</small></span></span>
+            <span class="check"><span><strong>expires_at</strong><small>Delete after your retry horizon ends.</small></span></span>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="footer">
+      Built for safer APIs. If this saved you a duplicate charge, <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Me a Coffee</a>.
+    </div>
+  </div>
+
+  <script>
+    const fields = {
+      resource: document.getElementById('resource'),
+      method: document.getElementById('method'),
+      endpoint: document.getElementById('endpoint'),
+      tenant: document.getElementById('tenant'),
+      ttl: document.getElementById('ttl'),
+      responseMode: document.getElementById('responseMode'),
+      conflictCode: document.getElementById('conflictCode'),
+      protectBody: document.getElementById('protectBody'),
+      protectUser: document.getElementById('protectUser'),
+      protectMethod: document.getElementById('protectMethod'),
+      allowPending: document.getElementById('allowPending'),
+      body: document.getElementById('body'),
+      attemptGap: document.getElementById('attemptGap'),
+      originalState: document.getElementById('originalState'),
+      retryPayload: document.getElementById('retryPayload'),
+      snippetSelect: document.getElementById('snippetSelect')
+    };
+
+    const outputs = {
+      key: document.getElementById('keyOutput'),
+      fingerprint: document.getElementById('fingerprintOutput'),
+      header: document.getElementById('headerOutput'),
+      retrySummary: document.getElementById('retrySummary'),
+      scoreCard: document.getElementById('scoreCard'),
+      snippet: document.getElementById('snippetOutput'),
+      clientAdvice: document.getElementById('clientAdvice'),
+      serverAdvice: document.getElementById('serverAdvice'),
+      storageAdvice: document.getElementById('storageAdvice'),
+      replayAdvice: document.getElementById('replayAdvice')
+    };
+
+    let currentKey = '';
+    let currentFingerprint = '';
+
+    function slugify(value) {
+      return value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 24) || 'request';
+    }
+
+    function randomHex(length = 24) {
+      const array = new Uint8Array(Math.ceil(length / 2));
+      crypto.getRandomValues(array);
+      return Array.from(array, b => b.toString(16).padStart(2, '0')).join('').slice(0, length);
+    }
+
+    async function sha256(text) {
+      const bytes = new TextEncoder().encode(text);
+      const hash = await crypto.subtle.digest('SHA-256', bytes);
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function normalizeJson(raw) {
+      try {
+        return JSON.stringify(sortKeys(JSON.parse(raw)));
+      } catch {
+        return raw.trim().replace(/\s+/g, ' ');
+      }
+    }
+
+    function sortKeys(value) {
+      if (Array.isArray(value)) return value.map(sortKeys);
+      if (value && typeof value === 'object') {
+        return Object.keys(value).sort().reduce((acc, key) => {
+          acc[key] = sortKeys(value[key]);
+          return acc;
+        }, {});
+      }
+      return value;
+    }
+
+    async function buildFingerprint() {
+      const parts = [];
+      if (fields.protectUser.checked) parts.push(`tenant:${fields.tenant.value.trim() || 'public'}`);
+      if (fields.protectMethod.checked) parts.push(`method:${fields.method.value}|path:${fields.endpoint.value.trim() || '/'}`);
+      if (fields.protectBody.checked) parts.push(`body:${normalizeJson(fields.body.value)}`);
+      if (!parts.length) parts.push('scope:none');
+      const canonical = parts.join('|');
+      const hash = await sha256(canonical);
+      currentFingerprint = hash;
+      return hash;
+    }
+
+    function ttlLabel(value) {
+      const map = {
+        '5m': 'short duplicate window — only safe for brief transient retries',
+        '30m': 'reasonable for most non-payment writes',
+        '24h': 'strong default for payment/order APIs with delayed mobile retries',
+        '48h': 'good when clients may retry the next day',
+        '7d': 'long retention — use only when operations are expensive and low-volume'
+      };
+      return map[value] || '';
+    }
+
+    function buildKey() {
+      const prefix = slugify(fields.resource.value);
+      currentKey = `${prefix}_${randomHex(12)}_${randomHex(18)}`;
+      return currentKey;
+    }
+
+    function retryDecision() {
+      const ttl = fields.ttl.value;
+      const gap = fields.attemptGap.value;
+      const originalState = fields.originalState.value;
+      const retryPayload = fields.retryPayload.value;
+      const code = fields.conflictCode.value;
+
+      const gapRank = { '2s': 1, '18s': 2, '4m': 3, '10h': 4, '26h': 5 }[gap] || 1;
+      const ttlRank = { '5m': 3, '30m': 4, '24h': 5, '48h': 6, '7d': 7 }[ttl] || 5;
+      const expired = gapRank > ttlRank;
+
+      if (expired) {
+        return {
+          tone: 'warn',
+          title: 'Key expired — treat as a fresh operation',
+          body: `The retry arrives after the configured ${ttl} retention window, so the server should not trust old replay records. If the operation might still have succeeded, force a manual/resource lookup before allowing another charge.`
+        };
+      }
+
+      if (retryPayload === 'different') {
+        return {
+          tone: 'bad',
+          title: `${code} mismatch recommended`,
+          body: `Same key, different fingerprint. Reject the retry and return a clear error explaining that idempotency keys must be reused only with the original payload.`
+        };
+      }
+
+      if (originalState === 'completed') {
+        return {
+          tone: 'good',
+          title: 'Replay original response',
+          body: `Return the saved success response instead of executing the write again. Add something like Idempotent-Replayed: true if you want debugging visibility.`
+        };
+      }
+
+      if (originalState === 'inflight') {
+        return {
+          tone: fields.allowPending.checked ? 'warn' : 'bad',
+          title: fields.allowPending.checked ? 'Request still in progress' : 'Pending duplicates are not modeled',
+          body: fields.allowPending.checked
+            ? `The first request is still running. Return 202/409 with retry-after guidance, or block until the original result is available.`
+            : `Your current settings do not track in-flight requests well. Add an in-progress record before performing side effects.`
+        };
+      }
+
+      if (originalState === 'failed-safe') {
+        return {
+          tone: 'warn',
+          title: 'Safe retry allowed',
+          body: `If you know the first attempt failed before any side effect (for example validation or auth), you can allow the same key to try again or clear the record immediately.`
+        };
+      }
+
+      return {
+        tone: 'warn',
+        title: 'Unknown outcome — prefer lookup before retry',
+        body: `The first attempt may have timed out after the side effect started. Keep the key locked, check downstream state/resource creation, and only then decide whether to replay the stored result or recover manually.`
+      };
+    }
+
+    function computeRisk() {
+      let score = 100;
+      if (!fields.protectBody.checked) score -= 28;
+      if (!fields.protectUser.checked) score -= 16;
+      if (!fields.protectMethod.checked) score -= 12;
+      if (!fields.allowPending.checked) score -= 14;
+      if (fields.ttl.value === '5m') score -= 18;
+      if (fields.ttl.value === '30m') score -= 8;
+      if (fields.ttl.value === '7d') score -= 6;
+      if (fields.responseMode.value === '409-mismatch') score += 2;
+      score = Math.max(18, Math.min(100, score));
+
+      const level = score >= 84 ? 'good' : score >= 68 ? 'warn' : 'bad';
+      const label = score >= 84 ? 'Strong' : score >= 68 ? 'Moderate' : 'Risky';
+      const summary = score >= 84
+        ? 'This plan is resilient against duplicate writes and replay mismatches.'
+        : score >= 68
+          ? 'Usable, but still vulnerable to some confusing retry cases.'
+          : 'High chance of duplicate side effects or hard-to-debug replay behavior.';
+
+      outputs.scoreCard.innerHTML = `<strong class="${level}">${label} idempotency posture · ${score}/100</strong><div class="muted">${summary}</div>`;
+
+      outputs.clientAdvice.textContent = 'Generate one key per user intent, persist it locally until success/failure is confirmed, and retry with the same key only for network/5xx uncertainty.';
+      outputs.serverAdvice.textContent = fields.allowPending.checked
+        ? 'Create an in-progress record before performing side effects, then atomically replace it with the final response snapshot.'
+        : 'Track in-progress requests; otherwise simultaneous retries may race and duplicate work.';
+      outputs.storageAdvice.textContent = `Retain records for ${fields.ttl.options[fields.ttl.selectedIndex].text.toLowerCase()} — ${ttlLabel(fields.ttl.value)}.`;
+      outputs.replayAdvice.textContent = fields.responseMode.value === 'same-status-body'
+        ? 'Preferred: identical fingerprint should replay the original status/body so clients see deterministic outcomes.'
+        : fields.responseMode.value === 'same-status-header'
+          ? 'Replay the original result and add a replay header for observability.'
+          : fields.responseMode.value === '202-pending'
+            ? 'Useful when long-running jobs finish asynchronously; clients must poll or retry later.'
+            : `Reject changed replays with ${fields.conflictCode.value} and log the fingerprint mismatch.`;
+    }
+
+    function buildHeaderExample() {
+      const payload = normalizeJson(fields.body.value);
+      const lines = [
+        `${fields.method.value} ${fields.endpoint.value || '/'} HTTP/1.1`,
+        'Host: api.example.com',
+        `Idempotency-Key: ${currentKey}`,
+        `X-Request-Fingerprint: ${currentFingerprint.slice(0, 24)}…`,
+        'Content-Type: application/json',
+        '',
+        payload
+      ];
+      outputs.header.value = lines.join('\n');
+    }
+
+    function buildSnippet() {
+      const payload = normalizeJson(fields.body.value);
+      const snippetType = fields.snippetSelect.value;
+      const ttlText = fields.ttl.options[fields.ttl.selectedIndex].text;
+      const mismatch = fields.conflictCode.value;
+
+      const snippets = {
+        curl: `curl -X ${fields.method.value} https://api.example.com${fields.endpoint.value || '/'} \\
+  -H 'Content-Type: application/json' \\
+  -H 'Idempotency-Key: ${currentKey}' \\
+  --data '${payload.replace(/'/g, "'\\''")}'`,
+        fetch: `const body = ${payload};\n\nawait fetch('https://api.example.com${fields.endpoint.value || '/'}', {\n  method: '${fields.method.value}',\n  headers: {\n    'Content-Type': 'application/json',\n    'Idempotency-Key': '${currentKey}'\n  },\n  body: JSON.stringify(body)\n});`,
+        node: `app.post('${fields.endpoint.value || '/resource'}', async (req, res) => {\n  const key = req.get('Idempotency-Key');\n  if (!key) return res.status(400).json({ error: 'Missing Idempotency-Key' });\n\n  const fingerprint = await sha256(JSON.stringify({\n    tenant: req.account.id,\n    method: req.method,\n    path: req.path,\n    body: normalize(req.body)\n  }));\n\n  const existing = await store.get(key);\n  if (existing) {\n    if (existing.fingerprint !== fingerprint) {\n      return res.status(${mismatch}).json({ error: 'Idempotency key reused with different payload' });\n    }\n\n    if (existing.state === 'completed') {\n      res.set('Idempotent-Replayed', 'true');\n      return res.status(existing.statusCode).json(existing.body);\n    }\n\n    return res.status(202).json({ status: 'processing', retryAfterSeconds: 2 });\n  }\n\n  await store.put(key, { state: 'in_progress', fingerprint }, { ttl: '${ttlText}' });\n\n  try {\n    const result = await createResource(req.body);\n    await store.put(key, {\n      state: 'completed',\n      fingerprint,\n      statusCode: 201,\n      body: result\n    }, { ttl: '${ttlText}' });\n\n    return res.status(201).json(result);\n  } catch (error) {\n    await store.put(key, { state: 'failed_unknown', fingerprint }, { ttl: '${ttlText}' });\n    throw error;\n  }\n});`,
+        sql: `CREATE TABLE idempotency_records (\n  id BIGSERIAL PRIMARY KEY,\n  tenant_id TEXT NOT NULL,\n  idempotency_key TEXT NOT NULL,\n  fingerprint CHAR(64) NOT NULL,\n  state TEXT NOT NULL CHECK (state IN ('in_progress', 'completed', 'failed_safe', 'failed_unknown')),\n  response_status INT,\n  response_body JSONB,\n  resource_id TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  expires_at TIMESTAMPTZ NOT NULL\n);\n\nCREATE UNIQUE INDEX uniq_idempotency_key_per_tenant\n  ON idempotency_records (tenant_id, idempotency_key);\n\n-- Delete expired rows after ${ttlText.toLowerCase()}.`
+      };
+
+      outputs.snippet.textContent = snippets[snippetType];
+    }
+
+    async function update() {
+      if (!currentKey) buildKey();
+      const fingerprint = await buildFingerprint();
+      outputs.key.textContent = currentKey;
+      outputs.fingerprint.textContent = fingerprint;
+      buildHeaderExample();
+      buildSnippet();
+      computeRisk();
+      const decision = retryDecision();
+      outputs.retrySummary.innerHTML = `<span class="${decision.tone}"><strong>${decision.title}</strong></span>\n${decision.body}`;
+    }
+
+    async function newKeyAndUpdate() {
+      buildKey();
+      await update();
+    }
+
+    function loadMismatchExample() {
+      fields.resource.value = 'order-create';
+      fields.endpoint.value = '/v1/orders';
+      fields.tenant.value = 'acct_7781';
+      fields.body.value = JSON.stringify({
+        sku: 'starter-plan',
+        quantity: 2,
+        currency: 'usd',
+        shippingSpeed: 'express'
+      }, null, 2);
+      fields.retryPayload.value = 'different';
+      fields.originalState.value = 'completed';
+      fields.ttl.value = '24h';
+      fields.responseMode.value = '409-mismatch';
+      fields.conflictCode.value = '409';
+      newKeyAndUpdate();
+    }
+
+    document.getElementById('generateBtn').addEventListener('click', update);
+    document.getElementById('randomizeBtn').addEventListener('click', newKeyAndUpdate);
+    document.getElementById('sampleMismatchBtn').addEventListener('click', loadMismatchExample);
+    fields.snippetSelect.addEventListener('change', buildSnippet);
+
+    Object.values(fields).forEach((element) => {
+      if (!element || element === fields.snippetSelect) return;
+      element.addEventListener('input', update);
+      element.addEventListener('change', update);
+    });
+
+    document.querySelectorAll('.copy-btn').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const target = document.getElementById(button.dataset.copyTarget);
+        const text = 'value' in target && target.value ? target.value : target.textContent;
+        try {
+          await navigator.clipboard.writeText(text.trim());
+          const original = button.textContent;
+          button.textContent = 'Copied';
+          setTimeout(() => button.textContent = original, 1200);
+        } catch {
+          button.textContent = 'Copy failed';
+          setTimeout(() => button.textContent = 'Copy', 1200);
+        }
+      });
+    });
+
+    newKeyAndUpdate();
+  </script>
+</body>
+</html>
