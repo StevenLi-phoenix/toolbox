@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User-Agent Parser & Device Detector</title>
+  <meta name="description" content="Parse browser user-agent strings, detect browser, OS, engine, device type, bots, and generate copyable debug summaries. Free, mobile-friendly, and privacy-conscious." />
+  <meta name="keywords" content="user agent parser, device detector, browser detection, os detection, bot detector, ua analyzer, developer tool" />
+  <meta name="author" content="Steven Li" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/useragent.html" />
+  <meta property="og:title" content="User-Agent Parser & Device Detector" />
+  <meta property="og:description" content="Inspect user-agent strings, detect browsers and devices, and generate clean debug summaries for support and QA." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/useragent.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="User-Agent Parser & Device Detector" />
+  <meta name="twitter:description" content="Parse UA strings, flag bots, classify devices, and copy ready-to-share debug notes." />
+  <style>
+    :root {
+      --bg: #050816;
+      --bg-soft: #0b1224;
+      --panel: rgba(10, 17, 33, 0.88);
+      --panel-strong: rgba(13, 21, 39, 0.96);
+      --border: rgba(148, 163, 184, 0.17);
+      --text: #edf3ff;
+      --muted: #98abc7;
+      --accent: #7c3aed;
+      --accent2: #38bdf8;
+      --accent3: #22c55e;
+      --warn: #f59e0b;
+      --danger: #fb7185;
+      --shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+      --radius: 22px;
+      --radius-sm: 16px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 26%),
+        radial-gradient(circle at top right, rgba(124, 58, 237, 0.16), transparent 30%),
+        linear-gradient(180deg, #040712 0%, #08101d 52%, #03060e 100%);
+      line-height: 1.55;
+    }
+
+    a { color: inherit; }
+
+    .wrap {
+      width: min(1320px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 28px 0 56px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.12fr 0.88fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .hero-main, .hero-side, .panel { padding: 24px; }
+
+    .hero-main {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      right: -68px;
+      bottom: -92px;
+      width: 280px;
+      height: 280px;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.18), transparent 68%);
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(56, 189, 248, 0.24);
+      background: rgba(56, 189, 248, 0.09);
+      color: #d8f6ff;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    h1 {
+      margin: 18px 0 12px;
+      font-size: clamp(2rem, 4vw, 3.3rem);
+      line-height: 1.03;
+      max-width: 11ch;
+    }
+
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      max-width: 70ch;
+      font-size: 1.03rem;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .stat {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(6, 12, 24, 0.72);
+      padding: 14px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.04rem;
+      margin-bottom: 4px;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .hero-side {
+      display: grid;
+      gap: 12px;
+      align-content: center;
+    }
+
+    .mini {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(10, 16, 30, 0.74);
+    }
+
+    .mini-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+
+    .mini p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.03fr) minmax(360px, 0.97fr);
+      gap: 20px;
+    }
+
+    .panel h2 {
+      margin: 0 0 6px;
+      font-size: 1.14rem;
+    }
+
+    .sub {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      font-size: 0.93rem;
+      font-weight: 600;
+    }
+
+    textarea, input[type="text"] {
+      width: 100%;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+      padding: 13px 14px;
+      font: inherit;
+      resize: vertical;
+      transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    textarea {
+      min-height: 180px;
+      font-family: var(--mono);
+      line-height: 1.45;
+    }
+
+    textarea:focus, input:focus {
+      outline: none;
+      border-color: rgba(56, 189, 248, 0.56);
+      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.13);
+      transform: translateY(-1px);
+    }
+
+    .btn-row, .quick-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    button, .button-link {
+      appearance: none;
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      color: var(--text);
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+      box-shadow: 0 16px 30px rgba(76, 29, 149, 0.25);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button.secondary, .button-link.secondary {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      box-shadow: none;
+      color: var(--text);
+    }
+
+    button.ghost {
+      background: rgba(8, 14, 28, 0.5);
+      border: 1px dashed rgba(148, 163, 184, 0.25);
+      box-shadow: none;
+      color: var(--muted);
+    }
+
+    button:hover, .button-link:hover {
+      transform: translateY(-1px);
+      opacity: 0.98;
+    }
+
+    .quick {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(8, 14, 28, 0.72);
+      padding: 12px 14px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      flex: 1 1 210px;
+      min-width: 0;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 18px 0 0;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(10, 16, 30, 0.7);
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .results {
+      display: grid;
+      gap: 14px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .item {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(8, 14, 28, 0.74);
+      padding: 14px;
+    }
+
+    .item strong {
+      display: block;
+      font-size: 0.8rem;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #c8d6f0;
+      margin-bottom: 8px;
+    }
+
+    .item span, .item code {
+      font-size: 0.98rem;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .pill-list, .note-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pill {
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.18);
+      color: #d6f5ff;
+      font-size: 0.87rem;
+    }
+
+    .pill.warn {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.24);
+      color: #fde3a7;
+    }
+
+    .pill.good {
+      background: rgba(34, 197, 94, 0.11);
+      border-color: rgba(34, 197, 94, 0.22);
+      color: #cbf7d8;
+    }
+
+    .code {
+      position: relative;
+      padding: 16px;
+      border-radius: 16px;
+      background: #060b16;
+      border: 1px solid rgba(56, 189, 248, 0.12);
+      overflow: auto;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--mono);
+      font-size: 0.92rem;
+      color: #d6e8ff;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .section-title h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .footer {
+      margin-top: 20px;
+      padding: 18px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .footer p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .coffee {
+      color: #fff7d6;
+      background: linear-gradient(135deg, #f59e0b, #fb7185);
+      box-shadow: 0 18px 32px rgba(245, 158, 11, 0.22);
+    }
+
+    .tiny {
+      font-size: 0.84rem;
+      color: var(--muted);
+    }
+
+    @media (max-width: 980px) {
+      .hero, .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .wrap {
+        width: min(100% - 18px, 1320px);
+        padding: 18px 0 42px;
+      }
+
+      .hero-main, .hero-side, .panel {
+        padding: 18px;
+      }
+
+      .hero-stats, .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        max-width: none;
+      }
+
+      button, .button-link {
+        width: 100%;
+      }
+
+      .btn-row > *, .quick-row > * {
+        flex: 1 1 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="card hero-main">
+        <div class="badge">Tool #159 · Browser diagnostics</div>
+        <h1>User-Agent Parser & Device Detector</h1>
+        <p class="lead">Paste any user-agent string to identify the likely browser, version, operating system, engine, device type, architecture hints, and whether it looks like a bot. Good for QA, analytics debugging, support tickets, and log triage.</p>
+        <div class="hero-stats">
+          <div class="stat">
+            <strong>Client-side only</strong>
+            <span>No user-agent strings leave your browser.</span>
+          </div>
+          <div class="stat">
+            <strong>Support-friendly</strong>
+            <span>Copy a clean human summary in one click.</span>
+          </div>
+          <div class="stat">
+            <strong>Fast heuristics</strong>
+            <span>Useful labels without any dependency or API.</span>
+          </div>
+        </div>
+      </div>
+      <div class="card hero-side">
+        <div class="mini">
+          <div class="mini-mark">UA</div>
+          <div>
+            <strong>What it catches</strong>
+            <p>Chrome, Safari, Edge, Firefox, Samsung Internet, Opera, bots/crawlers, desktop/mobile/tablet, and major OS families.</p>
+          </div>
+        </div>
+        <div class="mini">
+          <div class="mini-mark">⚠</div>
+          <div>
+            <strong>Keep in mind</strong>
+            <p>User-agent detection is heuristic. Browsers can spoof strings, and modern platforms are slowly reducing UA detail in favor of Client Hints.</p>
+          </div>
+        </div>
+        <div class="mini">
+          <div class="mini-mark">🧾</div>
+          <div>
+            <strong>Included output</strong>
+            <p>Structured summary, notable flags, support-note text, and sample server-side parsing snippets you can copy.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="card panel">
+        <h2>Analyze a user-agent string</h2>
+        <p class="sub">Paste a raw UA string, load your current browser string, or try a preset. The parser updates immediately when you click analyze.</p>
+
+        <div class="field">
+          <label for="uaInput">User-agent string</label>
+          <textarea id="uaInput" spellcheck="false"></textarea>
+        </div>
+
+        <div class="btn-row">
+          <button id="analyzeBtn">Analyze user-agent</button>
+          <button id="myUaBtn" class="secondary">Use my current browser</button>
+          <button id="clearBtn" class="ghost">Clear</button>
+        </div>
+
+        <div class="quick-row">
+          <button class="secondary preset-btn" data-preset="iphone">iPhone Safari</button>
+          <button class="secondary preset-btn" data-preset="android">Android Chrome</button>
+          <button class="secondary preset-btn" data-preset="edge">Windows Edge</button>
+          <button class="secondary preset-btn" data-preset="googlebot">Googlebot</button>
+        </div>
+
+        <div class="chip-row" id="topFlags"></div>
+      </div>
+
+      <div class="card panel results">
+        <div>
+          <h2>Detection summary</h2>
+          <p class="sub">A practical classification you can share with humans, not just raw tokens.</p>
+        </div>
+
+        <div class="summary-grid">
+          <div class="item"><strong>Browser</strong><span id="browserOut">—</span></div>
+          <div class="item"><strong>Browser Version</strong><span id="browserVersionOut">—</span></div>
+          <div class="item"><strong>Engine</strong><span id="engineOut">—</span></div>
+          <div class="item"><strong>Operating System</strong><span id="osOut">—</span></div>
+          <div class="item"><strong>Device Type</strong><span id="deviceOut">—</span></div>
+          <div class="item"><strong>CPU / Architecture Hint</strong><span id="archOut">—</span></div>
+          <div class="item"><strong>Vendor Hint</strong><span id="vendorOut">—</span></div>
+          <div class="item"><strong>Bot / Automation</strong><span id="botOut">—</span></div>
+        </div>
+
+        <div class="item">
+          <strong>Flags</strong>
+          <div class="pill-list" id="flagsOut"></div>
+        </div>
+
+        <div class="item">
+          <strong>Notes</strong>
+          <div class="note-list" id="notesOut"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="layout" style="margin-top: 20px;">
+      <div class="card panel">
+        <div class="section-title">
+          <h3>Support-ready summary</h3>
+          <button class="secondary" data-copy-target="supportSummary">Copy summary</button>
+        </div>
+        <div class="code"><pre id="supportSummary"></pre></div>
+        <p class="tiny" style="margin-top: 10px;">Use this in tickets, QA bug reports, or internal support notes.</p>
+      </div>
+
+      <div class="card panel">
+        <div class="section-title">
+          <h3>JSON result</h3>
+          <button class="secondary" data-copy-target="jsonOutput">Copy JSON</button>
+        </div>
+        <div class="code"><pre id="jsonOutput"></pre></div>
+      </div>
+    </section>
+
+    <section class="layout" style="margin-top: 20px;">
+      <div class="card panel">
+        <div class="section-title">
+          <h3>Request debug snippet</h3>
+          <button class="secondary" data-copy-target="debugSnippet">Copy snippet</button>
+        </div>
+        <div class="code"><pre id="debugSnippet"></pre></div>
+        <p class="tiny" style="margin-top: 10px;">Shows the kind of info you might log alongside headers like <code>User-Agent</code>, <code>Sec-CH-UA</code>, and platform hints.</p>
+      </div>
+
+      <div class="card panel">
+        <div class="section-title">
+          <h3>Server-side starter</h3>
+          <button class="secondary" data-copy-target="serverSnippet">Copy code</button>
+        </div>
+        <div class="code"><pre id="serverSnippet"></pre></div>
+      </div>
+    </section>
+
+    <footer class="card footer">
+      <p>Made for fast browser diagnostics, without shipping data anywhere.</p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <a class="button-link secondary" href="./">More tools</a>
+        <a class="button-link coffee" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener noreferrer">Buy Me a Coffee</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const presets = {
+      iphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+      android: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36',
+      edge: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.2420.81',
+      googlebot: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+    };
+
+    const uaInput = document.getElementById('uaInput');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const myUaBtn = document.getElementById('myUaBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const presetButtons = document.querySelectorAll('.preset-btn');
+    const topFlags = document.getElementById('topFlags');
+
+    const outputs = {
+      browser: document.getElementById('browserOut'),
+      browserVersion: document.getElementById('browserVersionOut'),
+      engine: document.getElementById('engineOut'),
+      os: document.getElementById('osOut'),
+      device: document.getElementById('deviceOut'),
+      arch: document.getElementById('archOut'),
+      vendor: document.getElementById('vendorOut'),
+      bot: document.getElementById('botOut'),
+      flags: document.getElementById('flagsOut'),
+      notes: document.getElementById('notesOut'),
+      supportSummary: document.getElementById('supportSummary'),
+      jsonOutput: document.getElementById('jsonOutput'),
+      debugSnippet: document.getElementById('debugSnippet'),
+      serverSnippet: document.getElementById('serverSnippet')
+    };
+
+    function capture(match, index = 1) {
+      return match ? match[index] : '';
+    }
+
+    function detectBrowser(ua) {
+      const checks = [
+        { name: 'Googlebot', version: capture(ua.match(/Googlebot\/([\d.]+)/i)) },
+        { name: 'Bingbot', version: capture(ua.match(/bingbot\/([\d.]+)/i)) },
+        { name: 'DuckDuckBot', version: capture(ua.match(/DuckDuckBot\/([\d.]+)/i)) },
+        { name: 'ChatGPT-User', version: capture(ua.match(/ChatGPT-User\/([\d.]+)/i)) },
+        { name: 'ClaudeBot', version: capture(ua.match(/ClaudeBot\/([\d.]+)/i)) },
+        { name: 'PerplexityBot', version: capture(ua.match(/PerplexityBot\/([\d.]+)/i)) },
+        { name: 'Edge', version: capture(ua.match(/EdgA?\/([\d.]+)/i)) },
+        { name: 'Opera', version: capture(ua.match(/(?:OPR|Opera)\/([\d.]+)/i)) },
+        { name: 'Samsung Internet', version: capture(ua.match(/SamsungBrowser\/([\d.]+)/i)) },
+        { name: 'Firefox', version: capture(ua.match(/Firefox\/([\d.]+)/i)) },
+        { name: 'Chrome', version: capture(ua.match(/Chrome\/([\d.]+)/i)) },
+        { name: 'Safari', version: capture(ua.match(/Version\/([\d.]+)/i)) }
+      ];
+
+      if (/CriOS\//i.test(ua)) return { name: 'Chrome (iOS)', version: capture(ua.match(/CriOS\/([\d.]+)/i)) };
+      if (/FxiOS\//i.test(ua)) return { name: 'Firefox (iOS)', version: capture(ua.match(/FxiOS\/([\d.]+)/i)) };
+      if (/EdgiOS\//i.test(ua)) return { name: 'Edge (iOS)', version: capture(ua.match(/EdgiOS\/([\d.]+)/i)) };
+
+      for (const item of checks) {
+        if (ua.toLowerCase().includes(item.name.toLowerCase().replace(/\s|\(|\)/g, '')) || (item.version && item.name !== 'Safari')) {
+          if (item.name === 'Safari' && !/Safari\//.test(ua)) continue;
+          if (item.name === 'Chrome' && /(Edg|OPR|SamsungBrowser|CriOS)/.test(ua)) continue;
+          if (item.name === 'Safari' && /(Chrome|CriOS|FxiOS|Edg|OPR|SamsungBrowser)/.test(ua)) continue;
+          return item;
+        }
+      }
+
+      if (/Safari\//.test(ua) && /Version\//.test(ua)) return { name: 'Safari', version: capture(ua.match(/Version\/([\d.]+)/i)) };
+      return { name: 'Unknown', version: '' };
+    }
+
+    function detectEngine(ua, browserName) {
+      if (/Gecko\//i.test(ua) && /Firefox\//i.test(ua)) return 'Gecko';
+      if (/AppleWebKit\//i.test(ua) && /(Chrome|Edg|OPR|SamsungBrowser|CriOS|EdgA|EdgiOS)/i.test(ua)) return 'Blink';
+      if (/AppleWebKit\//i.test(ua) && /Safari\//i.test(ua)) return 'WebKit';
+      if (/Trident\//i.test(ua)) return 'Trident';
+      if (/Googlebot|bingbot|DuckDuckBot/i.test(ua) && /AppleWebKit/i.test(ua)) return 'Likely Blink/WebKit-based crawler';
+      return browserName === 'Unknown' ? 'Unknown' : 'Unclear';
+    }
+
+    function detectOS(ua) {
+      if (/Windows NT 10\.0/i.test(ua)) return 'Windows 10/11';
+      if (/Windows NT 6\.3/i.test(ua)) return 'Windows 8.1';
+      if (/Windows NT 6\.2/i.test(ua)) return 'Windows 8';
+      if (/Windows NT 6\.1/i.test(ua)) return 'Windows 7';
+      if (/Android ([\d.]+)/i.test(ua)) return `Android ${capture(ua.match(/Android ([\d.]+)/i))}`;
+      if (/iPhone OS ([\d_]+)/i.test(ua)) return `iOS ${capture(ua.match(/iPhone OS ([\d_]+)/i)).replace(/_/g, '.')}`;
+      if (/CPU OS ([\d_]+)/i.test(ua)) return `iOS ${capture(ua.match(/CPU OS ([\d_]+)/i)).replace(/_/g, '.')}`;
+      if (/iPad; CPU OS ([\d_]+)/i.test(ua)) return `iPadOS ${capture(ua.match(/iPad; CPU OS ([\d_]+)/i)).replace(/_/g, '.')}`;
+      if (/Mac OS X ([\d_]+)/i.test(ua)) return `macOS ${capture(ua.match(/Mac OS X ([\d_]+)/i)).replace(/_/g, '.')}`;
+      if (/CrOS/i.test(ua)) return 'ChromeOS';
+      if (/Linux/i.test(ua)) return 'Linux';
+      return 'Unknown';
+    }
+
+    function detectDevice(ua) {
+      if (/iPad|Tablet|SM-T|Nexus 7|Nexus 9|Xoom/i.test(ua)) return 'Tablet';
+      if (/Mobile|iPhone|Android/i.test(ua) && !/iPad|Tablet/i.test(ua)) return 'Mobile';
+      if (/TV|SmartTV|HbbTV|AppleTV|CrKey/i.test(ua)) return 'TV / streaming device';
+      if (/PlayStation|Xbox|Nintendo/i.test(ua)) return 'Game console';
+      if (/Googlebot|bot|crawler|spider|crawl|headless/i.test(ua)) return 'Bot / automated client';
+      return 'Desktop / laptop';
+    }
+
+    function detectArch(ua) {
+      if (/arm64|aarch64/i.test(ua)) return 'ARM64';
+      if (/Win64|x64|x86_64|WOW64|amd64/i.test(ua)) return '64-bit x86';
+      if (/i686|x86|i386/i.test(ua)) return '32-bit x86';
+      if (/PPC|PowerPC/i.test(ua)) return 'PowerPC';
+      return 'Not exposed';
+    }
+
+    function detectVendor(ua) {
+      if (/iPhone|iPad|Macintosh/i.test(ua)) return 'Apple';
+      if (/Samsung/i.test(ua)) return 'Samsung';
+      if (/Pixel/i.test(ua)) return 'Google';
+      if (/Windows/i.test(ua)) return 'Microsoft ecosystem';
+      if (/X11|Ubuntu|Linux/i.test(ua)) return 'Linux / OEM varies';
+      return 'Unknown';
+    }
+
+    function collectFlags(ua, browser, os, device) {
+      const flags = [];
+      const notes = [];
+      const lower = ua.toLowerCase();
+      const bot = /(bot|crawler|spider|crawl|headless|slurp|preview|facebookexternalhit|monitoring)/i.test(ua);
+
+      if (bot) flags.push({ text: 'Automation / bot likely', tone: 'warn' });
+      else flags.push({ text: 'Human browser likely', tone: 'good' });
+
+      if (/mobile/i.test(ua)) flags.push({ text: 'Mobile token present', tone: 'good' });
+      if (/tablet|ipad/i.test(ua)) flags.push({ text: 'Tablet token present', tone: 'good' });
+      if (/wv\)|; wv/i.test(ua)) {
+        flags.push({ text: 'Android WebView likely', tone: 'warn' });
+        notes.push('Contains WebView markers (`wv`), so it may be inside an app rather than a full browser.');
+      }
+      if (/HeadlessChrome/i.test(ua)) {
+        flags.push({ text: 'Headless Chrome', tone: 'warn' });
+        notes.push('HeadlessChrome often indicates automated testing, scraping, or CI execution.');
+      }
+      if (/Safari/i.test(ua) && /(Chrome|CriOS|Edg|OPR|SamsungBrowser)/i.test(ua)) {
+        notes.push('Most Chromium-based browsers include a Safari token for compatibility.');
+      }
+      if (/Mac OS X/i.test(ua) && /iPhone|iPad/i.test(ua)) {
+        notes.push('Apple mobile strings often include “like Mac OS X”; this does not mean macOS.');
+      }
+      if (/Intel Mac OS X 10_15_7/i.test(ua)) {
+        notes.push('Many modern macOS browsers still expose the compatibility token 10_15_7 even on newer macOS releases.');
+      }
+      if (/Firefox/i.test(ua) && /Gecko/i.test(ua)) {
+        flags.push({ text: 'Gecko-based browser', tone: 'good' });
+      }
+      if (browser.name.includes('Safari') && device === 'Desktop / laptop') {
+        notes.push('Safari version detection relies on the `Version/` token, not the WebKit build number.');
+      }
+      if (/CriOS|FxiOS|EdgiOS/i.test(ua)) {
+        notes.push('On iOS, third-party browsers must still use Apple’s WebKit engine under the hood.');
+      }
+      if (os.startsWith('Unknown')) {
+        flags.push({ text: 'OS not confidently detected', tone: 'warn' });
+      }
+      if (lower.length < 20) {
+        notes.push('This string is unusually short. It may be synthetic, truncated, or not a real browser UA.');
+      }
+      if (!notes.length) {
+        notes.push('No major oddities detected. Treat this result as a best-effort heuristic classification.');
+      }
+
+      return { flags, notes, bot };
+    }
+
+    function parseUA(ua) {
+      const trimmed = ua.trim();
+      if (!trimmed) {
+        return {
+          browser: { name: '—', version: '' },
+          engine: '—', os: '—', device: '—', arch: '—', vendor: '—', bot: '—', flags: [], notes: ['Paste a user-agent string to begin.']
+        };
+      }
+
+      const browser = detectBrowser(trimmed);
+      const engine = detectEngine(trimmed, browser.name);
+      const os = detectOS(trimmed);
+      const device = detectDevice(trimmed);
+      const arch = detectArch(trimmed);
+      const vendor = detectVendor(trimmed);
+      const extra = collectFlags(trimmed, browser, os, device);
+
+      return {
+        raw: trimmed,
+        browser,
+        engine,
+        os,
+        device,
+        arch,
+        vendor,
+        bot: extra.bot ? 'Likely yes' : 'Likely no',
+        flags: extra.flags,
+        notes: extra.notes
+      };
+    }
+
+    function renderPills(container, items, emptyText) {
+      container.innerHTML = '';
+      if (!items.length) {
+        const span = document.createElement('span');
+        span.className = 'pill';
+        span.textContent = emptyText;
+        container.appendChild(span);
+        return;
+      }
+
+      items.forEach(item => {
+        const span = document.createElement('span');
+        span.className = `pill ${item.tone || ''}`.trim();
+        span.textContent = item.text || item;
+        container.appendChild(span);
+      });
+    }
+
+    function buildSummary(result) {
+      return [
+        `Browser: ${result.browser.name}${result.browser.version ? ' ' + result.browser.version : ''}`,
+        `Engine: ${result.engine}`,
+        `OS: ${result.os}`,
+        `Device: ${result.device}`,
+        `Architecture hint: ${result.arch}`,
+        `Vendor hint: ${result.vendor}`,
+        `Bot / automation: ${result.bot}`,
+        '',
+        'Flags:',
+        ...(result.flags.length ? result.flags.map(flag => `- ${flag.text}`) : ['- None']),
+        '',
+        'Notes:',
+        ...result.notes.map(note => `- ${note}`)
+      ].join('\n');
+    }
+
+    function buildDebugSnippet(result) {
+      const rawPreview = result.raw || '';
+      return [
+        'Suggested request logging fields:',
+        '{',
+        `  "userAgent": ${JSON.stringify(rawPreview)},`,
+        `  "detectedBrowser": ${JSON.stringify(result.browser.name)},`,
+        `  "browserVersion": ${JSON.stringify(result.browser.version || null)},`,
+        `  "engine": ${JSON.stringify(result.engine)},`,
+        `  "os": ${JSON.stringify(result.os)},`,
+        `  "deviceType": ${JSON.stringify(result.device)},`,
+        `  "architectureHint": ${JSON.stringify(result.arch)},`,
+        `  "vendorHint": ${JSON.stringify(result.vendor)},`,
+        `  "isBotLikely": ${JSON.stringify(result.bot === 'Likely yes')},`,
+        '  "relatedHeaders": ["user-agent", "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform"]',
+        '}',
+        '',
+        'Tip: Prefer feature detection or Client Hints where possible. UA parsing should usually be a fallback, not your primary source of truth.'
+      ].join('\n');
+    }
+
+    function buildServerSnippet() {
+      return [
+        'app.get("/debug/request", (req, res) => {',
+        '  const ua = req.get("user-agent") || "";',
+        '  const hints = {',
+        '    secChUa: req.get("sec-ch-ua"),',
+        '    secChUaMobile: req.get("sec-ch-ua-mobile"),',
+        '    secChUaPlatform: req.get("sec-ch-ua-platform")',
+        '  };',
+        '',
+        '  // Use UA parsing only as a fallback:',
+        '  const looksMobile = /Mobile|Android|iPhone/i.test(ua);',
+        '  const looksBot = /bot|crawler|spider|headless/i.test(ua);',
+        '',
+        '  res.json({ ua, hints, looksMobile, looksBot });',
+        '});',
+        '',
+        '// Safer pattern:',
+        '// 1) prefer responsive design and feature detection',
+        '// 2) use Client Hints if you truly need platform classes',
+        '// 3) parse UA only for debugging, analytics cleanup, or coarse fallback logic'
+      ].join('\n');
+    }
+
+    function render(result) {
+      outputs.browser.textContent = result.browser.name || '—';
+      outputs.browserVersion.textContent = result.browser.version || '—';
+      outputs.engine.textContent = result.engine || '—';
+      outputs.os.textContent = result.os || '—';
+      outputs.device.textContent = result.device || '—';
+      outputs.arch.textContent = result.arch || '—';
+      outputs.vendor.textContent = result.vendor || '—';
+      outputs.bot.textContent = result.bot || '—';
+
+      renderPills(outputs.flags, result.flags, 'No flags yet');
+      renderPills(outputs.notes, result.notes.map(note => ({ text: note })), 'No notes yet');
+      renderPills(topFlags, [
+        { text: result.browser.name || 'Unknown browser' },
+        { text: result.os || 'Unknown OS' },
+        { text: result.device || 'Unknown device' },
+        { text: result.bot || 'Unknown bot status', tone: result.bot === 'Likely yes' ? 'warn' : 'good' }
+      ], '');
+
+      outputs.supportSummary.textContent = buildSummary(result);
+      outputs.jsonOutput.textContent = JSON.stringify({
+        browser: result.browser.name,
+        browserVersion: result.browser.version || null,
+        engine: result.engine,
+        os: result.os,
+        deviceType: result.device,
+        architectureHint: result.arch,
+        vendorHint: result.vendor,
+        botLikely: result.bot === 'Likely yes',
+        flags: result.flags.map(flag => flag.text),
+        notes: result.notes,
+        raw: result.raw || ''
+      }, null, 2);
+      outputs.debugSnippet.textContent = buildDebugSnippet(result);
+      outputs.serverSnippet.textContent = buildServerSnippet();
+    }
+
+    function analyze() {
+      render(parseUA(uaInput.value));
+    }
+
+    analyzeBtn.addEventListener('click', analyze);
+    myUaBtn.addEventListener('click', async () => {
+      const parts = [navigator.userAgent || ''];
+      if (navigator.userAgentData) {
+        try {
+          const high = await navigator.userAgentData.getHighEntropyValues(['platform', 'platformVersion', 'architecture', 'model', 'bitness']);
+          parts.push('\n\n[Client Hints preview] ' + JSON.stringify({
+            brands: navigator.userAgentData.brands,
+            mobile: navigator.userAgentData.mobile,
+            ...high
+          }, null, 2));
+        } catch (_) {
+          // ignore
+        }
+      }
+      uaInput.value = parts.join('');
+      analyze();
+    });
+
+    clearBtn.addEventListener('click', () => {
+      uaInput.value = '';
+      analyze();
+    });
+
+    presetButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        uaInput.value = presets[btn.dataset.preset] || '';
+        analyze();
+      });
+    });
+
+    document.querySelectorAll('[data-copy-target]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const target = document.getElementById(btn.dataset.copyTarget);
+        if (!target) return;
+        try {
+          await navigator.clipboard.writeText(target.textContent);
+          const original = btn.textContent;
+          btn.textContent = 'Copied';
+          setTimeout(() => { btn.textContent = original; }, 1200);
+        } catch (_) {
+          btn.textContent = 'Copy failed';
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+        }
+      });
+    });
+
+    uaInput.value = presets.edge;
+    analyze();
+  </script>
+</body>
+</html>
