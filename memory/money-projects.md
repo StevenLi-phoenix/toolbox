@@ -282,9 +282,11 @@
 | 167 | MIME Type Lookup & Content-Type Header Builder | toolbox/mime.html | ✅ stevenli-phoenix.github.io/toolbox/mime.html | ❌ |
 | 168 | Forwarded Header Builder & Proxy Chain Inspector | toolbox/forwarded.html | ✅ stevenli-phoenix.github.io/toolbox/forwarded.html | ❌ |
 | 169 | Accept Header Builder & Content Negotiation Tester | toolbox/accept.html | ✅ stevenli-phoenix.github.io/toolbox/accept.html | ❌ |
+| 170 | Surrogate-Control Header Builder & CDN Cache Planner | toolbox/surrogatecontrol.html | ✅ stevenli-phoenix.github.io/toolbox/surrogatecontrol.html | ❌ |
+| 171 | Feature Flag Rollout Planner | toolbox/rollout.html | ✅ stevenli-phoenix.github.io/toolbox/rollout.html | ❌ |
 
 ## Queue
-170. (next tool TBD)
+172. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
