@@ -293,9 +293,11 @@
 | 178 | Stack Trace Explainer | toolbox/stacktrace.html | ✅ stevenli-phoenix.github.io/toolbox/stacktrace.html | ❌ |
 | 179 | Release Risk Radar | toolbox/releaseradar.html | ✅ stevenli-phoenix.github.io/toolbox/releaseradar.html | ❌ |
 | 180 | Git Worktree Planner | toolbox/worktree.html | ✅ stevenli-phoenix.github.io/toolbox/worktree.html | ❌ |
+| 181 | Release Note Diff Distiller | toolbox/releasenotemaker.html | ✅ stevenli-phoenix.github.io/toolbox/releasenotemaker.html | ❌ |
+| 182 | PR Comment Triage | toolbox/prtriage.html | ✅ stevenli-phoenix.github.io/toolbox/prtriage.html | ❌ |
 
 ## Queue
-181. (next tool TBD)
+183. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
