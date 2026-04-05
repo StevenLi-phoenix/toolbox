@@ -268,9 +268,23 @@
 | 153 | Vary Header Builder & Cache Key Planner | toolbox/vary.html | ✅ stevenli-phoenix.github.io/toolbox/vary.html | ❌ |
 | 154 | Referrer-Policy Header Builder & Privacy Preview | toolbox/referrerpolicy.html | ✅ stevenli-phoenix.github.io/toolbox/referrerpolicy.html | ❌ |
 | 155 | PR Description Generator | toolbox/prdescription.html | ✅ stevenli-phoenix.github.io/toolbox/prdescription.html | ❌ |
+| 156 | GitHub Actions Workflow Generator | toolbox/githubactions.html | ✅ stevenli-phoenix.github.io/toolbox/githubactions.html | ❌ |
+| 157 | SRI Hash Generator & Integrity Checker | toolbox/sri.html | ✅ stevenli-phoenix.github.io/toolbox/sri.html | ❌ |
+| 158 | Accept-Language Header Builder & Locale Negotiation Tester | toolbox/acceptlanguage.html | ✅ stevenli-phoenix.github.io/toolbox/acceptlanguage.html | ❌ |
+| 159 | User-Agent Parser & Device Detector | toolbox/useragent.html | ✅ stevenli-phoenix.github.io/toolbox/useragent.html | ❌ |
+| 160 | Server-Timing Header Builder & Performance Budget Planner | toolbox/servertiming.html | ✅ stevenli-phoenix.github.io/toolbox/servertiming.html | ❌ |
+| 161 | Alt-Svc Header Builder & HTTP/3 Upgrade Planner | toolbox/altsvc.html | ✅ stevenli-phoenix.github.io/toolbox/altsvc.html | ❌ |
+| 162 | Accept-Encoding Header Builder & Compression Negotiation Tester | toolbox/acceptencoding.html | ✅ stevenli-phoenix.github.io/toolbox/acceptencoding.html | ❌ |
+| 163 | Idempotency Key Builder & Retry Safety Planner | toolbox/idempotency.html | ✅ stevenli-phoenix.github.io/toolbox/idempotency.html | ❌ |
+| 164 | Range Header Builder & Partial Content Tester | toolbox/rangeheader.html | ✅ stevenli-phoenix.github.io/toolbox/rangeheader.html | ❌ |
+| 165 | API Request Builder & Code Snippet Generator | toolbox/apirequest.html | ✅ stevenli-phoenix.github.io/toolbox/apirequest.html | ❌ |
+| 166 | JSON Repair Studio | toolbox/jsonrepair.html | ✅ stevenli-phoenix.github.io/toolbox/jsonrepair.html | ❌ |
+| 167 | MIME Type Lookup & Content-Type Header Builder | toolbox/mime.html | ✅ stevenli-phoenix.github.io/toolbox/mime.html | ❌ |
+| 168 | Forwarded Header Builder & Proxy Chain Inspector | toolbox/forwarded.html | ✅ stevenli-phoenix.github.io/toolbox/forwarded.html | ❌ |
+| 169 | Accept Header Builder & Content Negotiation Tester | toolbox/accept.html | ✅ stevenli-phoenix.github.io/toolbox/accept.html | ❌ |
 
 ## Queue
-156. (next tool TBD)
+170. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
