@@ -292,9 +292,10 @@
 | 177 | Focus Session Planner | toolbox/focusplanner.html | ✅ stevenli-phoenix.github.io/toolbox/focusplanner.html | ❌ |
 | 178 | Stack Trace Explainer | toolbox/stacktrace.html | ✅ stevenli-phoenix.github.io/toolbox/stacktrace.html | ❌ |
 | 179 | Release Risk Radar | toolbox/releaseradar.html | ✅ stevenli-phoenix.github.io/toolbox/releaseradar.html | ❌ |
+| 180 | Git Worktree Planner | toolbox/worktree.html | ✅ stevenli-phoenix.github.io/toolbox/worktree.html | ❌ |
 
 ## Queue
-180. (next tool TBD)
+181. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
