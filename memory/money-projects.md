@@ -284,9 +284,11 @@
 | 169 | Accept Header Builder & Content Negotiation Tester | toolbox/accept.html | ✅ stevenli-phoenix.github.io/toolbox/accept.html | ❌ |
 | 170 | Surrogate-Control Header Builder & CDN Cache Planner | toolbox/surrogatecontrol.html | ✅ stevenli-phoenix.github.io/toolbox/surrogatecontrol.html | ❌ |
 | 171 | Feature Flag Rollout Planner | toolbox/rollout.html | ✅ stevenli-phoenix.github.io/toolbox/rollout.html | ❌ |
+| 172 | PR Review Checklist Generator | toolbox/prreview.html | ✅ stevenli-phoenix.github.io/toolbox/prreview.html | ❌ |
+| 173 | Issue Triage Assistant | toolbox/issuetriage.html | ✅ stevenli-phoenix.github.io/toolbox/issuetriage.html | ❌ |
 
 ## Queue
-172. (next tool TBD)
+174. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
