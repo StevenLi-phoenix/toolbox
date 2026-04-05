@@ -299,9 +299,10 @@
 | 184 | Merge Readiness Checker | toolbox/mergeready.html | ✅ stevenli-phoenix.github.io/toolbox/mergeready.html | ❌ |
 | 185 | Standup Update Generator | toolbox/standup.html | ✅ stevenli-phoenix.github.io/toolbox/standup.html | ❌ |
 | 186 | Task Breakdown Planner | toolbox/taskbreakdown.html | ✅ stevenli-phoenix.github.io/toolbox/taskbreakdown.html | ❌ |
+| 187 | Diff Risk Radar | toolbox/diffrisk.html | ✅ stevenli-phoenix.github.io/toolbox/diffrisk.html | ❌ |
 
 ## Queue
-187. (next tool TBD)
+188. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
