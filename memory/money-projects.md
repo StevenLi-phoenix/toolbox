@@ -322,9 +322,10 @@
 | 204 | Focus Debt Calculator | toolbox/focusdebt.html | ✅ stevenli-phoenix.github.io/toolbox/focusdebt.html | ❌ |
 | 205 | Context Switch Cost Calculator | toolbox/contextswitch.html | ✅ stevenli-phoenix.github.io/toolbox/contextswitch.html | ❌ |
 | 206 | Git Rebase Coach | toolbox/rebasecoach.html | ✅ stevenli-phoenix.github.io/toolbox/rebasecoach.html | ❌ |
+| 207 | Branch Cleanup Planner | toolbox/branchcleanup.html | ✅ stevenli-phoenix.github.io/toolbox/branchcleanup.html | ❌ |
 
 ## Queue
-207. (next tool TBD)
+208. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
