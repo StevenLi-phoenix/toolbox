@@ -312,9 +312,10 @@
 | 196 | Sprint Capacity Planner | toolbox/sprintcapacity.html | ✅ stevenli-phoenix.github.io/toolbox/sprintcapacity.html | ❌ |
 | 197 | Merge Conflict Compass | toolbox/mergeconflict.html | ✅ stevenli-phoenix.github.io/toolbox/mergeconflict.html | ❌ |
 | 198 | PR Scope Splitter | toolbox/prscope.html | ✅ stevenli-phoenix.github.io/toolbox/prscope.html | ❌ |
+| 199 | Port Conflict Finder | toolbox/portfinder.html | ✅ stevenli-phoenix.github.io/toolbox/portfinder.html | ❌ |
 
 ## Queue
-199. (next tool TBD)
+200. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
