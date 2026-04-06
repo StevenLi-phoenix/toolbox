@@ -309,9 +309,10 @@
 | 194 | Sprint Retro Generator | toolbox/sprintretro.html | ✅ stevenli-phoenix.github.io/toolbox/sprintretro.html | ❌ |
 
 | 195 | Launch Checklist Builder | toolbox/launchchecklist.html | ✅ stevenli-phoenix.github.io/toolbox/launchchecklist.html | ❌ |
+| 196 | Sprint Capacity Planner | toolbox/sprintcapacity.html | ✅ stevenli-phoenix.github.io/toolbox/sprintcapacity.html | ❌ |
 
 ## Queue
-196. (next tool TBD)
+197. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
