@@ -161,6 +161,9 @@ footer .privacy svg{width:14px;height:14px;fill:currentColor;color:#22c55e}
   </header>
 
   <main class="card">
+    <!-- API Config Panel -->
+    <div id="apiPanelMount"></div>
+
     <!-- Input -->
     <div class="input-section">
       <label>
@@ -195,9 +198,10 @@ footer .privacy svg{width:14px;height:14px;fill:currentColor;color:#22c55e}
       </div>
     </div>
 
-    <!-- Summarize Button -->
+    <!-- Summarize Buttons -->
     <div class="btn-row">
       <button class="btn btn-primary" id="summarizeBtn">⚡ Summarize</button>
+      <button class="btn btn-primary" id="aiSummarizeBtn" style="background:linear-gradient(135deg,#6366f1,#a855f7)">🤖 AI Summarize</button>
       <button class="btn btn-secondary" id="copyBtn" disabled>📋 Copy Summary</button>
       <button class="btn btn-secondary" id="downloadBtn" disabled>💾 Download TXT</button>
     </div>
@@ -215,17 +219,20 @@ footer .privacy svg{width:14px;height:14px;fill:currentColor;color:#22c55e}
   <footer>
     <div class="privacy">
       <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
-      100% client-side — your data never leaves your browser
+      Client-side TF-IDF mode needs no API key — AI mode sends text to OpenAI
     </div>
     <br>
     <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener noreferrer" class="btn btn-coffee" style="text-decoration:none;margin-bottom:.75rem;display:inline-flex">☕ Buy Me a Coffee</a>
-    <p style="margin-top:.75rem">Built with pure JavaScript. No API keys. No tracking.</p>
+    <p style="margin-top:.75rem">Built with pure JavaScript. AI mode powered by OpenAI API.</p>
   </footer>
 </div>
 
 <div class="toast" id="toast"></div>
 
+<script src="api-config.js"></script>
 <script>
+// ─── API Panel ─────────────────────────────────────────────
+ToolboxAPI.renderApiPanel(document.getElementById('apiPanelMount'));
 // ─── Theme Toggle ──────────────────────────────────────────
 const html = document.documentElement;
 const themeBtn = document.getElementById('themeToggle');
@@ -484,6 +491,48 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault();
     summarizeBtn.click();
+  }
+});
+
+// ─── AI Summarize ──────────────────────────────────────────
+const aiSummarizeBtn = document.getElementById('aiSummarizeBtn');
+aiSummarizeBtn.addEventListener('click', async () => {
+  const text = inputEl.value.trim();
+  if (!text) { showToast('Please paste some text first.'); return; }
+  if (countWords(text) < 20) { showToast('Text is too short to summarize.'); return; }
+
+  const bullets = bulletToggle.checked;
+  const lengthLabel_ = LENGTH_MAP[lengthSlider.value];
+  const formatInstr = bullets ? 'as a bullet-point list' : 'as a single cohesive paragraph';
+  const lengthInstr = lengthLabel_ === 'Short' ? '2–3 sentences' : lengthLabel_ === 'Medium' ? '4–6 sentences' : '7–10 sentences';
+
+  const origLabel = aiSummarizeBtn.innerHTML;
+  aiSummarizeBtn.innerHTML = '<span class="spinner"></span> Calling AI...';
+  aiSummarizeBtn.disabled = true;
+
+  try {
+    const reply = await ToolboxAPI.callOpenAI([
+      { role: 'system', content: 'You are a concise summarization assistant. Produce summaries that capture the key points faithfully.' },
+      { role: 'user', content: `Summarize the following text ${formatInstr} in ${lengthInstr}. Output only the summary, nothing else.\n\n${text}` }
+    ], { temperature: 0.4, max_tokens: 512 });
+
+    if (bullets) {
+      const lines = reply.split('\n').filter(l => l.trim());
+      outputBox.innerHTML = '<ul>' + lines.map(l => `<li>${escapeHTML(l.replace(/^[-*•]\s*/, ''))}</li>`).join('') + '</ul>';
+      currentSummary = lines.map(l => '• ' + l.replace(/^[-*•]\s*/, '')).join('\n');
+    } else {
+      currentSummary = reply;
+      outputBox.innerHTML = escapeHTML(reply);
+    }
+    outputCount.textContent = countWords(currentSummary) + ' words';
+    copyBtn.disabled = false;
+    downloadBtn.disabled = false;
+    showToast('AI summary generated!');
+  } catch (err) {
+    showToast(err.message || 'AI request failed.');
+  } finally {
+    aiSummarizeBtn.innerHTML = origLabel;
+    aiSummarizeBtn.disabled = false;
   }
 });
 </script>
