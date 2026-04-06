@@ -341,9 +341,10 @@
 | 219 | Deadline Budget Planner | toolbox/deadlinebudget.html | ✅ stevenli-phoenix.github.io/toolbox/deadlinebudget.html | ❌ |
 | 220 | Release Window Planner | toolbox/releasewindow.html | ✅ stevenli-phoenix.github.io/toolbox/releasewindow.html | ❌ |
 | 221 | Shortcut Cheat Sheet Builder | toolbox/shortcutcheatsheet.html | ✅ stevenli-phoenix.github.io/toolbox/shortcutcheatsheet.html | ❌ |
+| 222 | Deep Work Sprint Planner | toolbox/deepwork.html | ✅ stevenli-phoenix.github.io/toolbox/deepwork.html | ❌ |
 
 ## Queue
-222. (next tool TBD)
+223. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
