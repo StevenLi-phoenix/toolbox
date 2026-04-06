@@ -324,9 +324,10 @@
 | 206 | Git Rebase Coach | toolbox/rebasecoach.html | ✅ stevenli-phoenix.github.io/toolbox/rebasecoach.html | ❌ |
 | 207 | Branch Cleanup Planner | toolbox/branchcleanup.html | ✅ stevenli-phoenix.github.io/toolbox/branchcleanup.html | ❌ |
 | 208 | Rollback Planner | toolbox/rollback.html | ✅ stevenli-phoenix.github.io/toolbox/rollback.html | ❌ |
+| 209 | Bug Repro Script Builder | toolbox/bugrepro.html | ✅ stevenli-phoenix.github.io/toolbox/bugrepro.html | ❌ |
 
 ## Queue
-209. (next tool TBD)
+210. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
