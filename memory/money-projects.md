@@ -326,9 +326,10 @@
 | 208 | Rollback Planner | toolbox/rollback.html | ✅ stevenli-phoenix.github.io/toolbox/rollback.html | ❌ |
 | 209 | Bug Repro Script Builder | toolbox/bugrepro.html | ✅ stevenli-phoenix.github.io/toolbox/bugrepro.html | ❌ |
 | 210 | Meeting Prep Brief Generator | toolbox/meetingprep.html | ✅ stevenli-phoenix.github.io/toolbox/meetingprep.html | ❌ |
+| 211 | Merge Queue Planner | toolbox/mergequeue.html | ✅ stevenli-phoenix.github.io/toolbox/mergequeue.html | ❌ |
 
 ## Queue
-211. (next tool TBD)
+212. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
