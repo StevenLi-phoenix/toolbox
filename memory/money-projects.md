@@ -303,9 +303,10 @@
 | 188 | Ticket Slice Planner | toolbox/slices.html | ✅ stevenli-phoenix.github.io/toolbox/slices.html | ❌ |
 | 189 | OpenAPI Change Radar | toolbox/openapiradar.html | ✅ stevenli-phoenix.github.io/toolbox/openapiradar.html | ❌ |
 | 190 | Changelog Bullet Generator | toolbox/changelog.html | ✅ stevenli-phoenix.github.io/toolbox/changelog.html | ❌ |
+| 191 | Branch Name Generator | toolbox/branchname.html | ✅ stevenli-phoenix.github.io/toolbox/branchname.html | ❌ |
 
 ## Queue
-191. (next tool TBD)
+192. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
