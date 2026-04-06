@@ -52,7 +52,6 @@
             id="apiKeyInput"
             class="api-key-input"
             placeholder="sk-..."
-            value="${saved ? saved : ''}"
             autocomplete="off"
             spellcheck="false"
           />
@@ -62,7 +61,7 @@
         <p class="api-panel-hint">
           Your key is stored only in your browser's localStorage and is never sent anywhere except directly to
           <a href="https://platform.openai.com" target="_blank" rel="noopener">api.openai.com</a>.
-          Needs a key with access to <code>gpt-4o-mini</code> or higher.
+          Needs a key with access to <code>gpt-4o-mini</code> or other gpt-4o-family models.
         </p>
       </div>
       <style>
@@ -83,6 +82,9 @@
         .api-panel-hint code{background:rgba(255,255,255,.07);border-radius:4px;padding:1px 5px;font-size:.77rem}
       </style>
     `;
+
+    // Set the saved key value safely via DOM property to avoid XSS
+    container.querySelector('#apiKeyInput').value = saved;
 
     container.querySelector('#apiSaveBtn').addEventListener('click', () => {
       const key = container.querySelector('#apiKeyInput').value.trim();
