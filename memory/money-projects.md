@@ -305,9 +305,13 @@
 | 190 | Changelog Bullet Generator | toolbox/changelog.html | ✅ stevenli-phoenix.github.io/toolbox/changelog.html | ❌ |
 | 191 | Branch Name Generator | toolbox/branchname.html | ✅ stevenli-phoenix.github.io/toolbox/branchname.html | ❌ |
 | 192 | API Error Decoder | toolbox/apierror.html | ✅ stevenli-phoenix.github.io/toolbox/apierror.html | ❌ |
+| 193 | Priority Matrix | toolbox/prioritymatrix.html | ✅ stevenli-phoenix.github.io/toolbox/prioritymatrix.html | ❌ |
+| 194 | Sprint Retro Generator | toolbox/sprintretro.html | ✅ stevenli-phoenix.github.io/toolbox/sprintretro.html | ❌ |
+
+| 195 | Launch Checklist Builder | toolbox/launchchecklist.html | ✅ stevenli-phoenix.github.io/toolbox/launchchecklist.html | ❌ |
 
 ## Queue
-193. (next tool TBD)
+196. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
