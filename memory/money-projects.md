@@ -310,9 +310,10 @@
 
 | 195 | Launch Checklist Builder | toolbox/launchchecklist.html | ✅ stevenli-phoenix.github.io/toolbox/launchchecklist.html | ❌ |
 | 196 | Sprint Capacity Planner | toolbox/sprintcapacity.html | ✅ stevenli-phoenix.github.io/toolbox/sprintcapacity.html | ❌ |
+| 197 | Merge Conflict Compass | toolbox/mergeconflict.html | ✅ stevenli-phoenix.github.io/toolbox/mergeconflict.html | ❌ |
 
 ## Queue
-197. (next tool TBD)
+198. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
