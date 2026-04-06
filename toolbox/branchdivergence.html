@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="description" content="Estimate branch divergence, merge risk, and the cheapest path to get a Git branch back in sync." />
+  <meta name="keywords" content="git, branch divergence, merge risk, developer tool, productivity, merge planner" />
+  <meta name="robots" content="index,follow" />
+  <meta property="og:title" content="Git Branch Divergence Planner" />
+  <meta property="og:description" content="Estimate how far a branch has drifted from main and plan the safest merge strategy." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/branchdivergence.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/ogimage.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <title>Git Branch Divergence Planner</title>
+  <style>
+    :root{--bg:#070b14;--panel:#0e1629;--panel2:#101a31;--text:#e6ecff;--muted:#91a4cf;--line:#23314f;--accent:#7c5cff;--accent2:#31d0aa;--warn:#ffb84d;--bad:#ff6b7a;--good:#54e39f;--shadow:0 20px 60px rgba(0,0,0,.35)}
+    *{box-sizing:border-box} html,body{margin:0;background:radial-gradient(1200px 700px at 20% 0%,#142041 0%,var(--bg) 45%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    a{color:inherit} .wrap{max-width:1100px;margin:0 auto;padding:20px}
+    .hero{display:grid;gap:16px;grid-template-columns:1.3fr .7fr;align-items:stretch}
+    .card{background:linear-gradient(180deg,rgba(16,26,49,.96),rgba(11,16,32,.96));border:1px solid rgba(124,92,255,.18);border-radius:24px;box-shadow:var(--shadow);backdrop-filter:blur(10px)}
+    .pad{padding:20px} h1{margin:.1rem 0 .5rem;font-size:clamp(2rem,4vw,3.5rem);line-height:1.02} .tag{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--line);background:rgba(255,255,255,.03);padding:8px 12px;border-radius:999px;color:var(--muted);font-size:.92rem}
+    .sub{color:var(--muted);max-width:68ch} .grid{display:grid;gap:16px;grid-template-columns:repeat(12,1fr);margin-top:16px}
+    .form{grid-column:span 7} .results{grid-column:span 5} .full{grid-column:1/-1}
+    label{display:block;font-size:.9rem;color:#cbd7ff;margin:0 0 8px} input,textarea,select,button{width:100%;border-radius:16px;border:1px solid var(--line);background:#0a1222;color:var(--text);padding:14px 15px;font:inherit} textarea{min-height:110px;resize:vertical}
+    input:focus,textarea:focus,select:focus{outline:2px solid color-mix(in oklab, var(--accent) 70%, white 10%);outline-offset:1px}
+    .row{display:grid;gap:12px;grid-template-columns:repeat(2,1fr)} .row3{display:grid;gap:12px;grid-template-columns:repeat(3,1fr)}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px} button{cursor:pointer;font-weight:700;background:linear-gradient(135deg,var(--accent),#4aa3ff);border:none} button.secondary{background:#12203c;border:1px solid var(--line)} button.good{background:linear-gradient(135deg,#1d8d6d,#31d0aa)}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--line);margin:6px 8px 0 0;color:#dfe7ff}
+    .stat{display:grid;grid-template-columns:1fr auto;gap:8px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06)} .stat:last-child{border-bottom:none}
+    .k{color:var(--muted)} .v{font-weight:800}
+    .risk{padding:18px;border-radius:18px;background:linear-gradient(180deg,rgba(124,92,255,.12),rgba(49,208,170,.06));border:1px solid rgba(124,92,255,.2)}
+    .risk.low{border-color:rgba(84,227,159,.35)} .risk.med{border-color:rgba(255,184,77,.35)} .risk.high{border-color:rgba(255,107,122,.35)}
+    .footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:18px 0 8px;color:var(--muted);font-size:.94rem}
+    .coffee{color:#ffd79a;text-decoration:none;font-weight:700}
+    .mini{font-size:.92rem;color:var(--muted)}
+    .bar{height:10px;border-radius:999px;background:#111a30;overflow:hidden;border:1px solid var(--line)} .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--good),var(--warn),var(--bad));width:35%}
+    @media (max-width: 900px){.hero,.form,.results,.grid{grid-template-columns:1fr}.row,.row3{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="card pad">
+        <span class="tag">🪄 Git Branch Divergence Planner • #216</span>
+        <h1>Know when a branch is safe to merge.</h1>
+        <p class="sub">Drop in your commit counts, churn, and time since last sync. This tool estimates divergence, merge risk, and the cheapest path back to main — merge, rebase, or reset and start over.</p>
+        <div class="actions">
+          <a class="coffee" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener noreferrer">Buy me a coffee</a>
+          <span class="mini">Dark UI • mobile-friendly • offline-ready</span>
+        </div>
+      </div>
+      <div class="card pad">
+        <div class="stat"><div class="k">Recommended strategy</div><div class="v" id="strategy">—</div></div>
+        <div class="stat"><div class="k">Risk level</div><div class="v" id="riskLabel">—</div></div>
+        <div class="stat"><div class="k">Estimated merge pain</div><div class="v" id="pain">—</div></div>
+        <div class="bar" aria-hidden="true"><i id="barFill"></i></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card pad form">
+        <div class="row">
+          <div><label for="branchAge">Days since branch was cut</label><input id="branchAge" type="number" min="0" value="6" /></div>
+          <div><label for="syncAge">Days since last sync with main</label><input id="syncAge" type="number" min="0" value="3" /></div>
+        </div>
+        <div class="row3" style="margin-top:12px">
+          <div><label for="branchCommits">Branch-only commits</label><input id="branchCommits" type="number" min="0" value="7" /></div>
+          <div><label for="mainCommits">Main-only commits</label><input id="mainCommits" type="number" min="0" value="12" /></div>
+          <div><label for="conflicts">Expected conflict files</label><input id="conflicts" type="number" min="0" value="2" /></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div><label for="churn">Churn percentage</label><input id="churn" type="number" min="0" max="100" value="18" /></div>
+          <div><label for="velocity">Team velocity</label><select id="velocity"><option value="1.2">Fast-moving</option><option value="1">Normal</option><option value="0.8">Stable</option></select></div>
+        </div>
+        <div style="margin-top:12px"><label for="notes">Branch notes</label><textarea id="notes" placeholder="Add context: risky migrations, feature flags, generated code, etc."></textarea></div>
+        <div class="actions">
+          <button id="analyzeBtn">Analyze branch</button>
+          <button class="secondary" id="fillDemoBtn">Use realistic demo</button>
+          <button class="good" id="copyBtn">Copy plan</button>
+        </div>
+      </div>
+
+      <div class="card pad results">
+        <div class="risk" id="riskBox">
+          <div class="mini">Assessment</div>
+          <h2 style="margin:.2rem 0 .4rem" id="headline">Ready for analysis</h2>
+          <p class="sub" id="summary">Enter your branch stats and I’ll estimate the safest route.</p>
+        </div>
+        <div style="margin-top:16px" id="details"></div>
+      </div>
+
+      <div class="card pad full">
+        <h3 style="margin-top:0">Merge-playbook checklist</h3>
+        <div id="checklist"></div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <div>Built for fast dev decisions. No backend, no dependencies, no nonsense.</div>
+      <div><a class="coffee" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener noreferrer">Support the builder</a></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { strategy:'—', score:0, headline:'Ready for analysis', summary:'Enter your branch stats and I’ll estimate the safest route.' };
+    const checklistBase = [
+      'Fetch latest main and compare a clean diff.',
+      'Scan for migrations, lockfiles, generated artifacts, and config drift.',
+      'If conflicts are limited and branch is small, rebase is usually cheapest.',
+      'If the branch has team-visible history or is already shared, prefer merge.',
+      'If churn is huge or the branch is stale, consider cutting a fresh branch.'
+    ];
+
+    function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
+    function analyze(){
+      const age = +$('branchAge').value || 0;
+      const sync = +$('syncAge').value || 0;
+      const bc = +$('branchCommits').value || 0;
+      const mc = +$('mainCommits').value || 0;
+      const conflicts = +$('conflicts').value || 0;
+      const churn = +$('churn').value || 0;
+      const velocity = +$('velocity').value || 1;
+      const notes = $('notes').value.trim();
+
+      let score = age*3 + sync*4 + bc*2 + mc*1.4 + conflicts*8 + churn*0.9;
+      score *= velocity;
+      if (/migration|schema|lockfile|generated|auth|payment|infra/i.test(notes)) score += 12;
+      if (/flag|feature flag/i.test(notes)) score -= 4;
+      score = clamp(Math.round(score), 0, 100);
+      let strategy = 'Rebase';
+      let risk = 'low';
+      let headline = 'Small, clean branch';
+      let summary = 'Rebase looks cheap and low-risk. Ship it after a quick sanity check.';
+      if (score >= 70){ strategy='Cut a fresh branch'; risk='high'; headline='This branch has drifted a lot'; summary='The cheapest move is often to recreate the work on top of current main.'; }
+      else if (score >= 40){ strategy='Merge'; risk='med'; headline='Moderate merge risk'; summary='Prefer a merge if this branch is already shared; otherwise rebase if the team is comfortable.'; }
+      else { strategy='Rebase'; risk='low'; headline='Branch is still tame'; summary='Keep the history clean and rebase onto main before the review gets noisy.'; }
+
+      $('strategy').textContent = strategy;
+      $('riskLabel').textContent = risk.toUpperCase();
+      $('pain').textContent = score + '/100';
+      $('headline').textContent = headline;
+      $('summary').textContent = summary;
+      $('barFill').style.width = score + '%';
+      const box = $('riskBox');
+      box.className = 'risk ' + risk;
+      $('details').innerHTML = `
+        <div class="stat"><div class="k">Risk score</div><div class="v">${score}</div></div>
+        <div class="stat"><div class="k">Branch-only commits</div><div class="v">${bc}</div></div>
+        <div class="stat"><div class="k">Main-only commits</div><div class="v">${mc}</div></div>
+        <div class="stat"><div class="k">Conflict files</div><div class="v">${conflicts}</div></div>
+        <div class="stat"><div class="k">Churn</div><div class="v">${churn}%</div></div>
+      `;
+      $('checklist').innerHTML = checklistBase.map((x,i)=>`<div class="pill">${i+1}. ${x}</div>`).join('');
+      state.strategy = strategy; state.score = score; state.headline = headline; state.summary = summary;
+    }
+
+    $('analyzeBtn').addEventListener('click', analyze);
+    $('fillDemoBtn').addEventListener('click', ()=>{
+      $('branchAge').value=9; $('syncAge').value=5; $('branchCommits').value=14; $('mainCommits').value=22; $('conflicts').value=4; $('churn').value=27; $('velocity').value='1.2'; $('notes').value='Shared branch, lockfile updates, one schema migration pending.'; analyze();
+    });
+    $('copyBtn').addEventListener('click', async ()=>{
+      const txt = `Git Branch Divergence Planner\nStrategy: ${state.strategy}\nRisk score: ${state.score}/100\nSummary: ${state.summary}`;
+      try{ await navigator.clipboard.writeText(txt); $('copyBtn').textContent='Copied!'; setTimeout(()=>$('copyBtn').textContent='Copy plan',1200);}catch(e){alert('Clipboard unavailable.');}
+    });
+    document.querySelectorAll('input,textarea,select').forEach(el=>el.addEventListener('input',analyze));
+    analyze();
+  </script>
+</body>
+</html>

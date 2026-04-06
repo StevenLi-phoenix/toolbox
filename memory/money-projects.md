@@ -335,9 +335,10 @@
 |---|---------|-----|----------|-----------|
 | 214 | WIP Limit Planner | toolbox/wip.html | ✅ stevenli-phoenix.github.io/toolbox/wip.html | ❌ |
 | 215 | Dev Day Budget | toolbox/devdaybudget.html | ✅ stevenli-phoenix.github.io/toolbox/devdaybudget.html | ❌ |
+| 216 | Git Branch Divergence Planner | toolbox/branchdivergence.html | ✅ stevenli-phoenix.github.io/toolbox/branchdivergence.html | ❌ |
 
 ## Queue
-216. (next tool TBD)
+217. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
