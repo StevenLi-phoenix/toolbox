@@ -347,9 +347,10 @@
 | 224 | Interruption Shield | toolbox/interruptionshield.html | ✅ stevenli-phoenix.github.io/toolbox/interruptionshield.html | ❌ |
 | 225 | Task Batch Planner | toolbox/taskbatch.html | ✅ stevenli-phoenix.github.io/toolbox/taskbatch.html | ❌ |
 | 226 | Incident Postmortem Generator | toolbox/postmortem.html | ✅ stevenli-phoenix.github.io/toolbox/postmortem.html | ❌ |
+| 227 | PR Title Polisher | toolbox/prtitle.html | ✅ stevenli-phoenix.github.io/toolbox/prtitle.html | ❌ |
 
 ## Queue
-227. (next tool TBD)
+228. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
