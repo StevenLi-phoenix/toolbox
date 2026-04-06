@@ -319,8 +319,10 @@
 
 | 203 | PR Impact Estimator | toolbox/primpact.html | ✅ stevenli-phoenix.github.io/toolbox/primpact.html | ❌ |
 
+| 204 | Focus Debt Calculator | toolbox/focusdebt.html | ✅ stevenli-phoenix.github.io/toolbox/focusdebt.html | ❌ |
+
 ## Queue
-204. (next tool TBD)
+205. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
