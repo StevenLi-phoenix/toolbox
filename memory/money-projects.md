@@ -330,8 +330,13 @@
 | 212 | Incident Timeline Builder | toolbox/incidenttimeline.html | ✅ stevenli-phoenix.github.io/toolbox/incidenttimeline.html | ❌ |
 | 213 | Meeting Notes to Action Plan | toolbox/meetingnotes.html | ✅ stevenli-phoenix.github.io/toolbox/meetingnotes.html | ❌ |
 
+## Completed
+| # | Project | Dir | Deployed | Blog Post |
+|---|---------|-----|----------|-----------|
+| 214 | WIP Limit Planner | toolbox/wip.html | ✅ stevenli-phoenix.github.io/toolbox/wip.html | ❌ |
+
 ## Queue
-214. (next tool TBD)
+215. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
