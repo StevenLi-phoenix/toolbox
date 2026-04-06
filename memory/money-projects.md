@@ -351,9 +351,10 @@
 | 228 | Git Cherry-Pick Planner | toolbox/cherrypick.html | ✅ stevenli-phoenix.github.io/toolbox/cherrypick.html | ❌ |
 | 229 | Port Conflict Finder | toolbox/portfinder.html | ✅ stevenli-phoenix.github.io/toolbox/portfinder.html | ❌ |
 | 230 | Pairing Session Planner | toolbox/pairingplanner.html | ✅ stevenli-phoenix.github.io/toolbox/pairingplanner.html | ❌ |
+| 231 | Repo Pulse Analyzer | toolbox/repopulse.html | ✅ stevenli-phoenix.github.io/toolbox/repopulse.html | ❌ |
 
 ## Queue
-231. (next tool TBD)
+232. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
