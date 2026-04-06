@@ -301,9 +301,10 @@
 | 186 | Task Breakdown Planner | toolbox/taskbreakdown.html | ✅ stevenli-phoenix.github.io/toolbox/taskbreakdown.html | ❌ |
 | 187 | Diff Risk Radar | toolbox/diffrisk.html | ✅ stevenli-phoenix.github.io/toolbox/diffrisk.html | ❌ |
 | 188 | Ticket Slice Planner | toolbox/slices.html | ✅ stevenli-phoenix.github.io/toolbox/slices.html | ❌ |
+| 189 | OpenAPI Change Radar | toolbox/openapiradar.html | ✅ stevenli-phoenix.github.io/toolbox/openapiradar.html | ❌ |
 
 ## Queue
-189. (next tool TBD)
+190. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
