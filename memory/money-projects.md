@@ -348,9 +348,10 @@
 | 225 | Task Batch Planner | toolbox/taskbatch.html | ✅ stevenli-phoenix.github.io/toolbox/taskbatch.html | ❌ |
 | 226 | Incident Postmortem Generator | toolbox/postmortem.html | ✅ stevenli-phoenix.github.io/toolbox/postmortem.html | ❌ |
 | 227 | PR Title Polisher | toolbox/prtitle.html | ✅ stevenli-phoenix.github.io/toolbox/prtitle.html | ❌ |
+| 228 | Git Cherry-Pick Planner | toolbox/cherrypick.html | ✅ stevenli-phoenix.github.io/toolbox/cherrypick.html | ❌ |
 
 ## Queue
-228. (next tool TBD)
+229. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
