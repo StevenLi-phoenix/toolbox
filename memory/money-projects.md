@@ -337,9 +337,10 @@
 | 215 | Dev Day Budget | toolbox/devdaybudget.html | ✅ stevenli-phoenix.github.io/toolbox/devdaybudget.html | ❌ |
 | 216 | Git Branch Divergence Planner | toolbox/branchdivergence.html | ✅ stevenli-phoenix.github.io/toolbox/branchdivergence.html | ❌ |
 | 217 | Task Prioritizer | toolbox/taskprioritizer.html | ✅ stevenli-phoenix.github.io/toolbox/taskprioritizer.html | ❌ |
+| 218 | Bug Triage Matrix | toolbox/bugtriage.html | ✅ stevenli-phoenix.github.io/toolbox/bugtriage.html | ❌ |
 
 ## Queue
-218. (next tool TBD)
+219. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
