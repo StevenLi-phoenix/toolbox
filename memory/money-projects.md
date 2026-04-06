@@ -302,9 +302,10 @@
 | 187 | Diff Risk Radar | toolbox/diffrisk.html | ✅ stevenli-phoenix.github.io/toolbox/diffrisk.html | ❌ |
 | 188 | Ticket Slice Planner | toolbox/slices.html | ✅ stevenli-phoenix.github.io/toolbox/slices.html | ❌ |
 | 189 | OpenAPI Change Radar | toolbox/openapiradar.html | ✅ stevenli-phoenix.github.io/toolbox/openapiradar.html | ❌ |
+| 190 | Changelog Bullet Generator | toolbox/changelog.html | ✅ stevenli-phoenix.github.io/toolbox/changelog.html | ❌ |
 
 ## Queue
-190. (next tool TBD)
+191. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
