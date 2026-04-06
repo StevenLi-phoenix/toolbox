@@ -317,8 +317,10 @@
 | 201 | Branch Sanity Checker | toolbox/branchsanity.html | ✅ stevenli-phoenix.github.io/toolbox/branchsanity.html | ❌ |
 | 202 | Git Stash Planner | toolbox/stashplanner.html | ✅ stevenli-phoenix.github.io/toolbox/stashplanner.html | ❌ |
 
+| 203 | PR Impact Estimator | toolbox/primpact.html | ✅ stevenli-phoenix.github.io/toolbox/primpact.html | ❌ |
+
 ## Queue
-203. (next tool TBD)
+204. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
