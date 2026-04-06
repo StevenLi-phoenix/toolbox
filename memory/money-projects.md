@@ -349,9 +349,10 @@
 | 226 | Incident Postmortem Generator | toolbox/postmortem.html | ✅ stevenli-phoenix.github.io/toolbox/postmortem.html | ❌ |
 | 227 | PR Title Polisher | toolbox/prtitle.html | ✅ stevenli-phoenix.github.io/toolbox/prtitle.html | ❌ |
 | 228 | Git Cherry-Pick Planner | toolbox/cherrypick.html | ✅ stevenli-phoenix.github.io/toolbox/cherrypick.html | ❌ |
+| 229 | Port Conflict Finder | toolbox/portfinder.html | ✅ stevenli-phoenix.github.io/toolbox/portfinder.html | ❌ |
 
 ## Queue
-229. (next tool TBD)
+230. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
