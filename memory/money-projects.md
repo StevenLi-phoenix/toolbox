@@ -350,9 +350,10 @@
 | 227 | PR Title Polisher | toolbox/prtitle.html | ✅ stevenli-phoenix.github.io/toolbox/prtitle.html | ❌ |
 | 228 | Git Cherry-Pick Planner | toolbox/cherrypick.html | ✅ stevenli-phoenix.github.io/toolbox/cherrypick.html | ❌ |
 | 229 | Port Conflict Finder | toolbox/portfinder.html | ✅ stevenli-phoenix.github.io/toolbox/portfinder.html | ❌ |
+| 230 | Pairing Session Planner | toolbox/pairingplanner.html | ✅ stevenli-phoenix.github.io/toolbox/pairingplanner.html | ❌ |
 
 ## Queue
-230. (next tool TBD)
+231. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
