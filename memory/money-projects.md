@@ -315,9 +315,10 @@
 | 199 | Port Conflict Finder | toolbox/portfinder.html | ✅ stevenli-phoenix.github.io/toolbox/portfinder.html | ❌ |
 | 200 | PR Review Time Estimator | toolbox/prreviewtime.html | ✅ stevenli-phoenix.github.io/toolbox/prreviewtime.html | ❌ |
 | 201 | Branch Sanity Checker | toolbox/branchsanity.html | ✅ stevenli-phoenix.github.io/toolbox/branchsanity.html | ❌ |
+| 202 | Git Stash Planner | toolbox/stashplanner.html | ✅ stevenli-phoenix.github.io/toolbox/stashplanner.html | ❌ |
 
 ## Queue
-202. (next tool TBD)
+203. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
