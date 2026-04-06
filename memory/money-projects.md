@@ -343,8 +343,10 @@
 | 221 | Shortcut Cheat Sheet Builder | toolbox/shortcutcheatsheet.html | ✅ stevenli-phoenix.github.io/toolbox/shortcutcheatsheet.html | ❌ |
 | 222 | Deep Work Sprint Planner | toolbox/deepwork.html | ✅ stevenli-phoenix.github.io/toolbox/deepwork.html | ❌ |
 
+| 223 | Env Diff Inspector | toolbox/envdiff.html | ✅ stevenli-phoenix.github.io/toolbox/envdiff.html | ❌ |
+
 ## Queue
-223. (next tool TBD)
+224. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
