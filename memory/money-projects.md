@@ -344,9 +344,10 @@
 | 222 | Deep Work Sprint Planner | toolbox/deepwork.html | ✅ stevenli-phoenix.github.io/toolbox/deepwork.html | ❌ |
 
 | 223 | Env Diff Inspector | toolbox/envdiff.html | ✅ stevenli-phoenix.github.io/toolbox/envdiff.html | ❌ |
+| 224 | Interruption Shield | toolbox/interruptionshield.html | ✅ stevenli-phoenix.github.io/toolbox/interruptionshield.html | ❌ |
 
 ## Queue
-224. (next tool TBD)
+225. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
