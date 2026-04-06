@@ -334,9 +334,10 @@
 | # | Project | Dir | Deployed | Blog Post |
 |---|---------|-----|----------|-----------|
 | 214 | WIP Limit Planner | toolbox/wip.html | ✅ stevenli-phoenix.github.io/toolbox/wip.html | ❌ |
+| 215 | Dev Day Budget | toolbox/devdaybudget.html | ✅ stevenli-phoenix.github.io/toolbox/devdaybudget.html | ❌ |
 
 ## Queue
-215. (next tool TBD)
+216. (next tool TBD)
 
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
