@@ -1,6 +1,6 @@
 # 🧰 Free Dev Tools
 
-**215+ free, client-side developer tools.** No sign-up, no server, no data leaves your browser.
+**269 free, client-side developer tools.** No sign-up, no server, no data leaves your browser.
 
 🌐 **[Open the Toolbox](https://stevenli-phoenix.github.io/toolbox/)** — search and browse all tools in one place.
 
@@ -241,35 +241,35 @@
 
 | Tool | Description |
 |------|-------------|
-| [Branch Cleanup Planner](toolbox/branchcleanup.html) | Plan the cleanest way to tidy a git branch. |
-| [Git Branch Divergence Planner](toolbox/branchdivergence.html) | Estimate branch divergence and merge risk. |
-| [Bug Repro Script Builder](toolbox/bugrepro.html) | Turn rough bug notes into a clean reproduction script. |
-| [Bug Triage Matrix](toolbox/bugtriage.html) | Score bugs by severity, impact, and reproducibility. |
-| [Git Cherry-Pick Planner](toolbox/cherrypick.html) | Plan cherry-picks and spot potential conflicts. |
-| [Context Switch Cost Calculator](toolbox/contextswitch.html) | Estimate the cost of task switching. |
-| [Deadline Budget Planner](toolbox/deadlinebudget.html) | Plan safe development time before a deadline. |
-| [Deep Work Sprint Planner](toolbox/deepwork.html) | Plan a deep work sprint with goals and focus schedule. |
-| [Dev Day Budget](toolbox/devdaybudget.html) | Plan a realistic developer day with focus and meeting time. |
-| [Env Diff Inspector](toolbox/envdiff.html) | Compare two .env files and see all differences. |
-| [Focus Debt Calculator](toolbox/focusdebt.html) | Estimate focus debt from meetings and interruptions. |
-| [Incident Timeline Builder](toolbox/incidenttimeline.html) | Build a clear incident timeline from loose notes. |
-| [Interruption Shield](toolbox/interruptionshield.html) | Estimate your interruption budget and protect deep work. |
-| [Meeting Notes to Action Plan](toolbox/meetingnotes.html) | Turn meeting notes into decisions and action items. |
-| [Meeting Prep Brief Generator](toolbox/meetingprep.html) | Generate a crisp meeting prep brief with agenda and talking points. |
-| [Merge Queue Planner](toolbox/mergequeue.html) | Plan safe PR merge order and identify risks. |
-| [Pairing Session Planner](toolbox/pairingplanner.html) | Plan a focused pair programming session. |
-| [Port Conflict Finder](toolbox/portfinder.html) | Find port conflicts and generate clean port plans. |
-| [Incident Postmortem Generator](toolbox/postmortem.html) | Draft an incident postmortem with timeline and action items. |
-| [PR Impact Estimator](toolbox/primpact.html) | Estimate PR impact, review load, and rollout readiness. |
-| [PR Title Polisher](toolbox/prtitle.html) | Turn messy branch notes into clean PR titles. |
-| [Git Rebase Coach](toolbox/rebasecoach.html) | Turn a git rebase situation into a clean step-by-step plan. |
-| [Release Window Planner](toolbox/releasewindow.html) | Plan the safest release window. |
-| [Rollback Planner](toolbox/rollback.html) | Plan a safe production rollback. |
-| [Shortcut Cheat Sheet Builder](toolbox/shortcutcheatsheet.html) | Build a keyboard shortcut cheat sheet. |
-| [Git Stash Planner](toolbox/stashplanner.html) | Plan, label, and prioritize Git stashes. |
-| [Task Batch Planner](toolbox/taskbatch.html) | Group tasks into smart batches to reduce context switching. |
-| [Task Prioritizer](toolbox/taskprioritizer.html) | Score tasks by impact, effort, urgency, and risk. |
-| [WIP Limit Planner](toolbox/wip.html) | Plan realistic work-in-progress limits. |
+| [Branch Cleanup Planner](branchcleanup.html) | Plan the cleanest way to tidy a git branch. |
+| [Git Branch Divergence Planner](branchdivergence.html) | Estimate branch divergence and merge risk. |
+| [Bug Repro Script Builder](bugrepro.html) | Turn rough bug notes into a clean reproduction script. |
+| [Bug Triage Matrix](bugtriage.html) | Score bugs by severity, impact, and reproducibility. |
+| [Git Cherry-Pick Planner](cherrypick.html) | Plan cherry-picks and spot potential conflicts. |
+| [Context Switch Cost Calculator](contextswitch.html) | Estimate the cost of task switching. |
+| [Deadline Budget Planner](deadlinebudget.html) | Plan safe development time before a deadline. |
+| [Deep Work Sprint Planner](deepwork.html) | Plan a deep work sprint with goals and focus schedule. |
+| [Dev Day Budget](devdaybudget.html) | Plan a realistic developer day with focus and meeting time. |
+| [Env Diff Inspector](envdiff.html) | Compare two .env files and see all differences. |
+| [Focus Debt Calculator](focusdebt.html) | Estimate focus debt from meetings and interruptions. |
+| [Incident Timeline Builder](incidenttimeline.html) | Build a clear incident timeline from loose notes. |
+| [Interruption Shield](interruptionshield.html) | Estimate your interruption budget and protect deep work. |
+| [Meeting Notes to Action Plan](meetingnotes.html) | Turn meeting notes into decisions and action items. |
+| [Meeting Prep Brief Generator](meetingprep.html) | Generate a crisp meeting prep brief with agenda and talking points. |
+| [Merge Queue Planner](mergequeue.html) | Plan safe PR merge order and identify risks. |
+| [Pairing Session Planner](pairingplanner.html) | Plan a focused pair programming session. |
+| [Port Conflict Finder](portfinder.html) | Find port conflicts and generate clean port plans. |
+| [Incident Postmortem Generator](postmortem.html) | Draft an incident postmortem with timeline and action items. |
+| [PR Impact Estimator](primpact.html) | Estimate PR impact, review load, and rollout readiness. |
+| [PR Title Polisher](prtitle.html) | Turn messy branch notes into clean PR titles. |
+| [Git Rebase Coach](rebasecoach.html) | Turn a git rebase situation into a clean step-by-step plan. |
+| [Release Window Planner](releasewindow.html) | Plan the safest release window. |
+| [Rollback Planner](rollback.html) | Plan a safe production rollback. |
+| [Shortcut Cheat Sheet Builder](shortcutcheatsheet.html) | Build a keyboard shortcut cheat sheet. |
+| [Git Stash Planner](stashplanner.html) | Plan, label, and prioritize Git stashes. |
+| [Task Batch Planner](taskbatch.html) | Group tasks into smart batches to reduce context switching. |
+| [Task Prioritizer](taskprioritizer.html) | Score tasks by impact, effort, urgency, and risk. |
+| [WIP Limit Planner](wip.html) | Plan realistic work-in-progress limits. |
 
 ---
 
