@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GraphQL Formatter - Free Online GraphQL Query Beautifier</title>
+<meta name="description" content="Free online GraphQL query formatter and beautifier. Format, minify, and validate GraphQL queries and mutations. No data sent to any server.">
+<meta name="keywords" content="graphql formatter, graphql beautifier, graphql validator, graphql minify, graphql pretty print, free graphql tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/graphql.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel textarea { width: 100%; min-height: 350px; font-family: var(--mono); font-size: .85rem; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; tab-size: 2; }
+  .panel textarea:focus { outline: none; border-color: var(--accent); }
+  .panel h2 { margin-bottom: 8px; }
+  .status { font-size: .82rem; margin-top: 6px; min-height: 1.4em; }
+  .status.ok { color: var(--success); }
+  .status.err { color: var(--error); }
+  .stats { font-size: .82rem; color: var(--muted); margin-top: 6px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .schema-info { font-size: .82rem; color: var(--muted); margin-top: 4px; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .panel textarea { min-height: 220px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>GraphQL Formatter</h1>
+<p class="subtitle">Format, minify, and validate GraphQL queries, mutations & subscriptions</p>
+
+<div class="toolbar">
+  <button class="btn" onclick="formatQuery()">Format</button>
+  <button class="btn-secondary" onclick="minifyQuery()">Minify</button>
+  <button class="btn-secondary" onclick="validateQuery()">Validate</button>
+  <button class="btn-secondary" onclick="copyOutput()">📋 Copy</button>
+  <button class="btn-secondary" onclick="clearAll()">🗑️ Clear</button>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h2>📝 Input</h2>
+    <textarea id="input" placeholder="Paste your GraphQL query here..." spellcheck="false" oninput="autoFormat()">query GetUser($id: ID!) {
+  user(id: $id) {
+    id
+    name
+    email
+    posts(first: 10, orderBy: CREATED_AT_DESC) {
+      edges {
+        node {
+          id
+          title
+          createdAt
+          comments { totalCount }
+        }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+    followers { totalCount }
+  }
+}</textarea>
+    <div class="presets">
+      <button class="btn-secondary" onclick="loadPreset('query')">Query</button>
+      <button class="btn-secondary" onclick="loadPreset('mutation')">Mutation</button>
+      <button class="btn-secondary" onclick="loadPreset('subscription')">Subscription</button>
+      <button class="btn-secondary" onclick="loadPreset('fragment')">Fragment</button>
+      <button class="btn-secondary" onclick="loadPreset('introspection')">Introspection</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>✨ Output</h2>
+    <textarea id="output" readonly spellcheck="false"></textarea>
+    <div class="status" id="status"></div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const PRESETS = {
+  query: `query GetUsers($limit: Int = 10, $offset: Int = 0) {
+  users(limit: $limit, offset: $offset) {
+    id
+    name
+    email
+    role
+    createdAt
+  }
+  userCount
+}`,
+  mutation: `mutation CreateUser($input: CreateUserInput!) {
+  createUser(input: $input) {
+    user {
+      id
+      name
+      email
+    }
+    errors {
+      field
+      message
+    }
+  }
+}`,
+  subscription: `subscription OnMessageAdded($channelId: ID!) {
+  messageAdded(channelId: $channelId) {
+    id
+    text
+    author {
+      id
+      name
+      avatar
+    }
+    createdAt
+  }
+}`,
+  fragment: `fragment UserFields on User {
+  id
+  name
+  email
+  avatar
+  role
+}
+
+query GetUserWithPosts($id: ID!) {
+  user(id: $id) {
+    ...UserFields
+    posts(first: 5) {
+      id
+      title
+      body
+      publishedAt
+    }
+  }
+}`,
+  introspection: `query IntrospectionQuery {
+  __schema {
+    queryType { name }
+    mutationType { name }
+    subscriptionType { name }
+    types {
+      name
+      kind
+      description
+      fields {
+        name
+        type { name kind ofType { name kind } }
+      }
+    }
+  }
+}`
+};
+
+function loadPreset(name) {
+  $('input').value = PRESETS[name] || '';
+  formatQuery();
+}
+
+function tokenize(src) {
+  const tokens = [];
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    // Whitespace
+    if (/\s/.test(ch)) { i++; continue; }
+    // Comments
+    if (ch === '#') {
+      let comment = '';
+      while (i < src.length && src[i] !== '\n') comment += src[i++];
+      tokens.push({ type: 'comment', value: comment });
+      continue;
+    }
+    // String (block or single)
+    if (ch === '"') {
+      if (src.slice(i, i + 3) === '"""') {
+        let str = '"""';
+        i += 3;
+        while (i < src.length && src.slice(i, i + 3) !== '"""') str += src[i++];
+        str += '"""'; i += 3;
+        tokens.push({ type: 'string', value: str });
+      } else {
+        let str = '"';
+        i++;
+        while (i < src.length && src[i] !== '"') {
+          if (src[i] === '\\') { str += src[i++]; }
+          str += src[i++];
+        }
+        str += '"'; i++;
+        tokens.push({ type: 'string', value: str });
+      }
+      continue;
+    }
+    // Punctuation
+    if ('{}'.includes(ch) || '()'.includes(ch) || '[]'.includes(ch) || ch === ':' || ch === '!' || ch === '=' || ch === '@' || ch === '$' || ch === '.' || ch === '|' || ch === '&') {
+      if (ch === '.' && src.slice(i, i + 3) === '...') {
+        tokens.push({ type: 'punctuation', value: '...' });
+        i += 3;
+      } else {
+        tokens.push({ type: 'punctuation', value: ch });
+        i++;
+      }
+      continue;
+    }
+    // Name / keyword
+    if (/[a-zA-Z_]/.test(ch)) {
+      let name = '';
+      while (i < src.length && /[a-zA-Z0-9_]/.test(src[i])) name += src[i++];
+      tokens.push({ type: 'name', value: name });
+      continue;
+    }
+    // Number
+    if (/[0-9\-]/.test(ch)) {
+      let num = '';
+      if (ch === '-') { num += ch; i++; }
+      while (i < src.length && /[0-9.eE\-+]/.test(src[i])) num += src[i++];
+      tokens.push({ type: 'number', value: num });
+      continue;
+    }
+    // Skip unknown
+    i++;
+  }
+  return tokens;
+}
+
+function format(src, indent = 2) {
+  const tokens = tokenize(src);
+  let out = '';
+  let depth = 0;
+  const pad = () => ' '.repeat(depth * indent);
+  let i = 0;
+  const len = tokens.length;
+
+  while (i < len) {
+    const t = tokens[i];
+    const next = tokens[i + 1];
+    const prev = tokens[i - 1];
+
+    if (t.type === 'comment') {
+      out += pad() + t.value + '\n';
+      i++;
+      continue;
+    }
+
+    if (t.value === '{') {
+      out += ' {\n';
+      depth++;
+      i++;
+      continue;
+    }
+
+    if (t.value === '}') {
+      depth--;
+      out += pad() + '}';
+      if (next && next.value !== '}') out += '\n';
+      i++;
+      continue;
+    }
+
+    if (t.value === '(') {
+      out += '(';
+      i++;
+      continue;
+    }
+
+    if (t.value === ')') {
+      out += ')';
+      i++;
+      continue;
+    }
+
+    if (t.value === ':') {
+      out += ': ';
+      i++;
+      continue;
+    }
+
+    if (t.value === '=') {
+      out += ' = ';
+      i++;
+      continue;
+    }
+
+    if (t.value === '!') {
+      out += '!';
+      i++;
+      continue;
+    }
+
+    if (t.value === '@') {
+      out += ' @';
+      i++;
+      continue;
+    }
+
+    if (t.value === '$') {
+      out += '$';
+      i++;
+      continue;
+    }
+
+    if (t.value === '...') {
+      out += pad() + '...';
+      i++;
+      continue;
+    }
+
+    if (t.value === '[') { out += '['; i++; continue; }
+    if (t.value === ']') { out += ']'; i++; continue; }
+    if (t.value === '|') { out += ' | '; i++; continue; }
+    if (t.value === '&') { out += ' & '; i++; continue; }
+
+    if (t.type === 'string') {
+      out += t.value;
+      i++;
+      continue;
+    }
+
+    if (t.type === 'number') {
+      out += t.value;
+      i++;
+      continue;
+    }
+
+    // Names
+    const keywords = ['query', 'mutation', 'subscription', 'fragment', 'on', 'type', 'input', 'enum', 'interface', 'union', 'scalar', 'schema', 'extend', 'directive', 'implements'];
+    if (t.type === 'name') {
+      // If previous token was } or none, or previous was a newline context, add padding
+      if (!prev || prev.value === '}' || prev.value === '{' || prev.type === 'comment') {
+        if (prev && prev.value === '{') {
+          out += pad() + t.value;
+        } else if (!prev || prev.value === '}') {
+          if (prev && prev.value === '}') out += '\n';
+          out += pad() + t.value;
+        } else {
+          out += pad() + t.value;
+        }
+      } else if (prev && prev.value === '...') {
+        out += t.value;
+      } else if (prev && (prev.value === '(' || prev.value === '$' || prev.value === '@' || prev.value === '[')) {
+        out += t.value;
+      } else if (prev && prev.value === ':') {
+        out += t.value;
+      } else if (prev && prev.value === ')' && next && next.value === '{') {
+        out += ' ' + t.value;
+      } else if (prev && prev.value === ')') {
+        out += '\n' + pad() + t.value;
+      } else if (prev && (prev.type === 'name' || prev.type === 'number' || prev.value === '!' || prev.value === ']')) {
+        // After a field name that had no { after it — this is the next field
+        out += '\n' + pad() + t.value;
+      } else {
+        out += t.value;
+      }
+      i++;
+      continue;
+    }
+
+    i++;
+  }
+
+  // Clean up extra blank lines
+  return out.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function minify(src) {
+  const tokens = tokenize(src);
+  let out = '';
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    const prev = tokens[i - 1];
+    if (t.type === 'comment') continue;
+    // Add space between consecutive names/numbers
+    if (prev && (prev.type === 'name' || prev.type === 'number' || prev.value === '!' || prev.value === ']') &&
+        (t.type === 'name' || t.type === 'number' || t.value === '...' || t.value === '$' || t.value === '@')) {
+      out += ' ';
+    }
+    if (prev && prev.value === ')' && (t.type === 'name' || t.value === '{' || t.value === '@')) {
+      if (t.value !== '{') out += ' ';
+    }
+    if (prev && prev.value === '}' && (t.type === 'name' || t.value === '...')) {
+      out += ' ';
+    }
+    out += t.value;
+  }
+  return out;
+}
+
+function validate(src) {
+  const errors = [];
+  let braces = 0, parens = 0, brackets = 0;
+  const tokens = tokenize(src);
+
+  if (tokens.length === 0) {
+    return [{ msg: 'Empty query' }];
+  }
+
+  for (const t of tokens) {
+    if (t.value === '{') braces++;
+    if (t.value === '}') braces--;
+    if (t.value === '(') parens++;
+    if (t.value === ')') parens--;
+    if (t.value === '[') brackets++;
+    if (t.value === ']') brackets--;
+    if (braces < 0) errors.push({ msg: 'Unexpected closing brace }' });
+    if (parens < 0) errors.push({ msg: 'Unexpected closing paren )' });
+    if (brackets < 0) errors.push({ msg: 'Unexpected closing bracket ]' });
+  }
+
+  if (braces > 0) errors.push({ msg: `Missing ${braces} closing brace(s) }` });
+  if (braces < 0) errors.push({ msg: `Extra ${-braces} closing brace(s) }` });
+  if (parens > 0) errors.push({ msg: `Missing ${parens} closing paren(s) )` });
+  if (parens < 0) errors.push({ msg: `Extra ${-parens} closing paren(s) )` });
+  if (brackets > 0) errors.push({ msg: `Missing ${brackets} closing bracket(s) ]` });
+  if (brackets < 0) errors.push({ msg: `Extra ${-brackets} closing bracket(s) ]` });
+
+  // Check for operation keywords
+  const opKeywords = ['query', 'mutation', 'subscription', 'fragment', 'type', 'input', 'enum', 'interface', 'union', 'scalar', 'schema', 'extend', 'directive'];
+  const firstToken = tokens.find(t => t.type === 'name');
+  if (firstToken && !opKeywords.includes(firstToken.value) && tokens[0].value !== '{') {
+    errors.push({ msg: `Unexpected token "${firstToken.value}" — expected operation keyword or {` });
+  }
+
+  return errors;
+}
+
+function formatQuery() {
+  const src = $('input').value.trim();
+  if (!src) { $('output').value = ''; setStatus('', ''); setStats(''); return; }
+  const errors = validate(src);
+  const formatted = format(src);
+  $('output').value = formatted;
+  if (errors.length) {
+    setStatus('⚠ ' + errors.map(e => e.msg).join('; '), 'err');
+  } else {
+    setStatus('✓ Valid GraphQL', 'ok');
+  }
+  updateStats(src, formatted);
+}
+
+function minifyQuery() {
+  const src = $('input').value.trim();
+  if (!src) return;
+  const minified = minify(src);
+  $('output').value = minified;
+  setStatus('✓ Minified', 'ok');
+  updateStats(src, minified);
+}
+
+function validateQuery() {
+  const src = $('input').value.trim();
+  if (!src) { setStatus('Enter a query to validate', ''); return; }
+  const errors = validate(src);
+  if (errors.length) {
+    setStatus('✗ ' + errors.map(e => e.msg).join('; '), 'err');
+  } else {
+    setStatus('✓ Valid GraphQL — no syntax errors detected', 'ok');
+  }
+}
+
+function setStatus(msg, cls) {
+  const el = $('status');
+  el.textContent = msg;
+  el.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+function setStats(html) { $('stats').innerHTML = html; }
+
+function updateStats(src, out) {
+  const inSize = new Blob([src]).size;
+  const outSize = new Blob([out]).size;
+  const ratio = inSize ? ((1 - outSize / inSize) * 100).toFixed(1) : 0;
+  const tokens = tokenize(src);
+  const fields = tokens.filter(t => t.type === 'name').length;
+  setStats(`Input: ${inSize} B → Output: ${outSize} B (${ratio > 0 ? '-' : '+'}${Math.abs(ratio)}%) · ${fields} tokens`);
+}
+
+function copyOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const toast = $('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1500);
+  });
+}
+
+function clearAll() {
+  $('input').value = '';
+  $('output').value = '';
+  setStatus('', '');
+  setStats('');
+}
+
+let debounce;
+function autoFormat() {
+  clearTimeout(debounce);
+  debounce = setTimeout(formatQuery, 300);
+}
+
+// Initial format
+formatQuery();
+</script>
+</body>
+</html>
