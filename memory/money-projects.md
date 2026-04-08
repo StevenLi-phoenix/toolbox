@@ -299,9 +299,10 @@
 | 273 | Stale Branch Auditor | toolbox/stalebranch.html | ✅ stevenli-phoenix.github.io/toolbox/stalebranch.html | ❌ |
 | 274 | PR Review Lens | toolbox/prreviewlens.html | ✅ stevenli-phoenix.github.io/toolbox/prreviewlens.html | ❌ |
 | 275 | Bug Triage Assistant | toolbox/bugtriageassistant.html | ✅ stevenli-phoenix.github.io/toolbox/bugtriageassistant.html | ❌ |
+| 276 | Work Intake Triage | toolbox/workintake.html | ✅ stevenli-phoenix.github.io/toolbox/workintake.html | ❌ |
 
 ## Queue
-276. Next tool TBD
+277. Next tool TBD
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
