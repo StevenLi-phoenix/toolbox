@@ -306,8 +306,10 @@
 |---|---------|-----|----------|-----------|
 | 277 | Code Review Reply Generator | toolbox/reviewreply.html | ✅ stevenli-phoenix.github.io/toolbox/reviewreply.html | ❌ |
 
+| 278 | Docker Compose Builder | toolbox/dockercompose.html | ✅ stevenli-phoenix.github.io/toolbox/dockercompose.html | ❌ |
+
 ## Queue
-278. Next tool TBD
+279. Next tool TBD
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
