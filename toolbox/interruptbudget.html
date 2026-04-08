@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interrupt Budget Planner</title>
+  <meta name="description" content="Plan a realistic deep work day by estimating how much interruption budget you actually have, then convert it into focus blocks, buffers, and recovery time." />
+  <meta name="keywords" content="interrupt budget, focus planner, deep work, productivity tool, developer utility, schedule planner" />
+  <meta name="author" content="Steven Li" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#07111d" />
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/interruptbudget.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Interrupt Budget Planner" />
+  <meta property="og:description" content="Estimate how many interruptions your day can absorb and turn that into a sane work plan." />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/interruptbudget.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Interrupt Budget Planner" />
+  <meta name="twitter:description" content="A dark, mobile-friendly planner for deep work, buffers, and interruption tolerance." />
+  <link rel="stylesheet" href="toolbox.css">
+  <style>
+    .mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+    .slider-row{display:grid;gap:10px}
+    .slider-row label{display:flex;justify-content:space-between;gap:12px;font-size:.92rem}
+    input[type="range"]{width:100%}
+    .pill-row{display:flex;flex-wrap:wrap;gap:8px}
+    .pill{border:1px solid var(--border);border-radius:999px;padding:6px 10px;background:color-mix(in srgb, var(--panel) 86%, #000);font-size:.82rem}
+    .plan{display:grid;gap:10px}
+    .plan-item{padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:linear-gradient(180deg, color-mix(in srgb, var(--panel) 94%, #000), color-mix(in srgb, var(--panel) 86%, #000));}
+    .plan-item strong{display:block;margin-bottom:4px}
+    .muted{color:var(--muted);font-size:.92rem}
+    .warnbox{border-left:3px solid var(--warn);padding-left:12px}
+    .okbox{border-left:3px solid var(--success);padding-left:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">toolbox #280 · developer productivity</div>
+      <h1>Interrupt Budget Planner</h1>
+      <p class="lead">Figure out how many interruptions your day can survive before focus falls apart. Feed it your available hours, meeting load, and tolerance for context switching, then get a practical plan with focus blocks, buffer time, and a blunt risk score.</p>
+      <div class="hero-grid">
+        <div class="hero-stat"><span>Best for</span><strong>Deep work planning, meeting-heavy days, async triage, and realistic capacity checks</strong></div>
+        <div class="hero-stat"><span>Output</span><strong>Interrupt budget, recommended focus block size, buffer minutes, and day plan</strong></div>
+        <div class="hero-stat"><span>Mode</span><strong>Dark UI, mobile responsive, SEO meta tags, single self-contained HTML</strong></div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn primary" id="calcBtn" type="button">Calculate budget</button>
+        <button class="btn" id="sampleBtn" type="button">Load sample</button>
+        <button class="btn" id="copyBtn" type="button">Copy plan</button>
+        <a class="btn" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Me a Coffee</a>
+      </div>
+    </section>
+
+    <div class="layout">
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Inputs</h2><span class="badge">planner</span></div>
+          <div class="card-body">
+            <div class="grid">
+              <div class="field col-6"><label for="hours">Available work hours</label><input id="hours" type="number" min="1" max="14" step="0.5" value="8"></div>
+              <div class="field col-6"><label for="meetings">Meeting hours</label><input id="meetings" type="number" min="0" max="12" step="0.25" value="2.5"></div>
+              <div class="field col-6"><label for="interruptions">Expected interruptions</label><input id="interruptions" type="number" min="0" max="30" step="1" value="8"></div>
+              <div class="field col-6"><label for="switchCost">Minutes lost per switch</label><input id="switchCost" type="number" min="5" max="45" step="1" value="12"></div>
+              <div class="field col-12"><label for="goal">Today’s goal</label><input id="goal" value="Finish the important work without getting shredded by Slack and meetings"></div>
+              <div class="field col-12 slider-row">
+                <label for="focusTolerance"><span>Focus tolerance</span><strong id="focusToleranceLabel">Moderate</strong></label>
+                <input id="focusTolerance" type="range" min="1" max="5" value="3">
+              </div>
+              <div class="field col-12 slider-row">
+                <label for="meetingDrain"><span>Meeting drain</span><strong id="meetingDrainLabel">Medium</strong></label>
+                <input id="meetingDrain" type="range" min="1" max="5" value="3">
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Budget readout</h2><span class="badge good" id="stateBadge">ready</span></div>
+          <div class="card-body">
+            <div class="mini-grid">
+              <div class="tile"><span>Interrupt budget</span><strong id="budget">—</strong></div>
+              <div class="tile"><span>Focus blocks</span><strong id="blocks">—</strong></div>
+              <div class="tile"><span>Recovery time</span><strong id="recovery">—</strong></div>
+              <div class="tile"><span>Risk</span><strong id="risk">—</strong></div>
+            </div>
+            <div style="margin-top:14px" class="pill-row" id="tags"></div>
+            <div style="margin-top:14px" class="warnbox" id="warning"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Plan</h2><span class="badge warn">output</span></div>
+          <div class="card-body">
+            <div class="plan" id="plan">Calculate to generate a day plan.</div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Heuristics</h2><span class="badge">how it works</span></div>
+          <div class="card-body">
+            <div class="plan">
+              <div class="plan-item okbox"><strong>Interrupt budget</strong><div class="muted">The planner converts your available hours, meeting load, and tolerance into a rough cap on how many context switches you can absorb before the day turns into mush.</div></div>
+              <div class="plan-item okbox"><strong>Focus blocks</strong><div class="muted">Higher tolerance means longer blocks; meeting-heavy days get shorter blocks and more buffer so you don’t lie to yourself.</div></div>
+              <div class="plan-item okbox"><strong>Recovery time</strong><div class="muted">Every interruption is taxed by your estimated switch cost, then cushioned with a recovery buffer so the plan is actually survivable.</div></div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </div>
+
+    <div class="footer">
+      <div>Built for people who want fewer interruptions and fewer fake plans. <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Steven a coffee</a>.</div>
+      <div>Tool #280 · single-file HTML</div>
+    </div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const labels = ['Very low','Low','Moderate','High','Very high'];
+    const drainLabels = ['Light','Mild','Medium','Heavy','Brutal'];
+    const sample = { hours: 8, meetings: 3.5, interruptions: 11, switchCost: 14, focusTolerance: 2, meetingDrain: 4, goal: 'Ship the feature, answer the unavoidable messages, and protect one serious focus block.' };
+
+    function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+    function num(id){ return parseFloat($(id).value || '0'); }
+
+    function calc(){
+      const hours = num('hours');
+      const meetings = num('meetings');
+      const interruptions = num('interruptions');
+      const switchCost = num('switchCost');
+      const tolerance = parseInt($('focusTolerance').value, 10);
+      const drain = parseInt($('meetingDrain').value, 10);
+      $('focusToleranceLabel').textContent = labels[tolerance - 1];
+      $('meetingDrainLabel').textContent = drainLabels[drain - 1];
+
+      const availableFocusHours = Math.max(0, hours - meetings);
+      const toleranceMultiplier = [0.75, 0.95, 1.15, 1.35, 1.55][tolerance - 1];
+      const meetingPenalty = [1.35, 1.15, 1, 0.82, 0.68][drain - 1];
+      const budget = Math.max(0, Math.round((availableFocusHours * 4.2 * toleranceMultiplier) - (meetings * 1.1 * drain) - (interruptions * 0.55)));
+      const focusBlocks = clamp(Math.round((availableFocusHours / (tolerance <= 2 ? 1.75 : tolerance === 3 ? 1.5 : 1.25)) - (drain >= 4 ? 0.5 : 0)), 1, 6);
+      const recovery = Math.max(20, Math.round((interruptions * switchCost * 0.55) + (meetings * 18 * meetingPenalty)));
+      const riskScore = clamp(Math.round((interruptions * switchCost * meetingPenalty) / Math.max(1, hours * 10) + meetings * 8 + (5 - tolerance) * 8), 0, 100);
+      const risk = riskScore < 35 ? 'manageable' : riskScore < 60 ? 'fragile' : riskScore < 80 ? 'high risk' : 'toast';
+      const state = riskScore < 35 ? 'good' : riskScore < 60 ? 'warn' : 'bad';
+      $('stateBadge').className = 'badge ' + (riskScore < 35 ? 'good' : riskScore < 60 ? 'warn' : 'bad');
+      $('stateBadge').textContent = risk;
+      $('budget').textContent = budget + ' pts';
+      $('blocks').textContent = focusBlocks + ' blocks';
+      $('recovery').textContent = recovery + ' min';
+      $('risk').textContent = riskScore + '/100';
+
+      const tags = [
+        `${availableFocusHours.toFixed(1)}h focus available`,
+        `${interruptions} interruptions`,
+        `${switchCost}m switch cost`,
+        meetings > 4 ? 'meeting-heavy day' : 'room for focus'
+      ];
+      $('tags').innerHTML = tags.map(t => `<span class="pill">${t}</span>`).join('');
+
+      $('warning').innerHTML = riskScore >= 60
+        ? `<strong>Warning:</strong> your plan is overloaded. Protect a single deep-work block, batch interruptions, and expect slippage.`
+        : riskScore >= 35
+          ? `<strong>Caution:</strong> this works only if interruptions stay civilized. Put admin work next to meetings and keep buffers honest.`
+          : `<strong>Good shape:</strong> you have enough budget to keep momentum if you avoid random task-switching.`;
+
+      const blockMinutes = clamp(Math.round((availableFocusHours * 60) / focusBlocks), 35, 120);
+      const bufferMinutes = clamp(Math.round(recovery / 4), 15, 120);
+      const firstBlock = focusBlocks >= 2 ? 'Start with the hardest task before the day gets noisy.' : 'Use your one best block on the most valuable task.';
+      $('plan').innerHTML = `
+        <div class="plan-item">
+          <strong>Today’s goal</strong>
+          <div>${$('goal').value}</div>
+        </div>
+        <div class="plan-item">
+          <strong>Suggested rhythm</strong>
+          <div>${focusBlocks} focus blocks of about <strong>${blockMinutes} minutes</strong> each, plus <strong>${bufferMinutes} minutes</strong> of buffer after meetings or message bursts.</div>
+        </div>
+        <div class="plan-item">
+          <strong>Sequence</strong>
+          <div>${firstBlock} Batch comms into two windows, keep meetings away from your best block, and stop once the budget is gone.</div>
+        </div>
+        <div class="plan-item">
+          <strong>Reality check</strong>
+          <div>At this pace, the day can absorb about <strong>${budget}</strong> interruption points before it starts bleeding focus. That is ${risk} territory.</div>
+        </div>
+      `;
+
+      return { hours, meetings, interruptions, switchCost, tolerance, drain, budget, focusBlocks, recovery, riskScore, risk, blockMinutes, bufferMinutes };
+    }
+
+    function copyPlan(){
+      const data = calc();
+      const text = [
+        `Interrupt Budget Planner`,
+        `Goal: ${$('goal').value}`,
+        `Available hours: ${data.hours}`,
+        `Meeting hours: ${data.meetings}`,
+        `Expected interruptions: ${data.interruptions}`,
+        `Interrupt budget: ${data.budget} pts`,
+        `Focus blocks: ${data.focusBlocks} (~${data.blockMinutes} min each)`,
+        `Recovery: ${data.recovery} min`,
+        `Risk: ${data.riskScore}/100 (${data.risk})`
+      ].join('\n');
+      navigator.clipboard.writeText(text);
+      $('stateBadge').textContent = 'copied';
+      setTimeout(calc, 1000);
+    }
+
+    $('calcBtn').addEventListener('click', calc);
+    $('copyBtn').addEventListener('click', copyPlan);
+    $('sampleBtn').addEventListener('click', () => {
+      $('hours').value = sample.hours;
+      $('meetings').value = sample.meetings;
+      $('interruptions').value = sample.interruptions;
+      $('switchCost').value = sample.switchCost;
+      $('focusTolerance').value = sample.focusTolerance;
+      $('meetingDrain').value = sample.meetingDrain;
+      $('goal').value = sample.goal;
+      calc();
+    });
+    ['hours','meetings','interruptions','switchCost','goal','focusTolerance','meetingDrain'].forEach(id => $(id).addEventListener('input', calc));
+    calc();
+  </script>
+</body>
+</html>
