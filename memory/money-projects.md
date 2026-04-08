@@ -216,9 +216,6 @@
 | 211 | Merge Queue Planner | toolbox/mergequeue.html | ✅ stevenli-phoenix.github.io/toolbox/mergequeue.html | ❌ |
 | 212 | Incident Timeline Builder | toolbox/incidenttimeline.html | ✅ stevenli-phoenix.github.io/toolbox/incidenttimeline.html | ❌ |
 | 213 | Meeting Notes to Action Plan | toolbox/meetingnotes.html | ✅ stevenli-phoenix.github.io/toolbox/meetingnotes.html | ❌ |
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 214 | WIP Limit Planner | toolbox/wip.html | ✅ stevenli-phoenix.github.io/toolbox/wip.html | ❌ |
 | 215 | Dev Day Budget | toolbox/devdaybudget.html | ✅ stevenli-phoenix.github.io/toolbox/devdaybudget.html | ❌ |
 | 216 | Git Branch Divergence Planner | toolbox/branchdivergence.html | ✅ stevenli-phoenix.github.io/toolbox/branchdivergence.html | ❌ |
@@ -251,16 +248,10 @@
 | 243 | Scope Cutter | toolbox/scopecutter.html | ✅ stevenli-phoenix.github.io/toolbox/scopecutter.html | ❌ |
 | 244 | Daily Shutdown Planner | toolbox/dailyshutdown.html | ✅ stevenli-phoenix.github.io/toolbox/dailyshutdown.html | ❌ |
 | 245 | Review Queue Planner | toolbox/reviewqueue.html | ✅ stevenli-phoenix.github.io/toolbox/reviewqueue.html | ❌ |
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 246 | Release Blast Radius Mapper | toolbox/releaseblast.html | ✅ stevenli-phoenix.github.io/toolbox/releaseblast.html | ❌ |
 | 247 | Bug Bash Planner | toolbox/bugbash.html | ✅ stevenli-phoenix.github.io/toolbox/bugbash.html | ❌ |
 | 248 | Code Review Comment Polisher | toolbox/commentpolisher.html | ✅ stevenli-phoenix.github.io/toolbox/commentpolisher.html | ❌ |
 | 249 | Workspace Bootstrap Builder | toolbox/workspacebootstrap.html | ✅ stevenli-phoenix.github.io/toolbox/workspacebootstrap.html | ❌ |
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 250 | Debug Session Compass | toolbox/debugcompass.html | ✅ stevenli-phoenix.github.io/toolbox/debugcompass.html | ❌ |
 | 251 | Deployment Drift Detector | toolbox/deploymentdrift.html | ✅ stevenli-phoenix.github.io/toolbox/deploymentdrift.html | ❌ |
 | 252 | Git Revert Planner | toolbox/gitrevert.html | ✅ stevenli-phoenix.github.io/toolbox/gitrevert.html | ❌ |
@@ -268,27 +259,15 @@
 | 254 | Stack Triage | toolbox/stacktriage.html | ✅ stevenli-phoenix.github.io/toolbox/stacktriage.html | ❌ |
 | 255 | Test Plan Builder | toolbox/testplan.html | ✅ stevenli-phoenix.github.io/toolbox/testplan.html | ❌ |
 | 256 | PR Review Prep Assistant | toolbox/prreviewprep.html | ✅ stevenli-phoenix.github.io/toolbox/prreviewprep.html | ❌ |
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 257 | Dependency Drift Radar | toolbox/dependencydrift.html | ✅ stevenli-phoenix.github.io/toolbox/dependencydrift.html | ❌ |
 | 258 | Context Switch Recovery Planner | toolbox/contextswitch.html | ✅ stevenli-phoenix.github.io/toolbox/contextswitch.html | ❌ |
 | 259 | Git Hook Simulator | toolbox/githooksim.html | ✅ stevenli-phoenix.github.io/toolbox/githooksim.html | ❌ |
 | 260 | API Spec Delta Reviewer | toolbox/apispecdiff.html | ✅ stevenli-phoenix.github.io/toolbox/apispecdiff.html | ❌ |
 | 261 | Commit Footprint Analyzer | toolbox/commitfootprint.html | ✅ stevenli-phoenix.github.io/toolbox/commitfootprint.html | ❌ |
 | 262 | Release Readiness Scorecard | toolbox/releasereadiness.html | ✅ stevenli-phoenix.github.io/toolbox/releasereadiness.html | ❌ |
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 263 | Release Meeting Agenda Builder | toolbox/releasemeeting.html | ✅ stevenli-phoenix.github.io/toolbox/releasemeeting.html | ❌ |
 | 264 | Timebox Planner | toolbox/timebox.html | ✅ stevenli-phoenix.github.io/toolbox/timebox.html | ❌ |
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 265 | Debug Hypothesis Mapper | toolbox/debughypothesis.html | ✅ stevenli-phoenix.github.io/toolbox/debughypothesis.html | ❌ |
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 266 | PR Feedback Prioritizer | toolbox/prfeedbackprioritizer.html | ✅ stevenli-phoenix.github.io/toolbox/prfeedbackprioritizer.html | ❌ |
 | 267 | Focus Block Planner | toolbox/focusblock.html | ✅ stevenli-phoenix.github.io/toolbox/focusblock.html | ❌ |
 | 268 | Priority Stack Ranker | toolbox/prioritystack.html | ✅ stevenli-phoenix.github.io/toolbox/prioritystack.html | ❌ |
@@ -300,36 +279,15 @@
 | 274 | PR Review Lens | toolbox/prreviewlens.html | ✅ stevenli-phoenix.github.io/toolbox/prreviewlens.html | ❌ |
 | 275 | Bug Triage Assistant | toolbox/bugtriageassistant.html | ✅ stevenli-phoenix.github.io/toolbox/bugtriageassistant.html | ❌ |
 | 276 | Work Intake Triage | toolbox/workintake.html | ✅ stevenli-phoenix.github.io/toolbox/workintake.html | ❌ |
-
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 277 | Code Review Reply Generator | toolbox/reviewreply.html | ✅ stevenli-phoenix.github.io/toolbox/reviewreply.html | ❌ |
-
 | 278 | Docker Compose Builder | toolbox/dockercompose.html | ✅ stevenli-phoenix.github.io/toolbox/dockercompose.html | ❌ |
 | 279 | Acceptance Criteria Builder | toolbox/acceptancecriteria.html | ✅ stevenli-phoenix.github.io/toolbox/acceptancecriteria.html | ❌ |
 | 280 | Interrupt Budget Planner | toolbox/interruptbudget.html | ✅ stevenli-phoenix.github.io/toolbox/interruptbudget.html | ❌ |
 | 281 | Git Bisect Assistant | toolbox/gitbisect.html | ✅ stevenli-phoenix.github.io/toolbox/gitbisect.html | ❌ |
 | 282 | Git Cleanup Planner | toolbox/gitcleanup.html | ✅ stevenli-phoenix.github.io/toolbox/gitcleanup.html | ❌ |
-
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 283 | Token Budget Planner | toolbox/tokenbudget.html | ✅ stevenli-phoenix.github.io/toolbox/tokenbudget.html | ❌ |
-
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 284 | Diff Chunk Planner | toolbox/diffchunk.html | ✅ stevenli-phoenix.github.io/toolbox/diffchunk.html | ❌ |
-
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 285 | Task Context Compressor | toolbox/contextcompressor.html | ✅ stevenli-phoenix.github.io/toolbox/contextcompressor.html | ❌ |
-
-## Completed
-| # | Project | Dir | Deployed | Blog Post |
-|---|---------|-----|----------|-----------|
 | 286 | Change Risk Estimator | toolbox/changerisk.html | ✅ stevenli-phoenix.github.io/toolbox/changerisk.html | ❌ |
 
 ## Queue
