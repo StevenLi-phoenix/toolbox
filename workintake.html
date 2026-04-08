@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Work Intake Triage</title>
+  <meta name="description" content="Triage incoming developer tasks, requests, and messages into do now, schedule, delegate, or decline—with a dark, mobile-friendly scoring dashboard." />
+  <meta name="keywords" content="work intake triage, task triage, developer productivity, request prioritizer, inbox triage, decision matrix" />
+  <meta name="author" content="Steven Li" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#07111d" />
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/workintake.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Work Intake Triage" />
+  <meta property="og:description" content="Sort incoming tasks by urgency, impact, effort, risk, and reversibility." />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/workintake.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Work Intake Triage" />
+  <meta name="twitter:description" content="A dark, single-file triage board for deciding what to do with incoming work." />
+  <link rel="stylesheet" href="toolbox.css">
+  <style>
+    .triage-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}
+    .span-12{grid-column:span 12}.span-8{grid-column:span 8}.span-6{grid-column:span 6}.span-4{grid-column:span 4}
+    .inputs{display:grid;gap:10px}
+    .entry{border:1px solid var(--border);border-radius:var(--radius);padding:12px;background:rgba(255,255,255,.02)}
+    .entry-grid{display:grid;grid-template-columns:1.6fr repeat(6,minmax(72px,.7fr));gap:8px;align-items:center}
+    .entry-grid input,.entry-grid select,.entry-grid textarea{width:100%;font-size:.9rem}
+    .entry-grid textarea{min-height:42px;resize:vertical}
+    .label-mini{font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px}
+    .decision{padding:14px;border-radius:16px;border:1px solid var(--border);background:linear-gradient(180deg,rgba(99,102,241,.15),rgba(16,185,129,.06));}
+    .decision h3{margin:0 0 6px;font-size:1.1rem}
+    .pill-row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
+    .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--border);font-size:.8rem}
+    .score{font-size:2.2rem;font-weight:800;line-height:1}
+    .table{width:100%;border-collapse:collapse;font-size:.92rem}
+    .table th,.table td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top}
+    .table th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em}
+    .small{font-size:.82rem;color:var(--muted)}
+    .actions{display:flex;flex-wrap:wrap;gap:10px}
+    .card.soft{background:linear-gradient(180deg,rgba(148,163,184,.08),rgba(15,23,42,.4))}
+    @media (max-width: 900px){.span-8,.span-6,.span-4{grid-column:span 12}.entry-grid{grid-template-columns:1fr 1fr}.entry-grid .full{grid-column:1/-1}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">toolbox #276 · developer productivity</div>
+      <h1>Work Intake Triage</h1>
+      <p class="lead">Drop in incoming requests, issues, DMs, and “quick favors,” then score them against urgency, impact, effort, risk, reversibility, and waiting cost. It tells you whether to do it now, schedule it, delegate it, or politely let it die in the inbox.</p>
+      <div class="hero-grid">
+        <div class="hero-stat"><span>Best for</span><strong>Slack pings, issue triage, stakeholder requests, and noisy inboxes</strong></div>
+        <div class="hero-stat"><span>Output</span><strong>Decision, confidence score, rationale, and a ranked queue</strong></div>
+        <div class="hero-stat"><span>Mode</span><strong>Dark UI, mobile responsive, SEO tags, single-file HTML</strong></div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn primary" id="runBtn" type="button">Triaged my intake</button>
+        <button class="btn" id="demoBtn" type="button">Load demo set</button>
+        <button class="btn" id="copyBtn" type="button">Copy summary</button>
+        <a class="btn" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Me a Coffee</a>
+      </div>
+    </section>
+
+    <div class="triage-grid">
+      <section class="card span-8">
+        <div class="card-head"><h2>Incoming work</h2><span class="badge">triage board</span></div>
+        <div class="card-body inputs" id="items"></div>
+        <div class="actions" style="margin-top:12px">
+          <button class="btn" id="addBtn" type="button">+ Add item</button>
+          <button class="btn" id="resetBtn" type="button">Reset</button>
+        </div>
+      </section>
+
+      <section class="card span-4 soft">
+        <div class="card-head"><h2>Decision engine</h2><span class="badge good" id="status">ready</span></div>
+        <div class="card-body">
+          <div class="decision">
+            <div class="small">Top recommendation</div>
+            <h3 id="topName">—</h3>
+            <div class="score" id="topScore">—</div>
+            <div class="small" id="topWhy">Add work and hit triage.</div>
+            <div class="pill-row" id="topPills"></div>
+          </div>
+          <div style="height:12px"></div>
+          <div class="hero-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+            <div class="hero-stat"><span>Do now</span><strong id="doNowCount">0</strong></div>
+            <div class="hero-stat"><span>Schedule</span><strong id="scheduleCount">0</strong></div>
+            <div class="hero-stat"><span>Delegate</span><strong id="delegateCount">0</strong></div>
+            <div class="hero-stat"><span>Decline</span><strong id="declineCount">0</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card span-12">
+        <div class="card-head"><h2>Ranked queue</h2><span class="badge">sorted by decision score</span></div>
+        <div class="card-body" style="overflow:auto">
+          <table class="table">
+            <thead>
+              <tr><th>Item</th><th>Decision</th><th>Score</th><th>Reason</th></tr>
+            </thead>
+            <tbody id="queue"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+<script>
+const defaults = [
+  {name:'Fix broken onboarding bug', type:'issue', urgency:5, impact:5, effort:2, risk:2, reversibility:4, waitCost:5, due:'today', context:'blocks activation flow'},
+  {name:'Reply to a customer asking for a minor tweak', type:'request', urgency:3, impact:2, effort:1, risk:1, reversibility:5, waitCost:2, due:'this week', context:'nice-to-have'},
+  {name:'Prepare notes for next release review', type:'admin', urgency:2, impact:4, effort:2, risk:1, reversibility:3, waitCost:3, due:'tomorrow', context:'helps keep release moving'}
+];
+const itemHost = document.getElementById('items');
+const queueHost = document.getElementById('queue');
+const topName = document.getElementById('topName');
+const topScore = document.getElementById('topScore');
+const topWhy = document.getElementById('topWhy');
+const topPills = document.getElementById('topPills');
+const counters = ['doNowCount','scheduleCount','delegateCount','declineCount'].map(id=>document.getElementById(id));
+const status = document.getElementById('status');
+
+function row(item={}){
+  const div = document.createElement('div'); div.className='entry';
+  div.innerHTML = `<div class="entry-grid">
+    <div class="full"><span class="label-mini">Title</span><input class="name" value="${item.name||''}" placeholder="Incoming request / task / issue" /></div>
+    <div><span class="label-mini">Type</span><select class="type"><option ${item.type==='issue'?'selected':''}>issue</option><option ${item.type==='request'?'selected':''}>request</option><option ${item.type==='admin'?'selected':''}>admin</option><option ${item.type==='idea'?'selected':''}>idea</option></select></div>
+    <div><span class="label-mini">Urgency</span><input class="urgency" type="number" min="0" max="5" value="${item.urgency??3}" /></div>
+    <div><span class="label-mini">Impact</span><input class="impact" type="number" min="0" max="5" value="${item.impact??3}" /></div>
+    <div><span class="label-mini">Effort</span><input class="effort" type="number" min="0" max="5" value="${item.effort??3}" /></div>
+    <div><span class="label-mini">Risk</span><input class="risk" type="number" min="0" max="5" value="${item.risk??2}" /></div>
+    <div><span class="label-mini">Reversible</span><input class="reversibility" type="number" min="0" max="5" value="${item.reversibility??3}" /></div>
+    <div><span class="label-mini">Wait cost</span><input class="waitCost" type="number" min="0" max="5" value="${item.waitCost??2}" /></div>
+    <div class="full"><span class="label-mini">Context</span><textarea class="context" placeholder="Why this matters, blockers, due date">${item.context||''}</textarea></div>
+  </div>`;
+  return div;
+}
+function readItems(){
+  return [...itemHost.children].map(el=>({
+    name:el.querySelector('.name').value.trim(),
+    type:el.querySelector('.type').value,
+    urgency:+el.querySelector('.urgency').value||0,
+    impact:+el.querySelector('.impact').value||0,
+    effort:+el.querySelector('.effort').value||0,
+    risk:+el.querySelector('.risk').value||0,
+    reversibility:+el.querySelector('.reversibility').value||0,
+    waitCost:+el.querySelector('.waitCost').value||0,
+    context:el.querySelector('.context').value.trim()
+  })).filter(x=>x.name);
+}
+function score(it){
+  const value = it.impact*2 + it.urgency*1.8 + it.waitCost*1.2 + (it.type==='issue'?1.2:0) + (it.type==='request'?0.4:0);
+  const friction = it.effort*1.6 + it.risk*1.4 + (5-it.reversibility)*0.8;
+  return +(value - friction).toFixed(1);
+}
+function decide(it, s){
+  if (s >= 7) return ['Do now','high-value + time-sensitive'];
+  if (s >= 3.5) return ['Schedule','worth doing, but not at the expense of focus'];
+  if (it.effort >= 4 || it.risk >= 4) return ['Delegate','too expensive or too risky to own alone'];
+  return ['Decline','low leverage, low urgency, or better ignored'];
+}
+function triage(){
+  const items = readItems().map(it=>{ const s=score(it); const [decision,reason]=decide(it,s); return {...it,score:s,decision,reason}; }).sort((a,b)=>b.score-a.score);
+  queueHost.innerHTML = items.map(it=>`<tr><td><strong>${escapeHtml(it.name)}</strong><div class="small">${escapeHtml(it.type)} · ${escapeHtml(it.context||'')}</div></td><td>${it.decision}</td><td>${it.score}</td><td>${escapeHtml(it.reason)}</td></tr>`).join('') || '<tr><td colspan="4" class="small">No items yet.</td></tr>';
+  const top = items[0];
+  if (top){
+    topName.textContent = top.name;
+    topScore.textContent = top.score;
+    topWhy.textContent = top.reason + (top.context ? ` — ${top.context}` : '');
+    topPills.innerHTML = [`urgency ${top.urgency}`,`impact ${top.impact}`,`effort ${top.effort}`,`risk ${top.risk}`].map(t=>`<span class='pill'>${t}</span>`).join('');
+  } else {
+    topName.textContent = '—'; topScore.textContent = '—'; topWhy.textContent = 'Add work and hit triage.'; topPills.innerHTML='';
+  }
+  const buckets = {"Do now":0,"Schedule":0,"Delegate":0,"Decline":0}; items.forEach(i=>buckets[i.decision]++);
+  counters[0].textContent=buckets['Do now']; counters[1].textContent=buckets['Schedule']; counters[2].textContent=buckets['Delegate']; counters[3].textContent=buckets['Decline'];
+  status.textContent = items.length ? 'triaged' : 'ready';
+  return items;
+}
+function escapeHtml(s){return String(s).replace(/[&<>"]|'/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function load(items){ itemHost.innerHTML=''; items.forEach(i=>itemHost.appendChild(row(i))); triage(); }
+document.getElementById('addBtn').onclick=()=>{itemHost.appendChild(row()); triage();};
+document.getElementById('resetBtn').onclick=()=>load([{name:'',type:'issue'}]);
+document.getElementById('demoBtn').onclick=()=>load(defaults);
+document.getElementById('runBtn').onclick=triage;
+document.getElementById('copyBtn').onclick=async()=>{const lines=readItems().map(i=>`${i.name} → ${decide(i,score(i))[0]} (${score(i)})`); await navigator.clipboard.writeText(lines.join('\n') || ''); document.getElementById('copyBtn').textContent='Copied'; setTimeout(()=>document.getElementById('copyBtn').textContent='Copy summary',1200);};
+itemHost.addEventListener('input',triage);
+load(defaults);
+</script>
+</body>
+</html>
