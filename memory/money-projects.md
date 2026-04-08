@@ -309,9 +309,10 @@
 | 278 | Docker Compose Builder | toolbox/dockercompose.html | ✅ stevenli-phoenix.github.io/toolbox/dockercompose.html | ❌ |
 | 279 | Acceptance Criteria Builder | toolbox/acceptancecriteria.html | ✅ stevenli-phoenix.github.io/toolbox/acceptancecriteria.html | ❌ |
 | 280 | Interrupt Budget Planner | toolbox/interruptbudget.html | ✅ stevenli-phoenix.github.io/toolbox/interruptbudget.html | ❌ |
+| 281 | Git Bisect Assistant | toolbox/gitbisect.html | ✅ stevenli-phoenix.github.io/toolbox/gitbisect.html | ❌ |
 
 ## Queue
-281. Next tool TBD
+282. Next tool TBD
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
