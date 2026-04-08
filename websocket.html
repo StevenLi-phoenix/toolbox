@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebSocket Tester - Free Online WebSocket Client</title>
+<meta name="description" content="Free online WebSocket tester. Connect to WebSocket servers, send and receive messages, inspect frames. No data stored.">
+<meta name="keywords" content="websocket tester, websocket client, ws test, websocket debug, websocket online, websocket tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/websocket.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .conn-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .conn-bar input { flex: 1; min-width: 200px; font-family: var(--mono); font-size: .9rem; }
+  .conn-status { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: 600; padding: 4px 12px; border-radius: 99px; border: 1px solid var(--border); }
+  .conn-status .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .conn-status.disconnected .dot { background: var(--muted); }
+  .conn-status.connecting .dot { background: var(--warning); animation: pulse 1s infinite; }
+  .conn-status.connected .dot { background: var(--success); }
+  .conn-status.error .dot { background: var(--error); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
+  .send-bar { display: flex; gap: 8px; align-items: flex-end; }
+  .send-bar textarea { flex: 1; min-height: 60px; max-height: 200px; font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .send-actions { display: flex; flex-direction: column; gap: 6px; }
+
+  .log { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .log-entry { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: .82rem; display: flex; gap: 8px; align-items: flex-start; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-dir { font-weight: 700; min-width: 24px; text-align: center; font-size: .9rem; flex-shrink: 0; }
+  .log-dir.sent { color: #2563eb; }
+  .log-dir.recv { color: var(--success); }
+  .log-dir.sys { color: var(--muted); }
+  .log-dir.err { color: var(--error); }
+  .log-time { color: var(--muted); font-family: var(--mono); font-size: .75rem; white-space: nowrap; flex-shrink: 0; }
+  .log-msg { font-family: var(--mono); font-size: .82rem; word-break: break-all; white-space: pre-wrap; flex: 1; }
+  .log-size { color: var(--muted); font-size: .72rem; white-space: nowrap; flex-shrink: 0; }
+
+  .stats-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+  .stat-item { font-size: .82rem; color: var(--muted); }
+  .stat-item strong { color: var(--text); }
+
+  .protocol-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .protocol-bar label { font-size: .82rem; color: var(--muted); }
+  .protocol-bar input { width: 200px; font-family: var(--mono); font-size: .82rem; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>WebSocket Tester</h1>
+<p class="subtitle">Connect to WebSocket servers, send messages, and inspect responses. 100% client-side.</p>
+
+<div class="card">
+<h2>Connection</h2>
+<div class="conn-bar">
+  <input type="text" id="url" placeholder="wss://echo.websocket.org" value="wss://echo.websocket.events">
+  <button class="btn" id="connectBtn" onclick="toggleConnection()">Connect</button>
+  <div class="conn-status disconnected" id="connStatus"><span class="dot"></span><span id="connLabel">Disconnected</span></div>
+</div>
+<div class="protocol-bar">
+  <label for="protocols">Sub-protocols (comma-separated):</label>
+  <input type="text" id="protocols" placeholder="e.g. graphql-ws">
+</div>
+</div>
+
+<div class="card">
+<h2>Send Message</h2>
+<div class="send-bar">
+  <textarea id="message" placeholder='{"type": "hello", "payload": "world"}'></textarea>
+  <div class="send-actions">
+    <button class="btn" id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+    <button class="btn-secondary" onclick="formatJSON()" title="Format as JSON">{ }</button>
+  </div>
+</div>
+<div class="presets" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;">
+  <button class="btn-secondary" onclick="setMessage('Hello, WebSocket!')">Text</button>
+  <button class="btn-secondary" onclick='setMessage(JSON.stringify({type:"ping",timestamp:Date.now()},null,2))'>JSON Ping</button>
+  <button class="btn-secondary" onclick='setMessage(JSON.stringify({action:"subscribe",channel:"updates"},null,2))'>Subscribe</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Message Log</h2>
+<div class="row" style="justify-content:space-between; margin-bottom:8px;">
+  <div class="stats-row" id="stats">
+    <span class="stat-item">Sent: <strong id="sentCount">0</strong></span>
+    <span class="stat-item">Received: <strong id="recvCount">0</strong></span>
+    <span class="stat-item">Bytes In: <strong id="bytesIn">0</strong></span>
+    <span class="stat-item">Bytes Out: <strong id="bytesOut">0</strong></span>
+  </div>
+  <button class="btn-secondary" onclick="clearLog()">Clear</button>
+</div>
+<div class="log" id="log">
+  <div class="log-entry"><span class="log-dir sys">&bull;</span><span class="log-msg" style="color:var(--muted)">Ready to connect.</span></div>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">&check; Copied!</div>
+
+<footer>
+Built with &hearts; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let ws = null;
+let sentCount = 0, recvCount = 0, bytesIn = 0, bytesOut = 0;
+
+function setStatus(state, label) {
+  const el = $('connStatus');
+  el.className = 'conn-status ' + state;
+  $('connLabel').textContent = label;
+}
+
+function timeStr() {
+  const d = new Date();
+  return d.toLocaleTimeString('en-US', {hour12:false}) + '.' + String(d.getMilliseconds()).padStart(3,'0');
+}
+
+function addLog(dir, msg, cls) {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  const size = typeof msg === 'string' ? new Blob([msg]).size : 0;
+  const sizeLabel = size > 0 ? formatBytes(size) : '';
+
+  let dirSymbol, dirClass;
+  switch(dir) {
+    case 'sent': dirSymbol = '\u25B2'; dirClass = 'sent'; break;
+    case 'recv': dirSymbol = '\u25BC'; dirClass = 'recv'; break;
+    case 'err': dirSymbol = '\u2716'; dirClass = 'err'; break;
+    default: dirSymbol = '\u2022'; dirClass = 'sys'; break;
+  }
+
+  entry.innerHTML =
+    '<span class="log-dir ' + dirClass + '">' + dirSymbol + '</span>' +
+    '<span class="log-time">' + timeStr() + '</span>' +
+    '<span class="log-msg">' + escHtml(msg) + '</span>' +
+    (sizeLabel ? '<span class="log-size">' + sizeLabel + '</span>' : '');
+  $('log').appendChild(entry);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+function updateStats() {
+  $('sentCount').textContent = sentCount;
+  $('recvCount').textContent = recvCount;
+  $('bytesIn').textContent = formatBytes(bytesIn);
+  $('bytesOut').textContent = formatBytes(bytesOut);
+}
+
+function toggleConnection() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    ws.close();
+  } else {
+    connect();
+  }
+}
+
+function connect() {
+  const url = $('url').value.trim();
+  if (!url) return;
+
+  const protoStr = $('protocols').value.trim();
+  const protos = protoStr ? protoStr.split(',').map(s=>s.trim()).filter(Boolean) : undefined;
+
+  setStatus('connecting', 'Connecting...');
+  $('connectBtn').textContent = 'Disconnect';
+  addLog('sys', 'Connecting to ' + url + (protos ? ' [' + protos.join(', ') + ']' : '') + '...');
+
+  try {
+    ws = protos ? new WebSocket(url, protos) : new WebSocket(url);
+  } catch(e) {
+    setStatus('error', 'Error');
+    addLog('err', 'Failed: ' + e.message);
+    $('connectBtn').textContent = 'Connect';
+    return;
+  }
+
+  ws.onopen = () => {
+    setStatus('connected', 'Connected');
+    addLog('sys', 'Connected to ' + url);
+    $('sendBtn').disabled = false;
+  };
+
+  ws.onmessage = (e) => {
+    recvCount++;
+    const data = typeof e.data === 'string' ? e.data : '[Binary: ' + e.data.size + ' bytes]';
+    bytesIn += new Blob([data]).size;
+    addLog('recv', data);
+    updateStats();
+  };
+
+  ws.onerror = () => {
+    setStatus('error', 'Error');
+    addLog('err', 'Connection error');
+  };
+
+  ws.onclose = (e) => {
+    setStatus('disconnected', 'Disconnected');
+    addLog('sys', 'Disconnected (code: ' + e.code + ', reason: ' + (e.reason || 'none') + ')');
+    $('connectBtn').textContent = 'Connect';
+    $('sendBtn').disabled = true;
+    ws = null;
+  };
+}
+
+function sendMessage() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const msg = $('message').value;
+  if (!msg) return;
+  ws.send(msg);
+  sentCount++;
+  bytesOut += new Blob([msg]).size;
+  addLog('sent', msg);
+  updateStats();
+}
+
+function setMessage(text) {
+  $('message').value = text;
+}
+
+function formatJSON() {
+  try {
+    const parsed = JSON.parse($('message').value);
+    $('message').value = JSON.stringify(parsed, null, 2);
+  } catch(e) { /* not valid JSON, ignore */ }
+}
+
+function clearLog() {
+  $('log').innerHTML = '';
+  sentCount = recvCount = bytesIn = bytesOut = 0;
+  updateStats();
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Send on Ctrl+Enter
+$('message').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Connect on Enter in URL field
+$('url').addEventListener('keydown', e => {
+  if (e.key === 'Enter') toggleConnection();
+});
+</script>
+</body>
+</html>
