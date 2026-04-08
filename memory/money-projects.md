@@ -297,8 +297,10 @@
 | 271 | Meeting Load Balancer | toolbox/meetingload.html | ✅ stevenli-phoenix.github.io/toolbox/meetingload.html | ❌ |
 | 272 | Branch Recovery Planner | toolbox/branchrecovery.html | ✅ stevenli-phoenix.github.io/toolbox/branchrecovery.html | ❌ |
 | 273 | Stale Branch Auditor | toolbox/stalebranch.html | ✅ stevenli-phoenix.github.io/toolbox/stalebranch.html | ❌ |
+| 274 | PR Review Lens | toolbox/prreviewlens.html | ✅ stevenli-phoenix.github.io/toolbox/prreviewlens.html | ❌ |
+
 ## Queue
-274. Next tool TBD
+275. Next tool TBD
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
