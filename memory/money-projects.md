@@ -322,8 +322,13 @@
 |---|---------|-----|----------|-----------|
 | 284 | Diff Chunk Planner | toolbox/diffchunk.html | ✅ stevenli-phoenix.github.io/toolbox/diffchunk.html | ❌ |
 
+## Completed
+| # | Project | Dir | Deployed | Blog Post |
+|---|---------|-----|----------|-----------|
+| 285 | Task Context Compressor | toolbox/contextcompressor.html | ✅ stevenli-phoenix.github.io/toolbox/contextcompressor.html | ❌ |
+
 ## Queue
-285. Next tool TBD
+286. Next tool TBD
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
