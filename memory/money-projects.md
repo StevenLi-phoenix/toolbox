@@ -317,8 +317,13 @@
 |---|---------|-----|----------|-----------|
 | 283 | Token Budget Planner | toolbox/tokenbudget.html | ✅ stevenli-phoenix.github.io/toolbox/tokenbudget.html | ❌ |
 
+## Completed
+| # | Project | Dir | Deployed | Blog Post |
+|---|---------|-----|----------|-----------|
+| 284 | Diff Chunk Planner | toolbox/diffchunk.html | ✅ stevenli-phoenix.github.io/toolbox/diffchunk.html | ❌ |
+
 ## Queue
-284. Next tool TBD
+285. Next tool TBD
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
