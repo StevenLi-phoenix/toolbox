@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Git Cleanup Planner</title>
+  <meta name="description" content="Plan a safe git cleanup session. Prioritize stale branches, merged branches, local-only work, and risky refs with a dark, mobile-friendly productivity tool." />
+  <meta name="keywords" content="git cleanup planner, stale branches, branch cleanup, developer productivity, git utility, repo maintenance" />
+  <meta name="author" content="Steven Li" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#08111d" />
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/gitcleanup.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Git Cleanup Planner" />
+  <meta property="og:description" content="Sort branches by cleanup risk and generate a sane cleanup plan before you delete the wrong thing." />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/gitcleanup.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Git Cleanup Planner" />
+  <meta name="twitter:description" content="Score branches by age, merge status, remote presence, and confidence before cleanup." />
+  <style>
+    :root{--bg:#07111d;--panel:#0d1726;--panel2:#101c2d;--text:#e6eefc;--muted:#8ea2c3;--border:rgba(160,190,255,.14);--accent:#78a6ff;--accent2:#57d6a3;--warn:#ffcc66;--bad:#ff7b7b;--shadow:0 24px 80px rgba(0,0,0,.35);--radius:22px}
+    *{box-sizing:border-box} html,body{margin:0;padding:0;background:radial-gradient(circle at top,#10203a 0%,var(--bg) 46%,#040913 100%);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    body{line-height:1.5}
+    a{color:inherit} button,input,select,textarea{font:inherit}
+    .wrap{max-width:1180px;margin:0 auto;padding:20px 14px 36px}
+    .hero,.card,.tile,.branch{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));border:1px solid var(--border);box-shadow:var(--shadow);backdrop-filter:blur(10px)}
+    .hero{border-radius:28px;padding:22px}
+    .eyebrow{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+    h1{margin:.25rem 0 .55rem;font-size:clamp(2rem,4vw,3.7rem);line-height:1.03}
+    .lead{max-width:78ch;color:#d9e4f8;font-size:1.03rem;margin:0 0 18px}
+    .hero-grid,.stats,.layout{display:grid;gap:14px}
+    .hero-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin:18px 0}
+    .hero-stat,.card,.tile,.branch,.pill{border-radius:var(--radius)}
+    .hero-stat{padding:14px;background:rgba(255,255,255,.03);border:1px solid var(--border)}
+    .hero-stat span,.tile span{display:block;color:var(--muted);font-size:.82rem}
+    .hero-stat strong,.tile strong{display:block;margin-top:6px;font-size:1rem}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:10px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);text-decoration:none;padding:11px 16px;border-radius:999px;cursor:pointer}
+    .btn.primary{background:linear-gradient(135deg,var(--accent),#9ab8ff);color:#08111d;font-weight:700;border-color:transparent}
+    .btn.good{background:linear-gradient(135deg,var(--accent2),#95f5cb);color:#05110c;border-color:transparent;font-weight:700}
+    .layout{grid-template-columns:1.05fr .95fr;margin-top:14px}
+    .stack{display:grid;gap:14px}
+    .card{padding:18px;border-radius:26px}
+    .card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+    .card-head h2{margin:0;font-size:1.1rem}
+    .badge{padding:6px 10px;border-radius:999px;background:rgba(120,166,255,.14);color:#bcd0ff;font-size:.76rem;border:1px solid rgba(120,166,255,.24)}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+    .field{grid-column:span 6;display:flex;flex-direction:column;gap:6px}
+    .field.full{grid-column:span 12}
+    label{color:var(--muted);font-size:.84rem}
+    input,select,textarea{width:100%;padding:12px 14px;border-radius:16px;border:1px solid var(--border);background:#08111c;color:var(--text)}
+    textarea{min-height:108px;resize:vertical}
+    .small{font-size:.8rem;color:var(--muted)}
+    .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    .tile{padding:14px;background:rgba(255,255,255,.03);border:1px solid var(--border)}
+    .branch-list{display:grid;gap:10px;margin-top:12px}
+    .branch{padding:14px;background:rgba(255,255,255,.03);border:1px solid var(--border)}
+    .row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+    .row h3{margin:0;font-size:1rem}
+    .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .pill{padding:6px 10px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:#d9e4f8;font-size:.78rem}
+    .pill.good{background:rgba(87,214,163,.12);border-color:rgba(87,214,163,.22)}
+    .pill.warn{background:rgba(255,204,102,.12);border-color:rgba(255,204,102,.22)}
+    .pill.bad{background:rgba(255,123,123,.12);border-color:rgba(255,123,123,.22)}
+    .output{white-space:pre-wrap;background:#08111c;border:1px solid var(--border);border-radius:18px;padding:14px;min-height:260px}
+    .footer{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:.82rem;margin-top:12px}
+    .divider{height:1px;background:var(--border);margin:14px 0}
+    @media (max-width:860px){.layout{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.field{grid-column:span 12}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">toolbox #282 · developer productivity</div>
+      <h1>Git Cleanup Planner</h1>
+      <p class="lead">Before you start deleting old branches in a heroic fit of cleanliness, score what’s safe, what’s stale, and what absolutely needs a second look. This planner turns repo hygiene into a calm, copyable cleanup sequence.</p>
+      <div class="hero-grid">
+        <div class="hero-stat"><span>Best for</span><strong>Stale branches, merged refs, local-only work, remote tracking, and cleanup triage</strong></div>
+        <div class="hero-stat"><span>Output</span><strong>Priority-ranked branches plus a step-by-step safe cleanup order</strong></div>
+        <div class="hero-stat"><span>Mode</span><strong>Dark UI, mobile responsive, SEO-ready, self-contained single HTML</strong></div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn primary" id="planBtn" type="button">Build cleanup plan</button>
+        <button class="btn" id="sampleBtn" type="button">Load sample</button>
+        <button class="btn" id="copyBtn" type="button">Copy plan</button>
+        <a class="btn good" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Me a Coffee</a>
+      </div>
+    </section>
+
+    <div class="layout">
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Repo inputs</h2><span class="badge">planner</span></div>
+          <div class="grid">
+            <div class="field"><label for="repo">Repository</label><input id="repo" value="acme-web-app" /></div>
+            <div class="field"><label for="defaultBranch">Default branch</label><input id="defaultBranch" value="main" /></div>
+            <div class="field"><label for="keepDays">Keep untouched branches for at least</label><input id="keepDays" type="number" min="0" step="1" value="14" /></div>
+            <div class="field"><label for="riskTolerance">Risk tolerance</label><select id="riskTolerance"><option value="strict">Strict</option><option value="balanced" selected>Balanced</option><option value="aggressive">Aggressive</option></select></div>
+            <div class="field full"><label for="goal">Cleanup goal</label><input id="goal" value="Trim stale branches without deleting active work or useful archaeology" /></div>
+            <div class="field full"><label for="notes">Cleanup notes</label><textarea id="notes">Verify merged status before deleting, double-check branch owners, and keep release or hotfix branches unless explicitly confirmed.</textarea></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Branch inventory</h2><span class="badge" id="stateBadge">ready</span></div>
+          <div class="small">Fill the list below with branch data. Scores are computed from age, merge status, remote presence, protection, and owner confidence.</div>
+          <div id="branchList" class="branch-list"></div>
+          <div class="hero-actions" style="margin-top:12px">
+            <button class="btn" id="addRowBtn" type="button">Add branch</button>
+            <button class="btn" id="sortBtn" type="button">Sort now</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Cleanup summary</h2><span class="badge">output</span></div>
+          <div class="tiles">
+            <div class="tile"><span>Safe deletes</span><strong id="safeCount">—</strong></div>
+            <div class="tile"><span>Needs review</span><strong id="reviewCount">—</strong></div>
+            <div class="tile"><span>Keepers</span><strong id="keepCount">—</strong></div>
+            <div class="tile"><span>Total branches</span><strong id="totalCount">—</strong></div>
+          </div>
+          <div class="divider"></div>
+          <div id="ranked" class="branch-list"></div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Generated cleanup plan</h2><span class="badge">copyable</span></div>
+          <div id="output" class="output">Load sample branches or add your own to generate a safe cleanup plan.</div>
+        </article>
+      </section>
+    </div>
+
+    <div class="footer">
+      <div>Built for practical repo hygiene. <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Steven a coffee</a>.</div>
+      <div>Tool #282 · single-file HTML</div>
+    </div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const sample = [
+  { name: 'feature/login-redesign', age: 41, merged: 'yes', remote: 'yes', protected: 'no', owner: 'known', notes: 'Merged two weeks ago; safe to prune.' },
+  { name: 'fix/payment-retry', age: 6, merged: 'no', remote: 'yes', protected: 'no', owner: 'known', notes: 'Active fix branch; keep until shipped.' },
+  { name: 'wip/experiment-search', age: 23, merged: 'no', remote: 'no', protected: 'no', owner: 'unclear', notes: 'Local-only experiment. Ask before deleting.' },
+  { name: 'release/v2.8.0', age: 55, merged: 'no', remote: 'yes', protected: 'yes', owner: 'known', notes: 'Release branch; never auto-delete.' },
+  { name: 'chore/old-ci-migration', age: 68, merged: 'yes', remote: 'yes', protected: 'no', owner: 'known', notes: 'Long merged and inactive.' },
+];
+
+function rowTemplate(b = {}) {
+  return `
+    <div class="branch">
+      <div class="row">
+        <div style="flex:1;min-width:180px">
+          <h3><input class="name" placeholder="branch/name" value="${b.name || ''}" /></h3>
+          <div class="small" style="margin-top:6px"><input class="notes" placeholder="notes" value="${b.notes || ''}" /></div>
+        </div>
+        <span class="pill ownerPill">owner: <select class="owner"><option value="known" ${b.owner==='known'?'selected':''}>known</option><option value="unclear" ${b.owner==='unclear'?'selected':''}>unclear</option></select></span>
+      </div>
+      <div class="meta">
+        <span class="pill">age days <input class="age" type="number" min="0" step="1" value="${b.age ?? 0}" style="width:72px;background:transparent;border:0;color:inherit;padding:0;margin-left:6px" /></span>
+        <span class="pill">merged <select class="merged"><option value="yes" ${b.merged==='yes'?'selected':''}>yes</option><option value="no" ${b.merged==='no'?'selected':''}>no</option></select></span>
+        <span class="pill">remote <select class="remote"><option value="yes" ${b.remote==='yes'?'selected':''}>yes</option><option value="no" ${b.remote==='no'?'selected':''}>no</option></select></span>
+        <span class="pill">protected <select class="protected"><option value="yes" ${b.protected==='yes'?'selected':''}>yes</option><option value="no" ${b.protected==='no'?'selected':''}>no</option></select></span>
+        <span class="pill"><button class="delBtn" type="button" style="all:unset;cursor:pointer;color:#ffb1b1">remove</button></span>
+      </div>
+    </div>`;
+}
+
+function addRow(b = {}) {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = rowTemplate(b);
+  const node = wrap.firstElementChild;
+  node.querySelector('.delBtn').addEventListener('click', () => { node.remove(); build(); });
+  node.querySelectorAll('input,select').forEach(el => el.addEventListener('input', build));
+  $('branchList').appendChild(node);
+}
+
+function readBranches() {
+  return [...$('branchList').children].map(el => ({
+    name: el.querySelector('.name').value.trim() || 'untitled-branch',
+    age: Number(el.querySelector('.age').value || 0),
+    merged: el.querySelector('.merged').value,
+    remote: el.querySelector('.remote').value,
+    protected: el.querySelector('.protected').value,
+    owner: el.querySelector('.owner').value,
+    notes: el.querySelector('.notes').value.trim(),
+  }));
+}
+
+function score(b) {
+  let s = 0;
+  if (b.protected === 'yes') s -= 100;
+  if (b.merged === 'yes') s += 45;
+  if (b.remote === 'yes') s += 8;
+  if (b.remote === 'no') s += 12;
+  if (b.age >= 30) s += 18;
+  if (b.age >= 60) s += 18;
+  if (b.age >= 14) s += 8;
+  if (b.owner === 'unclear') s -= 30;
+  if (/release|hotfix|main|prod/i.test(b.name)) s -= 40;
+  return Math.round(s);
+}
+
+function labelFor(score, b) {
+  if (b.protected === 'yes') return ['keep','bad'];
+  if (score >= 40) return ['safe delete','good'];
+  if (score >= 10) return ['review','warn'];
+  return ['keep','bad'];
+}
+
+function build() {
+  const data = readBranches().map(b => ({...b, score: score(b)})).sort((a,b) => b.score - a.score);
+  const safe = data.filter(b => labelFor(b.score, b)[0] === 'safe delete').length;
+  const review = data.filter(b => labelFor(b.score, b)[0] === 'review').length;
+  const keep = data.filter(b => labelFor(b.score, b)[0] === 'keep').length;
+  $('safeCount').textContent = safe;
+  $('reviewCount').textContent = review;
+  $('keepCount').textContent = keep;
+  $('totalCount').textContent = data.length;
+
+  $('ranked').innerHTML = data.map((b, i) => {
+    const [label, cls] = labelFor(b.score, b);
+    return `<div class="branch"><div class="row"><div><h3>${i+1}. ${b.name}</h3><div class="small">${b.notes || 'No notes provided.'}</div></div><span class="pill ${cls}">${label}</span></div><div class="meta"><span class="pill">score ${b.score}</span><span class="pill">age ${b.age}d</span><span class="pill">merged ${b.merged}</span><span class="pill">remote ${b.remote}</span><span class="pill">protected ${b.protected}</span></div></div>`;
+  }).join('');
+
+  const lines = [];
+  lines.push(`Git Cleanup Planner for ${$('repo').value.trim() || 'repo'}`);
+  lines.push(`Default branch: ${$('defaultBranch').value.trim() || 'main'}`);
+  lines.push(`Goal: ${$('goal').value.trim()}`);
+  lines.push(`Risk tolerance: ${$('riskTolerance').value}`);
+  if ($('notes').value.trim()) {
+    lines.push('Notes:');
+    $('notes').value.trim().split('\n').forEach(l => lines.push(`- ${l}`));
+  }
+  lines.push('');
+  lines.push('Cleanup order:');
+  data.forEach((b, idx) => {
+    const [label] = labelFor(b.score, b);
+    lines.push(`${idx+1}. ${b.name} — ${label} — score ${b.score}`);
+  });
+  lines.push('');
+  lines.push(`Recommended action: delete ${safe} safe branches, review ${review} questionable branches, and keep ${keep} protected/risky branches.`);
+  lines.push(`Tip: always re-check with git branch --merged and branch ownership before deleting anything.`);
+  $('output').textContent = lines.join('\n');
+  $('stateBadge').textContent = 'updated';
+  setTimeout(() => $('stateBadge').textContent = 'ready', 700);
+}
+
+$('addRowBtn').addEventListener('click', () => { addRow(); build(); });
+$('sortBtn').addEventListener('click', build);
+$('planBtn').addEventListener('click', build);
+$('sampleBtn').addEventListener('click', () => { $('branchList').innerHTML = ''; sample.forEach(addRow); build(); });
+$('copyBtn').addEventListener('click', async () => { await navigator.clipboard.writeText($('output').textContent); $('stateBadge').textContent = 'copied'; setTimeout(() => $('stateBadge').textContent = 'ready', 700); });
+['repo','defaultBranch','keepDays','riskTolerance','goal','notes'].forEach(id => $(id).addEventListener('input', build));
+
+sample.forEach(addRow);
+build();
+</script>
+</body>
+</html>
