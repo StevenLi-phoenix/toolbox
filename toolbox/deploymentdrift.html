@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deployment Drift Detector</title>
+  <meta name="description" content="Compare local, staging, and production settings to spot deployment drift before it becomes an incident." />
+  <meta name="keywords" content="deployment drift, environment checker, devops tool, config diff, release readiness, productivity" />
+  <meta name="author" content="Steven Li" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#07111d" />
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/deploymentdrift.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Deployment Drift Detector" />
+  <meta property="og:description" content="Spot mismatched env values, config flags, and release drift before you ship." />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/deploymentdrift.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Deployment Drift Detector" />
+  <meta name="twitter:description" content="A dark, mobile-friendly deployment config drift checker for developers and DevOps folks." />
+  <style>
+    :root{--bg:#07111d;--bg2:#03070c;--panel:rgba(10,18,31,.96);--line:rgba(148,163,184,.16);--text:#eef6ff;--muted:#93a7c8;--accent:#7cc0ff;--accent2:#5ce0c3;--warn:#ffcb72;--danger:#ff7f9e;--good:#7ef0a8;--shadow:0 24px 70px rgba(0,0,0,.38);--radius:24px;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    *{box-sizing:border-box} html{color-scheme:dark} body{margin:0;min-height:100vh;font-family:var(--sans);color:var(--text);background:radial-gradient(circle at top left, rgba(92,224,195,.14), transparent 26%),radial-gradient(circle at top right, rgba(124,192,255,.15), transparent 28%),linear-gradient(180deg,#0a1424 0%,var(--bg) 40%,var(--bg2) 100%)}
+    a{color:var(--accent2)} button,input,select,textarea{font:inherit} input,select,textarea{width:100%;border-radius:14px;border:1px solid rgba(148,163,184,.2);background:rgba(4,9,18,.95);color:var(--text);padding:12px 14px;outline:none;transition:border-color .18s ease,box-shadow .18s ease} textarea{min-height:114px;resize:vertical} input:focus,select:focus,textarea:focus{border-color:rgba(124,192,255,.75);box-shadow:0 0 0 4px rgba(124,192,255,.12)}
+    .wrap{width:min(1280px,calc(100% - 32px));margin:0 auto;padding:28px 0 56px}.hero,.card{background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(12px)}.hero{position:relative;overflow:hidden;border-radius:28px;padding:28px;margin-bottom:22px}.hero::after{content:"";position:absolute;inset:auto -90px -120px auto;width:340px;height:340px;background:radial-gradient(circle, rgba(124,192,255,.16), transparent 66%);pointer-events:none}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(124,192,255,.12);border:1px solid rgba(124,192,255,.18);color:#dbeaff;font-size:.82rem;letter-spacing:.05em;text-transform:uppercase;font-weight:800} h1{margin:16px 0 12px;font-size:clamp(2rem,4.8vw,3.6rem);line-height:1.03}.lead{margin:0;max-width:920px;color:var(--muted);line-height:1.72;font-size:1.02rem}
+    .hero-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:22px}.hero-stat{padding:16px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}.hero-stat span{display:block;color:var(--muted);font-size:.84rem;margin-bottom:8px}.hero-stat strong{font-size:1.02rem;line-height:1.45}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}.btn{appearance:none;border:1px solid rgba(124,192,255,.24);background:#12213a;color:var(--text);border-radius:14px;padding:12px 15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}.btn:hover{transform:translateY(-1px);border-color:rgba(124,192,255,.52)}.primary{background:linear-gradient(135deg,#7cc0ff,#5ce0c3);color:#08111d;border:none;font-weight:800}
+    .layout{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:20px}.stack{display:grid;gap:20px}.card{border-radius:var(--radius);overflow:hidden}.card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg, rgba(255,255,255,.02), transparent)}.card-head h2{margin:0;font-size:1.05rem}.card-body{padding:20px}
+    .field-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.field{display:grid;gap:8px}.col-12{grid-column:span 12}.col-6{grid-column:span 6}.col-4{grid-column:span 4}.col-8{grid-column:span 8} label{font-size:.93rem;color:#dce7fb;font-weight:650}
+    .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.tile{padding:16px;border-radius:18px;background:linear-gradient(180deg, rgba(124,192,255,.08), rgba(92,224,195,.04));border:1px solid rgba(124,192,255,.16)}.tile span{display:block;color:var(--muted);font-size:.82rem;margin-bottom:8px}.tile strong{font-size:1.02rem;line-height:1.4}
+    .list,.output{padding:16px;border-radius:18px;background:rgba(4,9,17,.88);border:1px solid var(--line)}.list{display:grid;gap:12px}.output{white-space:pre-wrap;line-height:1.62;font-family:var(--mono);min-height:300px}
+    .item{padding:16px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid var(--line)}.item h4{margin:0 0 8px;font-size:1rem}.item p{margin:0;color:var(--muted);line-height:1.65}
+    .badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);font-size:.8rem;color:#dbe7ff}.badge.good{background:rgba(126,240,168,.14);border-color:rgba(126,240,168,.18)}.badge.warn{background:rgba(255,203,114,.14);border-color:rgba(255,203,114,.18)}.badge.danger{background:rgba(255,127,158,.14);border-color:rgba(255,127,158,.18)}
+    .checks{display:grid;gap:10px}.check{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid var(--line)}.check input{width:auto;margin-top:3px;accent-color:#5ce0c3}.check strong{display:block;margin-bottom:4px}.check span{color:var(--muted);font-size:.92rem;line-height:1.5}
+    .footer{margin-top:18px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:.93rem}
+    @media (max-width:920px){.layout,.summary-grid{grid-template-columns:1fr}.col-6,.col-4,.col-8{grid-column:span 12}.hero{padding:22px}.card-body,.card-head{padding-left:16px;padding-right:16px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">toolbox #251 · developer productivity</div>
+      <h1>Deployment Drift Detector</h1>
+      <p class="lead">Compare environments, flags, and release settings before they drift into a pager. Paste your local, staging, or production values, and the tool flags mismatches, risk hotspots, and the fastest next fix.</p>
+      <div class="hero-grid">
+        <div class="hero-stat"><span>Best for</span><strong>Release readiness, config review, incident triage</strong></div>
+        <div class="hero-stat"><span>Output</span><strong>Drift score, mismatched keys, safe next steps</strong></div>
+        <div class="hero-stat"><span>Includes</span><strong>SEO tags, dark UI, mobile layout, coffee link</strong></div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn primary" id="scanBtn" type="button">Scan drift</button>
+        <button class="btn" id="exampleBtn" type="button">Load example</button>
+        <a class="btn" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Me a Coffee</a>
+      </div>
+    </section>
+
+    <div class="layout">
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Environment inputs</h2><span class="badge">compare</span></div>
+          <div class="card-body">
+            <div class="field-grid">
+              <div class="field col-4"><label for="env">Primary environment</label><select id="env"><option>local</option><option selected>staging</option><option>production</option></select></div>
+              <div class="field col-4"><label for="risk">Release type</label><select id="risk"><option value="0.85">Patch</option><option value="1" selected>Standard</option><option value="1.2">Feature launch</option><option value="1.4">Hotfix / incident</option></select></div>
+              <div class="field col-4"><label for="scope">Drift scope</label><select id="scope"><option>env vars only</option><option selected>env + feature flags</option><option>env + flags + runtime</option><option>full release bundle</option></select></div>
+              <div class="field col-6"><label for="local">Local / expected values</label><textarea id="local">API_BASE_URL=https://api.example.com
+FEATURE_NEW_CHECKOUT=true
+LOG_LEVEL=debug
+CACHE_TTL=300</textarea></div>
+              <div class="field col-6"><label for="remote">Deployed / observed values</label><textarea id="remote">API_BASE_URL=https://api.example.com
+FEATURE_NEW_CHECKOUT=false
+LOG_LEVEL=info
+CACHE_TTL=60</textarea></div>
+              <div class="field col-12"><label for="notes">Notes</label><textarea id="notes">Production had an incident last week. Staging deploys are green, but the new checkout path is suspicious.</textarea></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Recommended checklist</h2><span class="badge warn" id="statusBadge">waiting</span></div>
+          <div class="card-body">
+            <div class="summary-grid">
+              <div class="tile"><span>Drift score</span><strong id="score">—</strong></div>
+              <div class="tile"><span>Mismatch count</span><strong id="mismatchCount">—</strong></div>
+              <div class="tile"><span>Action window</span><strong id="window">—</strong></div>
+            </div>
+            <div class="checks" style="margin-top:14px" id="checks"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Copy-ready drift report</h2><span class="badge good">ready</span></div>
+          <div class="card-body">
+            <div class="output" id="output"></div>
+            <div class="footer"><span>Hand this to the person on call or post in the release thread</span><span>Single-file HTML tool</span></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>What this catches</h2><span class="badge">notes</span></div>
+          <div class="card-body"><div class="list" id="notesList"></div></div>
+        </article>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const envEl = document.getElementById('env');
+    const riskEl = document.getElementById('risk');
+    const scopeEl = document.getElementById('scope');
+    const localEl = document.getElementById('local');
+    const remoteEl = document.getElementById('remote');
+    const notesEl = document.getElementById('notes');
+    const checksEl = document.getElementById('checks');
+    const outputEl = document.getElementById('output');
+    const notesListEl = document.getElementById('notesList');
+    const scoreEl = document.getElementById('score');
+    const mismatchCountEl = document.getElementById('mismatchCount');
+    const windowEl = document.getElementById('window');
+    const statusBadge = document.getElementById('statusBadge');
+
+    const example = {
+      env: 'production',
+      risk: '1.4',
+      scope: 'env + flags + runtime',
+      local: 'API_BASE_URL=https://api.example.com\nFEATURE_NEW_CHECKOUT=true\nLOG_LEVEL=debug\nCACHE_TTL=300\nSENTRY_DSN=abc123',
+      remote: 'API_BASE_URL=https://api.example.com\nFEATURE_NEW_CHECKOUT=false\nLOG_LEVEL=warn\nCACHE_TTL=60\nSENTRY_DSN=xyz999',
+      notes: 'Release was fine in staging, but production had one user-facing path diverge after deploy.'
+    };
+
+    const notes = [
+      ['It compares like a human would', 'Look for the values that changed, not just the diff noise.'],
+      ['It separates signal from noise', 'One bad flag can be more important than five harmless env differences.'],
+      ['It pushes action, not panic', 'You get a short fix plan instead of a wall of red.'],
+      ['It’s release-thread friendly', 'Useful for engineering, ops, and the person trying to sleep.']
+    ];
+
+    function parseBlock(text) {
+      const out = {};
+      text.split(/\n+/).map(s => s.trim()).filter(Boolean).forEach(line => {
+        const idx = line.indexOf('=');
+        if (idx > -1) out[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+      });
+      return out;
+    }
+
+    function scoreDrift(localMap, remoteMap, scope, risk) {
+      const keys = new Set([...Object.keys(localMap), ...Object.keys(remoteMap)]);
+      let mismatches = 0;
+      const details = [];
+      [...keys].sort().forEach(key => {
+        const a = localMap[key] ?? '∅';
+        const b = remoteMap[key] ?? '∅';
+        if (a !== b) {
+          mismatches++;
+          const weight = /FEATURE|FLAG|ENABLE/i.test(key) ? 2 : /URL|HOST|DSN|TOKEN|SECRET/i.test(key) ? 3 : 1;
+          details.push({ key, a, b, weight });
+        }
+      });
+      let score = Math.min(100, Math.round((mismatches * 14 + details.reduce((n, d) => n + d.weight, 0) * 6) * risk));
+      if (scope.includes('runtime')) score = Math.min(100, Math.round(score * 1.12));
+      if (scope.includes('full')) score = Math.min(100, Math.round(score * 1.18));
+      return { score, mismatches, details };
+    }
+
+    function render() {
+      const env = envEl.value;
+      const risk = Number(riskEl.value);
+      const scope = scopeEl.value;
+      const localMap = parseBlock(localEl.value);
+      const remoteMap = parseBlock(remoteEl.value);
+      const { score, mismatches, details } = scoreDrift(localMap, remoteMap, scope, risk);
+      const severity = score >= 75 ? 'danger' : score >= 40 ? 'warn' : 'good';
+      const badgeText = score >= 75 ? 'high drift' : score >= 40 ? 'watch closely' : 'low drift';
+      statusBadge.textContent = badgeText;
+      statusBadge.className = `badge ${severity}`;
+      scoreEl.textContent = `${score}/100`;
+      mismatchCountEl.textContent = String(mismatches);
+      windowEl.textContent = score >= 75 ? '30 min' : score >= 40 ? '1 hour' : 'end of day';
+
+      const actionItems = [
+        { t: 'Verify critical keys', b: 'Check URLs, feature flags, secrets, and cache settings first.' },
+        { t: 'Reconcile the release path', b: `Focus on what differs between ${env} and the expected values before diving into code.` },
+        { t: 'Fix one high-impact mismatch', b: details[0] ? `${details[0].key} is the loudest mismatch right now.` : 'No mismatches found; keep an eye on runtime drift.' },
+        { t: 'Re-run the deployment check', b: 'Confirm the updated values actually made it into the live process.' }
+      ];
+      checksEl.innerHTML = actionItems.map(item => `<div class="check"><input type="checkbox" checked disabled /><div><strong>${item.t}</strong><span>${item.b}</span></div></div>`).join('');
+      notesListEl.innerHTML = notes.map(([t,b]) => `<div class="item"><h4>${t}</h4><p>${b}</p></div>`).join('');
+      outputEl.textContent = [
+        'Deployment Drift Detector',
+        `Environment: ${env}`,
+        `Scope: ${scope}`,
+        `Risk multiplier: ${risk}`,
+        `Drift score: ${score}/100`,
+        `Mismatched keys: ${mismatches}`,
+        '',
+        'Mismatches:',
+        details.length ? details.map(d => `- ${d.key}: expected ${d.a} / observed ${d.b}`).join('\n') : 'None found.',
+        '',
+        'Next moves:',
+        score >= 75 ? '1. Halt rollout and fix the loudest mismatch first.' : '1. Keep shipping, but verify the critical keys.',
+        '2. Re-check the deployed runtime, not just the repo.',
+        '3. Re-run the scan after the fix.',
+        '',
+        'Notes:',
+        notesEl.value.trim() || '—'
+      ].join('\n');
+    }
+
+    document.getElementById('scanBtn').addEventListener('click', render);
+    document.getElementById('exampleBtn').addEventListener('click', () => { Object.entries(example).forEach(([k,v]) => { const el = document.getElementById(k); if (el) el.value = v; }); render(); });
+    [envEl, riskEl, scopeEl, localEl, remoteEl, notesEl].forEach(el => el.addEventListener('input', render));
+    render();
+  </script>
+</body>
+</html>
