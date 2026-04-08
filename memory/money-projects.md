@@ -327,8 +327,13 @@
 |---|---------|-----|----------|-----------|
 | 285 | Task Context Compressor | toolbox/contextcompressor.html | ✅ stevenli-phoenix.github.io/toolbox/contextcompressor.html | ❌ |
 
+## Completed
+| # | Project | Dir | Deployed | Blog Post |
+|---|---------|-----|----------|-----------|
+| 286 | Change Risk Estimator | toolbox/changerisk.html | ✅ stevenli-phoenix.github.io/toolbox/changerisk.html | ❌ |
+
 ## Queue
-286. Next tool TBD
+287. Next tool TBD
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
