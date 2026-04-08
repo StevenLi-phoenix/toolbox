@@ -312,8 +312,13 @@
 | 281 | Git Bisect Assistant | toolbox/gitbisect.html | ✅ stevenli-phoenix.github.io/toolbox/gitbisect.html | ❌ |
 | 282 | Git Cleanup Planner | toolbox/gitcleanup.html | ✅ stevenli-phoenix.github.io/toolbox/gitcleanup.html | ❌ |
 
+## Completed
+| # | Project | Dir | Deployed | Blog Post |
+|---|---------|-----|----------|-----------|
+| 283 | Token Budget Planner | toolbox/tokenbudget.html | ✅ stevenli-phoenix.github.io/toolbox/tokenbudget.html | ❌ |
+
 ## Queue
-283. Next tool TBD
+284. Next tool TBD
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
