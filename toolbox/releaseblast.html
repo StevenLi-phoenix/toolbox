@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Release Blast Radius Mapper - See What a Change Might Break</title>
+  <meta name="description" content="Estimate the blast radius of a release from file paths, touched systems, risk flags, and rollout details. Dark, mobile-friendly, single-file developer productivity tool." />
+  <meta name="keywords" content="release blast radius mapper, release risk, deployment planning, change impact, developer productivity" />
+  <meta name="author" content="Steven Li" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#07111d" />
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/releaseblast.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Release Blast Radius Mapper" />
+  <meta property="og:description" content="Estimate what a release may affect before you ship it into the void." />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/releaseblast.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Release Blast Radius Mapper" />
+  <meta name="twitter:description" content="A dark-mode tool for estimating deployment impact, test scope, and rollout caution." />
+  <style>
+    :root{--bg:#07111d;--bg2:#04070d;--panel:rgba(11,19,31,.96);--line:rgba(148,163,184,.15);--text:#eef5ff;--muted:#94a6c6;--accent:#8bc3ff;--accent2:#67e6c8;--warn:#ffd36d;--danger:#ff7d9a;--good:#6df0b0;--shadow:0 24px 72px rgba(0,0,0,.42);--radius:24px;--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box} html{color-scheme:dark}
+    body{margin:0;min-height:100vh;font-family:var(--sans);color:var(--text);background:radial-gradient(circle at top left, rgba(103,230,200,.12), transparent 28%),radial-gradient(circle at top right, rgba(139,195,255,.12), transparent 30%),linear-gradient(180deg,#0b1726 0%,var(--bg) 42%,var(--bg2) 100%)}
+    a{color:var(--accent2)} button,input,textarea,select{font:inherit}
+    input,textarea,select{width:100%;border-radius:14px;border:1px solid rgba(148,163,184,.18);background:rgba(4,9,18,.96);color:var(--text);padding:12px 14px;outline:none;transition:border-color .18s ease,box-shadow .18s ease}
+    textarea{min-height:180px;resize:vertical;line-height:1.55} input:focus,textarea:focus,select:focus{border-color:rgba(139,195,255,.82);box-shadow:0 0 0 4px rgba(139,195,255,.12)}
+    .wrap{width:min(1280px,calc(100% - 32px));margin:0 auto;padding:28px 0 56px}
+    .hero,.card{background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(12px)}
+    .hero{position:relative;overflow:hidden;border-radius:28px;padding:28px;margin-bottom:22px}.hero::after{content:"";position:absolute;inset:auto -100px -120px auto;width:380px;height:380px;background:radial-gradient(circle, rgba(103,230,200,.15), transparent 70%);pointer-events:none}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(139,195,255,.12);border:1px solid rgba(139,195,255,.2);color:#dce9ff;font-size:.82rem;letter-spacing:.05em;text-transform:uppercase;font-weight:700}
+    h1{margin:16px 0 12px;font-size:clamp(2rem,5vw,3.8rem);line-height:1.02}.lead{margin:0;max-width:980px;color:var(--muted);line-height:1.75;font-size:1.02rem}
+    .hero-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:22px}.hero-stat{padding:16px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}.hero-stat span{display:block;color:var(--muted);font-size:.84rem;margin-bottom:8px}.hero-stat strong{font-size:1.02rem;line-height:1.45}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}.btn{appearance:none;border:1px solid rgba(139,195,255,.24);background:#12203a;color:var(--text);border-radius:14px;padding:12px 15px;cursor:pointer;font:inherit;transition:transform .18s ease,border-color .18s ease,background .18s ease;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}.btn:hover{transform:translateY(-1px);border-color:rgba(139,195,255,.56)}.primary{background:linear-gradient(135deg,#8bc3ff,#67e6c8);color:#07101a;border:none;font-weight:800}
+    .layout{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);gap:20px}.stack{display:grid;gap:20px}.card{border-radius:var(--radius);overflow:hidden}.card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg, rgba(255,255,255,.02), transparent)}.card-head h2{margin:0;font-size:1.05rem}.card-body{padding:20px}
+    .field-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.field{display:grid;gap:8px}.col-12{grid-column:span 12}.col-6{grid-column:span 6}.col-4{grid-column:span 4}.col-3{grid-column:span 3} label{font-size:.93rem;color:#dbe7ff;font-weight:600}
+    .chips{display:flex;flex-wrap:wrap;gap:10px}.chip{padding:10px 12px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--text);font-size:.92rem;cursor:pointer}.chip.active{border-color:rgba(103,230,200,.5);background:rgba(103,230,200,.12)}
+    .summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.tile{padding:16px;border-radius:18px;background:linear-gradient(180deg, rgba(139,195,255,.08), rgba(103,230,200,.04));border:1px solid rgba(139,195,255,.16)}.tile span{display:block;color:var(--muted);font-size:.82rem;margin-bottom:8px}.tile strong{font-size:1.05rem;line-height:1.4}
+    .bar{height:12px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;border:1px solid rgba(255,255,255,.08)}.fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--good),var(--warn),var(--danger));width:0%;transition:width .25s ease}
+    .list,.output{padding:16px;border-radius:18px;background:rgba(4,9,17,.88);border:1px solid var(--line)}.list{display:grid;gap:12px}.output{white-space:pre-wrap;line-height:1.62;font-family:var(--mono);min-height:260px}
+    .item{padding:16px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid var(--line)}.item h4{margin:0 0 8px;font-size:1rem}.item p{margin:0;color:var(--muted);line-height:1.65}
+    .badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);font-size:.8rem;color:#dbe7ff}.badge.good{background:rgba(109,240,176,.14);border-color:rgba(109,240,176,.18)}.badge.warn{background:rgba(255,211,109,.14);border-color:rgba(255,211,109,.18)}.badge.danger{background:rgba(255,125,154,.14);border-color:rgba(255,125,154,.18)}
+    .footer{margin-top:18px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:.93rem}
+    @media (max-width:960px){.layout,.summary-grid{grid-template-columns:1fr}.col-6,.col-4,.col-3{grid-column:span 12}.hero{padding:22px}.card-body,.card-head{padding-left:16px;padding-right:16px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">toolbox #246 · release readiness</div>
+      <h1>Release Blast Radius Mapper</h1>
+      <p class="lead">Paste the files, services, and scary bits touched by a change, then get a rough blast radius score, likely impact zones, test focus, and rollout caution. It won’t save bad code, but it may save your weekend.</p>
+      <div class="hero-grid">
+        <div class="hero-stat"><span>Best for</span><strong>release planning, risk calls, change review, launch checklists</strong></div>
+        <div class="hero-stat"><span>Output</span><strong>Blast radius score, impact map, test plan, rollout advice</strong></div>
+        <div class="hero-stat"><span>Mode</span><strong>Dark UI, mobile-responsive, SEO-ready, single-file</strong></div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn primary" id="mapBtn" type="button">Map blast radius</button>
+        <button class="btn" id="exampleBtn" type="button">Load example</button>
+        <a class="btn" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Me a Coffee</a>
+      </div>
+    </section>
+
+    <div class="layout">
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Change inputs</h2><span class="badge">signals</span></div>
+          <div class="card-body">
+            <div class="field-grid">
+              <div class="field col-6"><label for="changeType">Change type</label><select id="changeType"><option selected>feature</option><option>bugfix</option><option>refactor</option><option>infra</option><option>hotfix</option><option>dependency</option></select></div>
+              <div class="field col-6"><label for="rollout">Rollout style</label><select id="rollout"><option selected>full deploy</option><option>canary</option><option>feature flag</option><option>blue/green</option><option>manual toggle</option></select></div>
+              <div class="field col-4"><label for="pathsCount">Touched files</label><input id="pathsCount" type="number" min="1" value="8" /></div>
+              <div class="field col-4"><label for="teamsCount">Teams involved</label><input id="teamsCount" type="number" min="1" value="3" /></div>
+              <div class="field col-4"><label for="usersAtRisk">Users at risk</label><input id="usersAtRisk" type="number" min="0" value="12000" /></div>
+              <div class="field col-12"><label for="details">Paths / services / notes</label><textarea id="details" placeholder="One line per signal: path, service, or note">src/payments/checkout.ts
+src/payments/refunds.ts
+api/webhooks/stripe.ts
+billing-service
+redis cache
+changed retry logic
+updated DB migration
+customer notification email</textarea></div>
+              <div class="field col-12">
+                <label>Risk modifiers</label>
+                <div class="chips" id="flags">
+                  <button class="chip active" data-flag="auth">auth touched</button>
+                  <button class="chip active" data-flag="payments">payments</button>
+                  <button class="chip">docs only</button>
+                  <button class="chip active" data-flag="migration">db migration</button>
+                  <button class="chip active" data-flag="external">external api</button>
+                  <button class="chip">pure frontend</button>
+                  <button class="chip active" data-flag="rollback">hard rollback</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Blast summary</h2><span class="badge warn" id="badge">elevated</span></div>
+          <div class="card-body">
+            <div class="summary-grid">
+              <div class="tile"><span>Blast radius</span><strong id="scoreText">68 / 100</strong></div>
+              <div class="tile"><span>Likely impact</span><strong id="impactText">Backend + billing + ops</strong></div>
+              <div class="tile"><span>Test priority</span><strong id="testsText">Integration + rollback</strong></div>
+              <div class="tile"><span>Rollout posture</span><strong id="rolloutText">Canary first</strong></div>
+            </div>
+            <div style="margin:14px 0 10px" class="bar"><div class="fill" id="fill"></div></div>
+            <div class="list" id="recommendations"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Impact map</h2><span class="badge good">copy-ready</span></div>
+          <div class="card-body">
+            <div class="output" id="output">Click Map blast radius to see the risk breakdown.</div>
+            <div class="footer"><span id="summaryLine">Built for release reviews that need a quick gut check</span><span>Useful before deploy, flag flips, and launch calls</span></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Heuristics</h2><span class="muted">why the score moved</span></div>
+          <div class="card-body">
+            <div class="list" id="heuristics"></div>
+          </div>
+        </article>
+      </section>
+    </div>
+
+    <div class="footer">If this helped you avoid a bad deploy, <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">buy Steven a coffee</a>.</div>
+  </div>
+
+  <script>
+    const chips = [...document.querySelectorAll('.chip')];
+    const pathRisk = /(auth|payment|billing|checkout|invoice|session|token|webhook|migration|cache|redis|queue|db|schema|security|email)/i;
+
+    chips.forEach(chip => chip.addEventListener('click', () => chip.classList.toggle('active')));
+
+    document.getElementById('exampleBtn').addEventListener('click', () => {
+      document.getElementById('changeType').value = 'hotfix';
+      document.getElementById('rollout').value = 'canary';
+      document.getElementById('pathsCount').value = 12;
+      document.getElementById('teamsCount').value = 4;
+      document.getElementById('usersAtRisk').value = 54000;
+      document.getElementById('details').value = [
+        'src/auth/session.ts',
+        'src/payments/checkout.ts',
+        'src/payments/pricing.ts',
+        'api/webhooks/paypal.ts',
+        'billing-service',
+        'postgres migration',
+        'redis cache keys',
+        'customer email template'
+      ].join('\n');
+      chips.forEach(c => c.classList.remove('active'));
+      ['auth','payments','migration','external','rollback'].forEach(flag => [...chips].find(c => c.dataset.flag === flag)?.classList.add('active'));
+      map();
+    });
+
+    function scoreLine(line){
+      let score = 0;
+      const lower = line.toLowerCase();
+      if (pathRisk.test(lower)) score += 10;
+      if (/(src\/|api\/|services\/|server\/|db|migration|schema)/i.test(lower)) score += 8;
+      if (/(webhook|payment|billing|auth|token|session)/i.test(lower)) score += 14;
+      if (/(redis|cache|queue|worker)/i.test(lower)) score += 9;
+      if (/(email|notification|message)/i.test(lower)) score += 5;
+      if (/(rollback|retry|fallback)/i.test(lower)) score += 6;
+      return score;
+    }
+
+    function riskLabel(score){
+      if (score < 34) return ['low','good','small ripple'];
+      if (score < 66) return ['medium','warn','noticeable blast radius'];
+      return ['high','danger','wide blast radius'];
+    }
+
+    function map(){
+      const type = document.getElementById('changeType').value;
+      const rollout = document.getElementById('rollout').value;
+      const paths = Number(document.getElementById('pathsCount').value || 0);
+      const teams = Number(document.getElementById('teamsCount').value || 1);
+      const users = Number(document.getElementById('usersAtRisk').value || 0);
+      const lines = document.getElementById('details').value.split('\n').map(s => s.trim()).filter(Boolean);
+      const active = chips.filter(c => c.classList.contains('active')).map(c => c.dataset.flag || c.textContent.trim());
+
+      let score = Math.min(22, paths * 1.8) + Math.min(16, teams * 3) + Math.min(18, Math.log10(Math.max(1, users)) * 6);
+      score += lines.reduce((sum, line) => sum + scoreLine(line), 0);
+      if (type === 'hotfix') score += 12;
+      if (type === 'infra') score += 9;
+      if (type === 'dependency') score += 8;
+      if (type === 'refactor') score += 6;
+      if (active.includes('auth')) score += 10;
+      if (active.includes('payments')) score += 12;
+      if (active.includes('migration')) score += 14;
+      if (active.includes('external')) score += 10;
+      if (active.includes('rollback')) score += 7;
+      if (active.includes('docs only')) score -= 18;
+      if (active.includes('pure frontend')) score -= 6;
+      if (rollout === 'feature flag') score -= 10;
+      if (rollout === 'canary') score -= 7;
+      if (rollout === 'blue/green') score -= 5;
+      score = Math.max(5, Math.min(100, Math.round(score)));
+
+      const [level, badgeClass, impact] = riskLabel(score);
+      const likelyImpact = [
+        active.includes('payments') ? 'billing' : null,
+        active.includes('auth') ? 'auth/session' : null,
+        active.includes('migration') ? 'database' : null,
+        active.includes('external') ? 'integrations' : null,
+        lines.some(l => /(email|notification)/i.test(l)) ? 'notifications' : null,
+        lines.some(l => /(cache|redis|queue)/i.test(l)) ? 'background jobs' : null
+      ].filter(Boolean);
+      const impactText = likelyImpact.length ? [...new Set(likelyImpact)].join(' + ') : 'frontend + API';
+      const tests = score >= 70 ? 'Integration + e2e + rollback' : score >= 40 ? 'Integration + smoke' : 'Smoke + targeted unit';
+      const rolloutText = score >= 70 ? 'Canary only' : score >= 40 ? 'Feature flag or canary' : 'Normal rollout';
+
+      document.getElementById('fill').style.width = score + '%';
+      document.getElementById('badge').className = 'badge ' + badgeClass;
+      document.getElementById('badge').textContent = level + ' risk';
+      document.getElementById('scoreText').textContent = score + ' / 100';
+      document.getElementById('impactText').textContent = impactText;
+      document.getElementById('testsText').textContent = tests;
+      document.getElementById('rolloutText').textContent = rolloutText;
+
+      const recs = [
+        `<div class="item"><h4>Primary read</h4><p>${impact}. This change is likely to touch ${impactText}. If that’s wrong, the inputs are being too polite.</p></div>`,
+        `<div class="item"><h4>Launch advice</h4><p>${rollout === 'full deploy' ? 'A full deploy is brave here; a smaller rollout would buy you sleep.' : `Use ${rollout} and watch the first telemetry spike before expanding.`}</p></div>`,
+        `<div class="item"><h4>Testing focus</h4><p>${tests}. Add a rollback check if the migration or external integration is doing anything nontrivial.</p></div>`
+      ];
+      if (score >= 70) recs.push(`<div class="item"><h4>Escalation note</h4><p>High blast radius. Get a second set of eyes on the deploy plan, on-call handoff, and rollback path.</p></div>`);
+      if (active.includes('migration')) recs.push(`<div class="item"><h4>Migration warning</h4><p>Schema changes can outlive the deploy window. Confirm forward-compatibility before shipping.</p></div>`);
+      if (active.includes('external')) recs.push(`<div class="item"><h4>External dependency note</h4><p>Third-party APIs make blast radius feel bigger because they also make blame harder. Add retries and timeouts.</p></div>`);
+      document.getElementById('recommendations').innerHTML = recs.join('');
+
+      document.getElementById('output').textContent = [
+        `Blast radius score: ${score}/100 (${impact})`,
+        `Change type: ${type}`,
+        `Rollout: ${rollout}`,
+        `Touched files: ${paths}`,
+        `Teams involved: ${teams}`,
+        `Users at risk: ${users.toLocaleString()}`,
+        `Active flags: ${active.join(', ') || 'none'}`,
+        '',
+        'Suggested checks:',
+        '- verify rollback path',
+        '- confirm telemetry alerts',
+        '- validate edge cases around the touched systems',
+        '- watch logs for the first 15 minutes after release'
+      ].join('\n');
+
+      document.getElementById('heuristics').innerHTML = [
+        `Paths scored higher because more surface area usually means more ways to embarrass you.`,
+        `${type === 'hotfix' ? 'Hotfixes got an extra bump because urgency loves to hide risk.' : 'Non-hotfix changes get a softer score bump.'}`,
+        `${active.includes('rollback') ? 'Rollback complexity raises the score because “we can revert it” is often aspirational.' : 'Simple rollback keeps the score a bit calmer.'}`,
+        `${users > 50000 ? 'Large user count pushes the score upward, because a tiny bug can still have a loud blast.' : 'Smaller user count keeps the incident radius grounded.'}`
+      ].map(t => `<div class="item"><p>${t}</p></div>`).join('');
+      document.getElementById('summaryLine').textContent = `Risk class: ${level} · ${impactText} · ${rolloutText}`;
+    }
+
+    document.getElementById('mapBtn').addEventListener('click', map);
+    map();
+  </script>
+</body>
+</html>
