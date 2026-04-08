@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stack Trace Explainer</title>
+  <meta name="description" content="Paste a stack trace and get likely error type, hot spots, probable causes, and next debugging steps in a clean dark-mode interface." />
+  <meta name="keywords" content="stack trace explainer, error decoder, debugging assistant, developer productivity, exception analyzer, log helper" />
+  <meta name="author" content="Steven Li" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#08111f" />
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/stacktrace.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Stack Trace Explainer" />
+  <meta property="og:description" content="Decode stack traces into likely causes, key frames, and actionable debugging steps." />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/stacktrace.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Stack Trace Explainer" />
+  <meta name="twitter:description" content="Turn stack traces into readable debugging guidance." />
+  <style>
+    :root {
+      --bg:#08111f; --bg2:#050a14; --panel:rgba(12,19,34,.92); --line:rgba(148,163,184,.16);
+      --text:#eef5ff; --muted:#96a7c4; --accent:#79c0ff; --accent2:#57e3c1; --warn:#ffca70; --danger:#ff7f96; --good:#67f0b4;
+      --radius:22px; --shadow:0 20px 60px rgba(0,0,0,.35); --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+      --sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+    *{box-sizing:border-box} html{color-scheme:dark} body{margin:0;font-family:var(--sans);color:var(--text);background:radial-gradient(circle at top left, rgba(87,227,193,.14), transparent 24%), radial-gradient(circle at top right, rgba(121,192,255,.16), transparent 28%), linear-gradient(180deg,#0b1424, var(--bg) 46%, var(--bg2));}
+    a{color:var(--accent2)} button,input,textarea,select{font:inherit} textarea,input,select{width:100%;border-radius:14px;border:1px solid rgba(148,163,184,.2);background:rgba(4,9,18,.95);color:var(--text);padding:12px 14px;outline:none;transition:.18s ease;border-color:.18s ease}
+    textarea{min-height:250px;resize:vertical;font-family:var(--mono);line-height:1.45} input:focus,textarea:focus,select:focus{border-color:rgba(121,192,255,.75);box-shadow:0 0 0 4px rgba(121,192,255,.12)}
+    .wrap{width:min(1240px,calc(100% - 32px));margin:0 auto;padding:28px 0 54px}.hero,.card{background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(12px)}
+    .hero{border-radius:28px;padding:28px;overflow:hidden;position:relative;margin-bottom:20px}.hero:after{content:"";position:absolute;inset:auto -90px -120px auto;width:340px;height:340px;background:radial-gradient(circle, rgba(121,192,255,.18), transparent 64%);pointer-events:none}
+    .badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(121,192,255,.12);border:1px solid rgba(121,192,255,.2);font-size:.82rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+    h1{margin:14px 0 10px;font-size:clamp(2rem,4.4vw,3.6rem);line-height:1.02} .lead{max-width:840px;margin:0;color:var(--muted);line-height:1.7;font-size:1.02rem}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 15px;border-radius:14px;border:1px solid rgba(121,192,255,.22);background:#12203a;color:var(--text);text-decoration:none;cursor:pointer;transition:transform .18s ease,border-color .18s ease,background .18s ease}.btn:hover{transform:translateY(-1px);border-color:rgba(121,192,255,.5)} .primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06101a;border:none;font-weight:800}
+    .layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:18px}.stack{display:grid;gap:18px}.card{border-radius:var(--radius);overflow:hidden}.card-head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;background:linear-gradient(180deg, rgba(255,255,255,.02), transparent)}.card-head h2{margin:0;font-size:1.04rem}.card-body{padding:20px}
+    .field-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.field{display:grid;gap:8px}.col-12{grid-column:span 12}.col-6{grid-column:span 6}.col-4{grid-column:span 4}.col-3{grid-column:span 3}.muted{color:var(--muted)} label{font-size:.93rem;font-weight:600;color:#dfe9ff}
+    .chips{display:flex;flex-wrap:wrap;gap:10px}.chip{padding:10px 12px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--text);font-size:.92rem}
+    .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.tile{padding:16px;border-radius:18px;background:linear-gradient(180deg, rgba(121,192,255,.08), rgba(87,227,193,.04));border:1px solid rgba(121,192,255,.16)}.tile span{display:block;color:var(--muted);font-size:.82rem;margin-bottom:8px}.tile strong{font-size:1.05rem;line-height:1.4}
+    .output{white-space:pre-wrap;font-family:var(--mono);line-height:1.55}.list{display:grid;gap:10px}.item{padding:14px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.025)}.item strong{display:block;margin-bottom:6px}.item small{color:var(--muted)}
+    .bad{color:var(--danger)} .warn{color:var(--warn)} .good{color:var(--good)} .footer{margin-top:18px;text-align:center;color:var(--muted);font-size:.92rem}.footer a{color:var(--accent2)}
+    @media (max-width: 920px){.layout,.summary-grid{grid-template-columns:1fr}.col-6,.col-4,.col-3{grid-column:span 12}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="badge">Developer Tool · #178</div>
+      <h1>Stack Trace Explainer</h1>
+      <p class="lead">Drop in a stack trace, log excerpt, or exception dump. This tool highlights the likely error, the frames that matter, probable root causes, and the next debugging moves that save time.</p>
+      <div class="hero-actions">
+        <button class="btn primary" id="analyzeBtn">Analyze trace</button>
+        <button class="btn" id="loadExampleBtn">Load example</button>
+        <a class="btn" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Me a Coffee</a>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Input</h2><span class="muted">Paste anything from one line to a full crash dump</span></div>
+          <div class="card-body">
+            <div class="field-grid">
+              <div class="field col-6"><label for="platform">Stack style</label><select id="platform"><option>Auto detect</option><option>JavaScript / TypeScript</option><option>Python</option><option>Java / Kotlin</option><option>Go</option><option>Rust</option><option>Swift / Objective-C</option><option>PHP</option></select></div>
+              <div class="field col-6"><label for="hint">Optional context</label><input id="hint" placeholder="API route, browser, framework, recent change..." /></div>
+              <div class="field col-12"><label for="trace">Stack trace / log excerpt</label><textarea id="trace" placeholder="Paste your trace here..."></textarea></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Likely fixes</h2><span class="muted">Heuristics only — still read the stack</span></div>
+          <div class="card-body"><div class="list" id="fixes"></div></div>
+        </article>
+      </div>
+
+      <div class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Summary</h2><span class="muted">Fast triage view</span></div>
+          <div class="card-body">
+            <div class="summary-grid">
+              <div class="tile"><span>Error type</span><strong id="errorType">Waiting for input</strong></div>
+              <div class="tile"><span>Confidence</span><strong id="confidence">—</strong></div>
+              <div class="tile"><span>Hot frame</span><strong id="hotFrame">—</strong></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>What this points to</h2><span class="muted">Probable root causes</span></div>
+          <div class="card-body"><div class="output" id="explanation">Paste a stack trace and hit Analyze.</div></div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Key frames</h2><span class="muted">The lines worth opening first</span></div>
+          <div class="card-body"><div class="list" id="frames"></div></div>
+        </article>
+      </div>
+    </section>
+
+    <div class="footer">Made for fast debugging. If it saved you five minutes, <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">buy Steven a coffee</a>.</div>
+  </main>
+
+  <script>
+    const traceEl = document.getElementById('trace');
+    const hintEl = document.getElementById('hint');
+    const platformEl = document.getElementById('platform');
+    const errorTypeEl = document.getElementById('errorType');
+    const confidenceEl = document.getElementById('confidence');
+    const hotFrameEl = document.getElementById('hotFrame');
+    const explanationEl = document.getElementById('explanation');
+    const framesEl = document.getElementById('frames');
+    const fixesEl = document.getElementById('fixes');
+
+    const example = `TypeError: Cannot read properties of undefined (reading 'map')\n    at renderItems (src/components/List.tsx:42:18)\n    at Dashboard (src/pages/index.tsx:87:7)\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)`;
+
+    const rules = [
+      { match: /cannot read (properties|property) of undefined|undefined.*reading/i, type: 'Undefined value access', causes: ['A value is missing from props/state/API payload.', 'A nested field is accessed before data loads.', 'An array/object was not initialized.'], fixes: ['Guard access with optional chaining or null checks.', 'Inspect the data shape before the failing line.', 'Initialize the default value in state or transform the API response.'], confidence: 92 },
+      { match: /cannot (set|assign) (properties|property) of undefined|undefined is not an object/i, type: 'Assignment into undefined', causes: ['A parent object was never created.', 'A destructuring step lost the reference.', 'Mutation happens before the object exists.'], fixes: ['Create the container object first.', 'Audit destructuring and early returns.', 'Trace the assignment path back to the caller.'], confidence: 90 },
+      { match: /maximum call stack size exceeded|too much recursion/i, type: 'Infinite recursion / cyclic call', causes: ['A function keeps calling itself.', 'A render/update loop keeps firing.', 'A cycle exists in serialization or tree walking.'], fixes: ['Add a base case or loop guard.', 'Check event handlers / useEffect dependencies.', 'Look for recursive traversal over cyclic data.'], confidence: 94 },
+      { match: /out of memory|heap out of memory/i, type: 'Memory exhaustion', causes: ['Processing too much data in one pass.', 'A leak keeps retaining objects.', 'An image/file/buffer is too large for the current allocation.'], fixes: ['Stream or chunk the work.', 'Profile retained objects.', 'Reduce concurrency and payload size.'], confidence: 88 },
+      { match: /typeerror|referenceerror|syntaxerror|rangeerror/i, type: 'JavaScript runtime error', causes: ['The stack trace usually includes the failing call site.', 'A recent refactor changed the expected input.', 'A typo or missing import is likely.'], fixes: ['Open the top-most app frame, not the framework frame.', 'Compare the failing input against the expected contract.', 'Search for the exact error text in the codebase.'], confidence: 84 },
+      { match: /traceback \(most recent call last\):|attributeerror|keyerror|indexerror|valuerror/i, type: 'Python exception', causes: ['A dict/list access failed.', 'Input validation is missing.', 'A library returned a different shape than expected.'], fixes: ['Inspect the variables in the last application frame.', 'Print the incoming payload shape.', 'Add validation before the failing access.'], confidence: 86 },
+      { match: /panic:|goroutine \d+ \[|fatal error:/i, type: 'Go panic / fatal runtime error', causes: ['A nil pointer was dereferenced.', 'A slice index is out of range.', 'Concurrent access caused a runtime crash.'], fixes: ['Check nil guards near the top frame.', 'Verify bounds before indexing.', 'Review shared mutable state and goroutine ownership.'], confidence: 87 },
+      { match: /exception|fatal error|uncaught/i, type: 'Unhandled exception', causes: ['The app did not catch or normalize the failure.', 'A lower-level error bubbled up unchanged.', 'The response/input path is missing validation.'], fixes: ['Capture and log the original payload.', 'Add a targeted try/catch or error boundary.', 'Search for the first non-framework frame.'], confidence: 78 }
+    ];
+
+    function detect() {
+      const text = traceEl.value.trim();
+      const hint = hintEl.value.trim();
+      if (!text) {
+        errorTypeEl.textContent = 'Waiting for input';
+        confidenceEl.textContent = '—';
+        hotFrameEl.textContent = '—';
+        explanationEl.textContent = 'Paste a stack trace and hit Analyze.';
+        framesEl.innerHTML = '<div class="item"><strong>No trace yet</strong><small>Add a crash, exception, or log excerpt to see triage output.</small></div>';
+        fixesEl.innerHTML = '';
+        return;
+      }
+
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const frames = lines.filter(l => /at\s+|\bat\b|\/|\.ts:|\.js:|\.py:|\.go:|\.java:|\.kt:|\.swift:|\.php:|:\d+(:\d+)?$/.test(l));
+      const firstLine = lines[0] || text;
+      const rule = rules.find(r => r.match.test(text)) || { type: 'Mixed / custom error', causes: ['The trace does not match a known pattern.', 'A third-party library may be wrapping the original failure.', 'You may be looking at only part of the real stack.'], fixes: ['Find the first line that names the original exception.', 'Open the first app-owned frame.', 'Search for the exact text and surrounding context.'], confidence: 72 };
+      const hotFrame = frames.find(f => /src\/|app\/|pages\/|components\/|lib\/|server\/|api\/|views\/|controllers\//i.test(f)) || frames[0] || lines[1] || firstLine;
+      const confidence = Math.min(99, rule.confidence + Math.min(6, Math.floor(frames.length / 2)) + (hint ? 3 : 0));
+
+      errorTypeEl.textContent = rule.type;
+      confidenceEl.textContent = confidence + '%';
+      hotFrameEl.textContent = hotFrame ? hotFrame.replace(/^at\s+/, '').slice(0, 48) + (hotFrame.length > 48 ? '…' : '') : '—';
+
+      const platform = platformEl.value;
+      const platformNote = platform !== 'Auto detect' ? `Platform hint: ${platform}. ` : '';
+      explanationEl.textContent = `${platformNote}${rule.causes.map((c, i) => `${i + 1}. ${c}`).join('\n\n')}\n\nContext hint: ${hint || 'none provided'}.\n\nRead the first application-owned frame, reproduce with a minimal input, and verify the data shape right before the crash.`;
+
+      framesEl.innerHTML = (frames.length ? frames : lines.slice(0, 4)).slice(0, 5).map((f, i) => `<div class="item"><strong>#${i + 1} ${f}</strong><small>${/node_modules|vendor|framework|internal/i.test(f) ? 'Framework / library frame' : 'Likely app frame'}${i === 0 ? ' · start here' : ''}</small></div>`).join('');
+      fixesEl.innerHTML = rule.fixes.map((f, i) => `<div class="item"><strong>Step ${i + 1}</strong><small>${f}</small></div>`).join('');
+    }
+
+    document.getElementById('analyzeBtn').addEventListener('click', detect);
+    document.getElementById('loadExampleBtn').addEventListener('click', () => { traceEl.value = example; hintEl.value = 'React list rendering'; platformEl.value = 'JavaScript / TypeScript'; detect(); });
+    [traceEl, hintEl, platformEl].forEach(el => el.addEventListener('input', detect));
+    detect();
+  </script>
+</body>
+</html>

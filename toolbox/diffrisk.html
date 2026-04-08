@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Diff Risk Radar scans pasted code diffs for risky changes, summarizes impact, flags hotspots, and suggests test ideas for faster reviews." />
+  <meta name="keywords" content="diff risk, code review, developer tool, pull request, git diff, review checklist, test suggestions, productivity" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta property="og:title" content="Diff Risk Radar" />
+  <meta property="og:description" content="Paste a diff and get a fast risk summary, hotspot scoring, and review/test suggestions." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/diffrisk.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/ogimage.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <title>Diff Risk Radar</title>
+  <style>
+    :root{--bg:#050816;--panel:#0b1224;--panel2:#101a33;--text:#e5e7eb;--muted:#94a3b8;--line:rgba(148,163,184,.18);--accent:#7c3aed;--accent2:#22c55e;--warn:#f59e0b;--danger:#fb7185;--chip:#172554;--shadow:0 24px 80px rgba(0,0,0,.45)}
+    *{box-sizing:border-box} html,body{margin:0;min-height:100%;background:radial-gradient(circle at top,#13204a 0,#050816 55%);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    a{color:#c4b5fd;text-decoration:none} a:hover{text-decoration:underline}
+    .wrap{max-width:1240px;margin:0 auto;padding:24px 16px 40px}
+    .hero{background:linear-gradient(180deg,rgba(124,58,237,.14),rgba(15,23,42,.92));border:1px solid var(--line);border-radius:28px;padding:28px;box-shadow:var(--shadow)}
+    .top{display:flex;gap:16px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+    .kicker{display:inline-flex;align-items:center;gap:8px;background:rgba(124,58,237,.14);border:1px solid rgba(124,58,237,.3);color:#e9d5ff;padding:8px 12px;border-radius:999px;font-size:13px}
+    h1{margin:14px 0 8px;font-size:clamp(2rem,4vw,3.8rem);line-height:1.03}
+    .lead{margin:0;color:var(--muted);max-width:72ch;font-size:1.02rem;line-height:1.6}
+    .coffee{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#111827;padding:12px 16px;border-radius:14px;font-weight:700;box-shadow:0 12px 30px rgba(0,0,0,.25)}
+    .grid{display:grid;grid-template-columns:1.03fr .97fr;gap:18px;margin-top:18px}
+    .card{background:rgba(11,18,36,.94);border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:var(--shadow)}
+    .card h2{margin:0 0 10px;font-size:1.05rem}
+    label{display:block;font-size:.88rem;color:#cbd5e1;margin:0 0 8px}
+    textarea,input,select{width:100%;background:#06101f;color:var(--text);border:1px solid rgba(148,163,184,.22);border-radius:16px;padding:14px 14px;font:inherit;outline:none}
+    textarea{min-height:220px;resize:vertical;line-height:1.55}
+    textarea:focus,input:focus,select:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(124,58,237,.18)}
+    .row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px}
+    .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+    button{appearance:none;border:0;border-radius:14px;padding:12px 14px;font:inherit;font-weight:700;color:#fff;background:linear-gradient(135deg,#7c3aed,#6366f1);cursor:pointer}
+    button.secondary{background:#172554;color:#dbeafe;border:1px solid rgba(96,165,250,.18)}
+    button.ghost{background:transparent;border:1px solid rgba(148,163,184,.22);color:var(--text)}
+    .pillbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+    .pill{padding:8px 11px;border-radius:999px;background:var(--chip);border:1px solid rgba(96,165,250,.18);color:#dbeafe;font-size:12px;cursor:pointer}
+    .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    .metric{background:linear-gradient(180deg,rgba(23,37,84,.9),rgba(6,16,31,.85));border:1px solid var(--line);padding:14px;border-radius:18px}
+    .metric .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+    .metric .value{font-size:1.5rem;font-weight:800;margin-top:4px}
+    .section{background:#07101f;border:1px solid rgba(148,163,184,.14);border-radius:18px;padding:14px;margin-top:12px}
+    .section h3{margin:0 0 10px;font-size:.98rem}
+    .output{white-space:pre-wrap;word-break:break-word;color:#e2e8f0;background:#020617;border:1px solid rgba(148,163,184,.14);border-radius:18px;padding:14px;min-height:240px;line-height:1.6}
+    .scorebar{height:12px;background:#0f172a;border-radius:999px;overflow:hidden;border:1px solid rgba(148,163,184,.16)}
+    .scorefill{height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#f59e0b,#fb7185);transition:width .25s ease}
+    .chips{display:flex;flex-wrap:wrap;gap:8px}
+    .chip{font-size:12px;padding:7px 10px;border-radius:999px;background:#0b1328;border:1px solid rgba(148,163,184,.18);color:#e2e8f0}
+    .chip.warn{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.26);color:#fde68a}
+    .chip.bad{background:rgba(251,113,133,.12);border-color:rgba(251,113,133,.26);color:#fecdd3}
+    .chip.good{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.26);color:#bbf7d0}
+    .footer{margin-top:18px;color:var(--muted);font-size:.92rem;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    @media (max-width: 960px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,1fr)}.row,.row3{grid-template-columns:1fr}}
+    @media (max-width: 560px){.hero{padding:18px;border-radius:20px}.card{border-radius:18px}.summary{grid-template-columns:1fr}.actions{flex-direction:column}.actions button{width:100%}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="top">
+        <div>
+          <div class="kicker">#187 · developer / productivity</div>
+          <h1>Diff Risk Radar</h1>
+          <p class="lead">Paste a git diff and get a fast read on what might break, where the review should focus, and which tests are worth running first. Built for tired humans skimming a PR at 11:47 PM.</p>
+        </div>
+        <a class="coffee" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Me a Coffee</a>
+      </div>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Input</h2>
+          <label for="diff">Paste unified diff / patch</label>
+          <textarea id="diff" placeholder="Example:\n@@ -12,7 +12,8 @@\n- const timeout = 5000;\n+ const timeout = Number(process.env.TIMEOUT_MS || 0);\n+ const retries = 3;\n"></textarea>
+
+          <div class="row3">
+            <div>
+              <label for="mode">Project type</label>
+              <select id="mode">
+                <option value="web" selected>Web app</option>
+                <option value="api">API / backend</option>
+                <option value="mobile">Mobile</option>
+                <option value="infra">Infra / DevOps</option>
+                <option value="library">Library / SDK</option>
+              </select>
+            </div>
+            <div>
+              <label for="familiarity">Review familiarity</label>
+              <select id="familiarity">
+                <option value="familiar">Very familiar</option>
+                <option value="mixed" selected>Mixed</option>
+                <option value="new">New codebase</option>
+              </select>
+            </div>
+            <div>
+              <label for="strictness">Risk tolerance</label>
+              <select id="strictness">
+                <option value="normal" selected>Normal</option>
+                <option value="strict">Strict</option>
+                <option value="relaxed">Relaxed</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="focus">Reviewer focus</label>
+              <select id="focus">
+                <option value="behavior" selected>Behavior changes</option>
+                <option value="performance">Performance</option>
+                <option value="security">Security</option>
+                <option value="dx">Developer experience</option>
+              </select>
+            </div>
+            <div>
+              <label for="goal">Target output</label>
+              <select id="goal">
+                <option value="summary" selected>Summary + risks</option>
+                <option value="checklist">Checklist</option>
+                <option value="tests">Test ideas</option>
+                <option value="all">Everything</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="pillbar" aria-label="Quick diff examples">
+            <span class="pill" data-fill="diff --git a/src/auth.ts b/src/auth.ts\n@@ -1,6 +1,9 @@\n- const token = await getToken();\n+ const token = await getToken({ refresh: true });\n+ if (!token) throw new Error('No token');\n+ await auditLog(user.id);">Auth change</span>
+            <span class="pill" data-fill="diff --git a/server.js b/server.js\n@@ -20,7 +20,7 @@\n- app.use(cors());\n+ app.use(cors({ origin: '*' }));">CORS change</span>
+            <span class="pill" data-fill="diff --git a/db/migrations/001.sql b/db/migrations/001.sql\n@@ -1,4 +1,8 @@\n+ ALTER TABLE users ADD COLUMN timezone TEXT;\n+ UPDATE users SET timezone = 'UTC';">Migration</span>
+            <span class="pill" data-fill="diff --git a/src/ui/button.tsx b/src/ui/button.tsx\n@@ -12,7 +12,7 @@\n- export const size = 'md';\n+ export const size = 'lg';">UI tweak</span>
+          </div>
+
+          <div class="actions">
+            <button id="analyze">Analyze diff</button>
+            <button class="secondary" id="copy">Copy report</button>
+            <button class="ghost" id="clear">Clear</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Risk overview</h2>
+          <div class="summary">
+            <div class="metric"><div class="label">Risk score</div><div class="value" id="score">0</div></div>
+            <div class="metric"><div class="label">Hotspots</div><div class="value" id="hotspots">0</div></div>
+            <div class="metric"><div class="label">Files</div><div class="value" id="files">0</div></div>
+            <div class="metric"><div class="label">Lines</div><div class="value" id="lines">0</div></div>
+          </div>
+          <div style="margin-top:12px">
+            <div class="scorebar" aria-hidden="true"><div class="scorefill" id="fill"></div></div>
+            <div class="tiny" id="scoreLabel" style="margin-top:8px;color:var(--muted)">Paste a diff to generate a risk signal.</div>
+          </div>
+
+          <div class="section">
+            <h3>Flagged patterns</h3>
+            <div class="chips" id="chips"></div>
+          </div>
+
+          <div class="section">
+            <h3>Suggested checks</h3>
+            <div class="output" id="report">No analysis yet.</div>
+          </div>
+        </section>
+      </div>
+
+      <div class="footer">
+        <span>Single-file, dark, mobile-friendly, and handy when a PR feels a little too cheerful.</span>
+        <span>All tools link to: <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">buymeacoffee.com/stevenli.phoenix</a></span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { report: '' };
+
+    const riskRules = [
+      { re: /\b(auth|token|session|jwt|oauth|login|password)\b/i, label: 'auth / identity', pts: 18, tone: 'bad' },
+      { re: /\b(cors|csrf|xss|sanitize|escape|sql|prisma|query|injection)\b/i, label: 'security-sensitive', pts: 20, tone: 'bad' },
+      { re: /\b(migration|schema|ALTER TABLE|DROP TABLE|index|constraint|foreign key)\b/i, label: 'data model change', pts: 19, tone: 'warn' },
+      { re: /\b(timeout|retry|cache|rate limit|backoff|queue|cron)\b/i, label: 'operational behavior', pts: 14, tone: 'warn' },
+      { re: /\b(api|endpoint|route|graphql|webhook|response|request|header)\b/i, label: 'public interface', pts: 13, tone: 'warn' },
+      { re: /\b(render|component|button|modal|css|layout|style|theme)\b/i, label: 'ui surface', pts: 8, tone: 'good' },
+      { re: /\b(test|spec|fixture|mock)\b/i, label: 'test updates', pts: -8, tone: 'good' },
+      { re: /\b(refactor|rename|move|extract)\b/i, label: 'refactor churn', pts: 7, tone: 'warn' },
+    ];
+
+    function analyze() {
+      const diff = $('diff').value.trim();
+      const mode = $('mode').value;
+      const familiarity = $('familiarity').value;
+      const strictness = $('strictness').value;
+      const focus = $('focus').value;
+      const goal = $('goal').value;
+
+      const lines = diff ? diff.split(/\r?\n/) : [];
+      const fileSet = new Set();
+      let added = 0, removed = 0, score = 0;
+      const chips = [];
+      const hits = new Map();
+
+      for (const line of lines) {
+        if (line.startsWith('diff --git')) {
+          const m = line.match(/ b\/(.+)$/);
+          if (m) fileSet.add(m[1]);
+        }
+        if (line.startsWith('+++ b/')) fileSet.add(line.slice(6));
+        if (line.startsWith('+') && !line.startsWith('+++')) added++;
+        if (line.startsWith('-') && !line.startsWith('---')) removed++;
+      }
+
+      const text = diff || '';
+      for (const rule of riskRules) {
+        const matchCount = (text.match(new RegExp(rule.re.source, 'gi')) || []).length;
+        if (matchCount) {
+          const pts = Math.max(2, Math.abs(rule.pts) * matchCount);
+          score += rule.pts > 0 ? pts : -Math.min(18, pts);
+          hits.set(rule.label, { label: rule.label, tone: rule.tone, count: matchCount });
+        }
+      }
+
+      if (added + removed > 120) { score += 16; hits.set('large diff', { label: 'large diff', tone: 'bad', count: 1 }); }
+      else if (added + removed > 50) { score += 9; hits.set('moderate diff', { label: 'moderate diff', tone: 'warn', count: 1 }); }
+      if (fileSet.size > 6) { score += 10; hits.set('many files', { label: 'many files', tone: 'warn', count: fileSet.size }); }
+      if (/\bTODO\b|\bFIXME\b/i.test(text)) { score += 5; hits.set('unfinished markers', { label: 'unfinished markers', tone: 'warn', count: 1 }); }
+      if (/\bconsole\.log\b|\bprint\(/i.test(text)) { score += 3; hits.set('debug logging', { label: 'debug logging', tone: 'warn', count: 1 }); }
+
+      const modifier = { strict: 1.18, normal: 1, relaxed: 0.88 }[strictness];
+      score = Math.round(Math.max(0, Math.min(100, score * modifier + (familiarity === 'new' ? 8 : familiarity === 'mixed' ? 3 : -2))));
+      const riskBand = score >= 70 ? 'High' : score >= 40 ? 'Medium' : 'Low';
+      const riskTone = score >= 70 ? 'bad' : score >= 40 ? 'warn' : 'good';
+
+      $('score').textContent = score;
+      $('fill').style.width = `${score}%`;
+      $('scoreLabel').textContent = diff ? `${riskBand} risk for a ${mode} change. Focus on ${focus} and regressions around ${fileSet.size || 1} file(s).` : 'Paste a diff to generate a risk signal.';
+      $('files').textContent = fileSet.size;
+      $('lines').textContent = added + removed;
+      $('hotspots').textContent = hits.size;
+
+      const chipHtml = [];
+      if (hits.size) {
+        for (const item of hits.values()) chipHtml.push(`<span class="chip ${item.tone}">${item.label}${item.count > 1 ? ` ×${item.count}` : ''}</span>`);
+      } else {
+        chipHtml.push('<span class="chip good">no obvious hotspots</span>');
+      }
+      $('chips').innerHTML = chipHtml.join('');
+
+      const tests = [];
+      if (/\b(auth|token|session|jwt|oauth|login|password)\b/i.test(text)) tests.push('Add auth path tests: login, refresh, expired token, unauthenticated access.');
+      if (/\b(cors|csrf|xss|sanitize|escape|sql|query|injection)\b/i.test(text)) tests.push('Run security checks: origin validation, payload escaping, injection guardrails.');
+      if (/\b(migration|schema|ALTER TABLE|DROP TABLE|index|constraint)\b/i.test(text)) tests.push('Verify data migration on a copy of prod-like data and confirm rollback path.');
+      if (/\b(api|endpoint|route|graphql|webhook|response|request|header)\b/i.test(text)) tests.push('Exercise request/response contracts and inspect backward compatibility.');
+      if (/\b(render|component|button|modal|css|layout|style|theme)\b/i.test(text)) tests.push('Check responsive rendering, empty states, and keyboard navigation.');
+      if (!tests.length) tests.push('Smoke test the changed path, then run the nearest unit/integration test suite.');
+
+      const checks = [];
+      checks.push(`Risk band: ${riskBand} (${score}/100)`);
+      checks.push(`Changed files: ${Array.from(fileSet).slice(0, 8).join(', ') || 'none detected'}`);
+      checks.push(`Estimated review depth: ${score >= 70 ? 'deep read + local test run' : score >= 40 ? 'focused read + one test pass' : 'quick skim + smoke test'}`);
+      checks.push('');
+      checks.push('Review checklist:');
+      checks.push(`- Confirm the intent matches the diff and no unrelated behavior changed.`);
+      checks.push(`- Look for edge cases, null/empty inputs, and error handling.`);
+      checks.push(`- Verify that observability/logging still makes sense after the change.`);
+      checks.push(`- Check whether docs, fixtures, or test snapshots need updates.`);
+      checks.push('');
+      checks.push('Test ideas:');
+      tests.forEach(t => checks.push(`- ${t}`));
+      checks.push('');
+      checks.push('Quick verdict:');
+      checks.push(`- ${goal === 'checklist' ? 'Use the checklist first, then inspect the riskiest hunk.' : goal === 'tests' ? 'Run the tests before debating style.' : `This looks ${riskBand.toLowerCase()} risk for a ${mode} change.`}`);
+      checks.push(`- For ${focus} focus, verify the user-visible or system-visible side effects, not just the code shape.`);
+
+      state.report = checks.join('\n');
+      $('report').textContent = state.report;
+    }
+
+    function clearAll() {
+      $('diff').value = '';
+      $('report').textContent = 'No analysis yet.';
+      $('chips').innerHTML = '';
+      $('score').textContent = '0';
+      $('hotspots').textContent = '0';
+      $('files').textContent = '0';
+      $('lines').textContent = '0';
+      $('fill').style.width = '0%';
+      $('scoreLabel').textContent = 'Paste a diff to generate a risk signal.';
+      state.report = '';
+    }
+
+    $('analyze').addEventListener('click', analyze);
+    $('clear').addEventListener('click', clearAll);
+    $('copy').addEventListener('click', async () => {
+      if (!state.report) analyze();
+      await navigator.clipboard.writeText(state.report || $('report').textContent);
+      $('copy').textContent = 'Copied';
+      setTimeout(() => $('copy').textContent = 'Copy report', 1200);
+    });
+    document.querySelectorAll('.pill').forEach(p => p.addEventListener('click', () => { $('diff').value = p.dataset.fill; analyze(); }));
+    analyze();
+  </script>
+</body>
+</html>

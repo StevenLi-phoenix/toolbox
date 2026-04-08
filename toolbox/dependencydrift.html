@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dependency Drift Radar</title>
+  <meta name="description" content="Compare current and target dependency manifests, spot version drift, estimate upgrade risk, and generate a concise action plan. Dark, responsive, client-side." />
+  <meta name="keywords" content="dependency drift, package.json diff, upgrade planner, semver risk, developer productivity, dependency radar" />
+  <meta name="author" content="Steven Li" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dependencydrift.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Dependency Drift Radar" />
+  <meta property="og:description" content="Compare dependency manifests and turn upgrade chaos into a clean action plan." />
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/dependencydrift.html" />
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Dependency Drift Radar" />
+  <meta name="twitter:description" content="A dark, mobile-friendly dependency upgrade planner for package.json drift." />
+  <style>
+    :root{--bg:#071019;--bg2:#04070d;--panel:rgba(11,19,31,.96);--line:rgba(148,163,184,.16);--text:#eef5ff;--muted:#97a8c6;--accent:#8bc3ff;--accent2:#63e0c4;--warn:#ffd46f;--danger:#ff7f9b;--good:#6df0b0;--shadow:0 24px 72px rgba(0,0,0,.4);--radius:24px;--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box} html{color-scheme:dark}
+    body{margin:0;min-height:100vh;font-family:var(--sans);color:var(--text);background:radial-gradient(circle at top left, rgba(99,224,196,.14), transparent 26%),radial-gradient(circle at top right, rgba(139,195,255,.14), transparent 28%),linear-gradient(180deg,#0b1624 0%,var(--bg) 45%,var(--bg2) 100%)}
+    a{color:var(--accent2)} button,textarea,input,select{font:inherit}
+    textarea,input,select{width:100%;border-radius:16px;border:1px solid rgba(148,163,184,.18);background:rgba(4,9,18,.96);color:var(--text);padding:12px 14px;outline:none;transition:border-color .18s ease,box-shadow .18s ease}
+    textarea{min-height:170px;resize:vertical;line-height:1.5} input:focus,textarea:focus,select:focus{border-color:rgba(139,195,255,.8);box-shadow:0 0 0 4px rgba(139,195,255,.12)}
+    .wrap{width:min(1280px,calc(100% - 32px));margin:0 auto;padding:28px 0 56px}
+    .hero,.card{background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(12px)}
+    .hero{position:relative;overflow:hidden;border-radius:28px;padding:28px;margin-bottom:22px}.hero::after{content:"";position:absolute;inset:auto -90px -120px auto;width:360px;height:360px;background:radial-gradient(circle, rgba(99,224,196,.16), transparent 70%);pointer-events:none}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(139,195,255,.12);border:1px solid rgba(139,195,255,.18);color:#dce9ff;font-size:.82rem;letter-spacing:.05em;text-transform:uppercase;font-weight:700}
+    h1{margin:16px 0 12px;font-size:clamp(2rem,4.8vw,3.7rem);line-height:1.02}.lead{margin:0;max-width:940px;color:var(--muted);line-height:1.75;font-size:1.02rem}
+    .hero-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:22px}.hero-stat{padding:16px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}.hero-stat span{display:block;color:var(--muted);font-size:.84rem;margin-bottom:8px}.hero-stat strong{font-size:1.02rem;line-height:1.45}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}.btn{appearance:none;border:1px solid rgba(139,195,255,.24);background:#12203a;color:var(--text);border-radius:14px;padding:12px 15px;cursor:pointer;font:inherit;transition:transform .18s ease,border-color .18s ease,background .18s ease;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}.btn:hover{transform:translateY(-1px);border-color:rgba(139,195,255,.54)}.primary{background:linear-gradient(135deg,#8bc3ff,#63e0c4);color:#07101a;border:none;font-weight:800}
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}.stack{display:grid;gap:20px}.card{border-radius:var(--radius);overflow:hidden}.card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg, rgba(255,255,255,.02), transparent)}.card-head h2{margin:0;font-size:1.05rem}.card-body{padding:20px}
+    .field-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.field{display:grid;gap:8px}.col-12{grid-column:span 12}.col-6{grid-column:span 6}.col-4{grid-column:span 4} label{font-size:.93rem;color:#dbe7ff;font-weight:600}
+    .summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.tile{padding:16px;border-radius:18px;background:linear-gradient(180deg, rgba(139,195,255,.08), rgba(99,224,196,.04));border:1px solid rgba(139,195,255,.16)}.tile span{display:block;color:var(--muted);font-size:.82rem;margin-bottom:8px}.tile strong{font-size:1.05rem;line-height:1.4}
+    .list,.output{padding:16px;border-radius:18px;background:rgba(4,9,17,.88);border:1px solid var(--line)}.list{display:grid;gap:12px}.output{white-space:pre-wrap;line-height:1.62;font-family:var(--mono);min-height:260px}
+    .item{padding:16px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid var(--line)}.item h4{margin:0 0 8px;font-size:1rem}.item p{margin:0;color:var(--muted);line-height:1.65}
+    .badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);font-size:.8rem;color:#dbe7ff}.badge.good{background:rgba(109,240,176,.14);border-color:rgba(109,240,176,.18)}.badge.warn{background:rgba(255,212,111,.14);border-color:rgba(255,212,111,.18)}.badge.danger{background:rgba(255,127,155,.14);border-color:rgba(255,127,155,.18)}
+    .footer{margin-top:18px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:.93rem}
+    @media (max-width:960px){.layout,.summary-grid{grid-template-columns:1fr}.col-6,.col-4{grid-column:span 12}.hero{padding:22px}.card-body,.card-head{padding-left:16px;padding-right:16px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">toolbox #257 · developer productivity</div>
+      <h1>Dependency Drift Radar</h1>
+      <p class="lead">Paste the current and target dependency manifests, then get a risk score, drift summary, and a practical upgrade plan. It’s built for people who want fewer surprise merges and more boring releases.</p>
+      <div class="hero-grid">
+        <div class="hero-stat"><span>Best for</span><strong>package.json upgrades, monorepo drift checks, release prep, dependency hygiene</strong></div>
+        <div class="hero-stat"><span>Output</span><strong>Added, removed, bumped packages with follow-up tasks</strong></div>
+        <div class="hero-stat"><span>Mode</span><strong>Dark UI, mobile-responsive, SEO-ready, single-file</strong></div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn primary" id="analyzeBtn" type="button">Analyze drift</button>
+        <button class="btn" id="exampleBtn" type="button">Load example</button>
+        <a class="btn" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Buy Me a Coffee</a>
+      </div>
+    </section>
+
+    <div class="layout">
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Manifest inputs</h2><span class="badge">compare</span></div>
+          <div class="card-body">
+            <div class="field-grid">
+              <div class="field col-6"><label for="project">Project name</label><input id="project" value="Toolbox web app" /></div>
+              <div class="field col-6"><label for="goal">Upgrade goal</label><select id="goal"><option>Stay current</option><option selected>Security + stability</option><option>Feature unlock</option><option>Major framework jump</option></select></div>
+              <div class="field col-6"><label for="current">Current dependencies</label><textarea id="current" placeholder='{"react":"18.2.0","vite":"5.4.2"}'></textarea></div>
+              <div class="field col-6"><label for="target">Target dependencies</label><textarea id="target" placeholder='{"react":"19.0.0","vite":"6.0.1"}'></textarea></div>
+              <div class="field col-4"><label for="size">Package count</label><select id="size"><option>Small</option><option selected>Medium</option><option>Large</option><option>Very large</option></select></div>
+              <div class="field col-4"><label for="branch">Branch risk</label><select id="branch"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></div>
+              <div class="field col-4"><label for="timebox">Timebox</label><select id="timebox"><option>30 min</option><option selected>1-2 hours</option><option>Half day</option><option>Multi-day</option></select></div>
+              <div class="field col-12"><label for="notes">Notes / constraints</label><textarea id="notes">- Keep the deployed site stable
+- Avoid pulling in breaking major versions unless needed
+- Check package lock churn and test coverage before merging</textarea></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>Risk summary</h2><span class="badge warn" id="statusBadge">waiting</span></div>
+          <div class="card-body">
+            <div class="summary-grid">
+              <div class="tile"><span>Drift score</span><strong id="score">—</strong></div>
+              <div class="tile"><span>Upgrade mode</span><strong id="modeText">—</strong></div>
+              <div class="tile"><span>Recommended path</span><strong id="pathText">—</strong></div>
+              <div class="tile"><span>Confidence</span><strong id="confidence">—</strong></div>
+            </div>
+            <div class="list" style="margin-top:14px" id="signals"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="stack">
+        <article class="card">
+          <div class="card-head"><h2>Copy-ready action plan</h2><span class="badge good">ready</span></div>
+          <div class="card-body">
+            <div class="output" id="output"></div>
+            <div class="footer"><span>Paste into a release ticket, PR description, or team update</span><span>Client-side only; no manifest leaves the browser</span></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h2>What to inspect first</h2><span class="badge">triage</span></div>
+          <div class="card-body"><div class="list" id="focusList"></div></div>
+        </article>
+      </section>
+    </div>
+
+    <div class="footer">If this saves you from a dependency roulette night, <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">buy Steven a coffee</a>.</div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const severity = { Small: 6, Medium: 12, Large: 20, 'Very large': 28 };
+    const branchRisk = { Low: 4, Medium: 10, High: 18, Critical: 26 };
+    const goalWeight = { 'Stay current': 3, 'Security + stability': 8, 'Feature unlock': 10, 'Major framework jump': 18 };
+
+    const focusCards = [
+      ['Major versions first', 'Flag every major bump before the diff becomes an argument about transitive packages.'],
+      ['Lockfile churn', 'Large lockfile diffs often mean hidden dependency movement even when manifests look tame.'],
+      ['Test surface', 'Run the highest-value smoke tests before you trust a dependency refresh.'],
+      ['Runtime compatibility', 'Check Node, bundler, and browser support alongside package semver.']
+    ];
+
+    function parseManifest(text){
+      const trimmed = text.trim();
+      if (!trimmed) return {};
+      try { return JSON.parse(trimmed); } catch (e) { return {}; }
+    }
+
+    function norm(v){ return String(v || '').trim(); }
+    function major(v){ const m = norm(v).match(/\d+/); return m ? parseInt(m[0], 10) : 0; }
+    function clean(v){ return norm(v).replace(/^[\^~><=\s]+/, ''); }
+
+    function loadExample(){
+      $('project').value = 'Toolbox web app';
+      $('goal').value = 'Security + stability';
+      $('size').value = 'Medium';
+      $('branch').value = 'High';
+      $('timebox').value = '1-2 hours';
+      $('current').value = JSON.stringify({ react: '18.2.0', vite: '5.4.2', zod: '3.23.8', eslint: '9.9.0' }, null, 2);
+      $('target').value = JSON.stringify({ react: '19.0.0', vite: '6.1.0', zod: '3.24.1', eslint: '9.14.0', 'typescript': '5.7.2' }, null, 2);
+      $('notes').value = '- Keep the site green on mobile\n- Update only what unlocks support and security fixes\n- Validate build output and bundle size';
+      analyze();
+    }
+
+    function analyze(){
+      const project = $('project').value.trim() || 'Untitled project';
+      const goal = $('goal').value;
+      const current = parseManifest($('current').value);
+      const target = parseManifest($('target').value);
+      const size = $('size').value;
+      const risk = $('branch').value;
+      const timebox = $('timebox').value;
+      const notes = $('notes').value.trim().split(/\n+/).map(s => s.replace(/^[-*]\s*/, '').trim()).filter(Boolean);
+
+      const all = new Set([...Object.keys(current), ...Object.keys(target)]);
+      const added = [];
+      const removed = [];
+      const bumped = [];
+      const same = [];
+      let majorBumps = 0;
+
+      for (const name of [...all].sort()) {
+        const a = clean(current[name] || '');
+        const b = clean(target[name] || '');
+        if (a && !b) removed.push(name);
+        else if (!a && b) added.push(name);
+        else if (a !== b) {
+          bumped.push({ name, from: a, to: b, majorJump: major(a) !== major(b) });
+          if (major(a) !== major(b)) majorBumps++;
+        } else same.push(name);
+      }
+
+      const score = Math.min(100, severity[size] + branchRisk[risk] + goalWeight[goal] + added.length * 2 + removed.length * 3 + bumped.length * 2 + majorBumps * 8);
+      const mode = score >= 70 ? 'deep upgrade review' : score >= 45 ? 'focused drift pass' : 'light touch refresh';
+      const path = majorBumps > 0 ? 'stage majors separately' : added.length + removed.length > 4 ? 'batch in one PR' : 'single PR is fine';
+      const confidence = score >= 80 ? 'low until tested' : score >= 55 ? 'medium' : 'high';
+      const badge = score >= 70 ? 'danger' : score >= 45 ? 'warn' : 'good';
+
+      $('score').textContent = `${score}/100`;
+      $('modeText').textContent = mode;
+      $('pathText').textContent = path;
+      $('confidence').textContent = confidence;
+      $('statusBadge').className = `badge ${badge}`;
+      $('statusBadge').textContent = score >= 70 ? 'high drift' : score >= 45 ? 'moderate drift' : 'low drift';
+
+      const signals = [
+        { h: 'Changed packages', p: `${bumped.length} version bumps, ${added.length} additions, ${removed.length} removals.` },
+        { h: 'Major jumps', p: majorBumps ? `${majorBumps} dependency${majorBumps === 1 ? '' : 'ies'} crossed a major boundary.` : 'No major version crossings detected.' },
+        { h: 'Risk framing', p: `This looks like a ${mode} for ${project}.` },
+        { h: 'Timebox guidance', p: `Reserve ${timebox} and leave room for one build check plus one regression test run.` }
+      ];
+
+      $('signals').innerHTML = signals.map(item => `<div class="item"><h4>${item.h}</h4><p>${item.p}</p></div>`).join('');
+      $('focusList').innerHTML = focusCards.map(([h,p]) => `<div class="item"><h4>${h}</h4><p>${p}</p></div>`).join('');
+
+      const plan = [
+        `• Project: ${project}`,
+        `• Upgrade goal: ${goal}`,
+        `• Drift score: ${score}/100 (${mode})`,
+        `• Recommended path: ${path}`,
+        `• Confidence: ${confidence}`,
+        '',
+        'Dependency changes:',
+        ...(added.length ? [`Added: ${added.join(', ')}`] : ['Added: none']),
+        ...(removed.length ? [`Removed: ${removed.join(', ')}`] : ['Removed: none']),
+        ...(bumped.length ? bumped.map(x => `${x.majorJump ? '⚠' : '•'} ${x.name}: ${x.from} → ${x.to}`) : ['Bumped: none']),
+        '',
+        'Suggested next steps:',
+        '1. Read release notes for any major bumps first.',
+        '2. Run install, build, and smoke tests in a clean environment.',
+        '3. Watch lockfile churn and bundle size before merging.',
+        '4. Split risky upgrades into a separate PR if failures appear.',
+        '',
+        'Notes:',
+        ...(notes.length ? notes.slice(0, 6).map((n, i) => `${i + 1}. ${n}`) : ['1. No notes supplied'])
+      ];
+      $('output').textContent = plan.join('\n');
+    }
+
+    $('analyzeBtn').addEventListener('click', analyze);
+    $('exampleBtn').addEventListener('click', loadExample);
+    loadExample();
+  </script>
+</body>
+</html>

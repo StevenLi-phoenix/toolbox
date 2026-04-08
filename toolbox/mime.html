@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MIME Type Lookup & Content-Type Header Builder</title>
+  <meta name="description" content="Look up common MIME types by extension, generate safe Content-Type headers with charset and boundary parameters, and copy server snippets for Express, Nginx, Python, and S3 metadata.">
+  <meta name="keywords" content="mime type lookup, content-type header builder, media type lookup, file extension mime, charset builder, developer toolbox">
+  <meta name="author" content="Steven Li">
+  <meta name="robots" content="index,follow">
+  <meta name="theme-color" content="#08101b">
+  <meta property="og:title" content="MIME Type Lookup & Content-Type Header Builder">
+  <meta property="og:description" content="Find MIME types fast, build correct Content-Type headers, and copy ready-to-use server snippets.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/mime.html">
+  <meta property="og:image" content="https://stevenli-phoenix.github.io/toolbox/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MIME Type Lookup & Content-Type Header Builder">
+  <meta name="twitter:description" content="Search MIME types, build Content-Type headers, preview browser behavior, and copy deployment snippets.">
+  <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mime.html">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08101b;
+      --bg-2: #0d1727;
+      --panel: rgba(10, 18, 30, 0.88);
+      --panel-2: rgba(15, 25, 41, 0.95);
+      --text: #eaf2ff;
+      --muted: #9eb1c8;
+      --accent: #7dd3fc;
+      --accent-2: #60a5fa;
+      --accent-3: #c084fc;
+      --good: #6ee7b7;
+      --warn: #fbbf24;
+      --bad: #fb7185;
+      --border: rgba(158, 177, 200, 0.16);
+      --shadow: 0 22px 60px rgba(0,0,0,.34);
+      --radius: 22px;
+      --radius-sm: 14px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(96, 165, 250, 0.18), transparent 24%),
+        radial-gradient(circle at top right, rgba(192, 132, 252, 0.14), transparent 20%),
+        linear-gradient(180deg, #04070d 0%, #08101b 56%, #050913 100%);
+      line-height: 1.55;
+    }
+    a { color: var(--accent); }
+    .container {
+      width: min(1280px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 30px 0 72px;
+    }
+    .hero {
+      display: grid;
+      gap: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      border-radius: 30px;
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -60px;
+      top: -80px;
+      width: 260px;
+      height: 260px;
+      background: radial-gradient(circle, rgba(125, 211, 252, 0.18), transparent 64%);
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-flex;
+      width: fit-content;
+      gap: 8px;
+      align-items: center;
+      border-radius: 999px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      background: rgba(125, 211, 252, 0.08);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: .9rem;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      line-height: 1.03;
+      letter-spacing: -.03em;
+    }
+    .lead {
+      margin: 0;
+      max-width: 76ch;
+      color: var(--muted);
+      font-size: 1.04rem;
+    }
+    .hero-actions, .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+    .bmc, .ghost-link, button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+      border: 0;
+      font: inherit;
+      transition: transform .15s ease, filter .15s ease, border-color .15s ease;
+    }
+    button:hover, .bmc:hover, .ghost-link:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    .primary {
+      color: #08101b;
+      background: linear-gradient(135deg, var(--accent), var(--accent-3));
+      box-shadow: 0 16px 40px rgba(96, 165, 250, 0.18);
+    }
+    .secondary {
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,.1);
+    }
+    .ghost-link {
+      background: rgba(255,255,255,.04);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .bmc {
+      color: #2b1604;
+      background: linear-gradient(135deg, #facc15, #fb7185);
+      box-shadow: var(--shadow);
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .stat {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 18px;
+      padding: 16px;
+    }
+    .stat span {
+      display: block;
+      font-size: .84rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .stat strong { font-size: 1.06rem; }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(330px, .92fr);
+      gap: 20px;
+      margin-top: 24px;
+      align-items: start;
+    }
+    .stack { display: grid; gap: 20px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      backdrop-filter: blur(16px);
+    }
+    .panel-inner { padding: 22px; display: grid; gap: 18px; }
+    .section-title { margin: 0; font-size: 1.1rem; letter-spacing: -.02em; }
+    .muted { color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+    .field { display: grid; gap: 8px; }
+    .full { grid-column: 1 / -1; }
+    label { color: var(--muted); font-size: .92rem; font-weight: 700; }
+    input, select, textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 13px;
+      border: 1px solid var(--border);
+      background: rgba(5, 11, 20, .9);
+      color: var(--text);
+      outline: none;
+      font: inherit;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    textarea { resize: vertical; min-height: 110px; }
+    input:focus, select:focus, textarea:focus {
+      border-color: rgba(125, 211, 252, .75);
+      box-shadow: 0 0 0 4px rgba(125, 211, 252, .12);
+    }
+    code, pre, .mono { font-family: var(--mono); }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(4, 9, 17, .82);
+      padding: 16px;
+      font-size: .92rem;
+      line-height: 1.6;
+    }
+    .result-grid, .chips, .example-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .result-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .card, .chip, .example {
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.03);
+      padding: 14px;
+    }
+    .card h3, .example h3 { margin: 0 0 8px; font-size: 1rem; }
+    .tiny { font-size: .84rem; }
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .table-wrap {
+      overflow: auto;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.03);
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.08); text-align: left; vertical-align: top; }
+    th { color: #d9e9ff; font-size: .84rem; text-transform: uppercase; letter-spacing: .05em; }
+    tr:last-child td { border-bottom: 0; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: .8rem;
+      font-weight: 700;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.05);
+    }
+    .footer {
+      margin-top: 24px;
+      color: var(--muted);
+      text-align: center;
+      font-size: .92rem;
+    }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .container { width: min(100% - 20px, 1280px); padding-top: 18px; }
+      .hero, .panel-inner { padding: 18px; }
+      .grid { grid-template-columns: 1fr; }
+      h1 { font-size: clamp(2rem, 10vw, 3rem); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <div class="badge">Tool #167 · HTTP / uploads / storage</div>
+      <h1>MIME Type Lookup &amp; Content-Type Header Builder</h1>
+      <p class="lead">Find the right media type for common file extensions, build clean <code>Content-Type</code> headers with optional parameters, and copy deployment snippets for app servers, static hosts, object storage, and multipart uploads.</p>
+      <div class="hero-actions">
+        <a class="bmc" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener noreferrer">Buy Me a Coffee</a>
+        <a class="ghost-link" href="#builder">Jump to builder</a>
+        <a class="ghost-link" href="#reference">MIME reference</a>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>Best for</span><strong>uploads, downloads, CDNs, APIs</strong></div>
+        <div class="stat"><span>Builds</span><strong>headers, metadata, and snippets</strong></div>
+        <div class="stat"><span>Helps avoid</span><strong>wrong previews, broken charset, bad caching</strong></div>
+        <div class="stat"><span>Includes</span><strong>browser behavior + security notes</strong></div>
+      </div>
+    </section>
+
+    <div class="layout">
+      <div class="stack">
+        <section class="panel" id="builder">
+          <div class="panel-inner">
+            <div>
+              <h2 class="section-title">Header builder</h2>
+              <p class="muted">Pick a known file type or enter a custom media type. Add parameters like <code>charset=utf-8</code> or <code>boundary=...</code>, then copy the final header.</p>
+            </div>
+            <div class="grid">
+              <div class="field">
+                <label for="search">Search by extension or keyword</label>
+                <input id="search" type="text" placeholder="e.g. json, svg, csv, mp4, font, excel">
+              </div>
+              <div class="field">
+                <label for="extension">Extension</label>
+                <input id="extension" type="text" placeholder="json">
+              </div>
+              <div class="field full">
+                <label for="mimeSelect">Common type preset</label>
+                <select id="mimeSelect"></select>
+              </div>
+              <div class="field full">
+                <label for="customMime">Custom MIME type override</label>
+                <input id="customMime" type="text" placeholder="application/vnd.my-app+json">
+              </div>
+              <div class="field">
+                <label for="dispositionMode">Response intent</label>
+                <select id="dispositionMode">
+                  <option value="render">Render in browser / API response</option>
+                  <option value="download">Force download / attachment style</option>
+                  <option value="upload">User upload / object metadata</option>
+                  <option value="multipart">Multipart form part</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="charset">Charset</label>
+                <select id="charset">
+                  <option value="">None</option>
+                  <option value="utf-8" selected>utf-8</option>
+                  <option value="us-ascii">us-ascii</option>
+                  <option value="iso-8859-1">iso-8859-1</option>
+                  <option value="utf-16le">utf-16le</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="boundary">Boundary (multipart only)</label>
+                <input id="boundary" type="text" placeholder="----WebKitFormBoundaryXyZ123">
+              </div>
+              <div class="field">
+                <label for="extraParams">Extra parameters</label>
+                <input id="extraParams" type="text" placeholder="profile=\"https://example.com/schema\"; version=2">
+              </div>
+              <div class="field full">
+                <label for="filename">Example filename</label>
+                <input id="filename" type="text" placeholder="report.json">
+              </div>
+            </div>
+            <div class="toolbar">
+              <button class="primary" id="copyHeaderBtn">Copy Content-Type header</button>
+              <button class="secondary" id="copyMimeBtn">Copy MIME only</button>
+              <button class="secondary" id="resetBtn">Reset</button>
+            </div>
+            <div class="result-grid">
+              <div class="card">
+                <h3>Final header</h3>
+                <pre id="headerOut"></pre>
+              </div>
+              <div class="card">
+                <h3>Raw MIME value</h3>
+                <pre id="mimeOut"></pre>
+              </div>
+              <div class="card">
+                <h3>Browser / client behavior</h3>
+                <pre id="behaviorOut"></pre>
+              </div>
+              <div class="card">
+                <h3>Validation notes</h3>
+                <pre id="notesOut"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-inner">
+            <div>
+              <h2 class="section-title">Code snippets</h2>
+              <p class="muted">Ready-to-copy snippets for common stacks. The examples update as you change the MIME type and filename.</p>
+            </div>
+            <div class="example-grid">
+              <div class="example">
+                <h3>Express / Node</h3>
+                <pre id="expressOut"></pre>
+              </div>
+              <div class="example">
+                <h3>Nginx</h3>
+                <pre id="nginxOut"></pre>
+              </div>
+              <div class="example">
+                <h3>Python / Flask</h3>
+                <pre id="pythonOut"></pre>
+              </div>
+              <div class="example">
+                <h3>S3 / object storage metadata</h3>
+                <pre id="s3Out"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="reference">
+          <div class="panel-inner">
+            <div>
+              <h2 class="section-title">Common MIME reference</h2>
+              <p class="muted">Quick lookup table for frequent file types. Search above filters this list too.</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Extension</th>
+                    <th>MIME type</th>
+                    <th>Category</th>
+                    <th>Typical use</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="stack">
+        <section class="panel">
+          <div class="panel-inner">
+            <div>
+              <h2 class="section-title">Quick presets</h2>
+              <p class="muted">Fast-start combinations for common workflows.</p>
+            </div>
+            <div class="chips" id="presetChips"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-inner">
+            <div>
+              <h2 class="section-title">When charset matters</h2>
+              <p class="muted">Use a charset for textual content that browsers or APIs should decode as text.</p>
+            </div>
+            <div class="card tiny">
+              <div class="pill good">Good fits</div>
+              <p><code>text/plain</code>, <code>text/html</code>, <code>text/css</code>, <code>application/json</code>, <code>application/javascript</code>, <code>image/svg+xml</code>, <code>application/xml</code>.</p>
+            </div>
+            <div class="card tiny">
+              <div class="pill warn">Usually skip it</div>
+              <p>Binary assets like <code>image/png</code>, <code>application/pdf</code>, <code>application/zip</code>, <code>font/woff2</code>, <code>video/mp4</code>.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-inner">
+            <div>
+              <h2 class="section-title">Security reminders</h2>
+            </div>
+            <div class="card tiny">
+              <p><span class="pill bad">XSS risk</span> Serving user-controlled SVG or HTML inline can execute active content. Consider download-only delivery or sanitization.</p>
+              <p><span class="pill warn">Sniffing</span> Add <code>X-Content-Type-Options: nosniff</code> for scripts and styles so browsers do not guess.</p>
+              <p><span class="pill good">Uploads</span> Store both original filename and trusted server-detected MIME type; never trust extension alone.</p>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <p class="footer">Built for Steven Li’s toolbox. Single-file, client-side, mobile-friendly, and ready for GitHub Pages.</p>
+  </div>
+
+  <script>
+    const MIME_DB = [
+      ["txt", "text/plain", "Text", "logs, notes, fallback downloads", "Safe default for plain text."],
+      ["html", "text/html", "Web", "web pages, email previews", "Inline rendering can execute markup/scripts."],
+      ["css", "text/css", "Web", "stylesheets", "Use nosniff when serving styles."],
+      ["js", "application/javascript", "Web", "scripts, bundles", "Prefer modern javascript type over text/javascript."],
+      ["mjs", "application/javascript", "Web", "ES modules", "Modules still use JavaScript MIME types."],
+      ["json", "application/json", "API", "REST responses, config", "UTF-8 is the practical default."],
+      ["map", "application/json", "API", "source maps", "Common for build output."],
+      ["jsonld", "application/ld+json", "API", "structured data, schema.org", "JSON-based linked data."],
+      ["xml", "application/xml", "Data", "feeds, sitemaps, APIs", "Can also appear as text/xml in legacy systems."],
+      ["csv", "text/csv", "Data", "exports, spreadsheets", "Charset often matters for Excel imports."],
+      ["tsv", "text/tab-separated-values", "Data", "table exports", "Text-based tabular data."],
+      ["yaml", "application/yaml", "Data", "config files", "Non-standard but widely used label."],
+      ["yml", "application/yaml", "Data", "config files", "Same as .yaml."],
+      ["pdf", "application/pdf", "Document", "reports, invoices", "Browsers often preview inline."],
+      ["zip", "application/zip", "Archive", "download bundles", "Binary; do not add charset."],
+      ["gz", "application/gzip", "Archive", "compressed logs, tarballs", "Content-Encoding is separate from Content-Type."],
+      ["tar", "application/x-tar", "Archive", "archives, containers", "Legacy but common."],
+      ["docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Document", "Word files", "Office Open XML."],
+      ["xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Document", "Excel files", "Office Open XML."],
+      ["pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "Document", "PowerPoint files", "Office Open XML."],
+      ["png", "image/png", "Image", "lossless images", "Binary image."],
+      ["jpg", "image/jpeg", "Image", "photos", "Same MIME for .jpeg too."],
+      ["jpeg", "image/jpeg", "Image", "photos", "Same as .jpg."],
+      ["gif", "image/gif", "Image", "animated images", "Can animate inline."],
+      ["webp", "image/webp", "Image", "modern web images", "Good for web delivery."],
+      ["svg", "image/svg+xml", "Image", "icons, vector art", "XML-based and potentially active."],
+      ["ico", "image/x-icon", "Image", "favicons", "Common favicon type."],
+      ["mp3", "audio/mpeg", "Audio", "music, voice files", "Streaming audio."],
+      ["wav", "audio/wav", "Audio", "raw / PCM audio", "Large but broadly compatible."],
+      ["ogg", "audio/ogg", "Audio", "audio containers", "Can carry Vorbis/Opus."],
+      ["mp4", "video/mp4", "Video", "video playback", "Inline playback common."],
+      ["webm", "video/webm", "Video", "web video", "Often used for browser-first media."],
+      ["mov", "video/quicktime", "Video", "Apple-origin video files", "Large uploads common."],
+      ["woff", "font/woff", "Font", "web fonts", "Web font delivery."],
+      ["woff2", "font/woff2", "Font", "compressed web fonts", "Best modern web font format."],
+      ["ttf", "font/ttf", "Font", "TrueType fonts", "Larger than WOFF2."],
+      ["otf", "font/otf", "Font", "OpenType fonts", "Often used in design pipelines."],
+      ["wasm", "application/wasm", "Web", "WebAssembly modules", "Needed for browser WASM loading."],
+      ["md", "text/markdown", "Text", "docs, markdown exports", "Useful for downloads / previews."],
+      ["ics", "text/calendar", "Calendar", "calendar invites", "UTF-8 often appropriate."],
+      ["avif", "image/avif", "Image", "high-efficiency images", "Modern image format."],
+      ["heic", "image/heic", "Image", "Apple device photos", "Browser support varies."],
+      ["apk", "application/vnd.android.package-archive", "Package", "Android packages", "Binary install package."],
+      ["dmg", "application/x-apple-diskimage", "Package", "macOS installers", "Download-only is typical."],
+      ["exe", "application/vnd.microsoft.portable-executable", "Package", "Windows executables", "Always download-only."],
+      ["bin", "application/octet-stream", "Binary", "generic binary", "Safe fallback when unsure."],
+      ["form", "multipart/form-data", "Multipart", "browser file uploads", "Requires boundary parameter."],
+    ];
+
+    const PRESETS = [
+      { label: "JSON API", ext: "json", mode: "render", charset: "utf-8", filename: "response.json" },
+      { label: "CSV export", ext: "csv", mode: "download", charset: "utf-8", filename: "export.csv" },
+      { label: "SVG inline asset", ext: "svg", mode: "render", charset: "utf-8", filename: "logo.svg" },
+      { label: "PDF download", ext: "pdf", mode: "download", charset: "", filename: "invoice.pdf" },
+      { label: "S3 image upload", ext: "webp", mode: "upload", charset: "", filename: "hero.webp" },
+      { label: "Multipart form", ext: "form", mode: "multipart", charset: "", boundary: "----WebKitFormBoundary7MA4YWxkTrZu0gW", filename: "upload.bin" }
+    ];
+
+    const el = (id) => document.getElementById(id);
+    const search = el("search");
+    const extension = el("extension");
+    const mimeSelect = el("mimeSelect");
+    const customMime = el("customMime");
+    const dispositionMode = el("dispositionMode");
+    const charset = el("charset");
+    const boundary = el("boundary");
+    const extraParams = el("extraParams");
+    const filename = el("filename");
+    const tableBody = el("tableBody");
+    const presetChips = el("presetChips");
+
+    function populateSelect() {
+      mimeSelect.innerHTML = '<option value="">Auto from extension / search</option>' + MIME_DB.map(([ext, mime, category]) => `<option value="${ext}">${ext} → ${mime} (${category})</option>`).join("");
+    }
+
+    function renderPresets() {
+      presetChips.innerHTML = PRESETS.map((preset, index) => `
+        <button class="secondary" type="button" data-preset="${index}">${preset.label}</button>
+      `).join("");
+      presetChips.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => applyPreset(PRESETS[Number(btn.dataset.preset)]));
+      });
+    }
+
+    function applyPreset(preset) {
+      extension.value = preset.ext || "";
+      mimeSelect.value = preset.ext || "";
+      customMime.value = "";
+      dispositionMode.value = preset.mode || "render";
+      charset.value = preset.charset || "";
+      boundary.value = preset.boundary || "";
+      filename.value = preset.filename || "";
+      extraParams.value = "";
+      search.value = preset.ext || "";
+      update();
+    }
+
+    function filterRows(term) {
+      const q = term.trim().toLowerCase();
+      return MIME_DB.filter(([ext, mime, category, use, notes]) => !q || [ext, mime, category, use, notes].join(" ").toLowerCase().includes(q));
+    }
+
+    function renderTable() {
+      const rows = filterRows(search.value);
+      tableBody.innerHTML = rows.map(([ext, mime, category, use, notes]) => `
+        <tr>
+          <td><code>.${ext}</code></td>
+          <td><code>${mime}</code></td>
+          <td>${category}</td>
+          <td>${use}</td>
+          <td class="muted">${notes}</td>
+        </tr>
+      `).join("") || '<tr><td colspan="5" class="muted">No matches. Try a broader keyword like image, json, archive, or font.</td></tr>';
+    }
+
+    function findByExt(ext) {
+      return MIME_DB.find((row) => row[0] === ext.toLowerCase());
+    }
+
+    function inferExt() {
+      const file = filename.value.trim();
+      if (file.includes(".")) return file.split(".").pop().toLowerCase();
+      if (mimeSelect.value) return mimeSelect.value;
+      return extension.value.trim().replace(/^\./, "").toLowerCase();
+    }
+
+    function selectedRecord() {
+      const picked = mimeSelect.value || extension.value.trim().replace(/^\./, "").toLowerCase() || inferExt();
+      return findByExt(picked);
+    }
+
+    function buildMimeValue() {
+      const record = selectedRecord();
+      const ext = inferExt();
+      const base = customMime.value.trim() || (record ? record[1] : "application/octet-stream");
+      const params = [];
+      const textual = /^(text\/|application\/(json|javascript|xml|ld\+json|yaml)|image\/svg\+xml)/i.test(base);
+      if (charset.value && textual) params.push(`charset=${charset.value}`);
+      if (dispositionMode.value === "multipart") {
+        params.push(`boundary=${boundary.value.trim() || "----boundary"}`);
+      }
+      if (extraParams.value.trim()) {
+        extraParams.value.split(";").map(part => part.trim()).filter(Boolean).forEach(part => params.push(part));
+      }
+      return {
+        ext,
+        record,
+        base,
+        full: params.length ? `${base}; ${params.join("; ")}` : base,
+        textual
+      };
+    }
+
+    function behaviorSummary(base, mode) {
+      if (/^image\//.test(base)) return mode === "download" ? "Will usually download if paired with attachment disposition." : "Browser will usually preview inline if directly navigated to or embedded.";
+      if (/^text\//.test(base)) return "Typically renders as text in browsers. Charset affects decoding and copy/paste correctness.";
+      if (/application\/json/.test(base)) return "Most browsers show raw JSON or download depending on route behavior; APIs and tooling parse it directly.";
+      if (/application\/pdf/.test(base)) return "Modern browsers often preview PDFs inline unless the response forces download.";
+      if (/multipart\/form-data/.test(base)) return "Used on request bodies, not normal file responses. Boundary is required.";
+      if (/font\//.test(base)) return "Loaded by CSS @font-face; wrong MIME may cause font load failures.";
+      if (/video\//.test(base) || /^audio\//.test(base)) return "Media elements can stream or preview inline when supported.";
+      if (/application\/octet-stream/.test(base)) return "Generic binary fallback. Safe when unsure, but loses semantic hints and preview behavior.";
+      return "Client behavior depends on app logic, Content-Disposition, and browser support.";
+    }
+
+    function validationNotes({ base, textual, record }) {
+      const notes = [];
+      if (!record && !customMime.value.trim()) notes.push("Unknown extension: falling back to application/octet-stream.");
+      if (/^text\//.test(base) || textual) notes.push("Textual type detected: adding charset is usually helpful.");
+      if (/^image\/svg\+xml$/.test(base)) notes.push("SVG can contain active content. Sanitize or serve as download if untrusted.");
+      if (/application\/javascript|text\/css/.test(base)) notes.push("Pair with X-Content-Type-Options: nosniff for safer browser behavior.");
+      if (/multipart\/form-data/.test(base) && !boundary.value.trim()) notes.push("Multipart bodies need a boundary parameter; one was generated for preview.");
+      if (/application\/yaml/.test(base)) notes.push("YAML MIME labels are common in practice but less standardized than JSON or XML.");
+      if (!notes.length) notes.push("Looks reasonable. Confirm the type with file inspection on the server for untrusted uploads.");
+      return notes.join("\n• ").replace(/^/, "• ");
+    }
+
+    function buildSnippets(info) {
+      const safeName = (filename.value.trim() || `file.${info.ext || "bin"}`).replace(/'/g, "\\'");
+      el("expressOut").textContent = `res.setHeader('Content-Type', '${info.full}');\nres.setHeader('X-Content-Type-Options', 'nosniff');\nres.sendFile('${safeName}', { root: process.cwd() });`;
+      el("nginxOut").textContent = `location /downloads/${safeName} {\n  types { }\n  default_type ${info.base};\n  add_header Content-Type '${info.full}' always;\n  add_header X-Content-Type-Options 'nosniff' always;\n}`;
+      el("pythonOut").textContent = `return send_file(\n    '${safeName}',\n    mimetype='${info.full}',\n    as_attachment=${dispositionMode.value === "download" ? "True" : "False"}\n)`;
+      el("s3Out").textContent = `aws s3 cp ${safeName} s3://your-bucket/${safeName} \\
+  --content-type '${info.full}'`;
+    }
+
+    function update() {
+      renderTable();
+      if (!extension.value.trim() && search.value.trim()) {
+        const exact = findByExt(search.value.trim().replace(/^\./, "").toLowerCase());
+        if (exact) extension.value = exact[0];
+      }
+      const info = buildMimeValue();
+      el("headerOut").textContent = `Content-Type: ${info.full}`;
+      el("mimeOut").textContent = info.full;
+      el("behaviorOut").textContent = behaviorSummary(info.base, dispositionMode.value);
+      el("notesOut").textContent = validationNotes(info);
+      buildSnippets(info);
+    }
+
+    async function copyText(text, button) {
+      const original = button.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = 'Copied';
+        setTimeout(() => button.textContent = original, 1200);
+      } catch {
+        button.textContent = 'Copy failed';
+        setTimeout(() => button.textContent = original, 1200);
+      }
+    }
+
+    [search, extension, mimeSelect, customMime, dispositionMode, charset, boundary, extraParams, filename].forEach((node) => {
+      node.addEventListener("input", update);
+      node.addEventListener("change", update);
+    });
+
+    el("copyHeaderBtn").addEventListener("click", (event) => copyText(el("headerOut").textContent, event.currentTarget));
+    el("copyMimeBtn").addEventListener("click", (event) => copyText(el("mimeOut").textContent, event.currentTarget));
+    el("resetBtn").addEventListener("click", () => {
+      search.value = "json";
+      extension.value = "json";
+      mimeSelect.value = "json";
+      customMime.value = "";
+      dispositionMode.value = "render";
+      charset.value = "utf-8";
+      boundary.value = "";
+      extraParams.value = "";
+      filename.value = "response.json";
+      update();
+    });
+
+    populateSelect();
+    renderPresets();
+    search.value = "json";
+    extension.value = "json";
+    mimeSelect.value = "json";
+    filename.value = "response.json";
+    update();
+  </script>
+</body>
+</html>
