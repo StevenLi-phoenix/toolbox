@@ -307,9 +307,10 @@
 | 277 | Code Review Reply Generator | toolbox/reviewreply.html | ✅ stevenli-phoenix.github.io/toolbox/reviewreply.html | ❌ |
 
 | 278 | Docker Compose Builder | toolbox/dockercompose.html | ✅ stevenli-phoenix.github.io/toolbox/dockercompose.html | ❌ |
+| 279 | Acceptance Criteria Builder | toolbox/acceptancecriteria.html | ✅ stevenli-phoenix.github.io/toolbox/acceptancecriteria.html | ❌ |
 
 ## Queue
-279. Next tool TBD
+280. Next tool TBD
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
