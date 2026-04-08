@@ -1,5 +1,4 @@
 # Money Projects Tracker
-
 ## Completed
 | # | Project | Dir | Deployed | Blog Post |
 |---|---------|-----|----------|-----------|
@@ -15,232 +14,123 @@
 | 9 | CSS Gradient Generator | toolbox/gradient.html | ✅ stevenli-phoenix.github.io/toolbox/gradient.html | ❌ |
 | 10 | Lorem Ipsum Generator | toolbox/lorem.html | ✅ stevenli-phoenix.github.io/toolbox/lorem.html | ❌ |
 | 11 | Unix Timestamp Converter | toolbox/timestamp.html | ✅ stevenli-phoenix.github.io/toolbox/timestamp.html | ❌ |
-
 | 12 | Image to Base64 | toolbox/img2base64.html | ✅ stevenli-phoenix.github.io/toolbox/img2base64.html | ❌ |
-
 | 13 | Text Diff | toolbox/diff.html | ✅ stevenli-phoenix.github.io/toolbox/diff.html | ❌ |
-
 | 14 | CSS Box Shadow | toolbox/shadow.html | ✅ stevenli-phoenix.github.io/toolbox/shadow.html | ❌ |
-
 | 15 | Hash Generator | toolbox/hash.html | ✅ stevenli-phoenix.github.io/toolbox/hash.html | ❌ |
-
 | 16 | URL Encoder/Decoder | toolbox/urlencode.html | ✅ stevenli-phoenix.github.io/toolbox/urlencode.html | ❌ |
-
 | 17 | Markdown Preview | toolbox/markdown.html | ✅ stevenli-phoenix.github.io/toolbox/markdown.html | ❌ |
-
 | 18 | Meta Tag Generator | toolbox/metatags.html | ✅ stevenli-phoenix.github.io/toolbox/metatags.html | ❌ |
-
 | 19 | Favicon Generator | toolbox/favicon.html | ✅ stevenli-phoenix.github.io/toolbox/favicon.html | ❌ |
-
 | 20 | CSS Flexbox Playground | toolbox/flexbox.html | ✅ stevenli-phoenix.github.io/toolbox/flexbox.html | ❌ |
-
 | 21 | CSS Grid Generator | toolbox/grid.html | ✅ stevenli-phoenix.github.io/toolbox/grid.html | ❌ |
-
 | 22 | Password Generator | toolbox/password.html | ✅ stevenli-phoenix.github.io/toolbox/password.html | ❌ |
 | 23 | Text Case Converter | toolbox/caseconvert.html | ✅ stevenli-phoenix.github.io/toolbox/caseconvert.html | ❌ |
 | 24 | JWT Decoder | toolbox/jwt.html | ✅ stevenli-phoenix.github.io/toolbox/jwt.html | ❌ |
 | 25 | Aspect Ratio Calculator | toolbox/aspect.html | ✅ stevenli-phoenix.github.io/toolbox/aspect.html | ❌ |
-
 | 26 | Pomodoro Timer | toolbox/pomodoro.html | ✅ stevenli-phoenix.github.io/toolbox/pomodoro.html | ❌ |
 | 27 | Unit Converter | toolbox/unitconvert.html | ✅ stevenli-phoenix.github.io/toolbox/unitconvert.html | ❌ |
 | 28 | JSON ⇄ CSV | toolbox/jsontocsv.html | ✅ stevenli-phoenix.github.io/toolbox/jsontocsv.html | ❌ |
 | 29 | Chmod Calculator | toolbox/chmod.html | ✅ stevenli-phoenix.github.io/toolbox/chmod.html | ❌ |
-
 | 30 | Cron Builder | toolbox/cron.html | ✅ stevenli-phoenix.github.io/toolbox/cron.html | ❌ |
 | 31 | Placeholder Image | toolbox/placeholder.html | ✅ stevenli-phoenix.github.io/toolbox/placeholder.html | ❌ |
 | 32 | HTML Entity Encoder | toolbox/htmlentity.html | ✅ stevenli-phoenix.github.io/toolbox/htmlentity.html | ❌ |
 | 33 | CSS/JS Minifier | toolbox/cssmini.html | ✅ stevenli-phoenix.github.io/toolbox/cssmini.html | ❌ |
-
 | 34 | SVG Path Editor | toolbox/svg.html | ✅ stevenli-phoenix.github.io/toolbox/svg.html | ❌ |
-
 | 35 | IP Address Lookup | toolbox/iplookup.html | ✅ stevenli-phoenix.github.io/toolbox/iplookup.html | ❌ |
-
 | 36 | Speech to Text | toolbox/speech2text.html | ✅ stevenli-phoenix.github.io/toolbox/speech2text.html | ❌ |
-
 | 37 | Image Compressor | toolbox/imgcompress.html | ✅ stevenli-phoenix.github.io/toolbox/imgcompress.html | ❌ |
-
 | 38 | Color Picker & Converter | toolbox/colorpicker.html | ✅ stevenli-phoenix.github.io/toolbox/colorpicker.html | ❌ |
-
 | 39 | PDF Merge & Split | toolbox/pdftool.html | ✅ stevenli-phoenix.github.io/toolbox/pdftool.html | ❌ |
-
 | 40 | Screen Recorder | toolbox/screenrecord.html | ✅ stevenli-phoenix.github.io/toolbox/screenrecord.html | ❌ |
-
 | 41 | Online Whiteboard | toolbox/whiteboard.html | ✅ stevenli-phoenix.github.io/toolbox/whiteboard.html | ❌ |
-
 | 42 | Typing Speed Test | toolbox/typingtest.html | ✅ stevenli-phoenix.github.io/toolbox/typingtest.html | ❌ |
-
 | 43 | Ambient Noise Generator | toolbox/noisegen.html | ✅ stevenli-phoenix.github.io/toolbox/noisegen.html | ❌ |
-
 | 44 | Code Screenshot Generator | toolbox/codesnap.html | ✅ stevenli-phoenix.github.io/toolbox/codesnap.html | ❌ |
-
 | 45 | Emoji Picker & Unicode Lookup | toolbox/emoji.html | ✅ stevenli-phoenix.github.io/toolbox/emoji.html | ❌ |
-
 | 46 | Markdown Table Generator | toolbox/mdtable.html | ✅ stevenli-phoenix.github.io/toolbox/mdtable.html | ❌ |
-
 | 47 | CSS Animation Generator | toolbox/animate.html | ✅ stevenli-phoenix.github.io/toolbox/animate.html | ❌ |
-
 | 48 | YAML ⇄ JSON Converter | toolbox/yaml.html | ✅ stevenli-phoenix.github.io/toolbox/yaml.html | ❌ |
-
 | 49 | SQL Formatter | toolbox/sql.html | ✅ stevenli-phoenix.github.io/toolbox/sql.html | ❌ |
-
 | 50 | Number Base Converter | toolbox/baseconvert.html | ✅ stevenli-phoenix.github.io/toolbox/baseconvert.html | ❌ |
-
 | 51 | CSS Filter Playground | toolbox/cssfilter.html | ✅ stevenli-phoenix.github.io/toolbox/cssfilter.html | ❌ |
-
 | 52 | Keyboard Event Tester | toolbox/keyevent.html | ✅ stevenli-phoenix.github.io/toolbox/keyevent.html | ❌ |
-
 | 53 | Pixel Art Editor | toolbox/pixelart.html | ✅ stevenli-phoenix.github.io/toolbox/pixelart.html | ❌ |
-
 | 54 | JSON Schema Generator | toolbox/jsonschema.html | ✅ stevenli-phoenix.github.io/toolbox/jsonschema.html | ❌ |
-
 | 55 | CSS Clip-Path Generator | toolbox/clippath.html | ✅ stevenli-phoenix.github.io/toolbox/clippath.html | ❌ |
-
 | 56 | cURL Command Builder | toolbox/curlbuilder.html | ✅ stevenli-phoenix.github.io/toolbox/curlbuilder.html | ❌ |
-
 | 57 | UUID & ID Generator | toolbox/uuid.html | ✅ stevenli-phoenix.github.io/toolbox/uuid.html | ❌ |
-
 | 58 | JSONPath Evaluator | toolbox/jsonpath.html | ✅ stevenli-phoenix.github.io/toolbox/jsonpath.html | ❌ |
-
 | 59 | Fake Data Generator | toolbox/mockdata.html | ✅ stevenli-phoenix.github.io/toolbox/mockdata.html | ❌ |
-
 | 60 | XML Sitemap Generator | toolbox/sitemap.html | ✅ stevenli-phoenix.github.io/toolbox/sitemap.html | ❌ |
-
 | 61 | Subnet Calculator | toolbox/subnet.html | ✅ stevenli-phoenix.github.io/toolbox/subnet.html | ❌ |
-
 | 62 | Git Command Builder | toolbox/gitcmd.html | ✅ stevenli-phoenix.github.io/toolbox/gitcmd.html | ❌ |
-
 | 63 | .gitignore Generator | toolbox/gitignore.html | ✅ stevenli-phoenix.github.io/toolbox/gitignore.html | ❌ |
-
 | 64 | HTML to JSX Converter | toolbox/html2jsx.html | ✅ stevenli-phoenix.github.io/toolbox/html2jsx.html | ❌ |
-
 | 65 | Text Encrypt/Decrypt | toolbox/encrypt.html | ✅ stevenli-phoenix.github.io/toolbox/encrypt.html | ❌ |
-
 | 66 | Dockerfile Generator | toolbox/dockerfile.html | ✅ stevenli-phoenix.github.io/toolbox/dockerfile.html | ❌ |
-
 | 67 | Nginx Config Generator | toolbox/nginx.html | ✅ stevenli-phoenix.github.io/toolbox/nginx.html | ❌ |
-
 | 68 | ASCII Art Generator | toolbox/asciiart.html | ✅ stevenli-phoenix.github.io/toolbox/asciiart.html | ❌ |
-
 | 69 | Mermaid Diagram Editor | toolbox/mermaid.html | ✅ stevenli-phoenix.github.io/toolbox/mermaid.html | ❌ |
-
 | 70 | Bitwise Calculator | toolbox/bitwise.html | ✅ stevenli-phoenix.github.io/toolbox/bitwise.html | ❌ |
-
 | 71 | JSON to TypeScript Interface | toolbox/json2ts.html | ✅ stevenli-phoenix.github.io/toolbox/json2ts.html | ❌ |
-
 | 72 | README Generator | toolbox/readme.html | ✅ stevenli-phoenix.github.io/toolbox/readme.html | ❌ |
-
 | 73 | WCAG Contrast Checker | toolbox/contrast.html | ✅ stevenli-phoenix.github.io/toolbox/contrast.html | ❌ |
-
 | 74 | Image Color Palette Extractor | toolbox/palette-extractor.html | ✅ stevenli-phoenix.github.io/toolbox/palette-extractor.html | ❌ |
-
 | 75 | robots.txt Generator | toolbox/robots.html | ✅ stevenli-phoenix.github.io/toolbox/robots.html | ❌ |
-
 | 76 | CSV Viewer & Editor | toolbox/csvview.html | ✅ stevenli-phoenix.github.io/toolbox/csvview.html | ❌ |
-
 | 77 | CSS Border Radius Generator | toolbox/borderradius.html | ✅ stevenli-phoenix.github.io/toolbox/borderradius.html | ❌ |
-
 | 78 | Live HTML/CSS/JS Editor | toolbox/htmlpreview.html | ✅ stevenli-phoenix.github.io/toolbox/htmlpreview.html | ❌ |
-
 | 79 | Kanban Board | toolbox/kanban.html | ✅ stevenli-phoenix.github.io/toolbox/kanban.html | ❌ |
-
 | 80 | CSS Text Shadow Generator | toolbox/textshadow.html | ✅ stevenli-phoenix.github.io/toolbox/textshadow.html | ❌ |
-
 | 81 | CSS Transform Playground | toolbox/transform.html | ✅ stevenli-phoenix.github.io/toolbox/transform.html | ❌ |
-
 | 82 | Image Watermark | toolbox/watermark.html | ✅ stevenli-phoenix.github.io/toolbox/watermark.html | ❌ |
-
 | 83 | Font Pair Preview | toolbox/fontpair.html | ✅ stevenli-phoenix.github.io/toolbox/fontpair.html | ❌ |
-
 | 84 | CSS Specificity Calculator | toolbox/specificity.html | ✅ stevenli-phoenix.github.io/toolbox/specificity.html | ❌ |
-
 | 85 | CSS Glassmorphism Generator | toolbox/glassmorphism.html | ✅ stevenli-phoenix.github.io/toolbox/glassmorphism.html | ❌ |
-
 | 86 | OG Image Generator | toolbox/ogimage.html | ✅ stevenli-phoenix.github.io/toolbox/ogimage.html | ❌ |
-
 | 87 | Math Expression Evaluator | toolbox/matheval.html | ✅ stevenli-phoenix.github.io/toolbox/matheval.html | ❌ |
-
 | 88 | CSS Easing Generator | toolbox/easing.html | ✅ stevenli-phoenix.github.io/toolbox/easing.html | ❌ |
-
 | 89 | Time Zone Converter | toolbox/timezone.html | ✅ stevenli-phoenix.github.io/toolbox/timezone.html | ❌ |
-
 | 90 | String Escape/Unescape | toolbox/strescape.html | ✅ stevenli-phoenix.github.io/toolbox/strescape.html | ❌ |
-
 | 91 | Chart Builder | toolbox/chartbuilder.html | ✅ stevenli-phoenix.github.io/toolbox/chartbuilder.html | ❌ |
-
 | 92 | Image Crop & Resize | toolbox/imgcrop.html | ✅ stevenli-phoenix.github.io/toolbox/imgcrop.html | ❌ |
-
 | 93 | CSS Neumorphism Generator | toolbox/neumorphism.html | ✅ stevenli-phoenix.github.io/toolbox/neumorphism.html | ❌ |
-
 | 94 | Markdown Slide Deck | toolbox/slides.html | ✅ stevenli-phoenix.github.io/toolbox/slides.html | ❌ |
-
 | 95 | DNS Lookup | toolbox/dnslookup.html | ✅ stevenli-phoenix.github.io/toolbox/dnslookup.html | ❌ |
-
 | 96 | HTTP Status Code Reference | toolbox/httpstatus.html | ✅ stevenli-phoenix.github.io/toolbox/httpstatus.html | ❌ |
-
 | 97 | Barcode Generator | toolbox/barcode.html | ✅ stevenli-phoenix.github.io/toolbox/barcode.html | ❌ |
-
 | 98 | TOML ⇄ JSON Converter | toolbox/toml.html | ✅ stevenli-phoenix.github.io/toolbox/toml.html | ❌ |
-
 | 99 | Hex File Viewer | toolbox/hexview.html | ✅ stevenli-phoenix.github.io/toolbox/hexview.html | ❌ |
-
 | 100 | App Icon Generator | toolbox/appicon.html | ✅ stevenli-phoenix.github.io/toolbox/appicon.html | ❌ |
-
 | 101 | Color Blindness Simulator | toolbox/colorblind.html | ✅ stevenli-phoenix.github.io/toolbox/colorblind.html | ❌ |
-
 | 102 | Text to Speech | toolbox/tts.html | ✅ stevenli-phoenix.github.io/toolbox/tts.html | ❌ |
-
 | 103 | Image Format Converter | toolbox/imgconvert.html | ✅ stevenli-phoenix.github.io/toolbox/imgconvert.html | ❌ |
-
 | 104 | Habit Tracker | toolbox/habits.html | ✅ stevenli-phoenix.github.io/toolbox/habits.html | ❌ |
-
 | 105 | Code Snippet Manager | toolbox/snippets.html | ✅ stevenli-phoenix.github.io/toolbox/snippets.html | ❌ |
-
 | 106 | Glob Pattern Tester | toolbox/glob.html | ✅ stevenli-phoenix.github.io/toolbox/glob.html | ❌ |
-
 | 107 | JSON to Go Struct | toolbox/json2go.html | ✅ stevenli-phoenix.github.io/toolbox/json2go.html | ❌ |
-
 | 108 | JSON Diff Viewer | toolbox/jsondiff.html | ✅ stevenli-phoenix.github.io/toolbox/jsondiff.html | ❌ |
-
 | 109 | EXIF & Image Metadata Viewer | toolbox/exifviewer.html | ✅ stevenli-phoenix.github.io/toolbox/exifviewer.html | ❌ |
-
 | 110 | Privacy Policy Generator | toolbox/privacypolicy.html | ✅ stevenli-phoenix.github.io/toolbox/privacypolicy.html | ❌ |
-
 | 111 | Invoice Generator | toolbox/invoice.html | ✅ stevenli-phoenix.github.io/toolbox/invoice.html | ❌ |
-
 | 112 | Image to ASCII Art | toolbox/img2ascii.html | ✅ stevenli-phoenix.github.io/toolbox/img2ascii.html | ❌ |
-
 | 113 | Morse Code Translator | toolbox/morse.html | ✅ stevenli-phoenix.github.io/toolbox/morse.html | ❌ |
-
 | 114 | CSV to SQL Converter | toolbox/csv2sql.html | ✅ stevenli-phoenix.github.io/toolbox/csv2sql.html | ❌ |
-
 | 115 | SVG Pattern Generator | toolbox/svgpattern.html | ✅ stevenli-phoenix.github.io/toolbox/svgpattern.html | ❌ |
-
 | 116 | Log Analyzer | toolbox/logviewer.html | ✅ stevenli-phoenix.github.io/toolbox/logviewer.html | ❌ |
-
 | 117 | Bookmarklet Builder | toolbox/bookmarklet.html | ✅ stevenli-phoenix.github.io/toolbox/bookmarklet.html | ❌ |
-
 | 118 | Image Dithering | toolbox/dither.html | ✅ stevenli-phoenix.github.io/toolbox/dither.html | ❌ |
-
 | 119 | Markdown Badge Generator | toolbox/badges.html | ✅ stevenli-phoenix.github.io/toolbox/badges.html | ❌ |
-
 | 120 | JSON ⇄ XML Converter | toolbox/json2xml.html | ✅ stevenli-phoenix.github.io/toolbox/json2xml.html | ❌ |
-
 | 121 | SVG Wave Generator | toolbox/wavegen.html | ✅ stevenli-phoenix.github.io/toolbox/wavegen.html | ❌ |
-
 | 122 | Audio Waveform Visualizer | toolbox/waveform.html | ✅ stevenli-phoenix.github.io/toolbox/waveform.html | ❌ |
-
 | 123 | HTTP Header Analyzer | toolbox/httpheaders.html | ✅ stevenli-phoenix.github.io/toolbox/httpheaders.html | ❌ |
-
 | 124 | Text Frequency Analyzer | toolbox/textfreq.html | ✅ stevenli-phoenix.github.io/toolbox/textfreq.html | ❌ |
-
 | 125 | Semver Version Calculator | toolbox/semver.html | ✅ stevenli-phoenix.github.io/toolbox/semver.html | ❌ |
-
 | 126 | .env File Editor | toolbox/envfile.html | ✅ stevenli-phoenix.github.io/toolbox/envfile.html | ❌ |
-
 | 127 | File Tree Generator | toolbox/filetree.html | ✅ stevenli-phoenix.github.io/toolbox/filetree.html | ❌ |
-
 | 128 | Terminal Color Theme Preview | toolbox/termcolors.html | ✅ stevenli-phoenix.github.io/toolbox/termcolors.html | ❌ |
-
 | 129 | Commit Message Generator | toolbox/commitmsg.html | ✅ stevenli-phoenix.github.io/toolbox/commitmsg.html | ❌ |
 | 130 | Release Notes Generator | toolbox/releasenotes.html | ✅ stevenli-phoenix.github.io/toolbox/releasenotes.html | ❌ |
 | 131 | cURL to fetch() Converter | toolbox/curl2fetch.html | ✅ stevenli-phoenix.github.io/toolbox/curl2fetch.html | ❌ |
@@ -307,7 +197,6 @@
 | 192 | API Error Decoder | toolbox/apierror.html | ✅ stevenli-phoenix.github.io/toolbox/apierror.html | ❌ |
 | 193 | Priority Matrix | toolbox/prioritymatrix.html | ✅ stevenli-phoenix.github.io/toolbox/prioritymatrix.html | ❌ |
 | 194 | Sprint Retro Generator | toolbox/sprintretro.html | ✅ stevenli-phoenix.github.io/toolbox/sprintretro.html | ❌ |
-
 | 195 | Launch Checklist Builder | toolbox/launchchecklist.html | ✅ stevenli-phoenix.github.io/toolbox/launchchecklist.html | ❌ |
 | 196 | Sprint Capacity Planner | toolbox/sprintcapacity.html | ✅ stevenli-phoenix.github.io/toolbox/sprintcapacity.html | ❌ |
 | 197 | Merge Conflict Compass | toolbox/mergeconflict.html | ✅ stevenli-phoenix.github.io/toolbox/mergeconflict.html | ❌ |
@@ -316,9 +205,7 @@
 | 200 | PR Review Time Estimator | toolbox/prreviewtime.html | ✅ stevenli-phoenix.github.io/toolbox/prreviewtime.html | ❌ |
 | 201 | Branch Sanity Checker | toolbox/branchsanity.html | ✅ stevenli-phoenix.github.io/toolbox/branchsanity.html | ❌ |
 | 202 | Git Stash Planner | toolbox/stashplanner.html | ✅ stevenli-phoenix.github.io/toolbox/stashplanner.html | ❌ |
-
 | 203 | PR Impact Estimator | toolbox/primpact.html | ✅ stevenli-phoenix.github.io/toolbox/primpact.html | ❌ |
-
 | 204 | Focus Debt Calculator | toolbox/focusdebt.html | ✅ stevenli-phoenix.github.io/toolbox/focusdebt.html | ❌ |
 | 205 | Context Switch Cost Calculator | toolbox/contextswitch.html | ✅ stevenli-phoenix.github.io/toolbox/contextswitch.html | ❌ |
 | 206 | Git Rebase Coach | toolbox/rebasecoach.html | ✅ stevenli-phoenix.github.io/toolbox/rebasecoach.html | ❌ |
@@ -329,7 +216,6 @@
 | 211 | Merge Queue Planner | toolbox/mergequeue.html | ✅ stevenli-phoenix.github.io/toolbox/mergequeue.html | ❌ |
 | 212 | Incident Timeline Builder | toolbox/incidenttimeline.html | ✅ stevenli-phoenix.github.io/toolbox/incidenttimeline.html | ❌ |
 | 213 | Meeting Notes to Action Plan | toolbox/meetingnotes.html | ✅ stevenli-phoenix.github.io/toolbox/meetingnotes.html | ❌ |
-
 ## Completed
 | # | Project | Dir | Deployed | Blog Post |
 |---|---------|-----|----------|-----------|
@@ -342,7 +228,6 @@
 | 220 | Release Window Planner | toolbox/releasewindow.html | ✅ stevenli-phoenix.github.io/toolbox/releasewindow.html | ❌ |
 | 221 | Shortcut Cheat Sheet Builder | toolbox/shortcutcheatsheet.html | ✅ stevenli-phoenix.github.io/toolbox/shortcutcheatsheet.html | ❌ |
 | 222 | Deep Work Sprint Planner | toolbox/deepwork.html | ✅ stevenli-phoenix.github.io/toolbox/deepwork.html | ❌ |
-
 | 223 | Env Diff Inspector | toolbox/envdiff.html | ✅ stevenli-phoenix.github.io/toolbox/envdiff.html | ❌ |
 | 224 | Interruption Shield | toolbox/interruptionshield.html | ✅ stevenli-phoenix.github.io/toolbox/interruptionshield.html | ❌ |
 | 225 | Task Batch Planner | toolbox/taskbatch.html | ✅ stevenli-phoenix.github.io/toolbox/taskbatch.html | ❌ |
@@ -355,7 +240,6 @@
 | 232 | Meeting Cost Calculator | toolbox/meetingcost.html | ✅ stevenli-phoenix.github.io/toolbox/meetingcost.html | ❌ |
 | 233 | Context Pack Builder | toolbox/contextpack.html | ✅ stevenli-phoenix.github.io/toolbox/contextpack.html | ❌ |
 | 234 | Dev Effort Estimator | toolbox/estimator.html | ✅ stevenli-phoenix.github.io/toolbox/estimator.html | ❌ |
-
 | 235 | Decision Log Builder | toolbox/decisionlog.html | ✅ stevenli-phoenix.github.io/toolbox/decisionlog.html | ❌ |
 | 236 | PR Size Sizer | toolbox/prsizesizer.html | ✅ stevenli-phoenix.github.io/toolbox/prsizesizer.html | ❌ |
 | 237 | PR Reply Generator | toolbox/prreply.html | ✅ stevenli-phoenix.github.io/toolbox/prreply.html | ❌ |
@@ -367,7 +251,6 @@
 | 243 | Scope Cutter | toolbox/scopecutter.html | ✅ stevenli-phoenix.github.io/toolbox/scopecutter.html | ❌ |
 | 244 | Daily Shutdown Planner | toolbox/dailyshutdown.html | ✅ stevenli-phoenix.github.io/toolbox/dailyshutdown.html | ❌ |
 | 245 | Review Queue Planner | toolbox/reviewqueue.html | ✅ stevenli-phoenix.github.io/toolbox/reviewqueue.html | ❌ |
-
 ## Completed
 | # | Project | Dir | Deployed | Blog Post |
 |---|---------|-----|----------|-----------|
@@ -375,7 +258,6 @@
 | 247 | Bug Bash Planner | toolbox/bugbash.html | ✅ stevenli-phoenix.github.io/toolbox/bugbash.html | ❌ |
 | 248 | Code Review Comment Polisher | toolbox/commentpolisher.html | ✅ stevenli-phoenix.github.io/toolbox/commentpolisher.html | ❌ |
 | 249 | Workspace Bootstrap Builder | toolbox/workspacebootstrap.html | ✅ stevenli-phoenix.github.io/toolbox/workspacebootstrap.html | ❌ |
-
 ## Completed
 | # | Project | Dir | Deployed | Blog Post |
 |---|---------|-----|----------|-----------|
@@ -386,31 +268,24 @@
 | 254 | Stack Triage | toolbox/stacktriage.html | ✅ stevenli-phoenix.github.io/toolbox/stacktriage.html | ❌ |
 | 255 | Test Plan Builder | toolbox/testplan.html | ✅ stevenli-phoenix.github.io/toolbox/testplan.html | ❌ |
 | 256 | PR Review Prep Assistant | toolbox/prreviewprep.html | ✅ stevenli-phoenix.github.io/toolbox/prreviewprep.html | ❌ |
-
 ## Completed
 | # | Project | Dir | Deployed | Blog Post |
 |---|---------|-----|----------|-----------|
 | 257 | Dependency Drift Radar | toolbox/dependencydrift.html | ✅ stevenli-phoenix.github.io/toolbox/dependencydrift.html | ❌ |
-
 | 258 | Context Switch Recovery Planner | toolbox/contextswitch.html | ✅ stevenli-phoenix.github.io/toolbox/contextswitch.html | ❌ |
 | 259 | Git Hook Simulator | toolbox/githooksim.html | ✅ stevenli-phoenix.github.io/toolbox/githooksim.html | ❌ |
 | 260 | API Spec Delta Reviewer | toolbox/apispecdiff.html | ✅ stevenli-phoenix.github.io/toolbox/apispecdiff.html | ❌ |
-
 | 261 | Commit Footprint Analyzer | toolbox/commitfootprint.html | ✅ stevenli-phoenix.github.io/toolbox/commitfootprint.html | ❌ |
-
 | 262 | Release Readiness Scorecard | toolbox/releasereadiness.html | ✅ stevenli-phoenix.github.io/toolbox/releasereadiness.html | ❌ |
-
 ## Completed
 | # | Project | Dir | Deployed | Blog Post |
 |---|---------|-----|----------|-----------|
 | 263 | Release Meeting Agenda Builder | toolbox/releasemeeting.html | ✅ stevenli-phoenix.github.io/toolbox/releasemeeting.html | ❌ |
 | 264 | Timebox Planner | toolbox/timebox.html | ✅ stevenli-phoenix.github.io/toolbox/timebox.html | ❌ |
-
 ## Completed
 | # | Project | Dir | Deployed | Blog Post |
 |---|---------|-----|----------|-----------|
 | 265 | Debug Hypothesis Mapper | toolbox/debughypothesis.html | ✅ stevenli-phoenix.github.io/toolbox/debughypothesis.html | ❌ |
-
 ## Completed
 | # | Project | Dir | Deployed | Blog Post |
 |---|---------|-----|----------|-----------|
@@ -421,12 +296,9 @@
 | 270 | Workday Prioritizer | toolbox/workdayprioritizer.html | ✅ stevenli-phoenix.github.io/toolbox/workdayprioritizer.html | ❌ |
 | 271 | Meeting Load Balancer | toolbox/meetingload.html | ✅ stevenli-phoenix.github.io/toolbox/meetingload.html | ❌ |
 | 272 | Branch Recovery Planner | toolbox/branchrecovery.html | ✅ stevenli-phoenix.github.io/toolbox/branchrecovery.html | ❌ |
-
 | 273 | Stale Branch Auditor | toolbox/stalebranch.html | ✅ stevenli-phoenix.github.io/toolbox/stalebranch.html | ❌ |
-
 ## Queue
 274. Next tool TBD
-
 ## Notes
 - All tools link to: https://buymeacoffee.com/stevenli.phoenix
 - Deploy to: ONE repo only — StevenLi-phoenix/toolbox (GitHub Pages)
