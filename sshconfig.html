@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSH Config Generator - Build ~/.ssh/config Visually</title>
+<meta name="description" content="Free online SSH config generator. Build ~/.ssh/config entries visually with host aliases, proxy jumps, identity files, and more. No data leaves your browser.">
+<meta name="keywords" content="ssh config, ssh config generator, ssh host, proxy jump, identity file, ssh tunnel, port forwarding">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sshconfig.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .hosts { display: flex; flex-direction: column; gap: 1rem; }
+  .host-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; background: var(--surface); }
+  .host-block h3 { margin: 0 0 .75rem; font-size: .9rem; display: flex; justify-content: space-between; align-items: center; }
+  .host-block h3 span { color: var(--muted); font-weight: 400; font-size: .8rem; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: .5rem; }
+  .field-row label { font-size: .8rem; font-weight: 600; margin-bottom: 2px; display: block; }
+  .field-row input, .field-row select { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .85rem; background: var(--bg); color: var(--text); }
+  .field-group { display: flex; flex-direction: column; }
+  .advanced-toggle { font-size: .8rem; color: var(--accent); cursor: pointer; background: none; border: none; padding: 4px 0; font-family: inherit; }
+  .advanced-toggle:hover { text-decoration: underline; }
+  .advanced-fields { display: none; }
+  .advanced-fields.show { display: block; }
+  .forwarding-list { display: flex; flex-direction: column; gap: .25rem; margin-top: .25rem; }
+  .forwarding-item { display: flex; gap: .25rem; align-items: center; }
+  .forwarding-item input { flex: 1; }
+  .forwarding-item button { padding: 4px 8px; font-size: .75rem; }
+  .output-area { position: relative; }
+  .output-area pre { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; font-family: var(--mono); font-size: .85rem; white-space: pre; overflow-x: auto; min-height: 100px; line-height: 1.6; }
+  .presets { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+  .presets button { padding: 4px 12px; font-size: .8rem; }
+  @media (max-width: 768px) {
+    .field-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>SSH Config Generator</h1>
+<p class="subtitle">Build ~/.ssh/config entries visually with host aliases, proxy jumps, tunnels, and more</p>
+
+<div class="card">
+<h2>🚀 Presets</h2>
+<div class="presets">
+  <button class="btn btn-secondary" onclick="addPreset('basic')">Basic Server</button>
+  <button class="btn btn-secondary" onclick="addPreset('bastion')">Bastion / Jump Host</button>
+  <button class="btn btn-secondary" onclick="addPreset('github')">GitHub</button>
+  <button class="btn btn-secondary" onclick="addPreset('tunnel')">Port Forwarding</button>
+  <button class="btn btn-secondary" onclick="addPreset('wildcard')">Wildcard Host</button>
+</div>
+</div>
+
+<div class="card">
+<h2>🖥️ Host Entries</h2>
+<div class="hosts" id="hosts"></div>
+<button class="btn" onclick="addHost()" style="margin-top:1rem">+ Add Host</button>
+</div>
+
+<div class="card">
+<h2>📋 Generated Config</h2>
+<div class="output-area">
+  <pre id="output">## Add a host entry above to generate config</pre>
+  <button class="btn btn-secondary" onclick="copyOutput()" style="position:absolute;top:12px;right:12px;padding:4px 12px;font-size:.75rem">Copy</button>
+</div>
+</div>
+
+<div class="card">
+<h2>💡 Tips</h2>
+<ul style="font-size:.85rem;color:var(--muted);line-height:1.8;padding-left:1.25rem">
+  <li>Save the output to <code>~/.ssh/config</code> and set permissions: <code>chmod 600 ~/.ssh/config</code></li>
+  <li>Use <code>ProxyJump</code> to connect through a bastion host in one step</li>
+  <li>Wildcards like <code>*.example.com</code> match multiple hosts</li>
+  <li>Use <code>Host *</code> at the end for global defaults</li>
+  <li>Local forwards: <code>-L localPort:remoteHost:remotePort</code></li>
+</ul>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+let hostId = 0;
+const hosts = [];
+
+function addHost(config = {}) {
+  const id = hostId++;
+  const h = {
+    id,
+    alias: config.alias || '',
+    hostname: config.hostname || '',
+    user: config.user || '',
+    port: config.port || '',
+    identityFile: config.identityFile || '',
+    proxyJump: config.proxyJump || '',
+    forwardAgent: config.forwardAgent || false,
+    compression: config.compression || false,
+    serverAliveInterval: config.serverAliveInterval || '',
+    serverAliveCountMax: config.serverAliveCountMax || '',
+    localForwards: config.localForwards || [],
+    remoteForwards: config.remoteForwards || [],
+    dynamicForward: config.dynamicForward || '',
+    strictHostKeyChecking: config.strictHostKeyChecking || '',
+    logLevel: config.logLevel || '',
+    requestTTY: config.requestTTY || '',
+    extra: config.extra || ''
+  };
+  hosts.push(h);
+  renderHosts();
+  generate();
+}
+
+function removeHost(id) {
+  const idx = hosts.findIndex(h => h.id === id);
+  if (idx >= 0) hosts.splice(idx, 1);
+  renderHosts();
+  generate();
+}
+
+function renderHosts() {
+  const container = document.getElementById('hosts');
+  container.innerHTML = hosts.map((h, i) => `
+    <div class="host-block" data-id="${h.id}">
+      <h3>Host #${i + 1} <span>${h.alias || 'unnamed'}</span>
+        <button class="btn btn-secondary" onclick="removeHost(${h.id})" style="padding:2px 8px;font-size:.75rem">Remove</button>
+      </h3>
+      <div class="field-row">
+        <div class="field-group">
+          <label>Host Alias *</label>
+          <input type="text" value="${esc(h.alias)}" placeholder="myserver" oninput="updateField(${h.id},'alias',this.value)">
+        </div>
+        <div class="field-group">
+          <label>HostName (IP / domain)</label>
+          <input type="text" value="${esc(h.hostname)}" placeholder="192.168.1.100" oninput="updateField(${h.id},'hostname',this.value)">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field-group">
+          <label>User</label>
+          <input type="text" value="${esc(h.user)}" placeholder="ubuntu" oninput="updateField(${h.id},'user',this.value)">
+        </div>
+        <div class="field-group">
+          <label>Port</label>
+          <input type="text" value="${esc(h.port)}" placeholder="22" oninput="updateField(${h.id},'port',this.value)">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field-group">
+          <label>IdentityFile</label>
+          <input type="text" value="${esc(h.identityFile)}" placeholder="~/.ssh/id_ed25519" oninput="updateField(${h.id},'identityFile',this.value)">
+        </div>
+        <div class="field-group">
+          <label>ProxyJump</label>
+          <input type="text" value="${esc(h.proxyJump)}" placeholder="bastion" oninput="updateField(${h.id},'proxyJump',this.value)">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field-group">
+          <label style="display:inline-flex;align-items:center;gap:.5rem">
+            <input type="checkbox" ${h.forwardAgent ? 'checked' : ''} onchange="updateField(${h.id},'forwardAgent',this.checked)"> ForwardAgent
+          </label>
+        </div>
+        <div class="field-group">
+          <label style="display:inline-flex;align-items:center;gap:.5rem">
+            <input type="checkbox" ${h.compression ? 'checked' : ''} onchange="updateField(${h.id},'compression',this.checked)"> Compression
+          </label>
+        </div>
+      </div>
+      <button class="advanced-toggle" onclick="toggleAdvanced(${h.id})">▸ Advanced options</button>
+      <div class="advanced-fields" id="adv-${h.id}">
+        <div class="field-row" style="margin-top:.5rem">
+          <div class="field-group">
+            <label>ServerAliveInterval (seconds)</label>
+            <input type="text" value="${esc(h.serverAliveInterval)}" placeholder="60" oninput="updateField(${h.id},'serverAliveInterval',this.value)">
+          </div>
+          <div class="field-group">
+            <label>ServerAliveCountMax</label>
+            <input type="text" value="${esc(h.serverAliveCountMax)}" placeholder="3" oninput="updateField(${h.id},'serverAliveCountMax',this.value)">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>DynamicForward (SOCKS port)</label>
+            <input type="text" value="${esc(h.dynamicForward)}" placeholder="1080" oninput="updateField(${h.id},'dynamicForward',this.value)">
+          </div>
+          <div class="field-group">
+            <label>StrictHostKeyChecking</label>
+            <select onchange="updateField(${h.id},'strictHostKeyChecking',this.value)">
+              <option value="">— default —</option>
+              <option value="yes" ${h.strictHostKeyChecking==='yes'?'selected':''}>yes</option>
+              <option value="no" ${h.strictHostKeyChecking==='no'?'selected':''}>no</option>
+              <option value="accept-new" ${h.strictHostKeyChecking==='accept-new'?'selected':''}>accept-new</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>LogLevel</label>
+            <select onchange="updateField(${h.id},'logLevel',this.value)">
+              <option value="">— default —</option>
+              <option value="QUIET" ${h.logLevel==='QUIET'?'selected':''}>QUIET</option>
+              <option value="ERROR" ${h.logLevel==='ERROR'?'selected':''}>ERROR</option>
+              <option value="INFO" ${h.logLevel==='INFO'?'selected':''}>INFO</option>
+              <option value="VERBOSE" ${h.logLevel==='VERBOSE'?'selected':''}>VERBOSE</option>
+              <option value="DEBUG" ${h.logLevel==='DEBUG'?'selected':''}>DEBUG</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label>RequestTTY</label>
+            <select onchange="updateField(${h.id},'requestTTY',this.value)">
+              <option value="">— default —</option>
+              <option value="yes" ${h.requestTTY==='yes'?'selected':''}>yes</option>
+              <option value="no" ${h.requestTTY==='no'?'selected':''}>no</option>
+              <option value="force" ${h.requestTTY==='force'?'selected':''}>force</option>
+              <option value="auto" ${h.requestTTY==='auto'?'selected':''}>auto</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group" style="margin-bottom:.5rem">
+          <label>LocalForward (localPort:remoteHost:remotePort)</label>
+          <div class="forwarding-list" id="lf-${h.id}">
+            ${h.localForwards.map((f, fi) => `
+              <div class="forwarding-item">
+                <input type="text" value="${esc(f)}" placeholder="8080:localhost:80" oninput="updateForward(${h.id},'localForwards',${fi},this.value)">
+                <button class="btn btn-secondary" onclick="removeForward(${h.id},'localForwards',${fi})">×</button>
+              </div>
+            `).join('')}
+          </div>
+          <button class="btn btn-secondary" onclick="addForward(${h.id},'localForwards')" style="padding:2px 8px;font-size:.75rem;margin-top:.25rem">+ Local Forward</button>
+        </div>
+        <div class="field-group" style="margin-bottom:.5rem">
+          <label>RemoteForward (remotePort:localHost:localPort)</label>
+          <div class="forwarding-list" id="rf-${h.id}">
+            ${h.remoteForwards.map((f, fi) => `
+              <div class="forwarding-item">
+                <input type="text" value="${esc(f)}" placeholder="9090:localhost:3000" oninput="updateForward(${h.id},'remoteForwards',${fi},this.value)">
+                <button class="btn btn-secondary" onclick="removeForward(${h.id},'remoteForwards',${fi})">×</button>
+              </div>
+            `).join('')}
+          </div>
+          <button class="btn btn-secondary" onclick="addForward(${h.id},'remoteForwards')" style="padding:2px 8px;font-size:.75rem;margin-top:.25rem">+ Remote Forward</button>
+        </div>
+        <div class="field-group">
+          <label>Extra directives (one per line)</label>
+          <textarea rows="2" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--mono);font-size:.82rem;background:var(--bg);color:var(--text);resize:vertical" oninput="updateField(${h.id},'extra',this.value)">${esc(h.extra)}</textarea>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function updateField(id, field, value) {
+  const h = hosts.find(h => h.id === id);
+  if (h) { h[field] = value; generate(); }
+}
+
+function toggleAdvanced(id) {
+  const el = document.getElementById('adv-' + id);
+  el.classList.toggle('show');
+  const btn = el.previousElementSibling;
+  btn.textContent = el.classList.contains('show') ? '▾ Advanced options' : '▸ Advanced options';
+}
+
+function addForward(id, type) {
+  const h = hosts.find(h => h.id === id);
+  if (h) { h[type].push(''); renderHosts(); generate(); }
+}
+
+function removeForward(id, type, idx) {
+  const h = hosts.find(h => h.id === id);
+  if (h) { h[type].splice(idx, 1); renderHosts(); generate(); }
+}
+
+function updateForward(id, type, idx, value) {
+  const h = hosts.find(h => h.id === id);
+  if (h) { h[type][idx] = value; generate(); }
+}
+
+function generate() {
+  if (hosts.length === 0) {
+    document.getElementById('output').textContent = '## Add a host entry above to generate config';
+    return;
+  }
+  const lines = ['# SSH Config — generated by toolbox'];
+  hosts.forEach(h => {
+    if (!h.alias) return;
+    lines.push('');
+    lines.push('Host ' + h.alias);
+    if (h.hostname) lines.push('  HostName ' + h.hostname);
+    if (h.user) lines.push('  User ' + h.user);
+    if (h.port) lines.push('  Port ' + h.port);
+    if (h.identityFile) lines.push('  IdentityFile ' + h.identityFile);
+    if (h.proxyJump) lines.push('  ProxyJump ' + h.proxyJump);
+    if (h.forwardAgent) lines.push('  ForwardAgent yes');
+    if (h.compression) lines.push('  Compression yes');
+    if (h.serverAliveInterval) lines.push('  ServerAliveInterval ' + h.serverAliveInterval);
+    if (h.serverAliveCountMax) lines.push('  ServerAliveCountMax ' + h.serverAliveCountMax);
+    if (h.dynamicForward) lines.push('  DynamicForward ' + h.dynamicForward);
+    if (h.strictHostKeyChecking) lines.push('  StrictHostKeyChecking ' + h.strictHostKeyChecking);
+    if (h.logLevel) lines.push('  LogLevel ' + h.logLevel);
+    if (h.requestTTY) lines.push('  RequestTTY ' + h.requestTTY);
+    h.localForwards.filter(f => f).forEach(f => lines.push('  LocalForward ' + f));
+    h.remoteForwards.filter(f => f).forEach(f => lines.push('  RemoteForward ' + f));
+    if (h.extra) {
+      h.extra.split('\n').filter(l => l.trim()).forEach(l => lines.push('  ' + l.trim()));
+    }
+  });
+  document.getElementById('output').textContent = lines.join('\n');
+}
+
+function addPreset(type) {
+  const presets = {
+    basic: { alias: 'myserver', hostname: '192.168.1.100', user: 'ubuntu', identityFile: '~/.ssh/id_ed25519' },
+    bastion: { alias: 'bastion', hostname: 'bastion.example.com', user: 'admin', port: '22', identityFile: '~/.ssh/id_ed25519', serverAliveInterval: '60', serverAliveCountMax: '3' },
+    github: { alias: 'github.com', hostname: 'github.com', user: 'git', identityFile: '~/.ssh/id_ed25519_github' },
+    tunnel: { alias: 'tunnel-db', hostname: '10.0.0.5', user: 'ubuntu', localForwards: ['5432:localhost:5432'], identityFile: '~/.ssh/id_ed25519' },
+    wildcard: { alias: '*.dev.example.com', user: 'deploy', identityFile: '~/.ssh/id_deploy', proxyJump: 'bastion', forwardAgent: true }
+  };
+  addHost(presets[type] || {});
+}
+
+function copyOutput() {
+  const text = document.getElementById('output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1500);
+  });
+}
+
+addHost({ alias: 'example', hostname: '192.168.1.100', user: 'ubuntu', identityFile: '~/.ssh/id_ed25519' });
+</script>
+</body>
+</html>

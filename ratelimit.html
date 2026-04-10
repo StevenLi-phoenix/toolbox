@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rate Limit Calculator - Token Bucket, Sliding & Fixed Window</title>
+<meta name="description" content="Free online rate limit calculator. Model token bucket, sliding window, and fixed window rate limiters. Visualize burst capacity, refill rates, and request timing.">
+<meta name="keywords" content="rate limit, token bucket, sliding window, fixed window, API rate limiting, throttle calculator, burst capacity">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ratelimit.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .algo-tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .algo-tab { flex: 1; padding: .6rem .75rem; text-align: center; font-size: .85rem; font-weight: 600; cursor: pointer; background: var(--surface); color: var(--muted); border: none; border-right: 1px solid var(--border); font-family: inherit; transition: background .15s, color .15s; }
+  .algo-tab:last-child { border-right: none; }
+  .algo-tab.active { background: var(--text); color: var(--bg); }
+  .params { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+  .param label { font-size: .8rem; font-weight: 600; display: block; margin-bottom: 4px; }
+  .param input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .9rem; background: var(--bg); color: var(--text); }
+  .param .hint { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+  .results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+  .result-box { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .result-box .value { font-size: 1.4rem; font-weight: 700; font-family: var(--mono); }
+  .result-box .label { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+  .viz { position: relative; width: 100%; height: 200px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+  .viz canvas { width: 100%; height: 100%; }
+  .sim-controls { display: flex; gap: .5rem; align-items: center; margin-top: .75rem; flex-wrap: wrap; }
+  .sim-controls button { padding: 6px 16px; font-size: .82rem; }
+  .sim-log { max-height: 150px; overflow-y: auto; font-family: var(--mono); font-size: .78rem; border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .75rem; margin-top: .75rem; background: var(--surface); line-height: 1.6; }
+  .sim-log .allowed { color: var(--success); }
+  .sim-log .denied { color: var(--error); }
+  .algo-desc { font-size: .85rem; color: var(--muted); line-height: 1.6; margin-bottom: 1rem; padding: .75rem; border-left: 3px solid var(--border); background: var(--surface); border-radius: 0 var(--radius) var(--radius) 0; }
+  .headers-output { font-family: var(--mono); font-size: .82rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem; line-height: 1.6; white-space: pre; overflow-x: auto; }
+  @media (max-width: 768px) {
+    .params { grid-template-columns: 1fr; }
+    .results-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Rate Limit Calculator</h1>
+<p class="subtitle">Model token bucket, sliding window, and fixed window rate limiters with live visualization</p>
+
+<div class="card">
+<h2>⚙️ Algorithm</h2>
+<div class="algo-tabs">
+  <button class="algo-tab active" onclick="setAlgo('token-bucket')">Token Bucket</button>
+  <button class="algo-tab" onclick="setAlgo('fixed-window')">Fixed Window</button>
+  <button class="algo-tab" onclick="setAlgo('sliding-window')">Sliding Window Log</button>
+</div>
+<div id="algo-desc" class="algo-desc"></div>
+
+<div class="params" id="params"></div>
+</div>
+
+<div class="card">
+<h2>📊 Results</h2>
+<div class="results-grid" id="results"></div>
+
+<h3 style="font-size:.9rem;margin-bottom:.5rem">Response Headers</h3>
+<div class="headers-output" id="headers"></div>
+</div>
+
+<div class="card">
+<h2>🎮 Simulator</h2>
+<div class="viz"><canvas id="canvas"></canvas></div>
+<div class="sim-controls">
+  <button class="btn" onclick="simRequest()">Send Request</button>
+  <button class="btn btn-secondary" onclick="simBurst()">Send Burst (5)</button>
+  <button class="btn btn-secondary" onclick="simReset()">Reset</button>
+  <span style="font-size:.8rem;color:var(--muted)" id="sim-status">Ready</span>
+</div>
+<div class="sim-log" id="sim-log">Click "Send Request" to simulate API calls…</div>
+</div>
+
+<div class="card">
+<h2>💡 Quick Reference</h2>
+<ul style="font-size:.85rem;color:var(--muted);line-height:1.8;padding-left:1.25rem">
+  <li><strong>Token Bucket:</strong> Best for allowing bursts while enforcing average rate. Used by AWS, Stripe.</li>
+  <li><strong>Fixed Window:</strong> Simplest to implement. Risk of 2× burst at window boundaries.</li>
+  <li><strong>Sliding Window Log:</strong> Most accurate. Tracks every request timestamp. Higher memory usage.</li>
+  <li>Standard headers: <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code>, <code>X-RateLimit-Reset</code></li>
+  <li>IETF draft: <code>RateLimit-Limit</code>, <code>RateLimit-Remaining</code>, <code>RateLimit-Reset</code></li>
+</ul>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+let algo = 'token-bucket';
+
+const ALGO_DESC = {
+  'token-bucket': 'Tokens are added to a bucket at a steady rate. Each request consumes one token. If the bucket is empty, the request is rejected. Allows controlled bursts up to the bucket capacity.',
+  'fixed-window': 'Requests are counted within fixed time windows (e.g. per minute). The counter resets at the start of each window. Simple but can allow 2× the rate at window boundaries.',
+  'sliding-window': 'Each request timestamp is stored. When a new request arrives, timestamps older than the window are purged. The request is allowed if the count is under the limit. Most precise but uses more memory.'
+};
+
+const ALGO_PARAMS = {
+  'token-bucket': [
+    { id: 'capacity', label: 'Bucket Capacity', value: 100, hint: 'Max tokens (burst size)' },
+    { id: 'refillRate', label: 'Refill Rate', value: 10, hint: 'Tokens added per second' },
+    { id: 'tokensPerReq', label: 'Tokens per Request', value: 1, hint: 'Tokens consumed per request' }
+  ],
+  'fixed-window': [
+    { id: 'limit', label: 'Request Limit', value: 100, hint: 'Max requests per window' },
+    { id: 'windowSec', label: 'Window (seconds)', value: 60, hint: 'Window duration in seconds' }
+  ],
+  'sliding-window': [
+    { id: 'limit', label: 'Request Limit', value: 100, hint: 'Max requests in sliding window' },
+    { id: 'windowSec', label: 'Window (seconds)', value: 60, hint: 'Sliding window duration' }
+  ]
+};
+
+// Simulation state
+let sim = { tokens: 100, requests: [], log: [], time: 0, windowStart: 0, windowCount: 0 };
+let animFrame = null;
+
+function setAlgo(a) {
+  algo = a;
+  document.querySelectorAll('.algo-tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase().replace(/\s+/g, '-') === a || (a === 'sliding-window' && t.textContent === 'Sliding Window Log')));
+  document.querySelectorAll('.algo-tab').forEach(t => {
+    const map = { 'Token Bucket': 'token-bucket', 'Fixed Window': 'fixed-window', 'Sliding Window Log': 'sliding-window' };
+    t.classList.toggle('active', map[t.textContent] === a);
+  });
+  renderParams();
+  calculate();
+  simReset();
+}
+
+function renderParams() {
+  document.getElementById('algo-desc').textContent = ALGO_DESC[algo];
+  const params = ALGO_PARAMS[algo];
+  document.getElementById('params').innerHTML = params.map(p => `
+    <div class="param">
+      <label>${p.label}</label>
+      <input type="number" id="p-${p.id}" value="${p.value}" min="1" oninput="calculate()">
+      <div class="hint">${p.hint}</div>
+    </div>
+  `).join('');
+}
+
+function getParam(id) {
+  const el = document.getElementById('p-' + id);
+  return el ? parseFloat(el.value) || 0 : 0;
+}
+
+function calculate() {
+  const results = document.getElementById('results');
+  const headers = document.getElementById('headers');
+  let boxes = [];
+  let headerText = '';
+
+  if (algo === 'token-bucket') {
+    const cap = getParam('capacity');
+    const rate = getParam('refillRate');
+    const cost = getParam('tokensPerReq');
+    const sustainedRPS = rate / cost;
+    const burstReqs = Math.floor(cap / cost);
+    const refillTime = cap / rate;
+    const emptyToFullSec = refillTime;
+
+    boxes = [
+      { value: sustainedRPS.toFixed(1), label: 'Sustained req/s' },
+      { value: burstReqs, label: 'Max burst requests' },
+      { value: formatDuration(emptyToFullSec), label: 'Empty → full refill' },
+      { value: (sustainedRPS * 60).toFixed(0), label: 'Requests per minute' },
+      { value: (sustainedRPS * 3600).toFixed(0), label: 'Requests per hour' },
+      { value: cost, label: 'Tokens per request' }
+    ];
+    headerText = `X-RateLimit-Limit: ${cap}\nX-RateLimit-Remaining: ${cap}\nX-RateLimit-Reset: ${Math.ceil(Date.now()/1000 + emptyToFullSec)}\nRetry-After: ${Math.ceil(cost / rate)}`;
+  } else if (algo === 'fixed-window') {
+    const limit = getParam('limit');
+    const win = getParam('windowSec');
+    const rps = limit / win;
+    const worstBurst = limit * 2;
+
+    boxes = [
+      { value: rps.toFixed(2), label: 'Average req/s' },
+      { value: limit, label: 'Requests per window' },
+      { value: formatDuration(win), label: 'Window duration' },
+      { value: worstBurst, label: 'Worst-case burst (boundary)' },
+      { value: (rps * 3600).toFixed(0), label: 'Requests per hour' },
+      { value: formatDuration(win), label: 'Max wait on limit' }
+    ];
+    headerText = `X-RateLimit-Limit: ${limit}\nX-RateLimit-Remaining: ${limit}\nX-RateLimit-Reset: ${Math.ceil(Date.now()/1000 + win)}\nRetry-After: ${win}`;
+  } else {
+    const limit = getParam('limit');
+    const win = getParam('windowSec');
+    const rps = limit / win;
+
+    boxes = [
+      { value: rps.toFixed(2), label: 'Average req/s' },
+      { value: limit, label: 'Requests per window' },
+      { value: formatDuration(win), label: 'Window duration' },
+      { value: limit, label: 'Max burst (window empty)' },
+      { value: (rps * 3600).toFixed(0), label: 'Requests per hour' },
+      { value: 'O(n)', label: 'Memory per client' }
+    ];
+    headerText = `X-RateLimit-Limit: ${limit}\nX-RateLimit-Remaining: ${limit}\nX-RateLimit-Reset: ${Math.ceil(Date.now()/1000 + win)}\nRetry-After: ${Math.ceil(1 / rps)}`;
+  }
+
+  results.innerHTML = boxes.map(b => `<div class="result-box"><div class="value">${b.value}</div><div class="label">${b.label}</div></div>`).join('');
+  headers.textContent = headerText;
+
+  // Reset sim with new params
+  initSim();
+  drawViz();
+}
+
+function formatDuration(sec) {
+  if (sec < 1) return (sec * 1000).toFixed(0) + 'ms';
+  if (sec < 60) return sec.toFixed(1) + 's';
+  if (sec < 3600) return (sec / 60).toFixed(1) + 'm';
+  return (sec / 3600).toFixed(1) + 'h';
+}
+
+function initSim() {
+  if (algo === 'token-bucket') {
+    sim = { tokens: getParam('capacity'), requests: [], log: [], time: 0, lastRefill: 0 };
+  } else if (algo === 'fixed-window') {
+    sim = { windowStart: 0, windowCount: 0, requests: [], log: [], time: 0 };
+  } else {
+    sim = { timestamps: [], requests: [], log: [], time: 0 };
+  }
+}
+
+function simRequest() {
+  sim.time += 0.2 + Math.random() * 0.3;
+  let allowed = false;
+
+  if (algo === 'token-bucket') {
+    const cap = getParam('capacity');
+    const rate = getParam('refillRate');
+    const cost = getParam('tokensPerReq');
+    const elapsed = sim.time - (sim.lastRefill || 0);
+    sim.tokens = Math.min(cap, sim.tokens + elapsed * rate);
+    sim.lastRefill = sim.time;
+    if (sim.tokens >= cost) {
+      sim.tokens -= cost;
+      allowed = true;
+    }
+  } else if (algo === 'fixed-window') {
+    const limit = getParam('limit');
+    const win = getParam('windowSec');
+    const currentWindow = Math.floor(sim.time / win);
+    const simWindow = Math.floor(sim.windowStart / win);
+    if (currentWindow !== simWindow) {
+      sim.windowStart = currentWindow * win;
+      sim.windowCount = 0;
+    }
+    if (sim.windowCount < limit) {
+      sim.windowCount++;
+      allowed = true;
+    }
+  } else {
+    const limit = getParam('limit');
+    const win = getParam('windowSec');
+    sim.timestamps = sim.timestamps.filter(t => t > sim.time - win);
+    if (sim.timestamps.length < limit) {
+      sim.timestamps.push(sim.time);
+      allowed = true;
+    }
+  }
+
+  sim.requests.push({ time: sim.time, allowed });
+  const status = allowed ? '✓ 200 OK' : '✗ 429 Too Many Requests';
+  const cls = allowed ? 'allowed' : 'denied';
+  sim.log.push(`<span class="${cls}">t=${sim.time.toFixed(2)}s  ${status}</span>`);
+
+  updateSimUI();
+  drawViz();
+}
+
+function simBurst() {
+  for (let i = 0; i < 5; i++) {
+    sim.time += 0.05;
+    let allowed = false;
+    if (algo === 'token-bucket') {
+      const cap = getParam('capacity');
+      const rate = getParam('refillRate');
+      const cost = getParam('tokensPerReq');
+      const elapsed = sim.time - (sim.lastRefill || 0);
+      sim.tokens = Math.min(cap, sim.tokens + elapsed * rate);
+      sim.lastRefill = sim.time;
+      if (sim.tokens >= cost) { sim.tokens -= cost; allowed = true; }
+    } else if (algo === 'fixed-window') {
+      const limit = getParam('limit');
+      const win = getParam('windowSec');
+      const currentWindow = Math.floor(sim.time / win);
+      const simWindow = Math.floor(sim.windowStart / win);
+      if (currentWindow !== simWindow) { sim.windowStart = currentWindow * win; sim.windowCount = 0; }
+      if (sim.windowCount < limit) { sim.windowCount++; allowed = true; }
+    } else {
+      const limit = getParam('limit');
+      const win = getParam('windowSec');
+      sim.timestamps = sim.timestamps.filter(t => t > sim.time - win);
+      if (sim.timestamps.length < limit) { sim.timestamps.push(sim.time); allowed = true; }
+    }
+    sim.requests.push({ time: sim.time, allowed });
+    const status = allowed ? '✓ 200 OK' : '✗ 429 Too Many Requests';
+    const cls = allowed ? 'allowed' : 'denied';
+    sim.log.push(`<span class="${cls}">t=${sim.time.toFixed(2)}s  ${status}</span>`);
+  }
+  updateSimUI();
+  drawViz();
+}
+
+function simReset() {
+  initSim();
+  document.getElementById('sim-log').innerHTML = 'Click "Send Request" to simulate API calls…';
+  document.getElementById('sim-status').textContent = 'Ready';
+  drawViz();
+}
+
+function updateSimUI() {
+  const logEl = document.getElementById('sim-log');
+  logEl.innerHTML = sim.log.join('<br>');
+  logEl.scrollTop = logEl.scrollHeight;
+
+  const allowed = sim.requests.filter(r => r.allowed).length;
+  const denied = sim.requests.filter(r => !r.allowed).length;
+  document.getElementById('sim-status').textContent = `${allowed} allowed · ${denied} denied · t=${sim.time.toFixed(2)}s`;
+}
+
+function drawViz() {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.offsetWidth * dpr;
+  canvas.height = canvas.offsetHeight * dpr;
+  ctx.scale(dpr, dpr);
+  const w = canvas.offsetWidth;
+  const h = canvas.offsetHeight;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Draw capacity line
+  ctx.strokeStyle = '#ddd';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(40, 20);
+  ctx.lineTo(w - 10, 20);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw capacity label
+  ctx.fillStyle = '#999';
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'right';
+
+  if (algo === 'token-bucket') {
+    const cap = getParam('capacity');
+    ctx.fillText(cap, 36, 24);
+    ctx.fillText('0', 36, h - 16);
+
+    // Draw token level over time
+    if (sim.requests.length > 0) {
+      const maxTime = Math.max(sim.time, 5);
+      const xScale = (w - 50) / maxTime;
+      const yScale = (h - 50) / cap;
+
+      // Reconstruct token levels
+      let tokens = cap;
+      let lastTime = 0;
+      const rate = getParam('refillRate');
+      const cost = getParam('tokensPerReq');
+
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(40, h - 20 - tokens * yScale);
+
+      sim.requests.forEach(r => {
+        tokens = Math.min(cap, tokens + (r.time - lastTime) * rate);
+        const x = 40 + r.time * xScale;
+        ctx.lineTo(x, h - 20 - tokens * yScale);
+        if (r.allowed) tokens = Math.max(0, tokens - cost);
+        ctx.lineTo(x, h - 20 - tokens * yScale);
+        lastTime = r.time;
+      });
+      ctx.stroke();
+
+      // Draw request dots
+      tokens = cap;
+      lastTime = 0;
+      sim.requests.forEach(r => {
+        tokens = Math.min(cap, tokens + (r.time - lastTime) * rate);
+        const x = 40 + r.time * xScale;
+        const y = h - 20 - tokens * yScale;
+        if (r.allowed) tokens = Math.max(0, tokens - cost);
+
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = r.allowed ? '#22c55e' : '#ef4444';
+        ctx.fill();
+        lastTime = r.time;
+      });
+    }
+  } else {
+    const limit = getParam('limit');
+    ctx.fillText(limit, 36, 24);
+    ctx.fillText('0', 36, h - 16);
+
+    if (sim.requests.length > 0) {
+      const maxTime = Math.max(sim.time, 5);
+      const xScale = (w - 50) / maxTime;
+      const yScale = (h - 50) / limit;
+
+      sim.requests.forEach(r => {
+        const x = 40 + r.time * xScale;
+        ctx.beginPath();
+        ctx.moveTo(x, 20);
+        ctx.lineTo(x, h - 20);
+        ctx.strokeStyle = r.allowed ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(x, h / 2, 4, 0, Math.PI * 2);
+        ctx.fillStyle = r.allowed ? '#22c55e' : '#ef4444';
+        ctx.fill();
+      });
+    }
+  }
+
+  // X axis label
+  ctx.fillStyle = '#999';
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('Time →', w / 2, h - 4);
+}
+
+// Init
+renderParams();
+calculate();
+window.addEventListener('resize', drawViz);
+</script>
+</body>
+</html>

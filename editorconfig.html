@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EditorConfig Generator - Consistent Code Style</title>
+<meta name="description" content="Free online EditorConfig generator. Create .editorconfig files for consistent coding styles across editors and IDEs. No data leaves your browser.">
+<meta name="keywords" content="editorconfig, editor config, code style, indent style, tabs spaces, end of line, trim whitespace, consistent formatting">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/editorconfig.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .section-list { display: flex; flex-direction: column; gap: 1rem; }
+  .section-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; background: var(--surface); }
+  .section-block h3 { margin: 0 0 .75rem; font-size: .9rem; display: flex; justify-content: space-between; align-items: center; }
+  .section-block h3 .badge { font-size: .75rem; font-weight: 400; color: var(--muted); background: var(--bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: var(--radius); }
+  .prop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
+  .prop label { font-size: .8rem; font-weight: 600; display: block; margin-bottom: 4px; }
+  .prop select, .prop input { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .85rem; background: var(--bg); color: var(--text); }
+  .prop .hint { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+  .glob-input { display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+  .glob-input input { flex: 1; font-family: var(--mono); }
+  .presets { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+  .presets button { padding: 4px 12px; font-size: .8rem; }
+  .output-area { position: relative; }
+  .output-area pre { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; font-family: var(--mono); font-size: .85rem; white-space: pre; overflow-x: auto; min-height: 120px; line-height: 1.7; }
+  .file-patterns { display: flex; flex-wrap: wrap; gap: .25rem; margin-bottom: .75rem; }
+  .file-patterns button { padding: 2px 10px; font-size: .75rem; border-radius: 999px; }
+  @media (max-width: 768px) {
+    .prop-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>EditorConfig Generator</h1>
+<p class="subtitle">Create .editorconfig files for consistent code style across editors and IDEs</p>
+
+<div class="card">
+<h2>🚀 Quick Start Presets</h2>
+<div class="presets">
+  <button class="btn btn-secondary" onclick="loadPreset('web')">Web (JS/TS/CSS)</button>
+  <button class="btn btn-secondary" onclick="loadPreset('python')">Python</button>
+  <button class="btn btn-secondary" onclick="loadPreset('go')">Go</button>
+  <button class="btn btn-secondary" onclick="loadPreset('java')">Java</button>
+  <button class="btn btn-secondary" onclick="loadPreset('rust')">Rust</button>
+  <button class="btn btn-secondary" onclick="loadPreset('minimal')">Minimal</button>
+</div>
+</div>
+
+<div class="card">
+<h2>📐 Sections</h2>
+<div class="section-list" id="sections"></div>
+<button class="btn" onclick="addSection()" style="margin-top:1rem">+ Add Section</button>
+</div>
+
+<div class="card">
+<h2>📋 Generated .editorconfig</h2>
+<div class="output-area">
+  <pre id="output"></pre>
+  <button class="btn btn-secondary" onclick="copyOutput()" style="position:absolute;top:12px;right:12px;padding:4px 12px;font-size:.75rem">Copy</button>
+</div>
+</div>
+
+<div class="card">
+<h2>💡 Glob Pattern Reference</h2>
+<ul style="font-size:.85rem;color:var(--muted);line-height:1.8;padding-left:1.25rem">
+  <li><code>*</code> — matches any string except path separator</li>
+  <li><code>**</code> — matches any string including path separators</li>
+  <li><code>?</code> — matches any single character</li>
+  <li><code>[abc]</code> — matches any character in brackets</li>
+  <li><code>{s1,s2}</code> — matches either string (e.g. <code>*.{js,ts}</code>)</li>
+  <li><code>[!abc]</code> — matches any character not in brackets</li>
+  <li>Common: <code>[*]</code> for all files, <code>*.py</code>, <code>*.{js,ts,tsx}</code>, <code>Makefile</code></li>
+</ul>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+let sectionId = 0;
+const sections = [];
+
+const GLOB_PRESETS = [
+  { label: 'All', glob: '*' },
+  { label: 'JS/TS', glob: '*.{js,jsx,ts,tsx}' },
+  { label: 'Python', glob: '*.py' },
+  { label: 'Go', glob: '*.go' },
+  { label: 'Rust', glob: '*.rs' },
+  { label: 'Java', glob: '*.java' },
+  { label: 'CSS', glob: '*.{css,scss,less}' },
+  { label: 'HTML', glob: '*.html' },
+  { label: 'JSON', glob: '*.json' },
+  { label: 'YAML', glob: '*.{yml,yaml}' },
+  { label: 'Markdown', glob: '*.md' },
+  { label: 'Makefile', glob: 'Makefile' },
+  { label: 'Shell', glob: '*.sh' },
+];
+
+function addSection(config = {}) {
+  const id = sectionId++;
+  sections.push({
+    id,
+    glob: config.glob || '*',
+    indent_style: config.indent_style || 'space',
+    indent_size: config.indent_size || '2',
+    end_of_line: config.end_of_line || 'lf',
+    charset: config.charset || 'utf-8',
+    trim_trailing_whitespace: config.trim_trailing_whitespace || 'true',
+    insert_final_newline: config.insert_final_newline || 'true',
+    max_line_length: config.max_line_length || '',
+    tab_width: config.tab_width || ''
+  });
+  renderSections();
+  generate();
+}
+
+function removeSection(id) {
+  const idx = sections.findIndex(s => s.id === id);
+  if (idx >= 0) sections.splice(idx, 1);
+  renderSections();
+  generate();
+}
+
+function updateSection(id, field, value) {
+  const s = sections.find(s => s.id === id);
+  if (s) { s[field] = value; generate(); }
+}
+
+function setGlob(id, glob) {
+  const s = sections.find(s => s.id === id);
+  if (s) {
+    s.glob = glob;
+    const input = document.querySelector(`[data-glob-id="${id}"]`);
+    if (input) input.value = glob;
+    generate();
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderSections() {
+  document.getElementById('sections').innerHTML = sections.map((s, i) => `
+    <div class="section-block">
+      <h3>
+        Section #${i + 1} <span class="badge">[${esc(s.glob)}]</span>
+        <button class="btn btn-secondary" onclick="removeSection(${s.id})" style="padding:2px 8px;font-size:.75rem">Remove</button>
+      </h3>
+      <div class="glob-input">
+        <label style="font-size:.8rem;font-weight:600;white-space:nowrap">Glob:</label>
+        <input type="text" data-glob-id="${s.id}" value="${esc(s.glob)}" placeholder="*" oninput="updateSection(${s.id},'glob',this.value)">
+      </div>
+      <div class="file-patterns">
+        ${GLOB_PRESETS.map(p => `<button class="btn btn-secondary" onclick="setGlob(${s.id},'${p.glob}')">${p.label}</button>`).join('')}
+      </div>
+      <div class="prop-grid">
+        <div class="prop">
+          <label>indent_style</label>
+          <select onchange="updateSection(${s.id},'indent_style',this.value)">
+            <option value="">— unset —</option>
+            <option value="space" ${s.indent_style==='space'?'selected':''}>space</option>
+            <option value="tab" ${s.indent_style==='tab'?'selected':''}>tab</option>
+          </select>
+        </div>
+        <div class="prop">
+          <label>indent_size</label>
+          <select onchange="updateSection(${s.id},'indent_size',this.value)">
+            <option value="">— unset —</option>
+            <option value="2" ${s.indent_size==='2'?'selected':''}>2</option>
+            <option value="4" ${s.indent_size==='4'?'selected':''}>4</option>
+            <option value="8" ${s.indent_size==='8'?'selected':''}>8</option>
+            <option value="tab" ${s.indent_size==='tab'?'selected':''}>tab</option>
+          </select>
+        </div>
+        <div class="prop">
+          <label>end_of_line</label>
+          <select onchange="updateSection(${s.id},'end_of_line',this.value)">
+            <option value="">— unset —</option>
+            <option value="lf" ${s.end_of_line==='lf'?'selected':''}>lf</option>
+            <option value="crlf" ${s.end_of_line==='crlf'?'selected':''}>crlf</option>
+            <option value="cr" ${s.end_of_line==='cr'?'selected':''}>cr</option>
+          </select>
+        </div>
+        <div class="prop">
+          <label>charset</label>
+          <select onchange="updateSection(${s.id},'charset',this.value)">
+            <option value="">— unset —</option>
+            <option value="utf-8" ${s.charset==='utf-8'?'selected':''}>utf-8</option>
+            <option value="utf-8-bom" ${s.charset==='utf-8-bom'?'selected':''}>utf-8-bom</option>
+            <option value="latin1" ${s.charset==='latin1'?'selected':''}>latin1</option>
+            <option value="utf-16be" ${s.charset==='utf-16be'?'selected':''}>utf-16be</option>
+            <option value="utf-16le" ${s.charset==='utf-16le'?'selected':''}>utf-16le</option>
+          </select>
+        </div>
+        <div class="prop">
+          <label>trim_trailing_whitespace</label>
+          <select onchange="updateSection(${s.id},'trim_trailing_whitespace',this.value)">
+            <option value="">— unset —</option>
+            <option value="true" ${s.trim_trailing_whitespace==='true'?'selected':''}>true</option>
+            <option value="false" ${s.trim_trailing_whitespace==='false'?'selected':''}>false</option>
+          </select>
+        </div>
+        <div class="prop">
+          <label>insert_final_newline</label>
+          <select onchange="updateSection(${s.id},'insert_final_newline',this.value)">
+            <option value="">— unset —</option>
+            <option value="true" ${s.insert_final_newline==='true'?'selected':''}>true</option>
+            <option value="false" ${s.insert_final_newline==='false'?'selected':''}>false</option>
+          </select>
+        </div>
+        <div class="prop">
+          <label>max_line_length</label>
+          <input type="text" value="${esc(s.max_line_length)}" placeholder="off" oninput="updateSection(${s.id},'max_line_length',this.value)">
+          <div class="hint">Number or "off"</div>
+        </div>
+        <div class="prop">
+          <label>tab_width</label>
+          <input type="text" value="${esc(s.tab_width)}" placeholder="(defaults to indent_size)" oninput="updateSection(${s.id},'tab_width',this.value)">
+          <div class="hint">Override tab display width</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function generate() {
+  const lines = ['# EditorConfig — https://editorconfig.org', 'root = true'];
+
+  sections.forEach(s => {
+    lines.push('');
+    lines.push('[' + s.glob + ']');
+    if (s.indent_style) lines.push('indent_style = ' + s.indent_style);
+    if (s.indent_size) lines.push('indent_size = ' + s.indent_size);
+    if (s.tab_width) lines.push('tab_width = ' + s.tab_width);
+    if (s.end_of_line) lines.push('end_of_line = ' + s.end_of_line);
+    if (s.charset) lines.push('charset = ' + s.charset);
+    if (s.trim_trailing_whitespace) lines.push('trim_trailing_whitespace = ' + s.trim_trailing_whitespace);
+    if (s.insert_final_newline) lines.push('insert_final_newline = ' + s.insert_final_newline);
+    if (s.max_line_length) lines.push('max_line_length = ' + s.max_line_length);
+  });
+
+  lines.push('');
+  document.getElementById('output').textContent = lines.join('\n');
+}
+
+function loadPreset(name) {
+  sections.length = 0;
+  sectionId = 0;
+
+  const presets = {
+    web: [
+      { glob: '*', indent_style: 'space', indent_size: '2', end_of_line: 'lf', charset: 'utf-8', trim_trailing_whitespace: 'true', insert_final_newline: 'true' },
+      { glob: '*.{js,jsx,ts,tsx}', indent_style: 'space', indent_size: '2', max_line_length: '100' },
+      { glob: '*.{css,scss,less}', indent_style: 'space', indent_size: '2' },
+      { glob: '*.json', indent_style: 'space', indent_size: '2', insert_final_newline: 'false' },
+      { glob: '*.md', trim_trailing_whitespace: 'false' }
+    ],
+    python: [
+      { glob: '*', indent_style: 'space', indent_size: '4', end_of_line: 'lf', charset: 'utf-8', trim_trailing_whitespace: 'true', insert_final_newline: 'true' },
+      { glob: '*.py', indent_style: 'space', indent_size: '4', max_line_length: '88' },
+      { glob: 'Makefile', indent_style: 'tab' },
+      { glob: '*.{yml,yaml}', indent_style: 'space', indent_size: '2' }
+    ],
+    go: [
+      { glob: '*', indent_style: 'space', indent_size: '2', end_of_line: 'lf', charset: 'utf-8', trim_trailing_whitespace: 'true', insert_final_newline: 'true' },
+      { glob: '*.go', indent_style: 'tab', indent_size: '4', tab_width: '4' },
+      { glob: 'Makefile', indent_style: 'tab' }
+    ],
+    java: [
+      { glob: '*', indent_style: 'space', indent_size: '4', end_of_line: 'lf', charset: 'utf-8', trim_trailing_whitespace: 'true', insert_final_newline: 'true' },
+      { glob: '*.java', indent_style: 'space', indent_size: '4', max_line_length: '120' },
+      { glob: '*.xml', indent_style: 'space', indent_size: '2' },
+      { glob: '*.{yml,yaml}', indent_style: 'space', indent_size: '2' }
+    ],
+    rust: [
+      { glob: '*', indent_style: 'space', indent_size: '4', end_of_line: 'lf', charset: 'utf-8', trim_trailing_whitespace: 'true', insert_final_newline: 'true' },
+      { glob: '*.rs', indent_style: 'space', indent_size: '4', max_line_length: '100' },
+      { glob: '*.toml', indent_style: 'space', indent_size: '2' },
+      { glob: 'Makefile', indent_style: 'tab' }
+    ],
+    minimal: [
+      { glob: '*', indent_style: 'space', indent_size: '2', end_of_line: 'lf', charset: 'utf-8', trim_trailing_whitespace: 'true', insert_final_newline: 'true' }
+    ]
+  };
+
+  (presets[name] || presets.minimal).forEach(s => addSection(s));
+}
+
+function copyOutput() {
+  const text = document.getElementById('output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1500);
+  });
+}
+
+// Initialize with web preset
+loadPreset('web');
+</script>
+</body>
+</html>
