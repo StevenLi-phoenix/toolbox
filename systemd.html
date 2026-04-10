@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Systemd Unit File Generator - Free Online Tool</title>
+<meta name="description" content="Generate systemd service, timer, and socket unit files. Configure restart policies, resource limits, sandboxing, and more. No data leaves your browser.">
+<meta name="keywords" content="systemd, service file, unit file, timer, socket, linux, init system, daemon, systemctl">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/systemd.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form-group { margin-bottom: 10px; }
+  .form-group label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 4px; }
+  .section-title { font-size: .88rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .section-title:first-child { border-top: none; padding-top: 0; }
+  .checkbox-group { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .checkbox-item { display: flex; align-items: center; gap: 6px; font-size: .85rem; cursor: pointer; }
+  .unit-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .unit-tab { padding: 6px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; font-size: .82rem; font-weight: 600; transition: all .15s; }
+  .unit-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .unit-tab:hover:not(.active) { background: var(--surface2); }
+  #output { font-family: var(--mono); font-size: .82rem; white-space: pre-wrap; word-break: break-word; margin: 0; }
+  .env-entry { display: flex; gap: 6px; margin-bottom: 6px; }
+  .env-entry input { flex: 1; }
+  .btn-remove { padding: 4px 10px; background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); cursor: pointer; font-size: 1rem; }
+  .btn-remove:hover { color: var(--error); border-color: var(--error); }
+  .install-hint { font-size: .78rem; color: var(--muted); margin-top: 12px; padding: 10px; background: var(--bg2); border-radius: var(--radius); border: 1px solid var(--border); }
+  .install-hint code { font-family: var(--mono); font-size: .78rem; background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  @media (max-width: 768px) { .checkbox-group { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Systemd Unit File Generator</h1>
+<p class="subtitle">Generate systemd service, timer & socket unit files for Linux daemons</p>
+
+<div class="unit-tabs" id="unitTabs">
+  <button class="unit-tab active" onclick="setUnitType('service')">Service</button>
+  <button class="unit-tab" onclick="setUnitType('timer')">Timer</button>
+  <button class="unit-tab" onclick="setUnitType('socket')">Socket</button>
+</div>
+
+<div class="layout">
+<div class="panel">
+<div class="panel-header"><h2>Configuration</h2></div>
+<div class="panel-body">
+
+<div class="section-title" style="border-top:none;padding-top:0">Unit</div>
+<div class="form-group">
+<label>Description</label>
+<input type="text" id="description" value="My Application Service" oninput="generate()">
+</div>
+<div class="form-group">
+<label>After</label>
+<input type="text" id="after" value="network.target" placeholder="network.target syslog.target" oninput="generate()">
+</div>
+<div class="form-group">
+<label>Wants</label>
+<input type="text" id="wants" value="" placeholder="network-online.target" oninput="generate()">
+</div>
+
+<div id="serviceFields">
+<div class="section-title">Service</div>
+<div class="form-group">
+<label>Type</label>
+<select id="serviceType" onchange="generate()">
+<option value="simple">simple</option>
+<option value="exec">exec</option>
+<option value="forking">forking</option>
+<option value="oneshot">oneshot</option>
+<option value="notify">notify</option>
+<option value="idle">idle</option>
+</select>
+</div>
+<div class="form-group">
+<label>ExecStart</label>
+<input type="text" id="execStart" value="/usr/bin/myapp --config /etc/myapp/config.yml" oninput="generate()">
+</div>
+<div class="form-group">
+<label>ExecStartPre <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+<input type="text" id="execStartPre" value="" placeholder="/usr/bin/myapp --check-config" oninput="generate()">
+</div>
+<div class="form-group">
+<label>ExecStop <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+<input type="text" id="execStop" value="" placeholder="/usr/bin/myapp --stop" oninput="generate()">
+</div>
+<div class="form-group">
+<label>ExecReload <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+<input type="text" id="execReload" value="" placeholder="/bin/kill -HUP $MAINPID" oninput="generate()">
+</div>
+<div class="form-group">
+<label>WorkingDirectory</label>
+<input type="text" id="workDir" value="" placeholder="/opt/myapp" oninput="generate()">
+</div>
+<div class="row">
+<div class="form-group">
+<label>User</label>
+<input type="text" id="user" value="" placeholder="www-data" oninput="generate()">
+</div>
+<div class="form-group">
+<label>Group</label>
+<input type="text" id="group" value="" placeholder="www-data" oninput="generate()">
+</div>
+</div>
+
+<div class="section-title">Restart Policy</div>
+<div class="row">
+<div class="form-group">
+<label>Restart</label>
+<select id="restart" onchange="generate()">
+<option value="on-failure">on-failure</option>
+<option value="always">always</option>
+<option value="on-abnormal">on-abnormal</option>
+<option value="on-abort">on-abort</option>
+<option value="no">no</option>
+</select>
+</div>
+<div class="form-group">
+<label>RestartSec</label>
+<input type="text" id="restartSec" value="5" oninput="generate()">
+</div>
+</div>
+<div class="row">
+<div class="form-group">
+<label>StartLimitBurst</label>
+<input type="number" id="startLimitBurst" value="3" oninput="generate()">
+</div>
+<div class="form-group">
+<label>StartLimitIntervalSec</label>
+<input type="number" id="startLimitInterval" value="60" oninput="generate()">
+</div>
+</div>
+
+<div class="section-title">Environment</div>
+<div id="envVars"></div>
+<button class="btn btn-sm" onclick="addEnv()">+ Add Variable</button>
+
+<div class="form-group" style="margin-top:10px">
+<label>EnvironmentFile <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+<input type="text" id="envFile" value="" placeholder="/etc/myapp/env" oninput="generate()">
+</div>
+
+<div class="section-title">Security & Sandboxing</div>
+<div class="checkbox-group" style="margin-bottom:8px">
+<label class="checkbox-item"><input type="checkbox" id="noNewPrivs" onchange="generate()"> NoNewPrivileges</label>
+<label class="checkbox-item"><input type="checkbox" id="protectSystem" onchange="generate()"> ProtectSystem=strict</label>
+<label class="checkbox-item"><input type="checkbox" id="protectHome" onchange="generate()"> ProtectHome</label>
+<label class="checkbox-item"><input type="checkbox" id="privateTmp" onchange="generate()"> PrivateTmp</label>
+<label class="checkbox-item"><input type="checkbox" id="privateDevices" onchange="generate()"> PrivateDevices</label>
+<label class="checkbox-item"><input type="checkbox" id="readOnlyPaths" onchange="generate()"> ReadOnlyPaths=/</label>
+</div>
+
+<div class="section-title">Resource Limits</div>
+<div class="row">
+<div class="form-group">
+<label>MemoryMax</label>
+<input type="text" id="memMax" value="" placeholder="512M" oninput="generate()">
+</div>
+<div class="form-group">
+<label>CPUQuota</label>
+<input type="text" id="cpuQuota" value="" placeholder="80%" oninput="generate()">
+</div>
+</div>
+<div class="form-group">
+<label>LimitNOFILE</label>
+<input type="text" id="limitNofile" value="" placeholder="65535" oninput="generate()">
+</div>
+
+<div class="section-title">Logging</div>
+<div class="row">
+<div class="form-group">
+<label>StandardOutput</label>
+<select id="stdOut" onchange="generate()">
+<option value="journal">journal</option>
+<option value="syslog">syslog</option>
+<option value="file:/var/log/myapp.log">file</option>
+<option value="null">null</option>
+<option value="inherit">inherit</option>
+</select>
+</div>
+<div class="form-group">
+<label>StandardError</label>
+<select id="stdErr" onchange="generate()">
+<option value="journal">journal</option>
+<option value="syslog">syslog</option>
+<option value="file:/var/log/myapp.err">file</option>
+<option value="null">null</option>
+<option value="inherit">inherit</option>
+</select>
+</div>
+</div>
+<div class="form-group">
+<label>SyslogIdentifier</label>
+<input type="text" id="syslogId" value="" placeholder="myapp" oninput="generate()">
+</div>
+</div>
+
+<div id="timerFields" style="display:none">
+<div class="section-title">Timer</div>
+<div class="form-group">
+<label>OnCalendar</label>
+<input type="text" id="onCalendar" value="*-*-* 02:00:00" placeholder="daily, hourly, *-*-* 02:00:00" oninput="generate()">
+</div>
+<div class="form-group">
+<label>OnBootSec <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+<input type="text" id="onBootSec" value="" placeholder="5min" oninput="generate()">
+</div>
+<div class="form-group">
+<label>OnUnitActiveSec <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+<input type="text" id="onUnitActiveSec" value="" placeholder="1h" oninput="generate()">
+</div>
+<div class="form-group">
+<label>Persistent</label>
+<select id="persistent" onchange="generate()">
+<option value="true">true</option>
+<option value="false">false</option>
+</select>
+</div>
+<div class="form-group">
+<label>RandomizedDelaySec</label>
+<input type="text" id="randomDelay" value="" placeholder="30s" oninput="generate()">
+</div>
+<div class="form-group">
+<label>Unit (target service)</label>
+<input type="text" id="timerUnit" value="" placeholder="myapp.service" oninput="generate()">
+</div>
+</div>
+
+<div id="socketFields" style="display:none">
+<div class="section-title">Socket</div>
+<div class="form-group">
+<label>ListenStream</label>
+<input type="text" id="listenStream" value="8080" placeholder="8080 or /run/myapp.sock" oninput="generate()">
+</div>
+<div class="form-group">
+<label>ListenDatagram <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+<input type="text" id="listenDatagram" value="" placeholder="5140" oninput="generate()">
+</div>
+<label class="checkbox-item"><input type="checkbox" id="socketAccept" onchange="generate()"> Accept</label>
+<div class="form-group" style="margin-top:6px">
+<label>SocketUser</label>
+<input type="text" id="socketUser" value="" placeholder="www-data" oninput="generate()">
+</div>
+<div class="form-group">
+<label>SocketMode</label>
+<input type="text" id="socketMode" value="" placeholder="0666" oninput="generate()">
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="panel">
+<div class="panel-header">
+<h2>Unit File</h2>
+<div class="actions">
+<button class="btn btn-sm" onclick="copyConfig()">Copy</button>
+<button class="btn btn-sm" onclick="downloadConfig()">Download</button>
+</div>
+</div>
+<div class="panel-body">
+<pre id="output"></pre>
+<div class="install-hint" id="installHint"></div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let unitType='service';
+let envVars=[];
+
+function setUnitType(t){
+  unitType=t;
+  document.querySelectorAll('.unit-tab').forEach(el=>el.classList.toggle('active',el.textContent.toLowerCase()===t));
+  $('serviceFields').style.display=t==='service'?'':'none';
+  $('timerFields').style.display=t==='timer'?'':'none';
+  $('socketFields').style.display=t==='socket'?'':'none';
+  generate();
+}
+
+function addEnv(){envVars.push({key:'',value:''});renderEnvs();generate();}
+function removeEnv(i){envVars.splice(i,1);renderEnvs();generate();}
+function renderEnvs(){
+  $('envVars').innerHTML=envVars.map((e,i)=>`
+    <div class="env-entry">
+      <input type="text" value="${esc(e.key)}" placeholder="KEY" oninput="envVars[${i}].key=this.value;generate()">
+      <input type="text" value="${esc(e.value)}" placeholder="value" oninput="envVars[${i}].value=this.value;generate()">
+      <button class="btn-remove" onclick="removeEnv(${i})">&times;</button>
+    </div>`).join('');
+}
+function esc(s){return s.replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+function generate(){
+  const lines=[];
+  const desc=$('description').value||'My Service';
+  const after=$('after').value;
+  const wants=$('wants').value;
+
+  // [Unit]
+  lines.push('[Unit]');
+  lines.push('Description='+desc);
+  if(after) lines.push('After='+after);
+  if(wants) lines.push('Wants='+wants);
+
+  if(unitType==='service'){
+    lines.push('');
+    lines.push('[Service]');
+    lines.push('Type='+$('serviceType').value);
+
+    const execStartPre=$('execStartPre').value;
+    if(execStartPre) lines.push('ExecStartPre='+execStartPre);
+    lines.push('ExecStart='+($('execStart').value||'/usr/bin/myapp'));
+    const execStop=$('execStop').value;
+    if(execStop) lines.push('ExecStop='+execStop);
+    const execReload=$('execReload').value;
+    if(execReload) lines.push('ExecReload='+execReload);
+
+    const workDir=$('workDir').value;
+    if(workDir) lines.push('WorkingDirectory='+workDir);
+    const user=$('user').value;
+    if(user) lines.push('User='+user);
+    const group=$('group').value;
+    if(group) lines.push('Group='+group);
+
+    // Restart
+    const restart=$('restart').value;
+    if(restart!=='no'){
+      lines.push('Restart='+restart);
+      const sec=$('restartSec').value;
+      if(sec) lines.push('RestartSec='+sec);
+    }
+    const burst=$('startLimitBurst').value;
+    if(burst) lines.push('StartLimitBurst='+burst);
+    const interval=$('startLimitInterval').value;
+    if(interval) lines.push('StartLimitIntervalSec='+interval);
+
+    // Environment
+    envVars.forEach(e=>{if(e.key) lines.push('Environment="'+e.key+'='+e.value+'"');});
+    const envFile=$('envFile').value;
+    if(envFile) lines.push('EnvironmentFile='+envFile);
+
+    // Security
+    if($('noNewPrivs').checked) lines.push('NoNewPrivileges=true');
+    if($('protectSystem').checked) lines.push('ProtectSystem=strict');
+    if($('protectHome').checked) lines.push('ProtectHome=true');
+    if($('privateTmp').checked) lines.push('PrivateTmp=true');
+    if($('privateDevices').checked) lines.push('PrivateDevices=true');
+    if($('readOnlyPaths').checked) lines.push('ReadOnlyPaths=/');
+
+    // Resources
+    const memMax=$('memMax').value;
+    if(memMax) lines.push('MemoryMax='+memMax);
+    const cpuQuota=$('cpuQuota').value;
+    if(cpuQuota) lines.push('CPUQuota='+cpuQuota);
+    const limitNofile=$('limitNofile').value;
+    if(limitNofile) lines.push('LimitNOFILE='+limitNofile);
+
+    // Logging
+    const stdOut=$('stdOut').value;
+    if(stdOut!=='journal') lines.push('StandardOutput='+stdOut);
+    const stdErr=$('stdErr').value;
+    if(stdErr!=='journal') lines.push('StandardError='+stdErr);
+    const syslogId=$('syslogId').value;
+    if(syslogId) lines.push('SyslogIdentifier='+syslogId);
+
+  } else if(unitType==='timer'){
+    lines.push('');
+    lines.push('[Timer]');
+    const onCal=$('onCalendar').value;
+    if(onCal) lines.push('OnCalendar='+onCal);
+    const onBoot=$('onBootSec').value;
+    if(onBoot) lines.push('OnBootSec='+onBoot);
+    const onUnitActive=$('onUnitActiveSec').value;
+    if(onUnitActive) lines.push('OnUnitActiveSec='+onUnitActive);
+    lines.push('Persistent='+$('persistent').value);
+    const rDelay=$('randomDelay').value;
+    if(rDelay) lines.push('RandomizedDelaySec='+rDelay);
+    const tUnit=$('timerUnit').value;
+    if(tUnit) lines.push('Unit='+tUnit);
+
+  } else if(unitType==='socket'){
+    lines.push('');
+    lines.push('[Socket]');
+    const ls=$('listenStream').value;
+    if(ls) lines.push('ListenStream='+ls);
+    const ld=$('listenDatagram').value;
+    if(ld) lines.push('ListenDatagram='+ld);
+    if($('socketAccept').checked) lines.push('Accept=true');
+    const su=$('socketUser').value;
+    if(su) lines.push('SocketUser='+su);
+    const sm=$('socketMode').value;
+    if(sm) lines.push('SocketMode='+sm);
+  }
+
+  // [Install]
+  lines.push('');
+  lines.push('[Install]');
+  lines.push('WantedBy=multi-user.target');
+
+  $('output').textContent=lines.join('\n');
+
+  // Install hint
+  const name=desc.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-+$/,'');
+  const ext=unitType;
+  $('installHint').innerHTML=`
+    <strong>Install commands:</strong><br>
+    <code>sudo cp ${name}.${ext} /etc/systemd/system/</code><br>
+    <code>sudo systemctl daemon-reload</code><br>
+    <code>sudo systemctl enable --now ${name}.${ext}</code><br>
+    <code>sudo systemctl status ${name}.${ext}</code>
+  `;
+}
+
+function showToast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);}
+
+function copyConfig(){navigator.clipboard.writeText($('output').textContent).then(()=>showToast('Copied!'));}
+
+function downloadConfig(){
+  const desc=$('description').value||'myapp';
+  const name=desc.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-+$/,'');
+  const blob=new Blob([$('output').textContent],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name+'.'+unitType;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+generate();
+</script>
+</body>
+</html>
