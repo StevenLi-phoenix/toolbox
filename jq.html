@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jq Playground - Free Online jq Expression Tester</title>
+<meta name="description" content="Free online jq playground. Test jq-like filter expressions against JSON data in real-time. 100% client-side, no data leaves your browser.">
+<meta name="keywords" content="jq playground, jq tester, jq online, json filter, jq expression, json query, jq tutorial">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jq.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+  .filter-bar input { flex: 1; font-family: var(--mono); font-size: .9rem; padding: 10px 14px; }
+  .filter-bar .btn { white-space: nowrap; }
+  textarea.json-input { width: 100%; min-height: 280px; font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .output-area { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; font-family: var(--mono); font-size: .85rem; white-space: pre-wrap; word-break: break-word; min-height: 280px; max-height: 500px; overflow: auto; }
+  .output-area.error { color: var(--error); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .presets button { font-size: .8rem; }
+  .stats { font-size: .82rem; color: var(--muted); margin-top: 6px; }
+  .panel-label { font-size: .85rem; font-weight: 600; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .panel-label .btn-icon { font-size: .8rem; padding: 2px 6px; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    textarea.json-input { min-height: 180px; }
+    .output-area { min-height: 180px; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>&#x2699; jq Playground</h1>
+<p class="subtitle">Test jq-like filter expressions against JSON data in real-time. 100% client-side.</p>
+
+<div class="container">
+  <div class="card">
+    <h2>Filter Expression</h2>
+    <div class="filter-bar">
+      <input type="text" id="filter" placeholder="." value="." autofocus>
+      <button class="btn" onclick="run()">Run</button>
+    </div>
+    <div class="presets">
+      <button class="btn-secondary" onclick="setFilter('.')">Identity</button>
+      <button class="btn-secondary" onclick="setFilter('.[]')">Iterate</button>
+      <button class="btn-secondary" onclick="setFilter('.[] | .name')">Pluck</button>
+      <button class="btn-secondary" onclick="setFilter('.[] | select(.age > 25)')">Select</button>
+      <button class="btn-secondary" onclick="setFilter('[.[] | .name]')">Map</button>
+      <button class="btn-secondary" onclick="setFilter('keys')">Keys</button>
+      <button class="btn-secondary" onclick="setFilter('length')">Length</button>
+      <button class="btn-secondary" onclick="setFilter('.[] | {name, age}')">Pick fields</button>
+      <button class="btn-secondary" onclick="setFilter('[.[] | .age] | add / length')">Average</button>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div>
+      <div class="panel-label">
+        <span>Input JSON</span>
+        <button class="btn-icon" onclick="formatInput()" title="Format JSON">Format</button>
+      </div>
+      <textarea class="json-input" id="input" spellcheck="false">[
+  { "name": "Alice", "age": 30, "city": "NYC" },
+  { "name": "Bob", "age": 25, "city": "LA" },
+  { "name": "Charlie", "age": 35, "city": "Chicago" },
+  { "name": "Diana", "age": 28, "city": "NYC" }
+]</textarea>
+    </div>
+    <div>
+      <div class="panel-label">
+        <span>Output</span>
+        <button class="btn-icon" onclick="copyOutput()" title="Copy output">Copy</button>
+      </div>
+      <div class="output-area" id="output"></div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div>Built with &#9749; by Steven Li &middot; No data leaves your browser</div>
+  <div><a href="index.html">&larr; Back to Toolbox</a> &middot; <a href="https://buymeacoffee.com/stevenli.phoenix">&#9749; Buy Me a Coffee</a></div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const filterEl = document.getElementById('filter');
+const inputEl = document.getElementById('input');
+const outputEl = document.getElementById('output');
+const statsEl = document.getElementById('stats');
+const toastEl = document.getElementById('toast');
+
+function setFilter(f) { filterEl.value = f; run(); }
+
+function formatInput() {
+  try {
+    const obj = JSON.parse(inputEl.value);
+    inputEl.value = JSON.stringify(obj, null, 2);
+  } catch(e) {}
+}
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 1500);
+}
+
+function copyOutput() {
+  const text = outputEl.textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => showToast('Copied!'));
+}
+
+// Mini jq interpreter
+function jqEval(data, expr) {
+  expr = expr.trim();
+  if (!expr) expr = '.';
+
+  // Pipeline: split on top-level pipes
+  const pipes = splitPipes(expr);
+  let current = [data];
+  for (const segment of pipes) {
+    const next = [];
+    for (const item of current) {
+      const results = evalSegment(item, segment.trim());
+      next.push(...results);
+    }
+    current = next;
+  }
+  return current;
+}
+
+function splitPipes(expr) {
+  const parts = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < expr.length; i++) {
+    const c = expr[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (c === '|' && depth === 0) {
+      parts.push(expr.slice(start, i));
+      start = i + 1;
+    }
+    // handle strings
+    else if (c === '"') {
+      i++;
+      while (i < expr.length && expr[i] !== '"') { if (expr[i] === '\\') i++; i++; }
+    }
+  }
+  parts.push(expr.slice(start));
+  return parts;
+}
+
+function evalSegment(data, expr) {
+  expr = expr.trim();
+
+  // Identity
+  if (expr === '.') return [data];
+
+  // Wrap in array: [expr]
+  if (expr.startsWith('[') && expr.endsWith(']') && !expr.startsWith('[].')) {
+    const inner = expr.slice(1, -1).trim();
+    if (inner === '') {
+      // .[] shorthand won't happen here
+      if (Array.isArray(data)) return [data];
+      return [Object.values(data)];
+    }
+    const results = jqEval(data, inner);
+    return [results];
+  }
+
+  // Object construction: {key, key2} or {key: .expr}
+  if (expr.startsWith('{') && expr.endsWith('}')) {
+    const inner = expr.slice(1, -1).trim();
+    const fields = splitCommas(inner);
+    const obj = {};
+    for (const field of fields) {
+      const f = field.trim();
+      if (f.includes(':')) {
+        const colonIdx = f.indexOf(':');
+        let key = f.slice(0, colonIdx).trim();
+        const valExpr = f.slice(colonIdx + 1).trim();
+        if (key.startsWith('"') && key.endsWith('"')) key = key.slice(1, -1);
+        const results = jqEval(data, valExpr);
+        obj[key] = results.length === 1 ? results[0] : results;
+      } else {
+        // shorthand {name} means {name: .name}
+        const key = f.startsWith('.') ? f.slice(1) : f;
+        obj[key] = accessPath(data, key);
+      }
+    }
+    return [obj];
+  }
+
+  // Iterate: .[]
+  if (expr === '.[]') {
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === 'object') return Object.values(data);
+    throw new Error('Cannot iterate over ' + typeof data);
+  }
+
+  // Array index: .[N]
+  const idxMatch = expr.match(/^\.\[(-?\d+)\]$/);
+  if (idxMatch) {
+    const idx = parseInt(idxMatch[1]);
+    if (Array.isArray(data)) {
+      const i = idx < 0 ? data.length + idx : idx;
+      return [data[i]];
+    }
+    throw new Error('Cannot index ' + typeof data + ' with number');
+  }
+
+  // Array slice: .[N:M]
+  const sliceMatch = expr.match(/^\.\[(\d*):(\d*)\]$/);
+  if (sliceMatch) {
+    if (Array.isArray(data)) {
+      const from = sliceMatch[1] ? parseInt(sliceMatch[1]) : 0;
+      const to = sliceMatch[2] ? parseInt(sliceMatch[2]) : data.length;
+      return [data.slice(from, to)];
+    }
+  }
+
+  // Iterate with field access: .[] | .field shorthand: .[].field
+  if (expr.startsWith('.[].')) {
+    const rest = expr.slice(3); // .field
+    const items = Array.isArray(data) ? data : Object.values(data);
+    const results = [];
+    for (const item of items) {
+      results.push(...evalSegment(item, rest));
+    }
+    return results;
+  }
+
+  // select(condition)
+  const selectMatch = expr.match(/^select\((.+)\)$/);
+  if (selectMatch) {
+    const cond = selectMatch[1].trim();
+    if (evalCondition(data, cond)) return [data];
+    return [];
+  }
+
+  // Built-in functions
+  if (expr === 'keys' || expr === 'keys_unsorted') {
+    if (data && typeof data === 'object') return [Object.keys(data)];
+    throw new Error('Cannot get keys of ' + typeof data);
+  }
+  if (expr === 'values') {
+    if (data && typeof data === 'object') return [Object.values(data)];
+    throw new Error('Cannot get values of ' + typeof data);
+  }
+  if (expr === 'length') {
+    if (Array.isArray(data)) return [data.length];
+    if (typeof data === 'string') return [data.length];
+    if (data && typeof data === 'object') return [Object.keys(data).length];
+    if (data === null) return [0];
+    throw new Error('Cannot get length of ' + typeof data);
+  }
+  if (expr === 'type') {
+    if (data === null) return ['null'];
+    if (Array.isArray(data)) return ['array'];
+    return [typeof data];
+  }
+  if (expr === 'not') return [!data];
+  if (expr === 'empty') return [];
+  if (expr === 'null') return [null];
+  if (expr === 'true') return [true];
+  if (expr === 'false') return [false];
+  if (expr === 'reverse') {
+    if (Array.isArray(data)) return [[...data].reverse()];
+    if (typeof data === 'string') return [data.split('').reverse().join('')];
+    throw new Error('Cannot reverse ' + typeof data);
+  }
+  if (expr === 'sort') {
+    if (Array.isArray(data)) return [[...data].sort()];
+    throw new Error('Cannot sort ' + typeof data);
+  }
+  if (expr === 'unique') {
+    if (Array.isArray(data)) return [[...new Set(data)]];
+    throw new Error('Cannot unique ' + typeof data);
+  }
+  if (expr === 'flatten') {
+    if (Array.isArray(data)) return [data.flat(Infinity)];
+    throw new Error('Cannot flatten ' + typeof data);
+  }
+  if (expr === 'min') { if (Array.isArray(data)) return [Math.min(...data)]; }
+  if (expr === 'max') { if (Array.isArray(data)) return [Math.max(...data)]; }
+  if (expr === 'add') {
+    if (Array.isArray(data)) {
+      if (data.length === 0) return [null];
+      if (typeof data[0] === 'number') return [data.reduce((a,b) => a+b, 0)];
+      if (typeof data[0] === 'string') return [data.join('')];
+      if (Array.isArray(data[0])) return [data.flat(1)];
+    }
+  }
+  if (expr === 'to_entries') {
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      return [Object.entries(data).map(([k,v]) => ({key:k, value:v}))];
+    }
+  }
+  if (expr === 'from_entries') {
+    if (Array.isArray(data)) {
+      const obj = {};
+      data.forEach(e => { obj[e.key || e.name] = e.value; });
+      return [obj];
+    }
+  }
+  if (expr === 'ascii_downcase' || expr === 'downcase') {
+    if (typeof data === 'string') return [data.toLowerCase()];
+  }
+  if (expr === 'ascii_upcase' || expr === 'upcase') {
+    if (typeof data === 'string') return [data.toUpperCase()];
+  }
+  if (expr === 'ltrimstr' || expr === 'rtrimstr') {
+    return [data]; // simplified
+  }
+  if (expr === 'tostring') return [String(data)];
+  if (expr === 'tonumber') return [Number(data)];
+  if (expr === 'strip' || expr === 'trim') {
+    if (typeof data === 'string') return [data.trim()];
+  }
+
+  // sort_by(.field)
+  const sortByMatch = expr.match(/^sort_by\(\.(\w+)\)$/);
+  if (sortByMatch) {
+    const key = sortByMatch[1];
+    if (Array.isArray(data)) return [[...data].sort((a,b) => a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0)];
+  }
+
+  // group_by(.field)
+  const groupByMatch = expr.match(/^group_by\(\.(\w+)\)$/);
+  if (groupByMatch) {
+    const key = groupByMatch[1];
+    if (Array.isArray(data)) {
+      const groups = {};
+      data.forEach(item => {
+        const k = String(item[key]);
+        if (!groups[k]) groups[k] = [];
+        groups[k].push(item);
+      });
+      return [Object.values(groups)];
+    }
+  }
+
+  // unique_by(.field)
+  const uniqueByMatch = expr.match(/^unique_by\(\.(\w+)\)$/);
+  if (uniqueByMatch) {
+    const key = uniqueByMatch[1];
+    if (Array.isArray(data)) {
+      const seen = new Set();
+      return [data.filter(item => { const k = item[key]; if (seen.has(k)) return false; seen.add(k); return true; })];
+    }
+  }
+
+  // map(expr)
+  const mapMatch = expr.match(/^map\((.+)\)$/);
+  if (mapMatch) {
+    const inner = mapMatch[1].trim();
+    if (Array.isArray(data)) {
+      const results = [];
+      for (const item of data) {
+        results.push(...jqEval(item, inner));
+      }
+      return [results];
+    }
+  }
+
+  // map_values(expr)
+  const mapValMatch = expr.match(/^map_values\((.+)\)$/);
+  if (mapValMatch) {
+    const inner = mapValMatch[1].trim();
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      const result = {};
+      for (const [k, v] of Object.entries(data)) {
+        const res = jqEval(v, inner);
+        result[k] = res.length === 1 ? res[0] : res;
+      }
+      return [result];
+    }
+  }
+
+  // has("key")
+  const hasMatch = expr.match(/^has\("([^"]+)"\)$/);
+  if (hasMatch) {
+    return [data && typeof data === 'object' && hasMatch[1] in data];
+  }
+
+  // contains(value)
+  const containsMatch = expr.match(/^contains\((.+)\)$/);
+  if (containsMatch) {
+    try {
+      const val = JSON.parse(containsMatch[1]);
+      if (typeof data === 'string') return [data.includes(val)];
+      if (Array.isArray(data)) return [data.some(x => JSON.stringify(x) === JSON.stringify(val))];
+    } catch(e) {}
+  }
+
+  // Arithmetic: add / length, expr + expr, expr - expr, etc.
+  const arithMatch = expr.match(/^(.+?)\s*([\+\-\*\/]|\/\/)\s*(.+)$/);
+  if (arithMatch) {
+    const left = jqEval(data, arithMatch[1].trim());
+    const right = jqEval(data, arithMatch[3].trim());
+    const lv = left[0], rv = right[0];
+    const op = arithMatch[2];
+    if (op === '+') {
+      if (typeof lv === 'number' && typeof rv === 'number') return [lv + rv];
+      if (typeof lv === 'string' && typeof rv === 'string') return [lv + rv];
+      if (Array.isArray(lv) && Array.isArray(rv)) return [lv.concat(rv)];
+      if (lv && rv && typeof lv === 'object' && typeof rv === 'object') return [Object.assign({}, lv, rv)];
+    }
+    if (op === '-' && typeof lv === 'number') return [lv - rv];
+    if (op === '*' && typeof lv === 'number') return [lv * rv];
+    if (op === '/' && typeof lv === 'number') return [rv === 0 ? null : lv / rv];
+    if (op === '//') return [lv != null ? lv : rv]; // alternative operator
+  }
+
+  // Numeric literal
+  if (/^-?\d+(\.\d+)?$/.test(expr)) return [parseFloat(expr)];
+
+  // String literal
+  if (expr.startsWith('"') && expr.endsWith('"')) return [expr.slice(1, -1)];
+
+  // Field access: .field or .field.subfield
+  if (expr.startsWith('.') && expr.length > 1) {
+    const path = expr.slice(1);
+    return [accessPath(data, path)];
+  }
+
+  // Try as field name without dot
+  if (/^\w+$/.test(expr) && data && typeof data === 'object') {
+    if (expr in data) return [data[expr]];
+  }
+
+  throw new Error('Unsupported expression: ' + expr);
+}
+
+function accessPath(data, path) {
+  const parts = path.split('.').filter(Boolean);
+  let current = data;
+  for (const part of parts) {
+    // Handle array index: field[0]
+    const bracketMatch = part.match(/^(\w+)\[(\d+)\]$/);
+    if (bracketMatch) {
+      current = current?.[bracketMatch[1]];
+      current = current?.[parseInt(bracketMatch[2])];
+    } else {
+      current = current?.[part];
+    }
+  }
+  return current;
+}
+
+function splitCommas(expr) {
+  const parts = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < expr.length; i++) {
+    const c = expr[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (c === ',' && depth === 0) {
+      parts.push(expr.slice(start, i));
+      start = i + 1;
+    } else if (c === '"') {
+      i++;
+      while (i < expr.length && expr[i] !== '"') { if (expr[i] === '\\') i++; i++; }
+    }
+  }
+  parts.push(expr.slice(start));
+  return parts;
+}
+
+function evalCondition(data, cond) {
+  cond = cond.trim();
+
+  // .field == value
+  const eqMatch = cond.match(/^(.+?)\s*(==|!=|>=|<=|>|<)\s*(.+)$/);
+  if (eqMatch) {
+    const left = jqEval(data, eqMatch[1].trim());
+    let right;
+    const rv = eqMatch[3].trim();
+    if (rv.startsWith('"') && rv.endsWith('"')) {
+      right = [rv.slice(1, -1)];
+    } else if (/^-?\d+(\.\d+)?$/.test(rv)) {
+      right = [parseFloat(rv)];
+    } else if (rv === 'null') {
+      right = [null];
+    } else if (rv === 'true') {
+      right = [true];
+    } else if (rv === 'false') {
+      right = [false];
+    } else {
+      right = jqEval(data, rv);
+    }
+    const lv = left[0], rVal = right[0];
+    switch (eqMatch[2]) {
+      case '==': return lv === rVal;
+      case '!=': return lv !== rVal;
+      case '>': return lv > rVal;
+      case '<': return lv < rVal;
+      case '>=': return lv >= rVal;
+      case '<=': return lv <= rVal;
+    }
+  }
+
+  // and / or
+  if (cond.includes(' and ')) {
+    const parts = cond.split(' and ');
+    return parts.every(p => evalCondition(data, p.trim()));
+  }
+  if (cond.includes(' or ')) {
+    const parts = cond.split(' or ');
+    return parts.some(p => evalCondition(data, p.trim()));
+  }
+
+  // has("key")
+  const hasMatch = cond.match(/^has\("([^"]+)"\)$/);
+  if (hasMatch) return data && typeof data === 'object' && hasMatch[1] in data;
+
+  // type == "string" etc
+  const typeMatch = cond.match(/^type\s*==\s*"(\w+)"$/);
+  if (typeMatch) {
+    const t = typeMatch[1];
+    if (t === 'array') return Array.isArray(data);
+    if (t === 'null') return data === null;
+    return typeof data === t;
+  }
+
+  // Truthy check
+  const result = jqEval(data, cond);
+  return Boolean(result[0]);
+}
+
+function run() {
+  const input = inputEl.value.trim();
+  const filter = filterEl.value.trim() || '.';
+
+  if (!input) {
+    outputEl.textContent = '';
+    outputEl.className = 'output-area';
+    statsEl.textContent = '';
+    return;
+  }
+
+  let data;
+  try {
+    data = JSON.parse(input);
+  } catch(e) {
+    outputEl.textContent = 'JSON Parse Error: ' + e.message;
+    outputEl.className = 'output-area error';
+    statsEl.textContent = '';
+    return;
+  }
+
+  const t0 = performance.now();
+  try {
+    const results = jqEval(data, filter);
+    const elapsed = (performance.now() - t0).toFixed(1);
+
+    if (results.length === 0) {
+      outputEl.textContent = '(empty — no output)';
+      outputEl.className = 'output-area';
+    } else if (results.length === 1) {
+      outputEl.textContent = JSON.stringify(results[0], null, 2);
+      outputEl.className = 'output-area';
+    } else {
+      outputEl.textContent = results.map(r => JSON.stringify(r, null, 2)).join('\n');
+      outputEl.className = 'output-area';
+    }
+    statsEl.textContent = results.length + ' result' + (results.length !== 1 ? 's' : '') + ' · ' + elapsed + 'ms';
+  } catch(e) {
+    outputEl.textContent = 'Error: ' + e.message;
+    outputEl.className = 'output-area error';
+    statsEl.textContent = '';
+  }
+}
+
+filterEl.addEventListener('input', run);
+inputEl.addEventListener('input', run);
+filterEl.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+run();
+</script>
+</body>
+</html>

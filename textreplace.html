@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulk Find &amp; Replace - Free Online Text Replacement Tool</title>
+<meta name="description" content="Free online bulk find and replace tool. Apply multiple replacement rules with regex support, case sensitivity, preview changes, and undo. 100% client-side.">
+<meta name="keywords" content="find and replace, text replace, bulk replace, regex replace, multi replace, text tool, search replace">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/textreplace.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .panels textarea { min-height: 250px; font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .rules { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .rule-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .rule-row input { flex: 1; min-width: 120px; font-family: var(--mono); font-size: .85rem; }
+  .rule-row .arrow { color: var(--muted); font-size: 1.1rem; flex-shrink: 0; }
+  .rule-opts { display: flex; gap: 8px; align-items: center; }
+  .rule-opts label { display: flex; align-items: center; gap: 3px; font-size: .78rem; cursor: pointer; white-space: nowrap; }
+  .rule-opts label span { font-family: var(--mono); }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stats { font-size: .82rem; color: var(--muted); margin-top: 6px; }
+  .panel-label { font-size: .85rem; font-weight: 600; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .panel-label .btn-icon { font-size: .8rem; padding: 2px 6px; }
+  .diff-view { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; font-family: var(--mono); font-size: .85rem; white-space: pre-wrap; word-break: break-word; min-height: 100px; max-height: 300px; overflow: auto; display: none; margin-bottom: 16px; }
+  .diff-view.show { display: block; }
+  .diff-add { background: #dcfce7; color: #166534; }
+  .diff-del { background: #fee2e2; color: #991b1b; text-decoration: line-through; }
+  .rule-count { font-size: .8rem; color: var(--muted); margin-left: auto; flex-shrink: 0; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .rule-row { flex-direction: column; align-items: stretch; }
+    .rule-row .arrow { text-align: center; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>&#128260; Bulk Find &amp; Replace</h1>
+<p class="subtitle">Apply multiple find-and-replace rules to text with regex support. 100% client-side.</p>
+
+<div class="container">
+  <div class="card">
+    <h2>Replacement Rules</h2>
+    <div class="rules" id="rules">
+      <div class="rule-row">
+        <input type="text" class="rule-find" placeholder="Find..." value="">
+        <span class="arrow">&rarr;</span>
+        <input type="text" class="rule-replace" placeholder="Replace with..." value="">
+        <div class="rule-opts">
+          <label><input type="checkbox" class="rule-regex"><span>.*</span></label>
+          <label><input type="checkbox" class="rule-case"><span>Aa</span></label>
+          <label><input type="checkbox" class="rule-whole"><span>W</span></label>
+        </div>
+        <span class="rule-count"></span>
+        <button class="btn-icon" onclick="removeRule(this)" title="Remove rule">&times;</button>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn-secondary" onclick="addRule()">+ Add Rule</button>
+      <button class="btn" onclick="applyRules()">Apply All Rules</button>
+      <button class="btn-secondary" onclick="previewDiff()">Preview Diff</button>
+      <button class="btn-secondary" onclick="clearRules()">Clear Rules</button>
+    </div>
+  </div>
+
+  <div class="diff-view" id="diff"></div>
+
+  <div class="panels">
+    <div>
+      <div class="panel-label">
+        <span>Input</span>
+        <div>
+          <button class="btn-icon" onclick="undoInput()" title="Undo">&#x21A9;</button>
+          <button class="btn-icon" onclick="clearInput()" title="Clear">Clear</button>
+        </div>
+      </div>
+      <textarea id="input" spellcheck="false" placeholder="Paste your text here...">The quick brown fox jumps over the lazy dog.
+The QUICK brown Fox jumps over the lazy Dog.
+Hello World! Hello Universe! Hello Everyone!
+foo_bar baz_qux hello_world
+2024-01-15 2024-02-20 2024-12-31</textarea>
+    </div>
+    <div>
+      <div class="panel-label">
+        <span>Output</span>
+        <button class="btn-icon" onclick="copyOutput()" title="Copy output">Copy</button>
+      </div>
+      <textarea id="output" spellcheck="false" readonly placeholder="Result will appear here..."></textarea>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div>Built with &#9749; by Steven Li &middot; No data leaves your browser</div>
+  <div><a href="index.html">&larr; Back to Toolbox</a> &middot; <a href="https://buymeacoffee.com/stevenli.phoenix">&#9749; Buy Me a Coffee</a></div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const inputEl = document.getElementById('input');
+const outputEl = document.getElementById('output');
+const statsEl = document.getElementById('stats');
+const diffEl = document.getElementById('diff');
+const toastEl = document.getElementById('toast');
+let undoStack = [];
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 1500);
+}
+
+function addRule() {
+  const rules = document.getElementById('rules');
+  const row = document.createElement('div');
+  row.className = 'rule-row';
+  row.innerHTML = `
+    <input type="text" class="rule-find" placeholder="Find..." value="">
+    <span class="arrow">&rarr;</span>
+    <input type="text" class="rule-replace" placeholder="Replace with..." value="">
+    <div class="rule-opts">
+      <label><input type="checkbox" class="rule-regex"><span>.*</span></label>
+      <label><input type="checkbox" class="rule-case"><span>Aa</span></label>
+      <label><input type="checkbox" class="rule-whole"><span>W</span></label>
+    </div>
+    <span class="rule-count"></span>
+    <button class="btn-icon" onclick="removeRule(this)" title="Remove rule">&times;</button>`;
+  rules.appendChild(row);
+}
+
+function removeRule(btn) {
+  const rows = document.querySelectorAll('.rule-row');
+  if (rows.length <= 1) return;
+  btn.closest('.rule-row').remove();
+}
+
+function clearRules() {
+  const rules = document.getElementById('rules');
+  rules.innerHTML = '';
+  addRule();
+  diffEl.classList.remove('show');
+  statsEl.textContent = '';
+}
+
+function getRules() {
+  const rows = document.querySelectorAll('.rule-row');
+  const rules = [];
+  rows.forEach(row => {
+    const find = row.querySelector('.rule-find').value;
+    const replace = row.querySelector('.rule-replace').value;
+    const isRegex = row.querySelector('.rule-regex').checked;
+    const caseSensitive = row.querySelector('.rule-case').checked;
+    const wholeWord = row.querySelector('.rule-whole').checked;
+    if (find) {
+      rules.push({ find, replace, isRegex, caseSensitive, wholeWord, countEl: row.querySelector('.rule-count') });
+    }
+  });
+  return rules;
+}
+
+function buildRegex(rule) {
+  let pattern = rule.find;
+  if (!rule.isRegex) {
+    pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  if (rule.wholeWord) {
+    pattern = '\\b' + pattern + '\\b';
+  }
+  const flags = 'g' + (rule.caseSensitive ? '' : 'i');
+  return new RegExp(pattern, flags);
+}
+
+function applyRulesTo(text, rules) {
+  let result = text;
+  let totalReplacements = 0;
+  for (const rule of rules) {
+    try {
+      const re = buildRegex(rule);
+      let count = 0;
+      result = result.replace(re, (...args) => {
+        count++;
+        // Support $1, $2 etc in replacement
+        let rep = rule.replace;
+        if (rule.isRegex) {
+          for (let i = 1; i < args.length - 2; i++) {
+            rep = rep.replace(new RegExp('\\$' + i, 'g'), args[i] || '');
+          }
+        }
+        return rep;
+      });
+      if (rule.countEl) rule.countEl.textContent = count + ' match' + (count !== 1 ? 'es' : '');
+      totalReplacements += count;
+    } catch(e) {
+      if (rule.countEl) rule.countEl.textContent = 'Error';
+    }
+  }
+  return { result, totalReplacements };
+}
+
+function applyRules() {
+  const text = inputEl.value;
+  const rules = getRules();
+  if (rules.length === 0) return;
+
+  undoStack.push(text);
+  if (undoStack.length > 20) undoStack.shift();
+
+  const { result, totalReplacements } = applyRulesTo(text, rules);
+  inputEl.value = result;
+  outputEl.value = result;
+  statsEl.textContent = totalReplacements + ' replacement' + (totalReplacements !== 1 ? 's' : '') + ' applied across ' + rules.length + ' rule' + (rules.length !== 1 ? 's' : '');
+  diffEl.classList.remove('show');
+}
+
+function previewDiff() {
+  const text = inputEl.value;
+  const rules = getRules();
+  if (rules.length === 0) return;
+
+  const { result } = applyRulesTo(text, rules);
+  outputEl.value = result;
+
+  // Generate simple diff
+  const origLines = text.split('\n');
+  const newLines = result.split('\n');
+  let html = '';
+  const maxLen = Math.max(origLines.length, newLines.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const orig = origLines[i] ?? '';
+    const modified = newLines[i] ?? '';
+    if (orig === modified) {
+      html += escapeHtml(orig) + '\n';
+    } else {
+      if (orig) html += '<span class="diff-del">' + escapeHtml(orig) + '</span>\n';
+      if (modified) html += '<span class="diff-add">' + escapeHtml(modified) + '</span>\n';
+    }
+  }
+
+  diffEl.innerHTML = html;
+  diffEl.classList.add('show');
+
+  const changes = origLines.filter((l, i) => l !== (newLines[i] ?? '')).length;
+  statsEl.textContent = changes + ' line' + (changes !== 1 ? 's' : '') + ' changed';
+}
+
+function undoInput() {
+  if (undoStack.length === 0) return;
+  inputEl.value = undoStack.pop();
+  outputEl.value = '';
+  statsEl.textContent = 'Undone';
+  diffEl.classList.remove('show');
+}
+
+function clearInput() {
+  undoStack.push(inputEl.value);
+  inputEl.value = '';
+  outputEl.value = '';
+  statsEl.textContent = '';
+  diffEl.classList.remove('show');
+}
+
+function copyOutput() {
+  const text = outputEl.value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => showToast('Copied!'));
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Live preview on rule input change
+document.getElementById('rules').addEventListener('input', () => {
+  const text = inputEl.value;
+  const rules = getRules();
+  if (rules.length === 0) { outputEl.value = ''; statsEl.textContent = ''; return; }
+  const { result, totalReplacements } = applyRulesTo(text, rules);
+  outputEl.value = result;
+  statsEl.textContent = totalReplacements + ' match' + (totalReplacements !== 1 ? 'es' : '') + ' found';
+});
+
+inputEl.addEventListener('input', () => {
+  const rules = getRules();
+  if (rules.length === 0) return;
+  const { result, totalReplacements } = applyRulesTo(inputEl.value, rules);
+  outputEl.value = result;
+  statsEl.textContent = totalReplacements + ' match' + (totalReplacements !== 1 ? 'es' : '') + ' found';
+});
+</script>
+</body>
+</html>
