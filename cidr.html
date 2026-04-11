@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIDR / Subnet Calculator — Free Online Networking Tool</title>
+<meta name="description" content="Free online CIDR and subnet calculator. Calculate network address, broadcast, host range, wildcard mask, and more from any IP/CIDR notation. No data leaves your browser.">
+<meta name="keywords" content="CIDR calculator, subnet calculator, IP address, network mask, subnet mask, wildcard mask, free networking tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cidr.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .ip-input { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+  .ip-input input { flex: 1; font-family: var(--mono); font-size: 1.1rem; padding: 10px 14px; }
+  .ip-input select { font-family: var(--mono); font-size: 1rem; padding: 10px 8px; }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .result-item { background: var(--bg); padding: 12px 14px; }
+  .result-label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; margin-bottom: 4px; }
+  .result-value { font-family: var(--mono); font-size: .9rem; word-break: break-all; }
+  .result-value.big { font-size: 1.05rem; font-weight: 600; }
+  .visual-bar { display: flex; height: 32px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); margin-top: 8px; }
+  .visual-network { background: var(--accent); }
+  .visual-host { background: var(--surface2); }
+  .visual-label { font-size: .75rem; color: var(--muted); display: flex; justify-content: space-between; margin-top: 4px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .subnet-table { width: 100%; font-size: .82rem; }
+  .subnet-table th { text-align: left; padding: 6px 8px; background: var(--surface2); font-weight: 600; position: sticky; top: 0; }
+  .subnet-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  .subnet-table tr.active { background: #fef08a; }
+  .table-wrap { max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .binary-display { font-family: var(--mono); font-size: .85rem; line-height: 1.8; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; word-break: break-all; }
+  .binary-display .net-bits { color: var(--accent); font-weight: 700; }
+  .binary-display .host-bits { color: var(--muted); }
+  @media (max-width: 768px) {
+    .result-grid { grid-template-columns: 1fr; }
+    .ip-input { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🌐 CIDR / Subnet Calculator</h1>
+<p class="subtitle">Calculate network details from CIDR notation. Supports IPv4 addresses with /0 – /32 prefixes. 100% client-side.</p>
+
+<div class="container">
+  <div class="card">
+    <h2>IP Address / CIDR</h2>
+    <div class="ip-input">
+      <input type="text" id="ip-input" value="192.168.1.0/24" placeholder="e.g. 10.0.0.0/8" spellcheck="false">
+      <button class="btn" onclick="calculate()">Calculate</button>
+    </div>
+    <div class="presets">
+      <button class="btn-secondary" onclick="setIP('10.0.0.0/8')">10.0.0.0/8</button>
+      <button class="btn-secondary" onclick="setIP('172.16.0.0/12')">172.16.0.0/12</button>
+      <button class="btn-secondary" onclick="setIP('192.168.0.0/16')">192.168.0.0/16</button>
+      <button class="btn-secondary" onclick="setIP('192.168.1.0/24')">192.168.1.0/24</button>
+      <button class="btn-secondary" onclick="setIP('10.0.1.0/28')">10.0.1.0/28</button>
+      <button class="btn-secondary" onclick="setIP('0.0.0.0/0')">0.0.0.0/0</button>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Network Details</h2>
+    <div class="result-grid" id="results"></div>
+  </div>
+
+  <div class="card">
+    <h2>Binary Representation</h2>
+    <div class="binary-display" id="binary"></div>
+    <div class="visual-bar" id="visual-bar"></div>
+    <div class="visual-label" id="visual-label"></div>
+  </div>
+
+  <div class="card">
+    <h2>Common Subnet Reference</h2>
+    <div class="table-wrap">
+      <table class="subnet-table" id="subnet-table">
+        <thead><tr><th>CIDR</th><th>Subnet Mask</th><th>Addresses</th><th>Usable Hosts</th><th>Class</th></tr></thead>
+        <tbody id="subnet-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+function parseIP(str) {
+  const m = str.trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/);
+  if (!m) return null;
+  const octets = [+m[1], +m[2], +m[3], +m[4]];
+  if (octets.some(o => o > 255)) return null;
+  const prefix = m[5] !== undefined ? +m[5] : 32;
+  if (prefix > 32) return null;
+  const ip = (octets[0] << 24 | octets[1] << 16 | octets[2] << 8 | octets[3]) >>> 0;
+  return { ip, prefix, octets };
+}
+
+function ipToStr(ip) {
+  return [(ip >>> 24) & 255, (ip >>> 16) & 255, (ip >>> 8) & 255, ip & 255].join('.');
+}
+
+function ipToBin(ip) {
+  return ip.toString(2).padStart(32, '0');
+}
+
+function calculate() {
+  const input = document.getElementById('ip-input').value;
+  const parsed = parseIP(input);
+  const statusEl = document.getElementById('status');
+  const resultsEl = document.getElementById('results');
+  const binaryEl = document.getElementById('binary');
+
+  if (!parsed) {
+    statusEl.innerHTML = '<div class="status error">Invalid IP address or CIDR notation</div>';
+    resultsEl.innerHTML = '';
+    binaryEl.innerHTML = '';
+    return;
+  }
+
+  statusEl.innerHTML = '<div class="status success">Valid CIDR notation</div>';
+
+  const { ip, prefix } = parsed;
+  const mask = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
+  const wildcard = (~mask) >>> 0;
+  const network = (ip & mask) >>> 0;
+  const broadcast = (network | wildcard) >>> 0;
+  const totalAddresses = Math.pow(2, 32 - prefix);
+  const usableHosts = prefix >= 31 ? totalAddresses : Math.max(0, totalAddresses - 2);
+  const firstHost = prefix >= 31 ? network : (network + 1) >>> 0;
+  const lastHost = prefix >= 31 ? broadcast : (broadcast - 1) >>> 0;
+
+  let ipClass = 'N/A';
+  const firstOctet = (network >>> 24) & 255;
+  if (firstOctet < 128) ipClass = 'A';
+  else if (firstOctet < 192) ipClass = 'B';
+  else if (firstOctet < 224) ipClass = 'C';
+  else if (firstOctet < 240) ipClass = 'D (Multicast)';
+  else ipClass = 'E (Reserved)';
+
+  let isPrivate = false;
+  if (firstOctet === 10) isPrivate = true;
+  else if (firstOctet === 172 && ((network >>> 16) & 255) >= 16 && ((network >>> 16) & 255) <= 31) isPrivate = true;
+  else if (firstOctet === 192 && ((network >>> 16) & 255) === 168) isPrivate = true;
+  else if (firstOctet === 127) isPrivate = true;
+
+  const items = [
+    ['Network Address', ipToStr(network) + '/' + prefix, true],
+    ['Broadcast Address', ipToStr(broadcast), false],
+    ['Subnet Mask', ipToStr(mask), false],
+    ['Wildcard Mask', ipToStr(wildcard), false],
+    ['First Usable Host', ipToStr(firstHost), false],
+    ['Last Usable Host', ipToStr(lastHost), false],
+    ['Total Addresses', totalAddresses.toLocaleString(), false],
+    ['Usable Hosts', usableHosts.toLocaleString(), false],
+    ['IP Class', ipClass, false],
+    ['Private/Public', isPrivate ? 'Private (RFC 1918)' : 'Public', false],
+  ];
+
+  resultsEl.innerHTML = items.map(([label, value, big]) =>
+    `<div class="result-item"><div class="result-label">${label}</div><div class="result-value${big ? ' big' : ''}">${value}</div></div>`
+  ).join('');
+
+  // Binary display
+  const bin = ipToBin(ip);
+  const netBits = bin.slice(0, prefix);
+  const hostBits = bin.slice(prefix);
+  binaryEl.innerHTML = `<strong>IP:</strong> <span class="net-bits">${netBits}</span><span class="host-bits">${hostBits || ''}</span><br>` +
+    `<strong>Mask:</strong> ${'1'.repeat(prefix)}${'0'.repeat(32 - prefix)}`;
+
+  // Visual bar
+  const netPct = (prefix / 32) * 100;
+  document.getElementById('visual-bar').innerHTML =
+    `<div class="visual-network" style="width:${netPct}%"></div><div class="visual-host" style="width:${100 - netPct}%"></div>`;
+  document.getElementById('visual-label').innerHTML =
+    `<span>Network: ${prefix} bits</span><span>Host: ${32 - prefix} bits</span>`;
+
+  highlightSubnetTable(prefix);
+}
+
+function setIP(val) {
+  document.getElementById('ip-input').value = val;
+  calculate();
+}
+
+function buildSubnetTable() {
+  const tbody = document.getElementById('subnet-tbody');
+  const rows = [];
+  for (let p = 32; p >= 0; p--) {
+    const mask = p === 0 ? 0 : (0xFFFFFFFF << (32 - p)) >>> 0;
+    const total = Math.pow(2, 32 - p);
+    const usable = p >= 31 ? total : Math.max(0, total - 2);
+    let cls = '';
+    if (p >= 24) cls = 'C';
+    else if (p >= 16) cls = 'B';
+    else if (p >= 8) cls = 'A';
+    else cls = '—';
+    rows.push(`<tr data-prefix="${p}"><td>/${p}</td><td>${ipToStr(mask)}</td><td>${total.toLocaleString()}</td><td>${usable.toLocaleString()}</td><td>${cls}</td></tr>`);
+  }
+  tbody.innerHTML = rows.join('');
+}
+
+function highlightSubnetTable(prefix) {
+  document.querySelectorAll('#subnet-tbody tr').forEach(tr => {
+    tr.classList.toggle('active', +tr.dataset.prefix === prefix);
+  });
+}
+
+document.getElementById('ip-input').addEventListener('keydown', e => { if (e.key === 'Enter') calculate(); });
+
+buildSubnetTable();
+calculate();
+</script>
+</body>
+</html>

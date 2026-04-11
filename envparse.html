@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>.env File Parser & Validator — Free Online Tool</title>
+<meta name="description" content="Free online .env file parser and validator. Parse, validate, lint, and convert environment variable files. Detect duplicates, missing quotes, and common issues. No data leaves your browser.">
+<meta name="keywords" content="env parser, dotenv, environment variables, env validator, env file, dotenv lint, free env tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/envparse.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .env-textarea { width: 100%; min-height: 300px; font-family: var(--mono); font-size: .85rem; line-height: 1.6; resize: vertical; padding: 12px; }
+  .issue-list { list-style: none; padding: 0; margin: 0; }
+  .issue-item { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: .85rem; display: flex; gap: 8px; align-items: flex-start; }
+  .issue-item:last-child { border-bottom: none; }
+  .issue-line { font-family: var(--mono); font-weight: 600; color: var(--muted); min-width: 42px; }
+  .issue-type { font-size: .7rem; font-weight: 600; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; white-space: nowrap; }
+  .issue-type.error { background: #fde8e8; color: var(--error); }
+  .issue-type.warn { background: #fef3cd; color: var(--warning); }
+  .issue-type.info { background: #e8f0fe; color: #1a73e8; }
+  .issue-msg { flex: 1; }
+  .var-table { width: 100%; font-size: .82rem; }
+  .var-table th { text-align: left; padding: 6px 8px; background: var(--surface2); font-weight: 600; }
+  .var-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .var-table td:first-child { font-family: var(--mono); font-weight: 600; }
+  .var-table td:nth-child(2) { font-family: var(--mono); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stats-bar { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stat { text-align: center; }
+  .stat-num { font-size: 1.4rem; font-weight: 700; font-family: var(--mono); }
+  .stat-label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .convert-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .output-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; font-family: var(--mono); font-size: .85rem; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .var-table td:nth-child(2) { max-width: 150px; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📋 .env File Parser & Validator</h1>
+<p class="subtitle">Parse, validate, and lint .env files. Detect duplicates, bad formatting, and common issues. 100% client-side.</p>
+
+<div class="container">
+  <div class="panels">
+    <div class="card">
+      <h2>Input (.env content)</h2>
+      <textarea class="env-textarea" id="env-input" placeholder="Paste your .env file here...
+# Example:
+DATABASE_URL=postgres://localhost/mydb
+API_KEY=&quot;sk-abc123&quot;
+DEBUG=true
+PORT=3000" spellcheck="false">## Database
+DATABASE_URL=postgres://user:pass@localhost:5432/mydb
+DB_POOL_SIZE=10
+
+# API Keys
+API_KEY="sk-live-abc123def456"
+API_SECRET='s3cr3t-k3y'
+
+# App Config
+NODE_ENV=production
+DEBUG=false
+PORT=3000
+HOST=0.0.0.0
+
+# Duplicates & Issues
+PORT=8080
+INVALID LINE HERE
+EMPTY_VAL=
+SPACES_IN_KEY = bad_practice
+UNQUOTED_SPECIAL=hello world with spaces</textarea>
+      <div style="margin-top: 8px; display: flex; gap: 8px;">
+        <button class="btn" onclick="parseEnv()">Parse & Validate</button>
+        <button class="btn-secondary" onclick="clearInput()">Clear</button>
+        <button class="btn-secondary" onclick="loadSample()">Load Sample</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>Summary</h2>
+        <div class="stats-bar" id="stats-bar"></div>
+        <div id="status"></div>
+      </div>
+
+      <div class="card" style="margin-top: 16px;">
+        <h2>Issues</h2>
+        <ul class="issue-list" id="issues"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Parsed Variables</h2>
+    <table class="var-table">
+      <thead><tr><th>Key</th><th>Value</th><th>Line</th></tr></thead>
+      <tbody id="var-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Export / Convert</h2>
+    <div class="convert-btns">
+      <button class="btn-secondary" onclick="exportAs('shell')">Shell export</button>
+      <button class="btn-secondary" onclick="exportAs('docker')">Docker --env</button>
+      <button class="btn-secondary" onclick="exportAs('json')">JSON</button>
+      <button class="btn-secondary" onclick="exportAs('yaml')">YAML</button>
+      <button class="btn-secondary" onclick="exportAs('toml')">TOML</button>
+      <button class="btn-secondary" onclick="copyOutput()">📋 Copy</button>
+    </div>
+    <div class="output-box" id="export-output" style="margin-top: 12px;"></div>
+  </div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+let parsedVars = [];
+
+function parseEnv() {
+  const input = document.getElementById('env-input').value;
+  const lines = input.split('\n');
+  const issues = [];
+  const vars = [];
+  const seen = {};
+
+  lines.forEach((line, idx) => {
+    const lineNum = idx + 1;
+    const trimmed = line.trim();
+
+    // Skip empty lines and comments
+    if (trimmed === '' || trimmed.startsWith('#')) return;
+
+    // Check for valid KEY=VALUE pattern
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) {
+      issues.push({ line: lineNum, type: 'error', msg: `Invalid syntax — no "=" found: "${trimmed.slice(0, 40)}"` });
+      return;
+    }
+
+    const key = trimmed.slice(0, eqIdx);
+    let value = trimmed.slice(eqIdx + 1);
+
+    // Validate key
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key.trim())) {
+      if (key !== key.trim()) {
+        issues.push({ line: lineNum, type: 'warn', msg: `Key "${key}" has leading/trailing spaces` });
+      } else {
+        issues.push({ line: lineNum, type: 'error', msg: `Invalid key name: "${key}"` });
+      }
+    }
+
+    const cleanKey = key.trim();
+
+    // Check for duplicates
+    if (seen[cleanKey] !== undefined) {
+      issues.push({ line: lineNum, type: 'warn', msg: `Duplicate key "${cleanKey}" (first on line ${seen[cleanKey]})` });
+    }
+    seen[cleanKey] = lineNum;
+
+    // Process value
+    let rawValue = value;
+    let cleanValue = value;
+
+    // Check for quoted values
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      cleanValue = value.slice(1, -1);
+    } else {
+      // Remove inline comments (unquoted)
+      const commentIdx = value.indexOf(' #');
+      if (commentIdx !== -1) {
+        cleanValue = value.slice(0, commentIdx);
+      }
+    }
+
+    // Check for empty values
+    if (cleanValue === '') {
+      issues.push({ line: lineNum, type: 'info', msg: `"${cleanKey}" has an empty value` });
+    }
+
+    // Check for unquoted values with spaces
+    if (!value.startsWith('"') && !value.startsWith("'") && value.includes(' ') && !value.includes(' #')) {
+      issues.push({ line: lineNum, type: 'warn', msg: `"${cleanKey}" value contains spaces but is not quoted` });
+    }
+
+    // Check for potentially sensitive values
+    if (/^(password|secret|token|api_key|private_key)/i.test(cleanKey) && cleanValue.length > 0 && cleanValue.length < 8) {
+      issues.push({ line: lineNum, type: 'warn', msg: `"${cleanKey}" looks like a secret but has a short value (< 8 chars)` });
+    }
+
+    vars.push({ key: cleanKey, value: cleanValue, rawValue: rawValue, line: lineNum });
+  });
+
+  parsedVars = vars;
+  renderResults(vars, issues);
+  exportAs('shell');
+}
+
+function renderResults(vars, issues) {
+  const errorCount = issues.filter(i => i.type === 'error').length;
+  const warnCount = issues.filter(i => i.type === 'warn').length;
+  const infoCount = issues.filter(i => i.type === 'info').length;
+
+  document.getElementById('stats-bar').innerHTML = [
+    { num: vars.length, label: 'Variables', color: 'var(--text)' },
+    { num: errorCount, label: 'Errors', color: 'var(--error)' },
+    { num: warnCount, label: 'Warnings', color: 'var(--warning)' },
+    { num: infoCount, label: 'Info', color: 'var(--muted)' },
+  ].map(s => `<div class="stat"><div class="stat-num" style="color:${s.color}">${s.num}</div><div class="stat-label">${s.label}</div></div>`).join('');
+
+  const statusEl = document.getElementById('status');
+  if (errorCount === 0 && warnCount === 0) {
+    statusEl.innerHTML = '<div class="status success">No issues found</div>';
+  } else if (errorCount > 0) {
+    statusEl.innerHTML = `<div class="status error">${errorCount} error(s) and ${warnCount} warning(s) found</div>`;
+  } else {
+    statusEl.innerHTML = `<div class="status warning">${warnCount} warning(s) found</div>`;
+  }
+
+  const issuesEl = document.getElementById('issues');
+  if (issues.length === 0) {
+    issuesEl.innerHTML = '<li class="issue-item" style="color:var(--muted)">No issues found — your .env file looks clean!</li>';
+  } else {
+    issuesEl.innerHTML = issues.map(i =>
+      `<li class="issue-item"><span class="issue-line">L${i.line}</span><span class="issue-type ${i.type}">${i.type}</span><span class="issue-msg">${escHtml(i.msg)}</span></li>`
+    ).join('');
+  }
+
+  const tbody = document.getElementById('var-tbody');
+  if (vars.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:16px">No variables parsed</td></tr>';
+  } else {
+    tbody.innerHTML = vars.map(v =>
+      `<tr><td>${escHtml(v.key)}</td><td title="${escHtml(v.value)}">${escHtml(v.value)}</td><td>${v.line}</td></tr>`
+    ).join('');
+  }
+}
+
+function exportAs(format) {
+  const output = document.getElementById('export-output');
+  if (parsedVars.length === 0) { output.textContent = '# No variables to export'; return; }
+
+  switch (format) {
+    case 'shell':
+      output.textContent = parsedVars.map(v => `export ${v.key}="${v.value.replace(/"/g, '\\"')}"`).join('\n');
+      break;
+    case 'docker':
+      output.textContent = parsedVars.map(v => `--env ${v.key}="${v.value.replace(/"/g, '\\"')}"`).join(' \\\n  ');
+      break;
+    case 'json':
+      const obj = {};
+      parsedVars.forEach(v => { obj[v.key] = v.value; });
+      output.textContent = JSON.stringify(obj, null, 2);
+      break;
+    case 'yaml':
+      output.textContent = parsedVars.map(v => {
+        const val = v.value;
+        if (val === '' || val === 'true' || val === 'false' || !isNaN(val)) return `${v.key}: ${val || '""'}`;
+        return `${v.key}: "${val.replace(/"/g, '\\"')}"`;
+      }).join('\n');
+      break;
+    case 'toml':
+      output.textContent = parsedVars.map(v => `${v.key} = "${v.value.replace(/"/g, '\\"')}"`).join('\n');
+      break;
+  }
+}
+
+function copyOutput() {
+  const text = document.getElementById('export-output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+
+function clearInput() {
+  document.getElementById('env-input').value = '';
+  parsedVars = [];
+  document.getElementById('stats-bar').innerHTML = '';
+  document.getElementById('status').innerHTML = '';
+  document.getElementById('issues').innerHTML = '';
+  document.getElementById('var-tbody').innerHTML = '';
+  document.getElementById('export-output').textContent = '';
+}
+
+function loadSample() {
+  document.getElementById('env-input').value = `## Database
+DATABASE_URL=postgres://user:pass@localhost:5432/mydb
+DB_POOL_SIZE=10
+
+# API Keys
+API_KEY="sk-live-abc123def456"
+API_SECRET='s3cr3t-k3y'
+
+# App Config
+NODE_ENV=production
+DEBUG=false
+PORT=3000
+HOST=0.0.0.0
+
+# Duplicates & Issues
+PORT=8080
+INVALID LINE HERE
+EMPTY_VAL=
+SPACES_IN_KEY = bad_practice
+UNQUOTED_SPECIAL=hello world with spaces`;
+  parseEnv();
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+parseEnv();
+</script>
+</body>
+</html>
