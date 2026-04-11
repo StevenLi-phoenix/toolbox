@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOTP 2FA Code Generator - Free Online Tool</title>
+<meta name="description" content="Generate time-based one-time passwords (TOTP) from a secret key. Test 2FA implementations client-side. No data leaves your browser.">
+<meta name="keywords" content="totp, 2fa, two factor authentication, otp, one time password, authenticator, rfc 6238">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/totp.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .code-display { text-align: center; padding: 2rem 1rem; }
+  .otp-code {
+    font-family: var(--mono);
+    font-size: 3rem;
+    font-weight: 700;
+    letter-spacing: .3em;
+    color: var(--text);
+    margin: .5rem 0;
+  }
+  .timer-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--surface2);
+    border-radius: 2px;
+    margin-top: 1rem;
+    overflow: hidden;
+  }
+  .timer-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width .25s linear;
+  }
+  .timer-fill.expiring { background: var(--error); }
+  .timer-label {
+    font-size: .85rem;
+    color: var(--muted);
+    margin-top: .5rem;
+  }
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 768px) {
+    .field-row { grid-template-columns: 1fr; }
+    .otp-code { font-size: 2.2rem; }
+  }
+  .secret-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: .95rem;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    margin-top: 1rem;
+  }
+  .info-item {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: .82rem;
+  }
+  .info-item .label { color: var(--muted); margin-bottom: 2px; }
+  .info-item .value { font-family: var(--mono); font-weight: 600; }
+  .history { max-height: 200px; overflow-y: auto; }
+  .history-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: .82rem;
+    font-family: var(--mono);
+  }
+  .history-row:last-child { border-bottom: none; }
+  .history-time { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>TOTP 2FA Code Generator</h1>
+<p class="subtitle">Generate time-based one-time passwords (RFC 6238) for testing 2FA</p>
+
+<div class="card">
+<h2>Secret Key</h2>
+<input class="secret-input" id="secret" placeholder="Enter Base32 secret (e.g. JBSWY3DPEHPK3PXP)" oninput="restart()" autocomplete="off" spellcheck="false">
+<div class="field-row" style="margin-top:12px">
+  <div>
+    <label style="font-size:.82rem;color:var(--muted)">Algorithm</label>
+    <select id="algo" onchange="restart()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font:inherit;background:var(--bg);color:var(--text)">
+      <option value="SHA-1" selected>SHA-1 (default)</option>
+      <option value="SHA-256">SHA-256</option>
+      <option value="SHA-512">SHA-512</option>
+    </select>
+  </div>
+  <div>
+    <label style="font-size:.82rem;color:var(--muted)">Digits</label>
+    <select id="digits" onchange="restart()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font:inherit;background:var(--bg);color:var(--text)">
+      <option value="6" selected>6 digits</option>
+      <option value="7">7 digits</option>
+      <option value="8">8 digits</option>
+    </select>
+  </div>
+</div>
+<div class="field-row" style="margin-top:12px">
+  <div>
+    <label style="font-size:.82rem;color:var(--muted)">Period (seconds)</label>
+    <input id="period" type="number" value="30" min="10" max="120" onchange="restart()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font:inherit;background:var(--bg);color:var(--text)">
+  </div>
+  <div style="display:flex;align-items:end;gap:8px">
+    <button class="btn" onclick="genRandom()">Random Secret</button>
+  </div>
+</div>
+</div>
+
+<div class="card">
+<div class="code-display">
+  <div style="font-size:.82rem;color:var(--muted)">Current Code</div>
+  <div class="otp-code" id="otpCode" onclick="copyCode()">------</div>
+  <div style="font-size:.75rem;color:var(--muted)">Click to copy</div>
+  <div class="timer-bar"><div class="timer-fill" id="timerFill"></div></div>
+  <div class="timer-label" id="timerLabel">Expires in --s</div>
+</div>
+</div>
+
+<div class="card">
+<h2>Details</h2>
+<div class="info-grid" id="infoGrid">
+  <div class="info-item"><div class="label">Counter (T)</div><div class="value" id="infoCounter">-</div></div>
+  <div class="info-item"><div class="label">Epoch Time</div><div class="value" id="infoEpoch">-</div></div>
+  <div class="info-item"><div class="label">Algorithm</div><div class="value" id="infoAlgo">-</div></div>
+  <div class="info-item"><div class="label">Secret (hex)</div><div class="value" id="infoHex" style="word-break:break-all">-</div></div>
+</div>
+</div>
+
+<div class="card">
+<h2>Recent Codes</h2>
+<div class="history" id="history"><div class="empty">Codes will appear here as they rotate</div></div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+// Base32 decode (RFC 4648)
+function base32Decode(str) {
+  const alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  str = str.replace(/[\s=-]/g, '').toUpperCase();
+  let bits = '';
+  for (const c of str) {
+    const v = alpha.indexOf(c);
+    if (v < 0) continue;
+    bits += v.toString(2).padStart(5, '0');
+  }
+  const bytes = new Uint8Array(Math.floor(bits.length / 8));
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+  }
+  return bytes;
+}
+
+function toHex(buf) {
+  return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function hmacSign(algo, key, msg) {
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', key, { name: 'HMAC', hash: algo }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, msg);
+  return new Uint8Array(sig);
+}
+
+async function generateTOTP(secret, time, algo, digits) {
+  const counter = Math.floor(time / parseInt($('period').value || 30));
+  // Counter to 8-byte big-endian
+  const msg = new Uint8Array(8);
+  let tmp = counter;
+  for (let i = 7; i >= 0; i--) {
+    msg[i] = tmp & 0xff;
+    tmp = Math.floor(tmp / 256);
+  }
+  const hash = await hmacSign(algo, secret, msg);
+  const offset = hash[hash.length - 1] & 0x0f;
+  const code = (
+    ((hash[offset] & 0x7f) << 24) |
+    ((hash[offset + 1] & 0xff) << 16) |
+    ((hash[offset + 2] & 0xff) << 8) |
+    (hash[offset + 3] & 0xff)
+  ) % Math.pow(10, digits);
+  return { code: code.toString().padStart(digits, '0'), counter };
+}
+
+let animFrame;
+const codeHistory = [];
+
+function restart() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  codeHistory.length = 0;
+  $('history').innerHTML = '<div class="empty">Codes will appear here as they rotate</div>';
+  tick();
+}
+
+let lastCounter = -1;
+
+async function tick() {
+  const secret = $('secret').value.trim();
+  const algo = $('algo').value;
+  const digits = parseInt($('digits').value);
+  const period = parseInt($('period').value) || 30;
+
+  if (!secret) {
+    $('otpCode').textContent = '-'.repeat(digits);
+    $('timerLabel').textContent = 'Enter a secret to start';
+    $('timerFill').style.width = '0%';
+    $('infoCounter').textContent = '-';
+    $('infoEpoch').textContent = '-';
+    $('infoAlgo').textContent = '-';
+    $('infoHex').textContent = '-';
+    animFrame = requestAnimationFrame(tick);
+    return;
+  }
+
+  try {
+    const keyBytes = base32Decode(secret);
+    const now = Math.floor(Date.now() / 1000);
+    const { code, counter } = await generateTOTP(keyBytes, now, algo, digits);
+    const remaining = period - (now % period);
+    const pct = (remaining / period) * 100;
+
+    $('otpCode').textContent = code.slice(0, Math.ceil(digits/2)) + ' ' + code.slice(Math.ceil(digits/2));
+    $('timerLabel').textContent = `Expires in ${remaining}s`;
+    $('timerFill').style.width = pct + '%';
+    $('timerFill').classList.toggle('expiring', remaining <= 5);
+
+    $('infoCounter').textContent = counter;
+    $('infoEpoch').textContent = now;
+    $('infoAlgo').textContent = algo;
+    $('infoHex').textContent = toHex(keyBytes);
+
+    if (counter !== lastCounter) {
+      lastCounter = counter;
+      codeHistory.unshift({ code, time: new Date().toLocaleTimeString(), counter });
+      if (codeHistory.length > 20) codeHistory.pop();
+      renderHistory();
+    }
+  } catch (e) {
+    $('otpCode').textContent = 'Invalid';
+    $('timerLabel').textContent = 'Check your secret key';
+    $('timerFill').style.width = '0%';
+  }
+  animFrame = requestAnimationFrame(tick);
+}
+
+function renderHistory() {
+  if (!codeHistory.length) {
+    $('history').innerHTML = '<div class="empty">Codes will appear here as they rotate</div>';
+    return;
+  }
+  $('history').innerHTML = codeHistory.map((h, i) =>
+    `<div class="history-row${i===0?' style="font-weight:600"':''}"><span>${h.code}</span><span>T=${h.counter}</span><span class="history-time">${h.time}</span></div>`
+  ).join('');
+}
+
+function genRandom() {
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  const alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  bytes.forEach(b => bits += b.toString(2).padStart(8, '0'));
+  let result = '';
+  for (let i = 0; i + 5 <= bits.length; i += 5) {
+    result += alpha[parseInt(bits.slice(i, i + 5), 2)];
+  }
+  $('secret').value = result;
+  restart();
+}
+
+function copyCode() {
+  const code = $('otpCode').textContent.replace(/\s/g, '');
+  if (code && !code.includes('-') && code !== 'Invalid') {
+    navigator.clipboard.writeText(code).then(() => {
+      const t = $('toast');
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1500);
+    });
+  }
+}
+
+tick();
+</script>
+</body>
+</html>
