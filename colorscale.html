@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Color Scale Generator - Free Online Design System Color Tool</title>
+<meta name="description" content="Generate Tailwind-style color scales from a single base color. Create consistent 50–950 shade palettes for design systems. No data leaves your browser.">
+<meta name="keywords" content="color scale, color palette, tailwind colors, design system, shade generator, color ramp">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/colorscale.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .color-input-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .color-input-row input[type="color"] { width: 48px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; padding: 2px; background: var(--surface); }
+  .color-input-row input[type="text"] { width: 120px; font-family: var(--mono); font-size: .9rem; }
+  .color-name { width: 140px; }
+  .scale-row { display: flex; gap: 0; border-radius: var(--radius); overflow: hidden; margin-bottom: 12px; }
+  .scale-swatch { flex: 1; min-height: 72px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; transition: transform .12s; position: relative; }
+  .scale-swatch:hover { transform: scale(1.05); z-index: 2; box-shadow: var(--shadow-lg); }
+  .scale-swatch .step { font-size: .7rem; font-weight: 700; }
+  .scale-swatch .hex { font-size: .65rem; font-family: var(--mono); opacity: .85; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .presets button { font-size: .8rem; }
+  .export-area { font-family: var(--mono); font-size: .8rem; white-space: pre; overflow-x: auto; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; max-height: 300px; overflow-y: auto; }
+  .scales-container { display: flex; flex-direction: column; gap: 8px; }
+  .scale-label { font-size: .85rem; font-weight: 600; color: var(--text); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; }
+  .scale-label button { font-size: .72rem; padding: 2px 8px; }
+  .multi-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+  .tabs { margin-bottom: 12px; }
+  @media (max-width: 768px) {
+    .scale-row { flex-wrap: wrap; }
+    .scale-swatch { min-width: calc(33.3% - 0px); min-height: 56px; }
+    .color-input-row { flex-direction: column; align-items: stretch; }
+    .color-input-row input[type="text"] { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Color Scale Generator</h1>
+<p class="subtitle">Generate Tailwind-style 50&ndash;950 color scales from a base color for design systems</p>
+
+<div class="card">
+<h2>🎨 Base Color</h2>
+<div class="color-input-row">
+  <input type="color" id="colorPicker" value="#3b82f6">
+  <input type="text" id="hexInput" value="#3b82f6" placeholder="#hex" maxlength="7" class="color-name">
+  <input type="text" id="scaleName" value="blue" placeholder="Scale name" class="color-name">
+  <button class="btn" onclick="generate()">Generate Scale</button>
+  <button class="btn-secondary" onclick="addScale()">+ Add to Collection</button>
+</div>
+<div class="presets" style="margin-top: 12px;">
+  <span style="font-size:.82rem;color:var(--muted)">Presets:</span>
+  <button class="btn-secondary" onclick="preset('#ef4444','red')">Red</button>
+  <button class="btn-secondary" onclick="preset('#f97316','orange')">Orange</button>
+  <button class="btn-secondary" onclick="preset('#eab308','yellow')">Yellow</button>
+  <button class="btn-secondary" onclick="preset('#22c55e','green')">Green</button>
+  <button class="btn-secondary" onclick="preset('#3b82f6','blue')">Blue</button>
+  <button class="btn-secondary" onclick="preset('#8b5cf6','violet')">Violet</button>
+  <button class="btn-secondary" onclick="preset('#ec4899','pink')">Pink</button>
+  <button class="btn-secondary" onclick="preset('#6b7280','gray')">Gray</button>
+  <button class="btn-secondary" onclick="preset('#14b8a6','teal')">Teal</button>
+</div>
+</div>
+
+<div class="card">
+<h2>🌈 Preview</h2>
+<div class="scales-container" id="preview"></div>
+<div class="empty" id="emptyPreview" style="display:none">Pick a base color and click Generate</div>
+</div>
+
+<div class="card">
+<h2>📦 Collection</h2>
+<div class="scales-container" id="collection"></div>
+<div class="empty" id="emptyCollection">Add scales to your collection to export them together</div>
+</div>
+
+<div class="card">
+<h2>📋 Export</h2>
+<div class="tabs">
+  <button class="tab active" onclick="setExport('css')">CSS Variables</button>
+  <button class="tab" onclick="setExport('tailwind')">Tailwind Config</button>
+  <button class="tab" onclick="setExport('scss')">SCSS Map</button>
+  <button class="tab" onclick="setExport('json')">JSON</button>
+</div>
+<div class="export-area" id="exportArea">Generate a scale and add it to your collection to see export code.</div>
+<button class="btn-secondary" style="margin-top:8px" onclick="copyExport()">Copy</button>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+const STEPS = [50,100,200,300,400,500,600,700,800,900,950];
+let currentScale = [];
+let collection = [];
+let exportMode = 'css';
+
+function hexToHSL(hex) {
+  hex = hex.replace('#','');
+  const r = parseInt(hex.substring(0,2),16)/255;
+  const g = parseInt(hex.substring(2,4),16)/255;
+  const b = parseInt(hex.substring(4,6),16)/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h,s,l = (max+min)/2;
+  if(max===min){ h=s=0; }
+  else {
+    const d=max-min;
+    s = l>0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max){
+      case r: h=((g-b)/d+(g<b?6:0))/6; break;
+      case g: h=((b-r)/d+2)/6; break;
+      case b: h=((r-g)/d+4)/6; break;
+    }
+  }
+  return [h*360, s*100, l*100];
+}
+
+function hslToHex(h, s, l) {
+  h = ((h%360)+360)%360;
+  s = Math.max(0, Math.min(100, s))/100;
+  l = Math.max(0, Math.min(100, l))/100;
+  const a = s * Math.min(l, 1-l);
+  const f = n => {
+    const k = (n + h/30) % 12;
+    const color = l - a * Math.max(Math.min(k-3, 9-k, 1), -1);
+    return Math.round(255 * color).toString(16).padStart(2,'0');
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+function contrastColor(hex) {
+  hex = hex.replace('#','');
+  const r = parseInt(hex.substring(0,2),16);
+  const g = parseInt(hex.substring(2,4),16);
+  const b = parseInt(hex.substring(4,6),16);
+  const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+  return lum > 0.55 ? '#000000' : '#ffffff';
+}
+
+function generateScale(hex) {
+  const [h, s, l] = hexToHSL(hex);
+  const scale = [];
+  // Lightness targets for each step (roughly matching Tailwind conventions)
+  const lightnessMap = {
+    50: 97, 100: 94, 200: 86, 300: 76, 400: 64,
+    500: 50, 600: 42, 700: 34, 800: 26, 900: 18, 950: 10
+  };
+  // Saturation adjustments — boost mid tones, desaturate extremes slightly
+  const satMap = {
+    50: -20, 100: -15, 200: -8, 300: -3, 400: 0,
+    500: 0, 600: 2, 700: 3, 800: 2, 900: -2, 950: -8
+  };
+  // Slight hue shifts for richness
+  const hueShift = {
+    50: -1, 100: -1, 200: 0, 300: 0, 400: 0,
+    500: 0, 600: 1, 700: 2, 800: 3, 900: 4, 950: 5
+  };
+
+  for (const step of STEPS) {
+    const newH = h + (hueShift[step] || 0);
+    const newS = Math.max(0, Math.min(100, s + (satMap[step] || 0)));
+    const newL = lightnessMap[step];
+    scale.push({ step, hex: hslToHex(newH, newS, newL) });
+  }
+  return scale;
+}
+
+function renderScale(scale, name, container, removable) {
+  const label = document.createElement('div');
+  label.className = 'scale-label';
+  label.innerHTML = `<span>${name}</span>`;
+  if (removable) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-secondary';
+    btn.textContent = '✕ Remove';
+    btn.onclick = () => {
+      collection = collection.filter(c => c.name !== name);
+      renderCollection();
+      renderExport();
+    };
+    label.appendChild(btn);
+  }
+  container.appendChild(label);
+
+  const row = document.createElement('div');
+  row.className = 'scale-row';
+  for (const {step, hex} of scale) {
+    const swatch = document.createElement('div');
+    swatch.className = 'scale-swatch';
+    swatch.style.background = hex;
+    swatch.style.color = contrastColor(hex);
+    swatch.innerHTML = `<span class="step">${step}</span><span class="hex">${hex}</span>`;
+    swatch.title = `${name}-${step}: ${hex}\nClick to copy`;
+    swatch.onclick = () => {
+      navigator.clipboard.writeText(hex);
+      toast(`Copied ${hex}`);
+    };
+    row.appendChild(swatch);
+  }
+  container.appendChild(row);
+}
+
+function generate() {
+  const hex = $('hexInput').value.trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) { toast('Enter a valid hex color'); return; }
+  currentScale = generateScale(hex);
+  const container = $('preview');
+  container.innerHTML = '';
+  $('emptyPreview').style.display = 'none';
+  renderScale(currentScale, $('scaleName').value || 'color', container, false);
+}
+
+function addScale() {
+  if (!currentScale.length) { generate(); }
+  if (!currentScale.length) return;
+  const name = ($('scaleName').value || 'color').trim().toLowerCase().replace(/\s+/g,'-');
+  // Replace if same name exists
+  collection = collection.filter(c => c.name !== name);
+  collection.push({ name, scale: [...currentScale] });
+  renderCollection();
+  renderExport();
+  toast(`Added "${name}" to collection`);
+}
+
+function renderCollection() {
+  const container = $('collection');
+  container.innerHTML = '';
+  $('emptyCollection').style.display = collection.length ? 'none' : 'block';
+  for (const {name, scale} of collection) {
+    renderScale(scale, name, container, true);
+  }
+}
+
+function setExport(mode) {
+  exportMode = mode;
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase().includes(mode === 'css' ? 'css var' : mode === 'tailwind' ? 'tailwind' : mode === 'scss' ? 'scss' : 'json')));
+  renderExport();
+}
+
+function renderExport() {
+  const el = $('exportArea');
+  if (!collection.length) { el.textContent = 'Add scales to your collection to see export code.'; return; }
+
+  if (exportMode === 'css') {
+    let out = ':root {\n';
+    for (const {name, scale} of collection) {
+      for (const {step, hex} of scale) {
+        out += `  --${name}-${step}: ${hex};\n`;
+      }
+      out += '\n';
+    }
+    out = out.trimEnd() + '\n}';
+    el.textContent = out;
+  } else if (exportMode === 'tailwind') {
+    let out = 'module.exports = {\n  theme: {\n    extend: {\n      colors: {\n';
+    for (const {name, scale} of collection) {
+      out += `        '${name}': {\n`;
+      for (const {step, hex} of scale) {
+        out += `          ${step}: '${hex}',\n`;
+      }
+      out += `        },\n`;
+    }
+    out += '      },\n    },\n  },\n};';
+    el.textContent = out;
+  } else if (exportMode === 'scss') {
+    let out = '';
+    for (const {name, scale} of collection) {
+      out += `$${name}: (\n`;
+      for (const {step, hex} of scale) {
+        out += `  "${step}": ${hex},\n`;
+      }
+      out += ');\n\n';
+    }
+    el.textContent = out.trimEnd();
+  } else {
+    const obj = {};
+    for (const {name, scale} of collection) {
+      obj[name] = {};
+      for (const {step, hex} of scale) {
+        obj[name][step] = hex;
+      }
+    }
+    el.textContent = JSON.stringify(obj, null, 2);
+  }
+}
+
+function copyExport() {
+  navigator.clipboard.writeText($('exportArea').textContent);
+  toast('Copied!');
+}
+
+function preset(hex, name) {
+  $('colorPicker').value = hex;
+  $('hexInput').value = hex;
+  $('scaleName').value = name;
+  generate();
+}
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1500);
+}
+
+// Sync color picker and hex input
+$('colorPicker').addEventListener('input', e => {
+  $('hexInput').value = e.target.value;
+  generate();
+});
+$('hexInput').addEventListener('input', e => {
+  const v = e.target.value;
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+    $('colorPicker').value = v;
+    generate();
+  }
+});
+
+// Initial render
+generate();
+</script>
+</body>
+</html>

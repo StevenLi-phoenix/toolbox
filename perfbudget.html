@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Performance Budget Calculator - Free Online Web Perf Tool</title>
+<meta name="description" content="Plan web performance budgets by resource type. Set targets for page weight, request count, and load time across connection speeds. No data leaves your browser.">
+<meta name="keywords" content="performance budget, web performance, page weight, load time, lighthouse, core web vitals">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/perfbudget.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .budget-table { width: 100%; border-collapse: collapse; }
+  .budget-table th { text-align: left; font-size: .8rem; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 2px solid var(--border); }
+  .budget-table td { padding: 8px; border-bottom: 1px solid var(--border); font-size: .85rem; }
+  .budget-table input[type="number"] { width: 80px; font-family: var(--mono); font-size: .85rem; text-align: right; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .budget-table .resource-name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .bar-cell { width: 30%; }
+  .bar-bg { background: var(--surface2); border-radius: 3px; height: 18px; overflow: hidden; position: relative; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width .2s; }
+  .bar-fill.ok { background: var(--success); }
+  .bar-fill.warn { background: var(--warning); }
+  .bar-fill.over { background: var(--error); }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .summary-card { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+  .summary-card .value { font-size: 1.5rem; font-weight: 700; font-family: var(--mono); }
+  .summary-card .label { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+  .connection-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .connection-row select, .connection-row input { font-size: .85rem; }
+  .grade { display: inline-block; font-size: 1.2rem; font-weight: 800; padding: 4px 12px; border-radius: var(--radius); }
+  .grade.A { background: #ecfdf5; color: var(--success); }
+  .grade.B { background: #fefce8; color: #92400e; }
+  .grade.C { background: #fef2f2; color: var(--error); }
+  .target-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .target-row label { font-size: .85rem; font-weight: 600; }
+  @media (max-width: 768px) {
+    .budget-table input[type="number"] { width: 60px; }
+    .bar-cell { display: none; }
+    .summary-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Performance Budget Calculator</h1>
+<p class="subtitle">Plan page weight budgets by resource type and estimate load times across connections</p>
+
+<div class="card">
+<h2>🌐 Connection Profile</h2>
+<div class="connection-row">
+  <label for="connPreset">Network:</label>
+  <select id="connPreset" onchange="applyPreset()">
+    <option value="slow3g">Slow 3G (400 Kbps)</option>
+    <option value="fast3g">Fast 3G (1.5 Mbps)</option>
+    <option value="4g" selected>4G / LTE (10 Mbps)</option>
+    <option value="wifi">Fast WiFi (30 Mbps)</option>
+    <option value="fiber">Fiber (100 Mbps)</option>
+    <option value="custom">Custom</option>
+  </select>
+  <label for="bandwidth">Bandwidth (Mbps):</label>
+  <input type="number" id="bandwidth" value="10" min="0.1" step="0.1" onchange="recalc()">
+  <label for="latency">Latency (ms):</label>
+  <input type="number" id="latency" value="50" min="0" step="10" onchange="recalc()">
+</div>
+<div class="target-row">
+  <label for="targetTime">Target load time:</label>
+  <select id="targetTime" onchange="recalc()">
+    <option value="2">2s (fast)</option>
+    <option value="3" selected>3s (good)</option>
+    <option value="5">5s (acceptable)</option>
+    <option value="8">8s (slow)</option>
+  </select>
+</div>
+</div>
+
+<div class="card">
+<h2>📊 Resource Budget</h2>
+<table class="budget-table">
+<thead>
+  <tr><th>Resource</th><th>Size (KB)</th><th>Requests</th><th>% of Budget</th><th class="bar-cell">Usage</th></tr>
+</thead>
+<tbody id="budgetBody"></tbody>
+<tfoot>
+  <tr style="font-weight:700; border-top:2px solid var(--border)">
+    <td>Total</td>
+    <td id="totalSize" style="font-family:var(--mono)">0 KB</td>
+    <td id="totalReqs" style="font-family:var(--mono)">0</td>
+    <td id="totalPct" style="font-family:var(--mono)">0%</td>
+    <td class="bar-cell"></td>
+  </tr>
+</tfoot>
+</table>
+</div>
+
+<div class="card">
+<h2>📈 Summary</h2>
+<div class="summary-grid" id="summaryGrid"></div>
+</div>
+
+<div class="card">
+<h2>📋 Export Budget</h2>
+<div class="tabs">
+  <button class="tab active" onclick="setExportMode('table')">Table</button>
+  <button class="tab" onclick="setExportMode('json')">JSON</button>
+  <button class="tab" onclick="setExportMode('markdown')">Markdown</button>
+</div>
+<pre class="export-area" id="exportArea" style="font-family:var(--mono);font-size:.8rem;white-space:pre;overflow-x:auto;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;max-height:250px;overflow-y:auto;"></pre>
+<button class="btn-secondary" style="margin-top:8px" onclick="copyExport()">Copy</button>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const RESOURCES = [
+  { id: 'html',    name: 'HTML',         emoji: '📄', defaultKB: 30,  defaultReqs: 1  },
+  { id: 'css',     name: 'CSS',          emoji: '🎨', defaultKB: 50,  defaultReqs: 3  },
+  { id: 'js',      name: 'JavaScript',   emoji: '⚡', defaultKB: 200, defaultReqs: 8  },
+  { id: 'images',  name: 'Images',       emoji: '🖼️', defaultKB: 300, defaultReqs: 15 },
+  { id: 'fonts',   name: 'Fonts',        emoji: '🔤', defaultKB: 80,  defaultReqs: 3  },
+  { id: 'video',   name: 'Video/Media',  emoji: '🎬', defaultKB: 0,   defaultReqs: 0  },
+  { id: 'api',     name: 'API / XHR',    emoji: '🌐', defaultKB: 20,  defaultReqs: 5  },
+  { id: 'other',   name: 'Other',        emoji: '📦', defaultKB: 10,  defaultReqs: 2  },
+];
+
+const PRESETS = {
+  slow3g:  { bandwidth: 0.4,  latency: 400 },
+  fast3g:  { bandwidth: 1.5,  latency: 150 },
+  '4g':    { bandwidth: 10,   latency: 50  },
+  wifi:    { bandwidth: 30,   latency: 20  },
+  fiber:   { bandwidth: 100,  latency: 5   },
+};
+
+let exportMode = 'table';
+
+function init() {
+  const tbody = $('budgetBody');
+  for (const r of RESOURCES) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="resource-name">${r.emoji} ${r.name}</span></td>
+      <td><input type="number" id="size_${r.id}" value="${r.defaultKB}" min="0" step="1" oninput="recalc()"></td>
+      <td><input type="number" id="reqs_${r.id}" value="${r.defaultReqs}" min="0" step="1" oninput="recalc()"></td>
+      <td id="pct_${r.id}" style="font-family:var(--mono)">0%</td>
+      <td class="bar-cell"><div class="bar-bg"><div class="bar-fill ok" id="bar_${r.id}"></div></div></td>
+    `;
+    tbody.appendChild(tr);
+  }
+  recalc();
+}
+
+function applyPreset() {
+  const key = $('connPreset').value;
+  if (PRESETS[key]) {
+    $('bandwidth').value = PRESETS[key].bandwidth;
+    $('latency').value = PRESETS[key].latency;
+  }
+  recalc();
+}
+
+function recalc() {
+  const bandwidthMbps = parseFloat($('bandwidth').value) || 1;
+  const latencyMs = parseFloat($('latency').value) || 0;
+  const targetSec = parseFloat($('targetTime').value) || 3;
+
+  // Max transferable KB in target time (minus latency overhead for TCP+TLS handshakes ~3 RTTs)
+  const overheadMs = latencyMs * 3;
+  const transferTimeMs = Math.max(0, (targetSec * 1000) - overheadMs);
+  const maxKB = (bandwidthMbps * 1000 / 8) * (transferTimeMs / 1000); // Mbps to KB/s
+
+  let totalSize = 0, totalReqs = 0;
+  const data = [];
+  for (const r of RESOURCES) {
+    const size = parseFloat(document.getElementById(`size_${r.id}`).value) || 0;
+    const reqs = parseInt(document.getElementById(`reqs_${r.id}`).value) || 0;
+    totalSize += size;
+    totalReqs += reqs;
+    data.push({ ...r, size, reqs });
+  }
+
+  for (const d of data) {
+    const pct = totalSize > 0 ? (d.size / totalSize * 100) : 0;
+    document.getElementById(`pct_${d.id}`).textContent = pct.toFixed(1) + '%';
+    const usagePct = maxKB > 0 ? Math.min(100, d.size / maxKB * 100) : 0;
+    const bar = document.getElementById(`bar_${d.id}`);
+    bar.style.width = Math.min(100, d.size / Math.max(totalSize, 1) * 100) + '%';
+    bar.className = 'bar-fill ' + (d.size === 0 ? 'ok' : pct > 50 ? 'over' : pct > 30 ? 'warn' : 'ok');
+  }
+
+  const budgetPct = maxKB > 0 ? (totalSize / maxKB * 100) : 0;
+  $('totalSize').textContent = formatSize(totalSize);
+  $('totalReqs').textContent = totalReqs;
+  $('totalPct').textContent = '100%';
+
+  // Estimated load time
+  const transferSec = totalSize / (bandwidthMbps * 1000 / 8);
+  const loadTimeSec = transferSec + (overheadMs / 1000);
+
+  // Grade
+  let grade, gradeClass;
+  if (loadTimeSec <= targetSec * 0.6) { grade = 'A'; gradeClass = 'A'; }
+  else if (loadTimeSec <= targetSec) { grade = 'B'; gradeClass = 'B'; }
+  else { grade = 'C'; gradeClass = 'C'; }
+
+  // Remaining budget
+  const remainingKB = Math.max(0, maxKB - totalSize);
+
+  $('summaryGrid').innerHTML = `
+    <div class="summary-card"><div class="value">${formatSize(totalSize)}</div><div class="label">Total Page Weight</div></div>
+    <div class="summary-card"><div class="value">${loadTimeSec.toFixed(2)}s</div><div class="label">Est. Load Time</div></div>
+    <div class="summary-card"><div class="value">${formatSize(maxKB)}</div><div class="label">Budget @ ${targetSec}s</div></div>
+    <div class="summary-card"><div class="value">${formatSize(remainingKB)}</div><div class="label">Remaining</div></div>
+    <div class="summary-card"><div class="value">${totalReqs}</div><div class="label">Total Requests</div></div>
+    <div class="summary-card"><div class="value"><span class="grade ${gradeClass}">${grade}</span></div><div class="label">Performance Grade</div></div>
+  `;
+
+  renderExport(data, totalSize, totalReqs, loadTimeSec, maxKB);
+}
+
+function formatSize(kb) {
+  if (kb >= 1024) return (kb / 1024).toFixed(1) + ' MB';
+  return Math.round(kb) + ' KB';
+}
+
+function setExportMode(mode) {
+  exportMode = mode;
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.toggle('active',
+    (mode === 'table' && t.textContent === 'Table') ||
+    (mode === 'json' && t.textContent === 'JSON') ||
+    (mode === 'markdown' && t.textContent === 'Markdown')
+  ));
+  recalc();
+}
+
+function renderExport(data, totalSize, totalReqs, loadTime, maxKB) {
+  const el = $('exportArea');
+  if (!data) return;
+
+  if (exportMode === 'json') {
+    const obj = {
+      budget: {},
+      totals: { size_kb: totalSize, requests: totalReqs, est_load_time_s: +loadTime.toFixed(2), max_budget_kb: +maxKB.toFixed(0) }
+    };
+    for (const d of data) {
+      obj.budget[d.id] = { size_kb: d.size, requests: d.reqs };
+    }
+    el.textContent = JSON.stringify(obj, null, 2);
+  } else if (exportMode === 'markdown') {
+    let out = '| Resource | Size (KB) | Requests | % of Budget |\n';
+    out += '|----------|-----------|----------|-------------|\n';
+    for (const d of data) {
+      const pct = totalSize > 0 ? (d.size / totalSize * 100).toFixed(1) : '0.0';
+      out += `| ${d.name} | ${d.size} | ${d.reqs} | ${pct}% |\n`;
+    }
+    out += `| **Total** | **${totalSize}** | **${totalReqs}** | **100%** |\n\n`;
+    out += `Est. Load Time: ${loadTime.toFixed(2)}s\nBudget Limit: ${formatSize(maxKB)}`;
+    el.textContent = out;
+  } else {
+    let out = 'Resource        Size (KB)   Requests   % of Budget\n';
+    out += '─'.repeat(55) + '\n';
+    for (const d of data) {
+      const pct = totalSize > 0 ? (d.size / totalSize * 100).toFixed(1) : '0.0';
+      out += `${d.name.padEnd(16)}${String(d.size).padStart(8)}      ${String(d.reqs).padStart(4)}      ${pct.padStart(6)}%\n`;
+    }
+    out += '─'.repeat(55) + '\n';
+    out += `${'Total'.padEnd(16)}${String(totalSize).padStart(8)}      ${String(totalReqs).padStart(4)}       100.0%\n\n`;
+    out += `Est. Load Time: ${loadTime.toFixed(2)}s | Budget: ${formatSize(maxKB)}`;
+    el.textContent = out;
+  }
+}
+
+function copyExport() {
+  navigator.clipboard.writeText($('exportArea').textContent);
+  const el = $('toast');
+  el.textContent = 'Copied!';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1500);
+}
+
+init();
+</script>
+</body>
+</html>

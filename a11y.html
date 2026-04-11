@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accessibility Checker - Free Online WCAG A11y Tool</title>
+<meta name="description" content="Check HTML for WCAG accessibility issues. Detect missing alt text, low contrast, bad ARIA, missing labels, and more. No data leaves your browser.">
+<meta name="keywords" content="accessibility checker, WCAG, a11y, ARIA, contrast checker, screen reader, web accessibility">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/a11y.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .issue-list { display: flex; flex-direction: column; gap: 8px; }
+  .issue { padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .issue.error { border-left: 4px solid var(--error); }
+  .issue.warning { border-left: 4px solid var(--warning); }
+  .issue.info { border-left: 4px solid var(--muted); }
+  .issue-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .issue-title { font-weight: 600; font-size: .85rem; }
+  .issue-badge { font-size: .7rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+  .issue-badge.error { background: #fef2f2; color: var(--error); }
+  .issue-badge.warning { background: #fefce8; color: var(--warning); }
+  .issue-badge.info { background: var(--surface2); color: var(--muted); }
+  .issue-detail { font-size: .82rem; color: var(--muted); margin-top: 4px; }
+  .issue-code { font-family: var(--mono); font-size: .78rem; background: var(--surface2); padding: 4px 8px; border-radius: 3px; display: inline-block; margin-top: 4px; word-break: break-all; }
+  .issue-fix { font-size: .8rem; color: var(--success); margin-top: 4px; }
+  .score-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .score-ring { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; font-family: var(--mono); flex-shrink: 0; }
+  .score-ring.good { background: #ecfdf5; color: var(--success); border: 4px solid var(--success); }
+  .score-ring.ok { background: #fefce8; color: #92400e; border: 4px solid var(--warning); }
+  .score-ring.bad { background: #fef2f2; color: var(--error); border: 4px solid var(--error); }
+  .score-summary { font-size: .85rem; }
+  .score-summary strong { display: block; font-size: 1rem; margin-bottom: 4px; }
+  .stats-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stat-chip { padding: 6px 12px; border-radius: var(--radius); font-size: .82rem; font-weight: 600; border: 1px solid var(--border); }
+  .stat-chip.err { color: var(--error); }
+  .stat-chip.wrn { color: var(--warning); }
+  .stat-chip.inf { color: var(--muted); }
+  .sample-btn { margin-left: 8px; }
+  textarea { min-height: 200px; }
+  @media (max-width: 768px) {
+    .score-bar { flex-direction: column; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Accessibility Checker</h1>
+<p class="subtitle">Paste HTML to check for WCAG accessibility issues &mdash; missing alt text, bad ARIA, low contrast, and more</p>
+
+<div class="card">
+<h2>📝 HTML Input</h2>
+<textarea id="htmlInput" placeholder="Paste your HTML here..."></textarea>
+<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+  <button class="btn" onclick="runCheck()">Check Accessibility</button>
+  <button class="btn-secondary" onclick="loadSample()">Load Sample</button>
+  <button class="btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+</div>
+
+<div class="card" id="resultsCard" style="display:none">
+<h2>📊 Results</h2>
+<div class="score-bar" id="scoreBar"></div>
+<div class="stats-row" id="statsRow"></div>
+<div class="issue-list" id="issueList"></div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const SAMPLE = `<html>
+<head><title>My Page</title></head>
+<body>
+  <div onclick="navigate()">Click here</div>
+  <img src="hero.jpg">
+  <img src="logo.png" alt="">
+  <form>
+    <input type="text" placeholder="Name">
+    <input type="email">
+    <select><option>Choose...</option></select>
+    <button type="submit">Submit</button>
+  </form>
+  <a href="#">Read more</a>
+  <a href="/page"></a>
+  <div role="button">Save</div>
+  <marquee>Breaking news!</marquee>
+  <table>
+    <tr><td>Name</td><td>Age</td></tr>
+    <tr><td>Alice</td><td>30</td></tr>
+  </table>
+  <p style="color: #999; background: #fff;">Low contrast text</p>
+  <h1>Title</h1>
+  <h3>Skipped h2</h3>
+  <div role="checkbox"></div>
+  <blink>Attention!</blink>
+  <iframe src="widget.html"></iframe>
+  <video src="intro.mp4"></video>
+  <label>Name</label>
+  <input type="text" id="username">
+</body>
+</html>`;
+
+function loadSample() {
+  $('htmlInput').value = SAMPLE;
+  runCheck();
+}
+
+function clearAll() {
+  $('htmlInput').value = '';
+  $('resultsCard').style.display = 'none';
+}
+
+function runCheck() {
+  const html = $('htmlInput').value.trim();
+  if (!html) { toast('Paste some HTML first'); return; }
+
+  const issues = [];
+  let doc;
+  try {
+    const parser = new DOMParser();
+    doc = parser.parseFromString(html, 'text/html');
+  } catch(e) {
+    toast('Could not parse HTML');
+    return;
+  }
+
+  // 1. Images without alt
+  doc.querySelectorAll('img').forEach(img => {
+    if (!img.hasAttribute('alt')) {
+      issues.push({ level: 'error', rule: 'img-alt', title: 'Image missing alt attribute', detail: 'All <img> elements must have an alt attribute for screen readers.', element: snippet(img), fix: 'Add alt="description" or alt="" for decorative images.' });
+    } else if (img.getAttribute('alt') === '' && !img.getAttribute('role')) {
+      issues.push({ level: 'info', rule: 'img-alt-empty', title: 'Image has empty alt text', detail: 'Empty alt marks an image as decorative. Verify this is intentional.', element: snippet(img), fix: 'If the image conveys meaning, add descriptive alt text.' });
+    }
+  });
+
+  // 2. Links without text
+  doc.querySelectorAll('a').forEach(a => {
+    const text = (a.textContent || '').trim();
+    const aria = a.getAttribute('aria-label') || '';
+    if (!text && !aria && !a.querySelector('img[alt]')) {
+      issues.push({ level: 'error', rule: 'link-text', title: 'Link has no accessible text', detail: 'Links must have visible text, aria-label, or contain an image with alt.', element: snippet(a), fix: 'Add text content or aria-label to the link.' });
+    }
+    if (text && ['click here', 'read more', 'here', 'learn more', 'more'].includes(text.toLowerCase())) {
+      issues.push({ level: 'warning', rule: 'link-ambiguous', title: 'Ambiguous link text: "' + text + '"', detail: 'Screen reader users navigate by links. Descriptive text improves navigation.', element: snippet(a), fix: 'Use descriptive text like "Read the accessibility guide" instead.' });
+    }
+  });
+
+  // 3. Form inputs without labels
+  doc.querySelectorAll('input, select, textarea').forEach(el => {
+    if (['hidden','submit','button','reset','image'].includes(el.type)) return;
+    const id = el.id;
+    const hasLabel = id && doc.querySelector(`label[for="${id}"]`);
+    const hasAriaLabel = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby');
+    const wrappedInLabel = el.closest('label');
+    if (!hasLabel && !hasAriaLabel && !wrappedInLabel) {
+      issues.push({ level: 'error', rule: 'form-label', title: `Form ${el.tagName.toLowerCase()} missing label`, detail: 'Form controls need an associated <label>, aria-label, or aria-labelledby.', element: snippet(el), fix: 'Add a <label for="id"> or wrap the input in a <label>.' });
+    }
+  });
+
+  // 4. Clickable divs without role/keyboard
+  doc.querySelectorAll('[onclick]').forEach(el => {
+    if (['a','button','input','select','textarea'].includes(el.tagName.toLowerCase())) return;
+    const role = el.getAttribute('role');
+    const tabindex = el.getAttribute('tabindex');
+    if (!role) {
+      issues.push({ level: 'error', rule: 'click-role', title: 'Clickable element missing role', detail: 'Non-interactive elements with onclick need role="button" and tabindex.', element: snippet(el), fix: 'Add role="button" tabindex="0" or use a <button> instead.' });
+    }
+    if (!tabindex) {
+      issues.push({ level: 'warning', rule: 'click-tabindex', title: 'Clickable element not keyboard accessible', detail: 'Elements with onclick should have tabindex="0" for keyboard users.', element: snippet(el), fix: 'Add tabindex="0" and handle keydown events.' });
+    }
+  });
+
+  // 5. ARIA role without required attributes
+  doc.querySelectorAll('[role="checkbox"]').forEach(el => {
+    if (!el.hasAttribute('aria-checked')) {
+      issues.push({ level: 'error', rule: 'aria-checkbox', title: 'role="checkbox" missing aria-checked', detail: 'Elements with role="checkbox" must have aria-checked="true" or "false".', element: snippet(el), fix: 'Add aria-checked="false" to the element.' });
+    }
+  });
+  doc.querySelectorAll('[role="button"]').forEach(el => {
+    if (!el.hasAttribute('tabindex')) {
+      issues.push({ level: 'warning', rule: 'aria-button-tab', title: 'role="button" should have tabindex', detail: 'Non-native buttons need tabindex="0" for keyboard access.', element: snippet(el), fix: 'Add tabindex="0" or use a <button> element.' });
+    }
+  });
+
+  // 6. Heading order
+  const headings = doc.querySelectorAll('h1,h2,h3,h4,h5,h6');
+  let prevLevel = 0;
+  headings.forEach(h => {
+    const level = parseInt(h.tagName[1]);
+    if (prevLevel > 0 && level > prevLevel + 1) {
+      issues.push({ level: 'warning', rule: 'heading-order', title: `Heading level skipped: h${prevLevel} → h${level}`, detail: 'Heading levels should not skip (e.g., h1 → h3). This confuses screen reader navigation.', element: snippet(h), fix: `Use h${prevLevel + 1} instead of h${level}.` });
+    }
+    prevLevel = level;
+  });
+
+  // 7. Missing lang attribute
+  const htmlEl = doc.querySelector('html');
+  if (htmlEl && !htmlEl.getAttribute('lang')) {
+    issues.push({ level: 'error', rule: 'html-lang', title: 'Missing lang attribute on <html>', detail: 'The lang attribute helps screen readers pronounce content correctly.', element: '<html>', fix: 'Add lang="en" (or appropriate language) to the <html> tag.' });
+  }
+
+  // 8. Deprecated elements
+  const deprecated = { marquee: 'Use CSS animations', blink: 'Use CSS animations', font: 'Use CSS', center: 'Use CSS text-align' };
+  for (const [tag, alt] of Object.entries(deprecated)) {
+    doc.querySelectorAll(tag).forEach(el => {
+      issues.push({ level: 'warning', rule: 'deprecated', title: `Deprecated element <${tag}>`, detail: `<${tag}> is deprecated and can cause accessibility issues.`, element: snippet(el), fix: alt + ' instead.' });
+    });
+  }
+
+  // 9. Tables without headers
+  doc.querySelectorAll('table').forEach(table => {
+    if (!table.querySelector('th') && !table.querySelector('[role="columnheader"]')) {
+      issues.push({ level: 'warning', rule: 'table-headers', title: 'Table missing header cells', detail: 'Data tables should use <th> elements so screen readers can associate data with headers.', element: '<table>...', fix: 'Add <th> elements in the first row or column.' });
+    }
+  });
+
+  // 10. iframe without title
+  doc.querySelectorAll('iframe').forEach(el => {
+    if (!el.getAttribute('title')) {
+      issues.push({ level: 'error', rule: 'iframe-title', title: 'iframe missing title attribute', detail: 'Screen readers use the title to describe the iframe content.', element: snippet(el), fix: 'Add a title attribute describing the iframe content.' });
+    }
+  });
+
+  // 11. Video without track/captions indicator
+  doc.querySelectorAll('video').forEach(el => {
+    if (!el.querySelector('track') && !el.getAttribute('aria-label')) {
+      issues.push({ level: 'warning', rule: 'video-captions', title: 'Video may be missing captions', detail: 'Videos should have <track> elements for captions/subtitles.', element: snippet(el), fix: 'Add <track kind="captions" src="..."> inside the video.' });
+    }
+  });
+
+  // 12. Label without matching input
+  doc.querySelectorAll('label[for]').forEach(label => {
+    const forId = label.getAttribute('for');
+    if (forId && !doc.getElementById(forId)) {
+      issues.push({ level: 'warning', rule: 'label-orphan', title: `Label "for" points to missing id: "${forId}"`, detail: 'The label\'s for attribute doesn\'t match any element\'s id.', element: snippet(label), fix: 'Ensure the input has id="' + forId + '" or fix the for attribute.' });
+    }
+  });
+
+  // 13. Inline style contrast check (basic)
+  doc.querySelectorAll('[style]').forEach(el => {
+    const style = el.getAttribute('style') || '';
+    const colorMatch = style.match(/(?:^|;)\s*color\s*:\s*(#[0-9a-fA-F]{3,6})/);
+    const bgMatch = style.match(/background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})/);
+    if (colorMatch && bgMatch) {
+      const ratio = contrastRatio(colorMatch[1], bgMatch[1]);
+      if (ratio < 4.5) {
+        issues.push({ level: 'error', rule: 'contrast', title: `Low contrast ratio: ${ratio.toFixed(2)}:1`, detail: `WCAG AA requires at least 4.5:1 for normal text. Found ${colorMatch[1]} on ${bgMatch[1]}.`, element: snippet(el), fix: 'Increase the color difference to meet 4.5:1 contrast ratio.' });
+      } else if (ratio < 7) {
+        issues.push({ level: 'info', rule: 'contrast-aaa', title: `Contrast ${ratio.toFixed(2)}:1 passes AA but not AAA`, detail: `WCAG AAA requires 7:1. Found ${colorMatch[1]} on ${bgMatch[1]}.`, element: snippet(el), fix: 'For AAA compliance, increase contrast to 7:1.' });
+      }
+    }
+  });
+
+  // 14. Auto-playing media
+  doc.querySelectorAll('video[autoplay], audio[autoplay]').forEach(el => {
+    issues.push({ level: 'warning', rule: 'autoplay', title: 'Auto-playing media detected', detail: 'Auto-playing audio/video can be disorienting for screen reader users.', element: snippet(el), fix: 'Remove autoplay or add muted attribute.' });
+  });
+
+  // 15. tabindex > 0
+  doc.querySelectorAll('[tabindex]').forEach(el => {
+    const val = parseInt(el.getAttribute('tabindex'));
+    if (val > 0) {
+      issues.push({ level: 'warning', rule: 'tabindex-positive', title: `Positive tabindex="${val}" disrupts tab order`, detail: 'tabindex values above 0 override natural tab order and cause confusion.', element: snippet(el), fix: 'Use tabindex="0" or remove the attribute.' });
+    }
+  });
+
+  renderResults(issues);
+}
+
+function snippet(el) {
+  const html = el.outerHTML || '';
+  if (html.length > 120) return html.substring(0, 120) + '...';
+  return html;
+}
+
+function hexToRGB(hex) {
+  hex = hex.replace('#','');
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  return [parseInt(hex.substring(0,2),16), parseInt(hex.substring(2,4),16), parseInt(hex.substring(4,6),16)];
+}
+
+function luminance(r, g, b) {
+  const [rs, gs, bs] = [r,g,b].map(c => {
+    c = c / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function contrastRatio(hex1, hex2) {
+  const [r1,g1,b1] = hexToRGB(hex1);
+  const [r2,g2,b2] = hexToRGB(hex2);
+  const l1 = luminance(r1,g1,b1);
+  const l2 = luminance(r2,g2,b2);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function renderResults(issues) {
+  const card = $('resultsCard');
+  card.style.display = 'block';
+
+  const errors = issues.filter(i => i.level === 'error').length;
+  const warnings = issues.filter(i => i.level === 'warning').length;
+  const infos = issues.filter(i => i.level === 'info').length;
+
+  // Score: start at 100, -5 per error, -2 per warning, -0.5 per info
+  const score = Math.max(0, Math.min(100, Math.round(100 - errors * 5 - warnings * 2 - infos * 0.5)));
+  const scoreClass = score >= 80 ? 'good' : score >= 50 ? 'ok' : 'bad';
+  const scoreLabel = score >= 80 ? 'Good' : score >= 50 ? 'Needs Work' : 'Poor';
+
+  $('scoreBar').innerHTML = `
+    <div class="score-ring ${scoreClass}">${score}</div>
+    <div class="score-summary">
+      <strong>${scoreLabel}</strong>
+      ${issues.length === 0 ? 'No accessibility issues found!' : `Found ${issues.length} issue${issues.length===1?'':'s'} in your HTML.`}
+    </div>
+  `;
+
+  $('statsRow').innerHTML = `
+    <div class="stat-chip err">${errors} Error${errors===1?'':'s'}</div>
+    <div class="stat-chip wrn">${warnings} Warning${warnings===1?'':'s'}</div>
+    <div class="stat-chip inf">${infos} Info</div>
+  `;
+
+  const list = $('issueList');
+  if (issues.length === 0) {
+    list.innerHTML = '<div class="empty">No issues found. Your HTML looks accessible!</div>';
+    return;
+  }
+
+  // Sort: errors first, then warnings, then info
+  issues.sort((a, b) => {
+    const order = { error: 0, warning: 1, info: 2 };
+    return order[a.level] - order[b.level];
+  });
+
+  list.innerHTML = issues.map(i => `
+    <div class="issue ${i.level}">
+      <div class="issue-header">
+        <span class="issue-title">${i.title}</span>
+        <span class="issue-badge ${i.level}">${i.level.toUpperCase()}</span>
+      </div>
+      <div class="issue-detail">${i.detail}</div>
+      ${i.element ? `<code class="issue-code">${escapeHTML(i.element)}</code>` : ''}
+      <div class="issue-fix">💡 ${i.fix}</div>
+    </div>
+  `).join('');
+}
+
+function escapeHTML(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1500);
+}
+</script>
+</body>
+</html>
