@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS Units Converter — px, rem, em, vw, vh, %</title>
+<meta name="description" content="Convert between CSS units: px, rem, em, vw, vh, vmin, vmax, ch, ex, %. Live preview with adjustable base sizes. No data leaves your browser.">
+<meta name="keywords" content="css units, converter, px, rem, em, vw, vh, percent, responsive, developer tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cssunits.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.settings-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+.settings-row label { font-size: .85rem; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.settings-row input { width: 80px; }
+.converter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.unit-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--surface);
+  transition: border-color .15s;
+}
+.unit-card:focus-within { border-color: var(--accent); }
+.unit-card .unit-label {
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+.unit-card input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 1.4rem;
+  font-family: var(--mono);
+  color: var(--text);
+  outline: none;
+  padding: 4px 0;
+}
+.unit-card .unit-note { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+.preview-section { margin-top: 1.5rem; }
+.preview-box {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  min-height: 80px;
+}
+.preview-bar {
+  height: 40px;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width .2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: .8rem;
+  font-family: var(--mono);
+  min-width: 40px;
+}
+.preview-ruler {
+  display: flex;
+  margin-top: 8px;
+  height: 20px;
+  position: relative;
+}
+.ruler-mark {
+  border-left: 1px solid var(--border);
+  font-size: .65rem;
+  color: var(--muted);
+  padding-left: 2px;
+  position: absolute;
+  bottom: 0;
+}
+.ref-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 1rem; }
+.ref-table th, .ref-table td { padding: 8px 10px; border: 1px solid var(--border); text-align: left; }
+.ref-table th { background: var(--surface2); font-weight: 600; font-size: .82rem; }
+.ref-table td { font-family: var(--mono); }
+.ref-table tr:hover td { background: var(--surface2); }
+.copy-btn {
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: .8rem;
+  color: var(--muted);
+  padding: 2px 4px;
+}
+.copy-btn:hover { color: var(--accent); }
+@media (max-width: 768px) {
+  .converter-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>📐 CSS Units Converter</h1>
+  <p class="subtitle">Convert between CSS units with live preview. Adjust base font size and viewport dimensions.</p>
+
+  <div class="card">
+    <h2>⚙️ Settings</h2>
+    <div class="settings-row">
+      <label>Root font-size: <input type="number" id="rootSize" value="16" min="1" max="100" step="1"> px</label>
+      <label>Parent font-size: <input type="number" id="parentSize" value="16" min="1" max="100" step="1"> px</label>
+      <label>Viewport W: <input type="number" id="vpWidth" value="" min="1" max="9999" step="1"> px</label>
+      <label>Viewport H: <input type="number" id="vpHeight" value="" min="1" max="9999" step="1"> px</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔄 Convert</h2>
+    <div class="converter-grid" id="converterGrid"></div>
+  </div>
+
+  <div class="card">
+    <h2>👁️ Live Preview</h2>
+    <p class="muted" style="font-size:.85rem;margin-bottom:.75rem">Width of the bar represents the current px value.</p>
+    <div class="preview-box" id="previewBox">
+      <div class="preview-bar" id="previewBar"></div>
+    </div>
+    <div id="previewLabel" class="muted" style="margin-top:8px;font-size:.85rem;font-family:var(--mono)"></div>
+  </div>
+
+  <div class="card">
+    <h2>📊 Quick Reference</h2>
+    <div style="overflow-x:auto">
+      <table class="ref-table" id="refTable"></table>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <a href="index.html">&larr; All Tools</a> &middot; Built with ☕ by Steven Li &middot; No data leaves your browser
+  <br><a class="bmc" href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">☕ Buy me a coffee</a>
+</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const UNITS = [
+  { id: 'px', label: 'px', note: 'Pixels (absolute)' },
+  { id: 'rem', label: 'rem', note: 'Relative to root font-size' },
+  { id: 'em', label: 'em', note: 'Relative to parent font-size' },
+  { id: 'percent', label: '%', note: 'Percentage of parent' },
+  { id: 'vw', label: 'vw', note: '1% of viewport width' },
+  { id: 'vh', label: 'vh', note: '1% of viewport height' },
+  { id: 'vmin', label: 'vmin', note: '1% of smaller viewport dim' },
+  { id: 'vmax', label: 'vmax', note: '1% of larger viewport dim' },
+  { id: 'pt', label: 'pt', note: '1pt = 1.333px (print)' },
+  { id: 'ch', label: 'ch', note: 'Width of "0" character' },
+];
+
+let activeUnit = 'px';
+let baseValue = 16; // in px
+
+function getSettings() {
+  const root = parseFloat(document.getElementById('rootSize').value) || 16;
+  const parent = parseFloat(document.getElementById('parentSize').value) || 16;
+  const vw = parseFloat(document.getElementById('vpWidth').value) || window.innerWidth;
+  const vh = parseFloat(document.getElementById('vpHeight').value) || window.innerHeight;
+  const vmin = Math.min(vw, vh);
+  const vmax = Math.max(vw, vh);
+  const ch = root * 0.5; // approximate
+  return { root, parent, vw, vh, vmin, vmax, ch };
+}
+
+function toPx(value, unit, s) {
+  switch (unit) {
+    case 'px': return value;
+    case 'rem': return value * s.root;
+    case 'em': return value * s.parent;
+    case 'percent': return value / 100 * s.parent;
+    case 'vw': return value / 100 * s.vw;
+    case 'vh': return value / 100 * s.vh;
+    case 'vmin': return value / 100 * s.vmin;
+    case 'vmax': return value / 100 * s.vmax;
+    case 'pt': return value * 4 / 3;
+    case 'ch': return value * s.ch;
+    default: return value;
+  }
+}
+
+function fromPx(px, unit, s) {
+  switch (unit) {
+    case 'px': return px;
+    case 'rem': return px / s.root;
+    case 'em': return px / s.parent;
+    case 'percent': return (px / s.parent) * 100;
+    case 'vw': return (px / s.vw) * 100;
+    case 'vh': return (px / s.vh) * 100;
+    case 'vmin': return (px / s.vmin) * 100;
+    case 'vmax': return (px / s.vmax) * 100;
+    case 'pt': return px * 3 / 4;
+    case 'ch': return px / s.ch;
+    default: return px;
+  }
+}
+
+function round(n) {
+  if (n === 0) return '0';
+  if (Math.abs(n) >= 100) return n.toFixed(2);
+  if (Math.abs(n) >= 1) return n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+  return n.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function buildGrid() {
+  const grid = document.getElementById('converterGrid');
+  grid.innerHTML = '';
+  UNITS.forEach(u => {
+    const card = document.createElement('div');
+    card.className = 'unit-card';
+    card.innerHTML = `
+      <div class="unit-label">${u.label}</div>
+      <input type="number" id="unit-${u.id}" step="any" placeholder="0">
+      <div class="unit-note">${u.note}</div>
+    `;
+    grid.appendChild(card);
+    const input = card.querySelector('input');
+    input.addEventListener('input', () => {
+      activeUnit = u.id;
+      const val = parseFloat(input.value);
+      if (isNaN(val)) return;
+      const s = getSettings();
+      baseValue = toPx(val, u.id, s);
+      updateAllExcept(u.id);
+      updatePreview();
+    });
+    input.addEventListener('focus', () => { activeUnit = u.id; });
+  });
+}
+
+function updateAllExcept(skipId) {
+  const s = getSettings();
+  UNITS.forEach(u => {
+    if (u.id === skipId) return;
+    const input = document.getElementById('unit-' + u.id);
+    const val = fromPx(baseValue, u.id, s);
+    input.value = round(val);
+  });
+}
+
+function updateAll() {
+  const s = getSettings();
+  const activeInput = document.getElementById('unit-' + activeUnit);
+  const val = parseFloat(activeInput.value);
+  if (!isNaN(val)) {
+    baseValue = toPx(val, activeUnit, s);
+  }
+  UNITS.forEach(u => {
+    const input = document.getElementById('unit-' + u.id);
+    const v = fromPx(baseValue, u.id, s);
+    input.value = round(v);
+  });
+  updatePreview();
+  updateRefTable();
+}
+
+function updatePreview() {
+  const bar = document.getElementById('previewBar');
+  const box = document.getElementById('previewBox');
+  const label = document.getElementById('previewLabel');
+  const maxW = box.clientWidth - 32;
+  const displayPx = Math.max(0, Math.min(baseValue, maxW));
+  bar.style.width = displayPx + 'px';
+  bar.textContent = Math.round(baseValue) + 'px';
+  const s = getSettings();
+  const parts = UNITS.slice(0, 6).map(u => {
+    const v = fromPx(baseValue, u.id, s);
+    return `${round(v)}${u.label}`;
+  });
+  label.textContent = parts.join('  =  ');
+}
+
+function updateRefTable() {
+  const s = getSettings();
+  const pxValues = [4, 8, 10, 12, 14, 16, 18, 20, 24, 32, 48, 64, 100];
+  const showUnits = ['px', 'rem', 'em', 'pt', 'vw', 'percent'];
+
+  let html = '<thead><tr><th>px</th>';
+  showUnits.filter(u => u !== 'px').forEach(uid => {
+    const u = UNITS.find(x => x.id === uid);
+    html += `<th>${u.label}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  pxValues.forEach(px => {
+    html += `<tr><td>${px}px</td>`;
+    showUnits.filter(u => u !== 'px').forEach(uid => {
+      const val = fromPx(px, uid, s);
+      html += `<td>${round(val)}${UNITS.find(x => x.id === uid).label}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('refTable').innerHTML = html;
+}
+
+function init() {
+  document.getElementById('vpWidth').placeholder = window.innerWidth;
+  document.getElementById('vpHeight').placeholder = window.innerHeight;
+
+  buildGrid();
+
+  // Set initial value
+  document.getElementById('unit-px').value = '16';
+  activeUnit = 'px';
+  baseValue = 16;
+  updateAllExcept('px');
+  updatePreview();
+  updateRefTable();
+
+  ['rootSize', 'parentSize', 'vpWidth', 'vpHeight'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateAll);
+  });
+
+  window.addEventListener('resize', () => {
+    if (!document.getElementById('vpWidth').value) {
+      document.getElementById('vpWidth').placeholder = window.innerWidth;
+    }
+    if (!document.getElementById('vpHeight').value) {
+      document.getElementById('vpHeight').placeholder = window.innerHeight;
+    }
+    updateAll();
+  });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+init();
+</script>
+</body>
+</html>
