@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IEEE 754 Float Inspector - Free Online Tool</title>
+<meta name="description" content="Visualize how floating-point numbers are stored in IEEE 754 binary format. Inspect sign, exponent, and mantissa bits for float32 and float64.">
+<meta name="keywords" content="ieee 754, floating point, binary representation, float inspector, mantissa, exponent, float32, float64, precision">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/float.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .bit-grid { display: flex; flex-wrap: wrap; gap: 1px; margin: 12px 0; font-family: var(--mono); font-size: .85rem; }
+  .bit { width: 28px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 3px; font-weight: 600; cursor: default; transition: transform .1s; }
+  .bit:hover { transform: scale(1.15); z-index: 1; }
+  .bit.sign { background: #fee2e2; color: #991b1b; }
+  .bit.exponent { background: #dbeafe; color: #1e40af; }
+  .bit.mantissa { background: #dcfce7; color: #166534; }
+  .bit-legend { display: flex; gap: 16px; font-size: .82rem; margin-bottom: 8px; }
+  .bit-legend span { display: flex; align-items: center; gap: 4px; }
+  .bit-legend .swatch { width: 14px; height: 14px; border-radius: 3px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .info-item { padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .info-item .label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+  .info-item .value { font-family: var(--mono); font-size: .9rem; word-break: break-all; }
+  .format-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .format-tab { padding: 6px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); cursor: pointer; font-size: .85rem; font-family: var(--sans); }
+  .format-tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .hex-display { font-family: var(--mono); font-size: .9rem; padding: 8px 12px; background: var(--surface2); border-radius: var(--radius); margin-top: 8px; }
+  .special-values { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .special-btn { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); cursor: pointer; font-size: .78rem; font-family: var(--mono); }
+  .special-btn:hover { background: var(--surface2); }
+  .precision-bar { height: 6px; border-radius: 3px; background: var(--surface2); margin-top: 6px; overflow: hidden; }
+  .precision-fill { height: 100%; border-radius: 3px; background: var(--success); transition: width .3s; }
+  .warning { color: var(--warning); font-size: .82rem; margin-top: 4px; }
+  @media (max-width: 768px) {
+    .info-grid { grid-template-columns: 1fr; }
+    .bit { width: 22px; height: 26px; font-size: .72rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>IEEE 754 Float Inspector</h1>
+<p class="subtitle">Visualize how floating-point numbers are stored in binary — sign, exponent, and mantissa bits</p>
+
+<div class="card">
+  <h2>🔢 Input</h2>
+  <input type="text" id="numInput" placeholder="Enter a number (e.g. 3.14, -0, Infinity, NaN)" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-family:var(--mono);background:var(--bg);color:var(--text)">
+  <div class="special-values">
+    <button class="special-btn" onclick="setVal('0')">0</button>
+    <button class="special-btn" onclick="setVal('-0')">-0</button>
+    <button class="special-btn" onclick="setVal('1')">1</button>
+    <button class="special-btn" onclick="setVal('-1')">-1</button>
+    <button class="special-btn" onclick="setVal('0.1')">0.1</button>
+    <button class="special-btn" onclick="setVal('0.2')">0.2</button>
+    <button class="special-btn" onclick="setVal('0.3')">0.3</button>
+    <button class="special-btn" onclick="setVal('3.14159265358979')">π</button>
+    <button class="special-btn" onclick="setVal('2.71828182845904')">e</button>
+    <button class="special-btn" onclick="setVal('Infinity')">+∞</button>
+    <button class="special-btn" onclick="setVal('-Infinity')">-∞</button>
+    <button class="special-btn" onclick="setVal('NaN')">NaN</button>
+    <button class="special-btn" onclick="setVal('1.7976931348623157e+308')">MAX</button>
+    <button class="special-btn" onclick="setVal('5e-324')">MIN (subnormal)</button>
+    <button class="special-btn" onclick="setVal('2.2250738585072014e-308')">MIN (normal)</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>💾 Binary Representation</h2>
+  <div class="format-tabs">
+    <button class="format-tab active" onclick="setFormat(64)" id="tab64">Float64 (double)</button>
+    <button class="format-tab" onclick="setFormat(32)" id="tab32">Float32 (single)</button>
+  </div>
+  <div class="bit-legend">
+    <span><span class="swatch" style="background:#fee2e2"></span> Sign (1 bit)</span>
+    <span><span class="swatch" style="background:#dbeafe"></span> Exponent (<span id="expBits">11</span> bits)</span>
+    <span><span class="swatch" style="background:#dcfce7"></span> Mantissa (<span id="manBits">52</span> bits)</span>
+  </div>
+  <div class="bit-grid" id="bitGrid"></div>
+  <div class="hex-display" id="hexDisplay"></div>
+</div>
+
+<div class="card">
+  <h2>📊 Decoded Values</h2>
+  <div class="info-grid" id="infoGrid"></div>
+</div>
+
+<div class="card">
+  <h2>⚠️ Precision Analysis</h2>
+  <div id="precisionInfo"></div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let format = 64;
+
+function setVal(v) {
+  $('numInput').value = v;
+  update();
+}
+
+function setFormat(f) {
+  format = f;
+  $('tab64').classList.toggle('active', f === 64);
+  $('tab32').classList.toggle('active', f === 32);
+  $('expBits').textContent = f === 64 ? '11' : '8';
+  $('manBits').textContent = f === 64 ? '52' : '23';
+  update();
+}
+
+function getBits64(num) {
+  const buf = new ArrayBuffer(8);
+  new Float64Array(buf)[0] = num;
+  const view = new DataView(buf);
+  const hi = view.getUint32(0, false);
+  const lo = view.getUint32(4, false);
+  let bits = '';
+  for (let i = 31; i >= 0; i--) bits += (hi >>> i) & 1;
+  for (let i = 31; i >= 0; i--) bits += (lo >>> i) & 1;
+  return bits;
+}
+
+function getBits32(num) {
+  const buf = new ArrayBuffer(4);
+  new Float32Array(buf)[0] = num;
+  const view = new DataView(buf);
+  const val = view.getUint32(0, false);
+  let bits = '';
+  for (let i = 31; i >= 0; i--) bits += (val >>> i) & 1;
+  return bits;
+}
+
+function getHex64(num) {
+  const buf = new ArrayBuffer(8);
+  new Float64Array(buf)[0] = num;
+  const view = new DataView(buf);
+  const hi = view.getUint32(0, false).toString(16).padStart(8, '0');
+  const lo = view.getUint32(4, false).toString(16).padStart(8, '0');
+  return '0x' + hi + lo;
+}
+
+function getHex32(num) {
+  const buf = new ArrayBuffer(4);
+  new Float32Array(buf)[0] = num;
+  const view = new DataView(buf);
+  return '0x' + view.getUint32(0, false).toString(16).padStart(8, '0');
+}
+
+function update() {
+  const raw = $('numInput').value.trim();
+  if (!raw) {
+    $('bitGrid').innerHTML = '<span class="muted">Enter a number above</span>';
+    $('hexDisplay').textContent = '';
+    $('infoGrid').innerHTML = '';
+    $('precisionInfo').innerHTML = '';
+    return;
+  }
+
+  let num;
+  if (raw.toLowerCase() === 'nan') num = NaN;
+  else if (raw === '-0') num = -0;
+  else if (raw.toLowerCase() === 'infinity' || raw === '+Infinity') num = Infinity;
+  else if (raw === '-Infinity') num = -Infinity;
+  else if (raw.startsWith('0x') || raw.startsWith('0X')) num = Number(raw);
+  else num = parseFloat(raw);
+
+  if (raw.toLowerCase() !== 'nan' && isNaN(num)) {
+    $('bitGrid').innerHTML = '<span class="muted">Invalid number</span>';
+    $('hexDisplay').textContent = '';
+    $('infoGrid').innerHTML = '';
+    $('precisionInfo').innerHTML = '';
+    return;
+  }
+
+  const is64 = format === 64;
+  const bits = is64 ? getBits64(num) : getBits32(num);
+  const hex = is64 ? getHex64(num) : getHex32(num);
+  const expLen = is64 ? 11 : 8;
+  const manLen = is64 ? 52 : 23;
+  const bias = is64 ? 1023 : 127;
+
+  // Render bits
+  let html = '';
+  for (let i = 0; i < bits.length; i++) {
+    let cls = 'sign';
+    if (i >= 1 && i <= expLen) cls = 'exponent';
+    else if (i > expLen) cls = 'mantissa';
+    html += `<div class="bit ${cls}" title="Bit ${i}: ${cls}">${bits[i]}</div>`;
+  }
+  $('bitGrid').innerHTML = html;
+
+  // Hex
+  $('hexDisplay').textContent = `Hex: ${hex}   Binary: ${bits.slice(0,1)} ${bits.slice(1,1+expLen)} ${bits.slice(1+expLen)}`;
+
+  // Decode components
+  const signBit = parseInt(bits[0], 2);
+  const expRaw = parseInt(bits.slice(1, 1 + expLen), 2);
+  const manBits = bits.slice(1 + expLen);
+  let manValue = 0;
+  for (let i = 0; i < manBits.length; i++) {
+    if (manBits[i] === '1') manValue += Math.pow(2, -(i + 1));
+  }
+
+  const sign = signBit === 0 ? '+' : '-';
+  const biasedExp = expRaw;
+  const unbiasedExp = expRaw - bias;
+
+  let category, reconstructed;
+  const maxExp = (1 << expLen) - 1;
+
+  if (expRaw === 0 && manValue === 0) {
+    category = signBit === 0 ? 'Positive Zero' : 'Negative Zero';
+    reconstructed = signBit === 0 ? '0' : '-0';
+  } else if (expRaw === 0) {
+    category = 'Subnormal (denormalized)';
+    const actualExp = 1 - bias;
+    reconstructed = `${sign}1 × 2^(${actualExp}) × ${manValue.toPrecision(6)}`;
+  } else if (expRaw === maxExp && manValue === 0) {
+    category = signBit === 0 ? 'Positive Infinity' : 'Negative Infinity';
+    reconstructed = signBit === 0 ? '+∞' : '-∞';
+  } else if (expRaw === maxExp) {
+    category = 'NaN (Not a Number)';
+    reconstructed = 'NaN';
+  } else {
+    category = 'Normal';
+    reconstructed = `${sign}1 × (1 + ${manValue.toPrecision(6)}) × 2^(${unbiasedExp})`;
+  }
+
+  const items = [
+    { label: 'Sign', value: `${signBit} (${sign})` },
+    { label: 'Biased Exponent', value: `${biasedExp} (${bits.slice(1, 1 + expLen)})` },
+    { label: 'Unbiased Exponent', value: `${unbiasedExp} (bias = ${bias})` },
+    { label: 'Mantissa Fraction', value: manValue === 0 ? '0' : manValue.toPrecision(15) },
+    { label: 'Category', value: category },
+    { label: 'Formula', value: reconstructed },
+    { label: 'Stored Value', value: is64 ? numToExact64(num) : numToExact32(num) },
+    { label: 'Hex Representation', value: hex },
+  ];
+
+  $('infoGrid').innerHTML = items.map(i =>
+    `<div class="info-item"><div class="label">${i.label}</div><div class="value">${i.value}</div></div>`
+  ).join('');
+
+  // Precision analysis
+  renderPrecision(num, is64);
+}
+
+function numToExact64(num) {
+  if (!isFinite(num)) return String(num);
+  if (Object.is(num, -0)) return '-0';
+  return num.toPrecision(17);
+}
+
+function numToExact32(num) {
+  if (!isFinite(num)) return String(num);
+  if (Object.is(num, -0)) return '-0';
+  const buf = new ArrayBuffer(4);
+  new Float32Array(buf)[0] = num;
+  const stored = new Float32Array(buf)[0];
+  return stored.toPrecision(9);
+}
+
+function renderPrecision(num, is64) {
+  const el = $('precisionInfo');
+  if (!isFinite(num) || isNaN(num)) {
+    el.innerHTML = '<p class="muted">Precision analysis not applicable for special values.</p>';
+    return;
+  }
+
+  const raw = $('numInput').value.trim();
+  const inputNum = raw === '-0' ? -0 : parseFloat(raw);
+
+  let storedNum;
+  if (is64) {
+    storedNum = num;
+  } else {
+    const buf = new ArrayBuffer(4);
+    new Float32Array(buf)[0] = num;
+    storedNum = new Float32Array(buf)[0];
+  }
+
+  const diff = Math.abs(inputNum - storedNum);
+  const relError = inputNum !== 0 ? Math.abs(diff / inputNum) : 0;
+
+  // Calculate ULP
+  const eps = is64 ? Number.EPSILON : Math.pow(2, -23);
+  const ulp = is64 ? Math.pow(2, Math.floor(Math.log2(Math.abs(num || 1)))) * eps : 0;
+
+  let precisionHtml = '';
+
+  if (diff === 0 && !Object.is(inputNum, -0)) {
+    precisionHtml += '<p style="color:var(--success);font-weight:600">✓ Exact representation — no precision loss</p>';
+  } else if (Object.is(inputNum, -0)) {
+    precisionHtml += '<p style="color:var(--success);font-weight:600">✓ Exact representation of negative zero</p>';
+  } else {
+    precisionHtml += `<p class="warning">⚠ This number cannot be exactly represented in ${is64 ? 'float64' : 'float32'}</p>`;
+    precisionHtml += `<div class="info-grid" style="margin-top:8px">`;
+    precisionHtml += `<div class="info-item"><div class="label">Absolute Error</div><div class="value">${diff.toExponential(4)}</div></div>`;
+    precisionHtml += `<div class="info-item"><div class="label">Relative Error</div><div class="value">${(relError * 100).toExponential(4)}%</div></div>`;
+    precisionHtml += `</div>`;
+  }
+
+  // Classic precision gotchas
+  if (raw === '0.1' || raw === '0.2' || raw === '0.3') {
+    const a = 0.1, b = 0.2;
+    precisionHtml += `<div style="margin-top:12px;padding:10px 14px;background:var(--surface2);border-radius:var(--radius);font-size:.85rem">`;
+    precisionHtml += `<strong>Classic gotcha:</strong> 0.1 + 0.2 = ${a + b} (not 0.3)<br>`;
+    precisionHtml += `Because 0.1, 0.2, and 0.3 are all inexact in binary floating point.`;
+    precisionHtml += `</div>`;
+  }
+
+  // Significant digits
+  const sigDigits = is64 ? '15–17' : '6–9';
+  precisionHtml += `<div style="margin-top:12px;font-size:.85rem;color:var(--muted)">`;
+  precisionHtml += `${is64 ? 'Float64' : 'Float32'} provides ~${sigDigits} significant decimal digits of precision.`;
+  precisionHtml += `</div>`;
+
+  el.innerHTML = precisionHtml;
+}
+
+$('numInput').addEventListener('input', update);
+setVal('3.14');
+</script>
+</body>
+</html>
