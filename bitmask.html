@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bitmask Calculator - Visual Bit Field Editor</title>
+<meta name="description" content="Visual bitmask calculator. Toggle individual bits, define named bit fields, convert between decimal, hex, octal, and binary. Presets for Unix permissions, TCP flags, and more.">
+<meta name="keywords" content="bitmask calculator, bit field editor, bitwise, binary converter, unix permissions, bit toggle, flags calculator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bitmask.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .bit-grid { display: flex; flex-wrap: wrap; gap: 2px; margin: 1rem 0; }
+  .bit-cell {
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: .9rem;
+    font-weight: 600;
+    transition: all .15s;
+    user-select: none;
+    background: var(--surface);
+    color: var(--muted);
+  }
+  .bit-cell.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .bit-cell:hover { border-color: var(--accent); }
+  .bit-index { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 4px; }
+  .bit-idx {
+    width: 38px; text-align: center;
+    font-size: .65rem; color: var(--muted); font-family: var(--mono);
+  }
+  .formats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 1rem; }
+  .fmt-row { display: flex; align-items: center; gap: 8px; }
+  .fmt-label { font-size: .82rem; font-weight: 600; min-width: 50px; }
+  .fmt-input {
+    flex: 1; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .85rem;
+    background: var(--bg); color: var(--text);
+  }
+  .fmt-input:focus { outline: none; border-color: var(--accent); }
+  .preset-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
+  .preset-bar button {
+    padding: 4px 12px; font-size: .78rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer;
+  }
+  .preset-bar button:hover { background: var(--surface2); }
+  .preset-bar button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .width-bar { display: flex; gap: 6px; margin-bottom: 1rem; }
+  .width-bar button {
+    padding: 4px 10px; font-size: .78rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer;
+  }
+  .width-bar button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .field-list { margin-top: 1rem; }
+  .field-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-bottom: 1px solid var(--border);
+    font-size: .85rem;
+  }
+  .field-item .swatch {
+    width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;
+  }
+  .field-item .fname { font-weight: 600; min-width: 120px; }
+  .field-item .fbits { font-family: var(--mono); color: var(--muted); font-size: .8rem; }
+  .field-item .fval { font-family: var(--mono); margin-left: auto; }
+  .actions { display: flex; gap: 8px; margin-top: 1rem; }
+  .binary-display {
+    font-family: var(--mono); font-size: 1rem;
+    word-break: break-all; padding: 10px;
+    background: var(--surface2); border-radius: var(--radius);
+    margin-top: .5rem; line-height: 1.6;
+  }
+  .group-sep { margin: 0 2px; color: var(--muted); }
+  @media (max-width: 768px) {
+    .formats { grid-template-columns: 1fr; }
+    .bit-cell { width: 30px; height: 30px; font-size: .78rem; }
+    .bit-idx { width: 30px; font-size: .55rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Bitmask Calculator</h1>
+<p class="subtitle">Toggle bits visually, convert between formats, and work with named bit fields</p>
+
+<div class="card">
+<h2>Bit Width</h2>
+<div class="width-bar" id="widthBar">
+  <button onclick="setBitWidth(8)">8-bit</button>
+  <button onclick="setBitWidth(16)">16-bit</button>
+  <button class="active" onclick="setBitWidth(32)">32-bit</button>
+</div>
+<h2>Presets</h2>
+<div class="preset-bar" id="presets">
+  <button onclick="loadPreset('unix')">Unix Permissions</button>
+  <button onclick="loadPreset('tcp')">TCP Flags</button>
+  <button onclick="loadPreset('file')">File Attributes</button>
+  <button onclick="loadPreset('custom')">Custom</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Bit Toggle</h2>
+<div class="bit-index" id="bitIndex"></div>
+<div class="bit-grid" id="bitGrid"></div>
+<div class="actions">
+  <button class="btn" onclick="setAll(1)">Set All</button>
+  <button class="btn btn-secondary" onclick="setAll(0)">Clear All</button>
+  <button class="btn btn-secondary" onclick="invertAll()">Invert</button>
+  <button class="btn btn-secondary" onclick="shiftLeft()">Shift Left</button>
+  <button class="btn btn-secondary" onclick="shiftRight()">Shift Right</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Value Formats</h2>
+<div class="formats">
+  <div class="fmt-row"><span class="fmt-label">Dec</span><input class="fmt-input" id="decInput" oninput="fromDec()" placeholder="0"></div>
+  <div class="fmt-row"><span class="fmt-label">Hex</span><input class="fmt-input" id="hexInput" oninput="fromHex()" placeholder="0x0"></div>
+  <div class="fmt-row"><span class="fmt-label">Oct</span><input class="fmt-input" id="octInput" oninput="fromOct()" placeholder="0o0"></div>
+  <div class="fmt-row"><span class="fmt-label">Bin</span><input class="fmt-input" id="binInput" oninput="fromBin()" placeholder="0b0"></div>
+</div>
+<div class="binary-display" id="binaryDisplay">00000000 00000000 00000000 00000000</div>
+</div>
+
+<div class="card" id="fieldsCard">
+<h2>Named Fields</h2>
+<div class="field-list" id="fieldList"></div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let bitWidth = 32;
+let value = 0;
+let currentPreset = 'custom';
+
+const PRESETS = {
+  unix: {
+    width: 12,
+    fields: [
+      { name: 'SetUID', bits: [11], color: '#e74c3c' },
+      { name: 'SetGID', bits: [10], color: '#e67e22' },
+      { name: 'Sticky', bits: [9], color: '#f1c40f' },
+      { name: 'Owner Read', bits: [8], color: '#3498db' },
+      { name: 'Owner Write', bits: [7], color: '#3498db' },
+      { name: 'Owner Exec', bits: [6], color: '#3498db' },
+      { name: 'Group Read', bits: [5], color: '#2ecc71' },
+      { name: 'Group Write', bits: [4], color: '#2ecc71' },
+      { name: 'Group Exec', bits: [3], color: '#2ecc71' },
+      { name: 'Other Read', bits: [2], color: '#9b59b6' },
+      { name: 'Other Write', bits: [1], color: '#9b59b6' },
+      { name: 'Other Exec', bits: [0], color: '#9b59b6' },
+    ]
+  },
+  tcp: {
+    width: 8,
+    fields: [
+      { name: 'CWR', bits: [7], color: '#e74c3c' },
+      { name: 'ECE', bits: [6], color: '#e67e22' },
+      { name: 'URG', bits: [5], color: '#f1c40f' },
+      { name: 'ACK', bits: [4], color: '#2ecc71' },
+      { name: 'PSH', bits: [3], color: '#3498db' },
+      { name: 'RST', bits: [2], color: '#9b59b6' },
+      { name: 'SYN', bits: [1], color: '#1abc9c' },
+      { name: 'FIN', bits: [0], color: '#e91e63' },
+    ]
+  },
+  file: {
+    width: 8,
+    fields: [
+      { name: 'Read Only', bits: [0], color: '#3498db' },
+      { name: 'Hidden', bits: [1], color: '#e74c3c' },
+      { name: 'System', bits: [2], color: '#e67e22' },
+      { name: 'Volume Label', bits: [3], color: '#f1c40f' },
+      { name: 'Directory', bits: [4], color: '#2ecc71' },
+      { name: 'Archive', bits: [5], color: '#9b59b6' },
+      { name: 'Device', bits: [6], color: '#1abc9c' },
+      { name: 'Normal', bits: [7], color: '#e91e63' },
+    ]
+  },
+  custom: { width: 32, fields: [] }
+};
+
+function setBitWidth(w) {
+  bitWidth = w;
+  value = value & ((1 << w) - 1 || 0xFFFFFFFF);
+  document.querySelectorAll('#widthBar button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#widthBar button').forEach(b => {
+    if (b.textContent.includes(w)) b.classList.add('active');
+  });
+  render();
+}
+
+function loadPreset(name) {
+  currentPreset = name;
+  const preset = PRESETS[name];
+  if (preset.width !== bitWidth) {
+    bitWidth = preset.width <= 8 ? 8 : preset.width <= 16 ? 16 : 32;
+    document.querySelectorAll('#widthBar button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#widthBar button').forEach(b => {
+      if (b.textContent.includes(bitWidth)) b.classList.add('active');
+    });
+  }
+  document.querySelectorAll('#presets button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#presets button').forEach(b => {
+    if (b.textContent.toLowerCase().includes(name === 'unix' ? 'unix' : name === 'tcp' ? 'tcp' : name === 'file' ? 'file attr' : 'custom'))
+      b.classList.add('active');
+  });
+  render();
+}
+
+function toggleBit(i) {
+  value ^= (1 << i);
+  render();
+}
+
+function setAll(v) {
+  value = v ? ((1 << bitWidth) - 1 || 0xFFFFFFFF) : 0;
+  render();
+}
+
+function invertAll() {
+  value = (~value) & ((1 << bitWidth) - 1 || 0xFFFFFFFF);
+  render();
+}
+
+function shiftLeft() {
+  value = (value << 1) & ((1 << bitWidth) - 1 || 0xFFFFFFFF);
+  render();
+}
+
+function shiftRight() {
+  value = value >>> 1;
+  render();
+}
+
+function fromDec() {
+  const v = parseInt($('decInput').value, 10);
+  if (!isNaN(v) && v >= 0) { value = v & ((1 << bitWidth) - 1 || 0xFFFFFFFF); render(true); }
+}
+function fromHex() {
+  const raw = $('hexInput').value.replace(/^0x/i, '');
+  const v = parseInt(raw, 16);
+  if (!isNaN(v) && v >= 0) { value = v & ((1 << bitWidth) - 1 || 0xFFFFFFFF); render(true); }
+}
+function fromOct() {
+  const raw = $('octInput').value.replace(/^0o/i, '');
+  const v = parseInt(raw, 8);
+  if (!isNaN(v) && v >= 0) { value = v & ((1 << bitWidth) - 1 || 0xFFFFFFFF); render(true); }
+}
+function fromBin() {
+  const raw = $('binInput').value.replace(/^0b/i, '').replace(/\s/g, '');
+  const v = parseInt(raw, 2);
+  if (!isNaN(v) && v >= 0) { value = v & ((1 << bitWidth) - 1 || 0xFFFFFFFF); render(true); }
+}
+
+function render(skipInputs) {
+  // Bit index row
+  const idxEl = $('bitIndex');
+  idxEl.innerHTML = '';
+  for (let i = bitWidth - 1; i >= 0; i--) {
+    idxEl.innerHTML += `<div class="bit-idx">${i}</div>`;
+  }
+
+  // Bit grid
+  const gridEl = $('bitGrid');
+  gridEl.innerHTML = '';
+  const fields = PRESETS[currentPreset]?.fields || [];
+  for (let i = bitWidth - 1; i >= 0; i--) {
+    const on = (value >> i) & 1;
+    const field = fields.find(f => f.bits.includes(i));
+    const style = field && on ? `background:${field.color};border-color:${field.color};color:#fff` : '';
+    gridEl.innerHTML += `<div class="bit-cell ${on ? 'on' : ''}" onclick="toggleBit(${i})" style="${style}" title="${field ? field.name + ' (bit ' + i + ')' : 'bit ' + i}">${on}</div>`;
+  }
+
+  // Format inputs
+  if (!skipInputs) {
+    $('decInput').value = value;
+    $('hexInput').value = '0x' + value.toString(16).toUpperCase();
+    $('octInput').value = '0o' + value.toString(8);
+    $('binInput').value = '0b' + value.toString(2).padStart(bitWidth, '0');
+  }
+
+  // Binary display with grouping
+  const bin = value.toString(2).padStart(bitWidth, '0');
+  let grouped = '';
+  for (let i = 0; i < bin.length; i++) {
+    if (i > 0 && (bin.length - i) % 8 === 0) grouped += '<span class="group-sep"> </span>';
+    else if (i > 0 && (bin.length - i) % 4 === 0) grouped += '<span class="group-sep"> </span>';
+    const on = bin[i] === '1';
+    grouped += on ? `<span style="font-weight:700">${bin[i]}</span>` : bin[i];
+  }
+  $('binaryDisplay').innerHTML = grouped;
+
+  // Named fields
+  const listEl = $('fieldList');
+  if (fields.length === 0) {
+    listEl.innerHTML = '<div class="empty">Select a preset to see named bit fields</div>';
+    return;
+  }
+  listEl.innerHTML = '';
+  fields.forEach(f => {
+    const fval = f.bits.reduce((acc, b) => acc | (((value >> b) & 1) << f.bits.indexOf(b)), 0);
+    const on = f.bits.some(b => (value >> b) & 1);
+    listEl.innerHTML += `<div class="field-item">
+      <div class="swatch" style="background:${f.color}"></div>
+      <span class="fname">${f.name}</span>
+      <span class="fbits">bit${f.bits.length > 1 ? 's' : ''} ${f.bits.join(',')}</span>
+      <span class="fval" style="color:${on ? 'var(--success)' : 'var(--muted)'}">${on ? 'SET' : 'OFF'}</span>
+    </div>`;
+  });
+}
+
+// Init
+loadPreset('custom');
+render();
+</script>
+</body>
+</html>
