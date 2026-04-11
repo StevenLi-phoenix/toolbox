@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown Table of Contents Generator - Free Online TOC Tool</title>
+<meta name="description" content="Generate a clickable table of contents from Markdown headings. Supports GitHub-flavored anchors, custom depth, ordered/unordered lists, and copy to clipboard.">
+<meta name="keywords" content="markdown toc, table of contents, markdown headings, github toc, readme toc, markdown generator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/markdowntoc.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .toc-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .toc-textarea { width: 100%; min-height: 400px; font-family: var(--mono); font-size: .85rem; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; line-height: 1.6; }
+  .toc-output { width: 100%; min-height: 400px; font-family: var(--mono); font-size: .85rem; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); resize: vertical; line-height: 1.6; white-space: pre-wrap; }
+  .options-bar { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+  .options-bar label { font-size: .85rem; display: flex; align-items: center; gap: .35rem; }
+  .options-bar select, .options-bar input[type="number"] {
+    padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: .85rem; background: var(--bg); color: var(--text);
+  }
+  .stat-bar { display: flex; gap: 1.5rem; margin-bottom: 1rem; font-size: .82rem; color: var(--muted); }
+  .stat-bar span { font-weight: 600; color: var(--text); }
+  .toc-preview { padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); font-size: .85rem; line-height: 1.7; max-height: 400px; overflow-y: auto; }
+  .toc-preview ul, .toc-preview ol { margin: 0; padding-left: 1.5em; }
+  .toc-preview li { margin-bottom: .15rem; }
+  .toc-preview a { color: var(--text); text-decoration: none; }
+  .toc-preview a:hover { text-decoration: underline; }
+  @media (max-width: 768px) {
+    .toc-panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📑 Markdown TOC Generator</h1>
+<p class="subtitle">Paste Markdown to generate a clickable table of contents with GitHub-compatible anchors</p>
+
+<div class="card">
+  <h2>⚙️ Options</h2>
+  <div class="options-bar">
+    <label>Min depth: <select id="minDepth" onchange="generate()">
+      <option value="1" selected>H1</option><option value="2">H2</option><option value="3">H3</option>
+    </select></label>
+    <label>Max depth: <select id="maxDepth" onchange="generate()">
+      <option value="2">H2</option><option value="3" selected>H3</option><option value="4">H4</option><option value="5">H5</option><option value="6">H6</option>
+    </select></label>
+    <label>Style: <select id="listStyle" onchange="generate()">
+      <option value="dash">- Dash</option><option value="asterisk">* Asterisk</option><option value="ordered">1. Ordered</option>
+    </select></label>
+    <label><input type="checkbox" id="includeLinks" checked onchange="generate()"> Links</label>
+    <label><input type="checkbox" id="includeNumbers" onchange="generate()"> Number prefix</label>
+    <label><input type="checkbox" id="addTocHeader" checked onchange="generate()"> Add "Table of Contents" header</label>
+  </div>
+</div>
+
+<div class="toc-panels">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+      <h2>📝 Markdown Input</h2>
+      <button class="btn btn-secondary" onclick="loadSample()">Load Sample</button>
+    </div>
+    <textarea class="toc-textarea" id="mdInput" placeholder="Paste your Markdown here..." oninput="generate()"></textarea>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+      <h2>📋 Generated TOC</h2>
+      <button class="btn" onclick="copyToc()">Copy</button>
+    </div>
+    <div class="stat-bar" id="stats"></div>
+    <textarea class="toc-output" id="tocOutput" readonly></textarea>
+    <h3 style="margin-top:1rem;font-size:.9rem;">Preview</h3>
+    <div class="toc-preview" id="tocPreview"><span class="empty">Enter Markdown to see TOC preview</span></div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+function slugify(text){
+  return text
+    .toLowerCase()
+    .replace(/<[^>]*>/g, '')
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function parseHeadings(md){
+  const lines = md.split('\n');
+  const headings = [];
+  let inCodeBlock = false;
+
+  for(const line of lines){
+    if(line.trim().startsWith('```')){
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if(inCodeBlock) continue;
+
+    const match = line.match(/^(#{1,6})\s+(.+)$/);
+    if(match){
+      const level = match[1].length;
+      let text = match[2].trim();
+      // Remove trailing # characters
+      text = text.replace(/\s+#+\s*$/, '').trim();
+      // Remove inline markdown bold/italic
+      const plain = text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1').replace(/_(.+?)_/g, '$1').replace(/`(.+?)`/g, '$1').replace(/\[(.+?)\]\(.+?\)/g, '$1');
+      headings.push({ level, text: plain, slug: slugify(plain) });
+    }
+  }
+  return headings;
+}
+
+function generate(){
+  const md = $('mdInput').value;
+  const minDepth = parseInt($('minDepth').value);
+  const maxDepth = parseInt($('maxDepth').value);
+  const listStyle = $('listStyle').value;
+  const includeLinks = $('includeLinks').checked;
+  const includeNumbers = $('includeNumbers').checked;
+  const addHeader = $('addTocHeader').checked;
+
+  const headings = parseHeadings(md).filter(h => h.level >= minDepth && h.level <= maxDepth);
+
+  if(!headings.length){
+    $('tocOutput').value = '';
+    $('tocPreview').innerHTML = '<span class="empty">No headings found</span>';
+    $('stats').innerHTML = '';
+    return;
+  }
+
+  // Handle duplicate slugs
+  const slugCount = {};
+  headings.forEach(h => {
+    if(slugCount[h.slug] !== undefined){
+      slugCount[h.slug]++;
+      h.slug = h.slug + '-' + slugCount[h.slug];
+    } else {
+      slugCount[h.slug] = 0;
+    }
+  });
+
+  const minLevel = Math.min(...headings.map(h => h.level));
+  const lines = [];
+  if(addHeader) lines.push('## Table of Contents\n');
+
+  const counters = {};
+  headings.forEach((h, i) => {
+    const indent = '  '.repeat(h.level - minLevel);
+    let bullet;
+    if(listStyle === 'ordered'){
+      const key = h.level;
+      counters[key] = (counters[key] || 0) + 1;
+      // Reset deeper counters
+      for(let k = key + 1; k <= 6; k++) counters[k] = 0;
+      bullet = counters[key] + '.';
+    } else {
+      bullet = listStyle === 'asterisk' ? '*' : '-';
+    }
+
+    let prefix = includeNumbers ? `${i + 1}. ` : '';
+    let label = includeNumbers ? `${prefix}${h.text}` : h.text;
+
+    if(includeLinks){
+      lines.push(`${indent}${bullet} [${label}](#${h.slug})`);
+    } else {
+      lines.push(`${indent}${bullet} ${label}`);
+    }
+  });
+
+  const output = lines.join('\n');
+  $('tocOutput').value = output;
+
+  // Stats
+  const depthCounts = {};
+  headings.forEach(h => { depthCounts[h.level] = (depthCounts[h.level] || 0) + 1; });
+  const statParts = [`<span>${headings.length}</span> headings`];
+  Object.keys(depthCounts).sort().forEach(d => {
+    statParts.push(`H${d}: <span>${depthCounts[d]}</span>`);
+  });
+  $('stats').innerHTML = statParts.join(' · ');
+
+  // Preview
+  renderPreview(headings, minLevel, listStyle, includeLinks, includeNumbers);
+}
+
+function renderPreview(headings, minLevel, listStyle, includeLinks, includeNumbers){
+  const tag = listStyle === 'ordered' ? 'ol' : 'ul';
+
+  function buildList(items, depth){
+    if(!items.length) return '';
+    let html = `<${tag}>`;
+    let i = 0;
+    while(i < items.length){
+      const item = items[i];
+      const label = includeNumbers ? `${i + 1}. ${item.text}` : item.text;
+      const linkHtml = includeLinks ? `<a href="#${item.slug}">${label}</a>` : label;
+
+      // Gather children
+      const children = [];
+      let j = i + 1;
+      while(j < items.length && items[j].level > item.level){
+        children.push(items[j]);
+        j++;
+      }
+
+      if(children.length){
+        html += `<li>${linkHtml}${buildList(children, depth + 1)}</li>`;
+      } else {
+        html += `<li>${linkHtml}</li>`;
+      }
+      i = j;
+    }
+    html += `</${tag}>`;
+    return html;
+  }
+
+  // Normalize to top level
+  const normalized = headings.map(h => ({...h, level: h.level - minLevel}));
+  // Build tree from flat list
+  const topLevel = [];
+  const stack = [];
+  normalized.forEach(h => {
+    while(stack.length && stack[stack.length-1].level >= h.level) stack.pop();
+    if(!stack.length){
+      topLevel.push(h);
+    }
+    stack.push(h);
+  });
+
+  $('tocPreview').innerHTML = buildList(normalized.map(h => ({...h, level: h.level + minLevel})), 0) || '<span class="empty">No headings found</span>';
+}
+
+function copyToc(){
+  const text = $('tocOutput').value;
+  if(!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+
+function loadSample(){
+  $('mdInput').value = `# Project Name
+
+## Introduction
+Brief overview of the project.
+
+## Getting Started
+
+### Prerequisites
+What you need before installing.
+
+### Installation
+Step by step installation guide.
+
+### Configuration
+How to configure the project.
+
+## Usage
+
+### Basic Usage
+Simple examples to get started.
+
+### Advanced Features
+Power user features and options.
+
+### API Reference
+Complete API documentation.
+
+## Contributing
+
+### Code Style
+Follow these coding conventions.
+
+### Pull Requests
+How to submit changes.
+
+## License
+MIT License information.
+
+## Changelog
+
+### v2.0.0
+Major release notes.
+
+### v1.0.0
+Initial release notes.`;
+  generate();
+}
+
+// Init
+generate();
+</script>
+</body>
+</html>

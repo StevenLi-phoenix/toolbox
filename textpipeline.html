@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Transform Pipeline - Free Online Text Processing Tool</title>
+<meta name="description" content="Chain text transformations together: uppercase, base64, reverse, regex replace, trim, URL encode, hash, and more. Build reusable processing pipelines.">
+<meta name="keywords" content="text transform, text pipeline, text processing, chain transforms, base64, regex replace, text tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/textpipeline.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .pipeline-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .pipe-textarea { width: 100%; min-height: 180px; font-family: var(--mono); font-size: .85rem; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; line-height: 1.5; }
+  .step-list { display: flex; flex-direction: column; gap: .5rem; min-height: 60px; }
+  .step {
+    display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  }
+  .step:hover { border-color: var(--border2); }
+  .step-num { font-size: .75rem; font-weight: 700; color: var(--muted); min-width: 20px; }
+  .step select {
+    padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: .82rem; background: var(--bg); color: var(--text); flex-shrink: 0;
+  }
+  .step-args { flex: 1; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; font-family: var(--mono); background: var(--bg); color: var(--text); }
+  .step-args::placeholder { color: var(--muted); }
+  .step-remove { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1rem; padding: 0 4px; }
+  .step-remove:hover { color: var(--error); }
+  .step-move { background: none; border: none; cursor: pointer; color: var(--muted); font-size: .85rem; padding: 0 2px; }
+  .step-move:hover { color: var(--text); }
+  .add-bar { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; }
+  .add-btn { padding: .3rem .65rem; font-size: .78rem; border: 1px dashed var(--border); border-radius: var(--radius); background: transparent; cursor: pointer; color: var(--muted); }
+  .add-btn:hover { background: var(--surface); color: var(--text); border-style: solid; }
+  .char-count { font-size: .78rem; color: var(--muted); margin-top: .35rem; }
+  .intermediate { margin-top: 1rem; }
+  .intermediate summary { font-size: .85rem; cursor: pointer; color: var(--muted); font-weight: 600; }
+  .inter-step { margin-top: .5rem; padding: .5rem .75rem; border-left: 3px solid var(--border); font-size: .82rem; }
+  .inter-label { font-weight: 600; font-size: .78rem; color: var(--muted); margin-bottom: .25rem; }
+  .inter-val { font-family: var(--mono); font-size: .8rem; white-space: pre-wrap; word-break: break-all; max-height: 100px; overflow-y: auto; }
+  .presets-wrap { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .preset-chip { padding: .3rem .65rem; font-size: .78rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; color: var(--text); }
+  .preset-chip:hover { background: var(--surface2); }
+  .error-msg { color: var(--error); font-size: .82rem; margin-top: .25rem; }
+  @media (max-width: 768px) {
+    .pipeline-layout { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔗 Text Transform Pipeline</h1>
+<p class="subtitle">Chain text transformations together — each step feeds into the next</p>
+
+<div class="presets-wrap">
+  <strong style="font-size:.85rem;line-height:2;">Presets:</strong>
+  <button class="preset-chip" onclick="loadPreset('slugify')">Slugify</button>
+  <button class="preset-chip" onclick="loadPreset('base64url')">Base64 → URL Encode</button>
+  <button class="preset-chip" onclick="loadPreset('clean')">Clean & Normalize</button>
+  <button class="preset-chip" onclick="loadPreset('csv-lines')">CSV → Lines</button>
+  <button class="preset-chip" onclick="loadPreset('minify')">Minify Whitespace</button>
+  <button class="preset-chip" onclick="loadPreset('hash-prep')">Trim → Lowercase → SHA-256</button>
+</div>
+
+<div class="pipeline-layout">
+  <div>
+    <div class="card">
+      <h2>📝 Input</h2>
+      <textarea class="pipe-textarea" id="pipeInput" placeholder="Paste your text here..." oninput="runPipeline()"></textarea>
+      <div class="char-count" id="inputStats"></div>
+    </div>
+    <div class="card" style="margin-top:1rem;">
+      <h2>📋 Output</h2>
+      <textarea class="pipe-textarea" id="pipeOutput" readonly></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.5rem;">
+        <div class="char-count" id="outputStats"></div>
+        <button class="btn" onclick="copyOutput()">Copy</button>
+      </div>
+      <div id="errorMsg" class="error-msg"></div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <h2>⚙️ Pipeline Steps</h2>
+        <button class="btn btn-secondary" onclick="clearSteps()" style="font-size:.78rem;padding:.25rem .6rem;">Clear All</button>
+      </div>
+      <div class="step-list" id="stepList"></div>
+      <div class="add-bar">
+        <button class="add-btn" onclick="addStep('uppercase')">+ Uppercase</button>
+        <button class="add-btn" onclick="addStep('lowercase')">+ Lowercase</button>
+        <button class="add-btn" onclick="addStep('trim')">+ Trim</button>
+        <button class="add-btn" onclick="addStep('reverse')">+ Reverse</button>
+        <button class="add-btn" onclick="addStep('base64-encode')">+ Base64 Encode</button>
+        <button class="add-btn" onclick="addStep('base64-decode')">+ Base64 Decode</button>
+        <button class="add-btn" onclick="addStep('url-encode')">+ URL Encode</button>
+        <button class="add-btn" onclick="addStep('url-decode')">+ URL Decode</button>
+        <button class="add-btn" onclick="addStep('regex-replace')">+ Regex Replace</button>
+        <button class="add-btn" onclick="addStep('prefix')">+ Prefix</button>
+        <button class="add-btn" onclick="addStep('suffix')">+ Suffix</button>
+        <button class="add-btn" onclick="addStep('remove-blank-lines')">+ Remove Blank Lines</button>
+        <button class="add-btn" onclick="addStep('sort-lines')">+ Sort Lines</button>
+        <button class="add-btn" onclick="addStep('unique-lines')">+ Unique Lines</button>
+        <button class="add-btn" onclick="addStep('reverse-lines')">+ Reverse Lines</button>
+        <button class="add-btn" onclick="addStep('number-lines')">+ Number Lines</button>
+        <button class="add-btn" onclick="addStep('wrap-lines')">+ Wrap Lines</button>
+        <button class="add-btn" onclick="addStep('split')">+ Split</button>
+        <button class="add-btn" onclick="addStep('join')">+ Join</button>
+        <button class="add-btn" onclick="addStep('replace')">+ Replace</button>
+        <button class="add-btn" onclick="addStep('slice')">+ Slice</button>
+        <button class="add-btn" onclick="addStep('pad-left')">+ Pad Left</button>
+        <button class="add-btn" onclick="addStep('pad-right')">+ Pad Right</button>
+        <button class="add-btn" onclick="addStep('repeat')">+ Repeat</button>
+        <button class="add-btn" onclick="addStep('sha256')">+ SHA-256</button>
+        <button class="add-btn" onclick="addStep('html-encode')">+ HTML Encode</button>
+        <button class="add-btn" onclick="addStep('html-decode')">+ HTML Decode</button>
+        <button class="add-btn" onclick="addStep('json-stringify')">+ JSON Stringify</button>
+        <button class="add-btn" onclick="addStep('json-parse')">+ JSON Parse</button>
+        <button class="add-btn" onclick="addStep('count-chars')">+ Count Chars</button>
+        <button class="add-btn" onclick="addStep('count-words')">+ Count Words</button>
+        <button class="add-btn" onclick="addStep('count-lines')">+ Count Lines</button>
+      </div>
+    </div>
+    <details class="intermediate card" style="margin-top:1rem;" id="intermediateWrap">
+      <summary>Intermediate Results</summary>
+      <div id="intermediateResults"></div>
+    </details>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const TRANSFORMS = {
+  'uppercase':        { label: 'Uppercase',         args: false, fn: (s) => s.toUpperCase() },
+  'lowercase':        { label: 'Lowercase',         args: false, fn: (s) => s.toLowerCase() },
+  'trim':             { label: 'Trim',              args: false, fn: (s) => s.trim() },
+  'reverse':          { label: 'Reverse',           args: false, fn: (s) => [...s].reverse().join('') },
+  'base64-encode':    { label: 'Base64 Encode',     args: false, fn: (s) => btoa(unescape(encodeURIComponent(s))) },
+  'base64-decode':    { label: 'Base64 Decode',     args: false, fn: (s) => decodeURIComponent(escape(atob(s))) },
+  'url-encode':       { label: 'URL Encode',        args: false, fn: (s) => encodeURIComponent(s) },
+  'url-decode':       { label: 'URL Decode',        args: false, fn: (s) => decodeURIComponent(s) },
+  'html-encode':      { label: 'HTML Encode',       args: false, fn: (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') },
+  'html-decode':      { label: 'HTML Decode',       args: false, fn: (s) => { const d=document.createElement('div'); d.innerHTML=s; return d.textContent; }},
+  'regex-replace':    { label: 'Regex Replace',     args: true, placeholder: '/pattern/flags → replacement', fn: (s, a) => {
+    const m = a.match(/^\/(.+)\/([gimsuy]*)\s*→\s*(.*)$/);
+    if(!m) throw new Error('Format: /pattern/flags → replacement');
+    return s.replace(new RegExp(m[1], m[2]), m[3]);
+  }},
+  'replace':          { label: 'Replace',           args: true, placeholder: 'find → replace', fn: (s, a) => {
+    const parts = a.split('→').map(p=>p.trim());
+    if(parts.length<2) throw new Error('Format: find → replace');
+    return s.split(parts[0]).join(parts[1]);
+  }},
+  'split':            { label: 'Split',             args: true, placeholder: 'delimiter (e.g. , or \\n)', fn: (s, a) => {
+    const d = a.replace(/\\n/g,'\n').replace(/\\t/g,'\t');
+    return s.split(d).join('\n');
+  }},
+  'join':             { label: 'Join',              args: true, placeholder: 'delimiter (e.g. , or \\n)', fn: (s, a) => {
+    const d = a.replace(/\\n/g,'\n').replace(/\\t/g,'\t');
+    return s.split('\n').join(d);
+  }},
+  'prefix':           { label: 'Prefix Lines',      args: true, placeholder: 'prefix text', fn: (s, a) => s.split('\n').map(l=>a+l).join('\n') },
+  'suffix':           { label: 'Suffix Lines',      args: true, placeholder: 'suffix text', fn: (s, a) => s.split('\n').map(l=>l+a).join('\n') },
+  'wrap-lines':       { label: 'Wrap Lines',        args: true, placeholder: 'before → after (e.g. " → ")', fn: (s, a) => {
+    const parts = a.split('→').map(p=>p.trim());
+    const before = parts[0] || '', after = parts[1] || parts[0] || '';
+    return s.split('\n').map(l=>before+l+after).join('\n');
+  }},
+  'remove-blank-lines':{ label: 'Remove Blank Lines', args: false, fn: (s) => s.split('\n').filter(l=>l.trim()).join('\n') },
+  'sort-lines':       { label: 'Sort Lines',        args: false, fn: (s) => s.split('\n').sort((a,b)=>a.localeCompare(b)).join('\n') },
+  'unique-lines':     { label: 'Unique Lines',      args: false, fn: (s) => [...new Set(s.split('\n'))].join('\n') },
+  'reverse-lines':    { label: 'Reverse Lines',     args: false, fn: (s) => s.split('\n').reverse().join('\n') },
+  'number-lines':     { label: 'Number Lines',      args: false, fn: (s) => s.split('\n').map((l,i)=>`${i+1}. ${l}`).join('\n') },
+  'slice':            { label: 'Slice',             args: true, placeholder: 'start,end (e.g. 0,100)', fn: (s, a) => {
+    const [start,end] = a.split(',').map(Number);
+    return s.slice(start, end);
+  }},
+  'pad-left':         { label: 'Pad Left',          args: true, placeholder: 'length,char (e.g. 10,0)', fn: (s, a) => {
+    const [len,ch] = a.split(',');
+    return s.split('\n').map(l=>l.padStart(parseInt(len),ch||' ')).join('\n');
+  }},
+  'pad-right':        { label: 'Pad Right',         args: true, placeholder: 'length,char (e.g. 10, )', fn: (s, a) => {
+    const [len,ch] = a.split(',');
+    return s.split('\n').map(l=>l.padEnd(parseInt(len),ch||' ')).join('\n');
+  }},
+  'repeat':           { label: 'Repeat',            args: true, placeholder: 'count (e.g. 3)', fn: (s, a) => s.repeat(parseInt(a)||1) },
+  'sha256':           { label: 'SHA-256',           args: false, fn: async (s) => {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }},
+  'json-stringify':   { label: 'JSON Stringify',    args: false, fn: (s) => JSON.stringify(s) },
+  'json-parse':       { label: 'JSON Parse',        args: false, fn: (s) => { const v=JSON.parse(s); return typeof v==='string'?v:JSON.stringify(v,null,2); }},
+  'count-chars':      { label: 'Count Chars',       args: false, fn: (s) => String(s.length) },
+  'count-words':      { label: 'Count Words',       args: false, fn: (s) => String(s.trim()?s.trim().split(/\s+/).length:0) },
+  'count-lines':      { label: 'Count Lines',       args: false, fn: (s) => String(s.split('\n').length) },
+};
+
+let steps = [];
+
+function addStep(type){
+  steps.push({ type, args: '' });
+  renderSteps();
+  runPipeline();
+}
+
+function removeStep(i){
+  steps.splice(i, 1);
+  renderSteps();
+  runPipeline();
+}
+
+function moveStep(i, dir){
+  const j = i + dir;
+  if(j < 0 || j >= steps.length) return;
+  [steps[i], steps[j]] = [steps[j], steps[i]];
+  renderSteps();
+  runPipeline();
+}
+
+function clearSteps(){
+  steps = [];
+  renderSteps();
+  runPipeline();
+}
+
+function renderSteps(){
+  const list = $('stepList');
+  if(!steps.length){
+    list.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:.85rem;padding:1rem;">No steps added. Click a transform below to start.</div>';
+    return;
+  }
+  list.innerHTML = steps.map((s, i) => {
+    const t = TRANSFORMS[s.type];
+    const argsHtml = t.args ? `<input class="step-args" value="${escHtml(s.args)}" placeholder="${escHtml(t.placeholder||'')}" oninput="updateArgs(${i},this.value)">` : '';
+    return `<div class="step">
+      <span class="step-num">${i+1}</span>
+      <select onchange="changeType(${i},this.value)">${Object.keys(TRANSFORMS).map(k=>`<option value="${k}"${k===s.type?' selected':''}>${TRANSFORMS[k].label}</option>`).join('')}</select>
+      ${argsHtml}
+      <button class="step-move" onclick="moveStep(${i},-1)" title="Move up">▲</button>
+      <button class="step-move" onclick="moveStep(${i},1)" title="Move down">▼</button>
+      <button class="step-remove" onclick="removeStep(${i})" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function changeType(i, type){
+  steps[i].type = type;
+  steps[i].args = '';
+  renderSteps();
+  runPipeline();
+}
+
+function updateArgs(i, val){
+  steps[i].args = val;
+  runPipeline();
+}
+
+async function runPipeline(){
+  const input = $('pipeInput').value;
+  $('inputStats').textContent = `${input.length} chars · ${input.trim()?input.trim().split(/\s+/).length:0} words · ${input.split('\n').length} lines`;
+
+  if(!steps.length){
+    $('pipeOutput').value = input;
+    $('outputStats').textContent = '';
+    $('errorMsg').textContent = '';
+    $('intermediateResults').innerHTML = '';
+    return;
+  }
+
+  let val = input;
+  const intermediates = [];
+  $('errorMsg').textContent = '';
+
+  for(let i = 0; i < steps.length; i++){
+    const s = steps[i];
+    const t = TRANSFORMS[s.type];
+    try {
+      const result = t.fn(val, s.args);
+      val = result instanceof Promise ? await result : result;
+      intermediates.push({ label: `Step ${i+1}: ${t.label}`, value: val });
+    } catch(e){
+      $('errorMsg').textContent = `Step ${i+1} (${t.label}): ${e.message}`;
+      $('pipeOutput').value = '';
+      $('outputStats').textContent = '';
+      renderIntermediates(intermediates);
+      return;
+    }
+  }
+
+  $('pipeOutput').value = val;
+  $('outputStats').textContent = `${val.length} chars · ${val.trim()?val.trim().split(/\s+/).length:0} words · ${val.split('\n').length} lines`;
+  renderIntermediates(intermediates);
+}
+
+function renderIntermediates(items){
+  $('intermediateResults').innerHTML = items.map(it => `
+    <div class="inter-step">
+      <div class="inter-label">${escHtml(it.label)}</div>
+      <div class="inter-val">${escHtml(it.value.slice(0, 500))}${it.value.length > 500 ? '…' : ''}</div>
+    </div>
+  `).join('');
+}
+
+function copyOutput(){
+  const text = $('pipeOutput').value;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+
+const PRESETS_MAP = {
+  'slugify': [
+    {type:'trim', args:''},
+    {type:'lowercase', args:''},
+    {type:'regex-replace', args:'/[^a-z0-9\\s-]/g → '},
+    {type:'regex-replace', args:'/\\s+/g → -'},
+    {type:'regex-replace', args:'/-+/g → -'},
+  ],
+  'base64url': [
+    {type:'base64-encode', args:''},
+    {type:'url-encode', args:''},
+  ],
+  'clean': [
+    {type:'trim', args:''},
+    {type:'remove-blank-lines', args:''},
+    {type:'regex-replace', args:'/[ \\t]+$/gm → '},
+  ],
+  'csv-lines': [
+    {type:'split', args:','},
+    {type:'trim', args:''},
+    {type:'remove-blank-lines', args:''},
+  ],
+  'minify': [
+    {type:'regex-replace', args:'/\\s+/g → '},
+    {type:'trim', args:''},
+  ],
+  'hash-prep': [
+    {type:'trim', args:''},
+    {type:'lowercase', args:''},
+    {type:'sha256', args:''},
+  ],
+};
+
+function loadPreset(name){
+  steps = JSON.parse(JSON.stringify(PRESETS_MAP[name] || []));
+  renderSteps();
+  runPipeline();
+}
+
+// Init
+renderSteps();
+runPipeline();
+</script>
+</body>
+</html>
