@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PKCE Generator - Free Online OAuth 2.0 Tool</title>
+<meta name="description" content="Generate PKCE code verifier and code challenge pairs for OAuth 2.0 authorization code flow. Supports S256 and plain methods. 100% client-side — your data never leaves your browser.">
+<meta name="keywords" content="pkce, oauth2, code verifier, code challenge, authorization code flow, proof key, S256, rfc7636">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pkce.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .pair-card { margin-bottom: 1.5rem; }
+  .pair-card h3 { margin-bottom: .5rem; font-size: .9rem; }
+  .value-row {
+    display: flex; align-items: center; gap: .5rem;
+    padding: 10px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg2); margin-bottom: .5rem;
+  }
+  .value-row code {
+    flex: 1; font-family: var(--mono); font-size: .85rem;
+    word-break: break-all; color: var(--text);
+  }
+  .value-row button { flex-shrink: 0; }
+  .option-row { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+  .option-row label { font-size: .85rem; color: var(--muted); }
+  .option-row select, .option-row input[type="number"] {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font: inherit; font-size: .85rem;
+  }
+  .option-row input[type="number"] { width: 80px; }
+  .url-template {
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg2); font-family: var(--mono); font-size: .8rem;
+    word-break: break-all; line-height: 1.6; color: var(--text);
+  }
+  .url-template .param { color: var(--success); font-weight: 600; }
+  .url-template .placeholder { color: var(--muted); font-style: italic; }
+  .info-box {
+    padding: 12px 14px; border-radius: var(--radius);
+    background: var(--bg2); border: 1px solid var(--border);
+    font-size: .82rem; color: var(--muted); line-height: 1.6;
+  }
+  .info-box strong { color: var(--text); }
+  .meta { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
+  .custom-input {
+    width: 100%; padding: 10px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .85rem;
+  }
+  .verify-result { margin-top: .5rem; padding: 8px 12px; border-radius: var(--radius); font-size: .85rem; font-weight: 600; }
+  .verify-result.match { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .verify-result.nomatch { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>PKCE Generator</h1>
+<p class="subtitle">Generate code_verifier &amp; code_challenge pairs for OAuth 2.0 (RFC 7636)</p>
+
+<div class="card">
+<h2>⚙️ Options</h2>
+<div class="option-row">
+  <label>Method:
+    <select id="method" onchange="generate()">
+      <option value="S256" selected>S256 (recommended)</option>
+      <option value="plain">plain</option>
+    </select>
+  </label>
+  <label>Verifier Length:
+    <input type="number" id="length" value="128" min="43" max="128" onchange="generate()">
+  </label>
+  <button class="btn" onclick="generate()">🔄 Regenerate</button>
+</div>
+</div>
+
+<div class="card">
+<h2>🔑 Generated Pair</h2>
+
+<div class="pair-card">
+  <h3>code_verifier</h3>
+  <div class="value-row">
+    <code id="verifier">—</code>
+    <button class="btn btn-secondary" onclick="copy('verifier')">Copy</button>
+  </div>
+  <div class="meta" id="verifierMeta"></div>
+</div>
+
+<div class="pair-card">
+  <h3>code_challenge</h3>
+  <div class="value-row">
+    <code id="challenge">—</code>
+    <button class="btn btn-secondary" onclick="copy('challenge')">Copy</button>
+  </div>
+  <div class="meta" id="challengeMeta"></div>
+</div>
+
+<div class="pair-card">
+  <h3>code_challenge_method</h3>
+  <div class="value-row">
+    <code id="methodDisplay">S256</code>
+    <button class="btn btn-secondary" onclick="copy('methodDisplay')">Copy</button>
+  </div>
+</div>
+</div>
+
+<div class="card">
+<h2>🔗 Authorization URL Template</h2>
+<div class="url-template" id="urlTemplate"></div>
+<button class="btn btn-secondary" style="margin-top:.75rem" onclick="copyUrl()">Copy URL Template</button>
+</div>
+
+<div class="card">
+<h2>✅ Verify a Pair</h2>
+<p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem">Paste a code_verifier to compute its challenge, or verify an existing pair.</p>
+<input class="custom-input" id="customVerifier" placeholder="Paste code_verifier here…" oninput="verifyPair()">
+<input class="custom-input" id="customChallenge" placeholder="Paste expected code_challenge here (optional)…" style="margin-top:.5rem" oninput="verifyPair()">
+<div id="computedChallenge"></div>
+<div id="verifyResult"></div>
+</div>
+
+<div class="card">
+<h2>ℹ️ How PKCE Works</h2>
+<div class="info-box">
+  <strong>PKCE</strong> (Proof Key for Code Exchange, RFC 7636) prevents authorization code interception attacks in OAuth 2.0 public clients.<br><br>
+  <strong>1.</strong> Client generates a random <strong>code_verifier</strong> (43–128 chars, [A-Z a-z 0-9 - . _ ~]).<br>
+  <strong>2.</strong> Client computes <strong>code_challenge</strong> = BASE64URL(SHA256(code_verifier)) for S256 method.<br>
+  <strong>3.</strong> Client sends <strong>code_challenge</strong> + <strong>code_challenge_method</strong> in the authorization request.<br>
+  <strong>4.</strong> Client sends <strong>code_verifier</strong> in the token exchange request.<br>
+  <strong>5.</strong> Server verifies the verifier matches the challenge before issuing tokens.
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+function generateVerifier(len) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => chars[b % chars.length]).join('');
+}
+
+async function computeChallenge(verifier, method) {
+  if (method === 'plain') return verifier;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return base64urlEncode(digest);
+}
+
+function base64urlEncode(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function generate() {
+  const method = $('method').value;
+  const len = Math.max(43, Math.min(128, parseInt($('length').value) || 128));
+  $('length').value = len;
+
+  const verifier = generateVerifier(len);
+  const challenge = await computeChallenge(verifier, method);
+
+  $('verifier').textContent = verifier;
+  $('challenge').textContent = challenge;
+  $('methodDisplay').textContent = method;
+  $('verifierMeta').textContent = `${verifier.length} characters`;
+  $('challengeMeta').textContent = method === 'S256'
+    ? `${challenge.length} characters (BASE64URL(SHA-256(verifier)))`
+    : `${challenge.length} characters (same as verifier)`;
+
+  updateUrlTemplate(challenge, method);
+}
+
+function updateUrlTemplate(challenge, method) {
+  $('urlTemplate').innerHTML =
+    '<span class="placeholder">https://auth.example.com/authorize</span>' +
+    '?<span class="param">response_type</span>=code' +
+    '&amp;<span class="param">client_id</span>=<span class="placeholder">YOUR_CLIENT_ID</span>' +
+    '&amp;<span class="param">redirect_uri</span>=<span class="placeholder">YOUR_REDIRECT_URI</span>' +
+    '&amp;<span class="param">scope</span>=<span class="placeholder">openid profile</span>' +
+    '&amp;<span class="param">state</span>=<span class="placeholder">RANDOM_STATE</span>' +
+    '&amp;<span class="param">code_challenge</span>=' + escapeHtml(challenge) +
+    '&amp;<span class="param">code_challenge_method</span>=' + escapeHtml(method);
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function verifyPair() {
+  const v = $('customVerifier').value.trim();
+  const expected = $('customChallenge').value.trim();
+  const method = $('method').value;
+
+  if (!v) {
+    $('computedChallenge').innerHTML = '';
+    $('verifyResult').innerHTML = '';
+    return;
+  }
+
+  if (v.length < 43 || v.length > 128) {
+    $('computedChallenge').innerHTML = '<div class="verify-result nomatch">code_verifier must be 43–128 characters</div>';
+    $('verifyResult').innerHTML = '';
+    return;
+  }
+
+  const computed = await computeChallenge(v, method);
+  $('computedChallenge').innerHTML =
+    '<div style="margin-top:.5rem;font-size:.85rem;color:var(--muted)">Computed challenge (' + method + '):</div>' +
+    '<div class="value-row" style="margin-top:.25rem"><code>' + escapeHtml(computed) + '</code>' +
+    '<button class="btn btn-secondary" onclick="copyText(\'' + escapeHtml(computed) + '\')">Copy</button></div>';
+
+  if (expected) {
+    const match = computed === expected;
+    $('verifyResult').innerHTML = match
+      ? '<div class="verify-result match">✓ Challenge matches the verifier</div>'
+      : '<div class="verify-result nomatch">✗ Challenge does NOT match the verifier</div>';
+  } else {
+    $('verifyResult').innerHTML = '';
+  }
+}
+
+function copy(id) {
+  const text = $(id).textContent;
+  navigator.clipboard.writeText(text).then(() => showToast());
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => showToast());
+}
+
+function copyUrl() {
+  const el = $('urlTemplate');
+  const text = el.textContent;
+  navigator.clipboard.writeText(text).then(() => showToast());
+}
+
+function showToast() {
+  const t = $('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+generate();
+</script>
+</body>
+</html>
