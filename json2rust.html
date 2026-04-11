@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON to Rust Struct Converter - Free Online Serde Generator</title>
+<meta name="description" content="Convert JSON objects to Rust structs with serde derive macros instantly. Generates proper struct definitions with Option types and nested structs. Free, private, runs in your browser.">
+<meta name="keywords" content="json to rust, rust struct generator, serde, json converter, rust code generator, derive macro, developer tool">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/json2rust.html">
+<meta property="og:title" content="JSON to Rust Struct Converter — Free Online Tool">
+<meta property="og:description" content="Convert JSON to Rust structs with serde derive, Option types, and nested struct support. Runs entirely in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/json2rust.html">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="JSON to Rust Struct Converter">
+<meta name="twitter:description" content="Convert JSON to Rust structs with serde derive, Option types, and nested struct support.">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .options { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; align-items: center; }
+  .options label { font-size: .85rem; display: flex; align-items: center; gap: .3rem; cursor: pointer; }
+  .options select, .options input[type="text"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: .85rem; }
+  .options input[type="text"] { width: 130px; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  textarea { width: 100%; min-height: 350px; font-family: var(--mono); font-size: .85rem; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; tab-size: 4; }
+  .output-area { position: relative; }
+  .output-area textarea { background: var(--surface); }
+  .copy-btn { position: absolute; top: 8px; right: 8px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON &rarr; Rust</h1>
+<p class="subtitle">Convert JSON objects to Rust structs with serde derive macros</p>
+
+<div class="card">
+<div class="options">
+  <label>Root struct:
+    <input type="text" id="structName" value="Root" placeholder="StructName" oninput="convert()">
+  </label>
+  <label><input type="checkbox" id="optSerde" checked onchange="convert()"> #[derive(Serialize, Deserialize)]</label>
+  <label><input type="checkbox" id="optDebug" checked onchange="convert()"> #[derive(Debug)]</label>
+  <label><input type="checkbox" id="optClone" onchange="convert()"> #[derive(Clone)]</label>
+  <label><input type="checkbox" id="optOption" onchange="convert()"> Option&lt;T&gt; for nulls</label>
+  <label><input type="checkbox" id="optSnake" onchange="convert()"> snake_case rename</label>
+  <label><input type="checkbox" id="optPub" checked onchange="convert()"> pub fields</label>
+</div>
+</div>
+
+<div class="panels">
+  <div class="card">
+    <h2>JSON Input</h2>
+    <textarea id="input" placeholder='{"name": "Alice", "age": 30, "active": true}' oninput="convert()"></textarea>
+  </div>
+  <div class="card output-area">
+    <h2>Rust Output</h2>
+    <button class="btn btn-secondary copy-btn" onclick="copyOutput()">Copy</button>
+    <textarea id="output" readonly></textarea>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">&check; Copied!</div>
+<footer>Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function toPascalCase(s) {
+  return s.replace(/[^a-zA-Z0-9_]/g, ' ')
+    .split(/[\s_]+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('');
+}
+
+function toSnakeCase(s) {
+  return s.replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[\-\s]+/g, '_')
+    .toLowerCase();
+}
+
+function inferType(val, key, nested, opts) {
+  if (val === null) {
+    return opts.option ? 'Option<serde_json::Value>' : 'serde_json::Value';
+  }
+  if (typeof val === 'string') return 'String';
+  if (typeof val === 'boolean') return 'bool';
+  if (typeof val === 'number') {
+    return Number.isInteger(val) ? 'i64' : 'f64';
+  }
+  if (Array.isArray(val)) {
+    if (val.length === 0) return 'Vec<serde_json::Value>';
+    const inner = inferType(val[0], key, nested, opts);
+    return `Vec<${inner}>`;
+  }
+  if (typeof val === 'object') {
+    const structName = toPascalCase(key);
+    nested.push({ name: structName, obj: val });
+    return structName;
+  }
+  return 'serde_json::Value';
+}
+
+function generateStruct(name, obj, nested, opts) {
+  const lines = [];
+  const derives = [];
+  if (opts.debug) derives.push('Debug');
+  if (opts.clone) derives.push('Clone');
+  if (opts.serde) derives.push('Serialize', 'Deserialize');
+
+  if (derives.length) lines.push(`#[derive(${derives.join(', ')})]`);
+
+  const entries = Object.entries(obj);
+  const needsRename = opts.snake && entries.some(([k]) => toSnakeCase(k) !== k);
+  if (opts.serde && needsRename) {
+    lines.push('#[serde(rename_all = "camelCase")]');
+  }
+
+  lines.push(`pub struct ${name} {`);
+
+  if (entries.length === 0) {
+    lines.push('}');
+    return lines;
+  }
+
+  for (const [key, val] of entries) {
+    const rustField = opts.snake ? toSnakeCase(key) : key.replace(/[^a-zA-Z0-9_]/g, '_');
+    let rustType = inferType(val, key, nested, opts);
+
+    if (val === null && opts.option) {
+      rustType = `Option<serde_json::Value>`;
+    }
+
+    // Add serde rename if field name differs from JSON key and no blanket rename
+    const needsFieldRename = opts.serde && rustField !== key && !needsRename;
+    if (needsFieldRename) {
+      lines.push(`    #[serde(rename = "${key}")]`);
+    }
+
+    const vis = opts.pub ? 'pub ' : '';
+    lines.push(`    ${vis}${rustField}: ${rustType},`);
+  }
+
+  lines.push('}');
+  return lines;
+}
+
+function convert() {
+  const raw = $('input').value.trim();
+  if (!raw) { $('output').value = ''; return; }
+
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (e) {
+    $('output').value = `// Error: ${e.message}`;
+    return;
+  }
+
+  if (typeof parsed !== 'object' || parsed === null) {
+    $('output').value = '// Error: Input must be a JSON object or array of objects';
+    return;
+  }
+
+  const opts = {
+    serde: $('optSerde').checked,
+    debug: $('optDebug').checked,
+    clone: $('optClone').checked,
+    option: $('optOption').checked,
+    snake: $('optSnake').checked,
+    pub: $('optPub').checked,
+  };
+
+  let rootObj = parsed;
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0 || typeof parsed[0] !== 'object') {
+      $('output').value = '// Error: Array must contain objects';
+      return;
+    }
+    rootObj = parsed[0];
+  }
+
+  const rootName = $('structName').value.trim() || 'Root';
+  const nested = [];
+  const mainLines = generateStruct(rootName, rootObj, nested, opts);
+
+  const allStructs = [];
+  const seen = new Set([rootName]);
+  while (nested.length > 0) {
+    const { name, obj } = nested.shift();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    allStructs.push(generateStruct(name, obj, nested, opts));
+  }
+
+  // Build use statement
+  const useLines = [];
+  if (opts.serde) {
+    useLines.push('use serde::{Serialize, Deserialize};');
+  }
+
+  const allCode = [...allStructs, mainLines].map(s => s.join('\n')).join('\n\n');
+
+  // Check if serde_json::Value is used
+  const needsSerdeJson = allCode.includes('serde_json::Value');
+
+  const output = [
+    ...useLines,
+    ...(needsSerdeJson ? ['use serde_json;'] : []),
+    '',
+    allCode,
+    '',
+  ].join('\n');
+
+  $('output').value = output;
+}
+
+function copyOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const toast = $('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1500);
+  });
+}
+
+// Load sample on start
+$('input').value = JSON.stringify({
+  "id": 1,
+  "name": "Alice",
+  "email": "alice@example.com",
+  "is_active": true,
+  "score": 98.5,
+  "tags": ["admin", "user"],
+  "address": {
+    "street": "123 Main St",
+    "city": "Springfield",
+    "zip": "62701"
+  },
+  "metadata": null
+}, null, 2);
+convert();
+</script>
+</body>
+</html>
