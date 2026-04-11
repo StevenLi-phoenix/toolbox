@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visual Image Diff - Free Online Tool</title>
+<meta name="description" content="Compare two images visually with side-by-side, slider overlay, difference, and onion skin modes. Spot pixel-level changes instantly.">
+<meta name="keywords" content="image diff, image compare, visual diff, image overlay, pixel diff, screenshot diff">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/imagediff.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .upload-box {
+    border: 2px dashed var(--border); border-radius: var(--radius); padding: 2rem 1rem;
+    text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+    position: relative; min-height: 120px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; overflow: hidden;
+  }
+  .upload-box:hover { border-color: var(--accent); background: var(--surface); }
+  .upload-box.has-image { padding: 0; border-style: solid; }
+  .upload-box img { max-width: 100%; max-height: 200px; object-fit: contain; }
+  .upload-box input { display: none; }
+  .upload-box .label { font-size: .85rem; color: var(--muted); }
+  .upload-box h3 { margin: 0 0 4px; font-size: .9rem; }
+
+  .modes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+
+  .compare-area {
+    position: relative; overflow: hidden; border: 1px solid var(--border);
+    border-radius: var(--radius); background: repeating-conic-gradient(#e0e0e0 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+    min-height: 300px; display: flex; align-items: center; justify-content: center;
+  }
+  .compare-area canvas { max-width: 100%; display: block; }
+
+  .slider-container { position: relative; cursor: col-resize; }
+  .slider-container canvas { display: block; max-width: 100%; }
+  .slider-line {
+    position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent);
+    pointer-events: none; z-index: 2;
+  }
+  .slider-handle {
+    position: absolute; top: 50%; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); border: 2px solid #fff; transform: translate(-50%, -50%);
+    pointer-events: none; z-index: 3; box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px;
+  }
+
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+  .stat { font-size: .85rem; color: var(--muted); }
+  .stat strong { color: var(--text); }
+
+  .opacity-ctrl { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .opacity-ctrl input[type=range] { flex: 1; }
+  .opacity-ctrl label { font-size: .82rem; color: var(--muted); white-space: nowrap; }
+
+  .empty-state { color: var(--muted); font-size: .9rem; }
+  @media (max-width: 768px) {
+    .upload-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Visual Image Diff</h1>
+<p class="subtitle">Compare two images pixel-by-pixel with multiple view modes</p>
+
+<div class="card">
+  <h2>Upload Images</h2>
+  <div class="upload-grid">
+    <div class="upload-box" id="dropA" onclick="$('fileA').click()">
+      <input type="file" id="fileA" accept="image/*" onchange="loadImage('A', this.files[0])">
+      <h3>Image A (Before)</h3>
+      <p class="label">Click or drop image</p>
+    </div>
+    <div class="upload-box" id="dropB" onclick="$('fileB').click()">
+      <input type="file" id="fileB" accept="image/*" onchange="loadImage('B', this.files[0])">
+      <h3>Image B (After)</h3>
+      <p class="label">Click or drop image</p>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="compareCard" style="display:none">
+  <h2>Comparison</h2>
+  <div class="modes">
+    <button class="btn active" data-mode="slider" onclick="setMode('slider')">Slider</button>
+    <button class="btn btn-secondary" data-mode="side" onclick="setMode('side')">Side by Side</button>
+    <button class="btn btn-secondary" data-mode="diff" onclick="setMode('diff')">Difference</button>
+    <button class="btn btn-secondary" data-mode="onion" onclick="setMode('onion')">Onion Skin</button>
+  </div>
+  <div class="opacity-ctrl" id="opacityCtrl" style="display:none">
+    <label>Opacity: <span id="opacityVal">50%</span></label>
+    <input type="range" id="opacityRange" min="0" max="100" value="50" oninput="updateOnion()">
+  </div>
+  <div class="compare-area" id="compareArea"></div>
+  <div class="stats" id="stats"></div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let imgA = null, imgB = null, currentMode = 'slider', sliderX = 0.5;
+
+['dropA','dropB'].forEach(id => {
+  const el = $(id);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.style.borderColor = 'var(--accent)'; });
+  el.addEventListener('dragleave', () => { el.style.borderColor = ''; });
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.style.borderColor = '';
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const side = id === 'dropA' ? 'A' : 'B';
+      loadImage(side, file);
+    }
+  });
+});
+
+function loadImage(side, file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      if (side === 'A') imgA = img; else imgB = img;
+      const box = $(side === 'A' ? 'dropA' : 'dropB');
+      box.innerHTML = `<input type="file" id="file${side}" accept="image/*" onchange="loadImage('${side}', this.files[0])">`;
+      const preview = document.createElement('img');
+      preview.src = e.target.result;
+      box.appendChild(preview);
+      box.classList.add('has-image');
+      if (imgA && imgB) showComparison();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function showComparison() {
+  $('compareCard').style.display = '';
+  render();
+}
+
+function setMode(m) {
+  currentMode = m;
+  document.querySelectorAll('.modes .btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === m);
+    b.classList.toggle('btn-secondary', b.dataset.mode !== m);
+  });
+  $('opacityCtrl').style.display = m === 'onion' ? '' : 'none';
+  render();
+}
+
+function render() {
+  if (!imgA || !imgB) return;
+  const area = $('compareArea');
+  area.innerHTML = '';
+
+  const w = Math.max(imgA.width, imgB.width);
+  const h = Math.max(imgA.height, imgB.height);
+
+  if (currentMode === 'slider') renderSlider(area, w, h);
+  else if (currentMode === 'side') renderSide(area, w, h);
+  else if (currentMode === 'diff') renderDiff(area, w, h);
+  else if (currentMode === 'onion') renderOnion(area, w, h);
+
+  computeStats(w, h);
+}
+
+function renderSlider(area, w, h) {
+  area.classList.add('slider-container');
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.style.maxWidth = '100%';
+  const ctx = canvas.getContext('2d');
+
+  function draw(ratio) {
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(imgA, 0, 0);
+    const clipX = Math.round(w * ratio);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(clipX, 0, w - clipX, h);
+    ctx.clip();
+    ctx.drawImage(imgB, 0, 0);
+    ctx.restore();
+  }
+  draw(sliderX);
+  area.appendChild(canvas);
+
+  const line = document.createElement('div');
+  line.className = 'slider-line';
+  line.style.left = (sliderX * 100) + '%';
+  area.appendChild(line);
+
+  const handle = document.createElement('div');
+  handle.className = 'slider-handle';
+  handle.style.left = (sliderX * 100) + '%';
+  handle.innerHTML = '&#x2194;';
+  area.appendChild(handle);
+
+  let dragging = false;
+  const onMove = e => {
+    if (!dragging) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || e.touches[0].clientX) - rect.left;
+    sliderX = Math.max(0, Math.min(1, x / rect.width));
+    draw(sliderX);
+    line.style.left = (sliderX * 100) + '%';
+    handle.style.left = (sliderX * 100) + '%';
+  };
+  area.addEventListener('mousedown', () => dragging = true);
+  area.addEventListener('touchstart', () => dragging = true, { passive: true });
+  document.addEventListener('mouseup', () => dragging = false);
+  document.addEventListener('touchend', () => dragging = false);
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, { passive: true });
+}
+
+function renderSide(area, w, h) {
+  area.classList.remove('slider-container');
+  area.style.display = 'grid';
+  area.style.gridTemplateColumns = '1fr 1fr';
+  area.style.gap = '4px';
+  const cA = document.createElement('canvas');
+  const cB = document.createElement('canvas');
+  cA.width = w; cA.height = h; cA.style.maxWidth = '100%';
+  cB.width = w; cB.height = h; cB.style.maxWidth = '100%';
+  cA.getContext('2d').drawImage(imgA, 0, 0);
+  cB.getContext('2d').drawImage(imgB, 0, 0);
+  const labelA = document.createElement('div');
+  labelA.style.cssText = 'text-align:center';
+  labelA.innerHTML = '<div style="font-size:.8rem;color:var(--muted);padding:4px">Image A</div>';
+  labelA.prepend(cA);
+  const labelB = document.createElement('div');
+  labelB.style.cssText = 'text-align:center';
+  labelB.innerHTML = '<div style="font-size:.8rem;color:var(--muted);padding:4px">Image B</div>';
+  labelB.prepend(cB);
+  area.appendChild(labelA);
+  area.appendChild(labelB);
+}
+
+function renderDiff(area, w, h) {
+  area.classList.remove('slider-container');
+  area.style.display = '';
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h; canvas.style.maxWidth = '100%';
+  const ctx = canvas.getContext('2d');
+
+  const cA = document.createElement('canvas');
+  cA.width = w; cA.height = h;
+  cA.getContext('2d').drawImage(imgA, 0, 0);
+  const dA = cA.getContext('2d').getImageData(0, 0, w, h);
+
+  const cB = document.createElement('canvas');
+  cB.width = w; cB.height = h;
+  cB.getContext('2d').drawImage(imgB, 0, 0);
+  const dB = cB.getContext('2d').getImageData(0, 0, w, h);
+
+  const out = ctx.createImageData(w, h);
+  for (let i = 0; i < dA.data.length; i += 4) {
+    const dr = Math.abs(dA.data[i] - dB.data[i]);
+    const dg = Math.abs(dA.data[i+1] - dB.data[i+1]);
+    const db = Math.abs(dA.data[i+2] - dB.data[i+2]);
+    const diff = (dr + dg + db) / 3;
+    if (diff > 10) {
+      out.data[i] = 255; out.data[i+1] = 50; out.data[i+2] = 50; out.data[i+3] = 200;
+    } else {
+      const gray = Math.round((dA.data[i] + dA.data[i+1] + dA.data[i+2]) / 3);
+      out.data[i] = gray; out.data[i+1] = gray; out.data[i+2] = gray; out.data[i+3] = 255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+  area.appendChild(canvas);
+}
+
+function renderOnion(area, w, h) {
+  area.classList.remove('slider-container');
+  area.style.display = '';
+  area.style.position = 'relative';
+  const cA = document.createElement('canvas');
+  cA.width = w; cA.height = h; cA.style.maxWidth = '100%'; cA.style.display = 'block';
+  cA.getContext('2d').drawImage(imgA, 0, 0);
+  area.appendChild(cA);
+
+  const cB = document.createElement('canvas');
+  cB.width = w; cB.height = h;
+  cB.style.cssText = 'position:absolute;top:0;left:0;max-width:100%;display:block;';
+  cB.id = 'onionB';
+  const opacity = $('opacityRange').value / 100;
+  cB.style.opacity = opacity;
+  cB.getContext('2d').drawImage(imgB, 0, 0);
+  area.appendChild(cB);
+}
+
+function updateOnion() {
+  const val = $('opacityRange').value;
+  $('opacityVal').textContent = val + '%';
+  const cB = document.getElementById('onionB');
+  if (cB) cB.style.opacity = val / 100;
+}
+
+function computeStats(w, h) {
+  const cA = document.createElement('canvas');
+  cA.width = w; cA.height = h;
+  cA.getContext('2d').drawImage(imgA, 0, 0);
+  const dA = cA.getContext('2d').getImageData(0, 0, w, h);
+
+  const cB = document.createElement('canvas');
+  cB.width = w; cB.height = h;
+  cB.getContext('2d').drawImage(imgB, 0, 0);
+  const dB = cB.getContext('2d').getImageData(0, 0, w, h);
+
+  let diffPixels = 0;
+  const total = w * h;
+  for (let i = 0; i < dA.data.length; i += 4) {
+    const dr = Math.abs(dA.data[i] - dB.data[i]);
+    const dg = Math.abs(dA.data[i+1] - dB.data[i+1]);
+    const db = Math.abs(dA.data[i+2] - dB.data[i+2]);
+    if ((dr + dg + db) / 3 > 10) diffPixels++;
+  }
+  const pct = ((diffPixels / total) * 100).toFixed(2);
+  $('stats').innerHTML =
+    `<div class="stat">Image A: <strong>${imgA.width}&times;${imgA.height}</strong></div>` +
+    `<div class="stat">Image B: <strong>${imgB.width}&times;${imgB.height}</strong></div>` +
+    `<div class="stat">Canvas: <strong>${w}&times;${h}</strong></div>` +
+    `<div class="stat">Changed pixels: <strong>${diffPixels.toLocaleString()} (${pct}%)</strong></div>`;
+}
+</script>
+</body>
+</html>
