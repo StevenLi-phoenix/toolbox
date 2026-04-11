@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protobuf Decoder — Decode Raw Protocol Buffer Binary | DevToolbox</title>
+    <meta name="description" content="Free online Protocol Buffer decoder. Decode raw protobuf binary data (base64 or hex) without a schema. View field numbers, wire types, and values.">
+    <meta name="keywords" content="protobuf decoder, protocol buffer, protobuf binary, wire format, base64 decode, grpc debug, developer tools">
+    <meta name="author" content="Steven Li">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/protobuf.html">
+    <meta property="og:title" content="Protobuf Decoder — Decode Raw Protocol Buffer Binary">
+    <meta property="og:description" content="Decode raw protobuf wire format data without a schema. View field numbers, types, and values interactively.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/protobuf.html">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Protobuf Decoder — Decode Raw Protocol Buffer Binary">
+    <meta name="twitter:description" content="Decode raw protobuf binary data without a schema.">
+    <link rel="stylesheet" href="toolbox.css">
+<style>
+  .proto-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .input-area textarea{width:100%;height:180px;font-family:var(--mono);font-size:.85rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);resize:vertical}
+  .format-tabs{display:flex;gap:0;margin-bottom:8px}
+  .format-tab{padding:6px 16px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:.82rem;font-weight:600}
+  .format-tab:first-child{border-radius:var(--radius) 0 0 var(--radius)}
+  .format-tab:last-child{border-radius:0 var(--radius) var(--radius) 0}
+  .format-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .tree{font-family:var(--mono);font-size:.84rem;line-height:1.8}
+  .tree-node{padding-left:20px;border-left:1px solid var(--border)}
+  .tree-field{display:flex;gap:8px;align-items:baseline;padding:2px 4px;border-radius:3px;cursor:default}
+  .tree-field:hover{background:var(--surface2)}
+  .field-num{color:var(--warning);font-weight:700;min-width:50px}
+  .wire-type{color:var(--muted);font-size:.75rem;min-width:100px}
+  .field-val{color:var(--text);word-break:break-all}
+  .field-val.str{color:var(--success)}
+  .field-val.num{color:#6366f1}
+  .field-val.bytes{color:var(--muted);font-size:.8rem}
+  .nested-toggle{cursor:pointer;color:var(--accent);text-decoration:underline;font-size:.78rem;margin-left:6px}
+  .stats{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+  .stat{padding:6px 12px;background:var(--surface2);border-radius:var(--radius);font-size:.82rem}
+  .stat strong{font-weight:700}
+  .sample-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .sample-btn{padding:3px 10px;font-size:.78rem;border:1px solid var(--border);border-radius:99px;background:var(--surface);cursor:pointer;color:var(--text)}
+  .sample-btn:hover{border-color:var(--accent)}
+  .error-msg{color:var(--error);font-size:.85rem;padding:8px;background:var(--surface2);border-radius:var(--radius);margin-top:8px}
+  @media(max-width:768px){.proto-layout{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+    <a href="index.html" class="back">&larr; All Tools</a>
+    <h1>📦 Protobuf Decoder</h1>
+    <p class="subtitle">Decode raw Protocol Buffer binary data without a schema. Paste base64 or hex-encoded bytes to inspect field numbers, wire types, and values.</p>
+
+    <div class="proto-layout">
+        <div class="card input-area">
+            <h2>Input</h2>
+            <div class="format-tabs">
+                <div class="format-tab active" onclick="setFormat('base64')">Base64</div>
+                <div class="format-tab" onclick="setFormat('hex')">Hex</div>
+            </div>
+            <textarea id="input" placeholder="Paste base64 or hex-encoded protobuf data..." oninput="decode()"></textarea>
+            <div class="sample-btns">
+                <span style="font-size:.78rem;color:var(--muted)">Samples:</span>
+                <button class="sample-btn" onclick="loadSample('simple')">Simple Message</button>
+                <button class="sample-btn" onclick="loadSample('nested')">Nested Message</button>
+                <button class="sample-btn" onclick="loadSample('repeated')">Repeated Fields</button>
+            </div>
+            <div id="error"></div>
+            <div class="stats" id="stats"></div>
+        </div>
+
+        <div class="card">
+            <h2>Decoded Fields</h2>
+            <div class="tree" id="output"><span style="color:var(--muted)">Paste protobuf data to decode...</span></div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+        <h2>Wire Type Reference</h2>
+        <table class="table" style="font-size:.84rem">
+            <thead><tr><th>ID</th><th>Wire Type</th><th>Used For</th></tr></thead>
+            <tbody>
+                <tr><td>0</td><td>Varint</td><td>int32, int64, uint32, uint64, sint32, sint64, bool, enum</td></tr>
+                <tr><td>1</td><td>64-bit</td><td>fixed64, sfixed64, double</td></tr>
+                <tr><td>2</td><td>Length-delimited</td><td>string, bytes, embedded messages, packed repeated fields</td></tr>
+                <tr><td>5</td><td>32-bit</td><td>fixed32, sfixed32, float</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <footer style="margin-top:2rem;text-align:center;color:var(--muted);font-size:.85rem">Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+
+<script>
+let inputFormat = 'base64';
+
+const SAMPLES = {
+    simple: { format: 'base64', data: 'CAESBUhlbGxvGGQ=' },
+    nested: { format: 'base64', data: 'CgcKBUFsaWNlEgUKA0JvYhgB' },
+    repeated: { format: 'base64', data: 'CgVIZWxsbwoDV29yEgR0ZXN0GAEYAhgD' }
+};
+
+function setFormat(fmt) {
+    inputFormat = fmt;
+    document.querySelectorAll('.format-tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase() === fmt));
+    decode();
+}
+
+function loadSample(name) {
+    const s = SAMPLES[name];
+    setFormat(s.format);
+    document.getElementById('input').value = s.data;
+    decode();
+}
+
+function hexToBytes(hex) {
+    hex = hex.replace(/[\s\n\r:,0x]/g, '');
+    if (hex.length % 2 !== 0) throw new Error('Invalid hex: odd number of characters');
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+        const b = parseInt(hex.substr(i, 2), 16);
+        if (isNaN(b)) throw new Error('Invalid hex character at position ' + i);
+        bytes[i / 2] = b;
+    }
+    return bytes;
+}
+
+function base64ToBytes(b64) {
+    b64 = b64.replace(/[\s\n\r]/g, '');
+    // Handle URL-safe base64
+    b64 = b64.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+}
+
+function readVarint(bytes, offset) {
+    let result = 0n;
+    let shift = 0n;
+    let pos = offset;
+    while (pos < bytes.length) {
+        const b = bytes[pos];
+        result |= BigInt(b & 0x7f) << shift;
+        pos++;
+        if ((b & 0x80) === 0) return { value: result, bytesRead: pos - offset };
+        shift += 7n;
+        if (shift > 63n) throw new Error('Varint too long');
+    }
+    throw new Error('Truncated varint at offset ' + offset);
+}
+
+function decodeZigZag(n) {
+    return (n >> 1n) ^ -(n & 1n);
+}
+
+function bytesToFloat32(bytes) {
+    const buf = new ArrayBuffer(4);
+    const view = new DataView(buf);
+    for (let i = 0; i < 4; i++) view.setUint8(i, bytes[i]);
+    return view.getFloat32(0, true);
+}
+
+function bytesToFloat64(bytes) {
+    const buf = new ArrayBuffer(8);
+    const view = new DataView(buf);
+    for (let i = 0; i < 8; i++) view.setUint8(i, bytes[i]);
+    return view.getFloat64(0, true);
+}
+
+function isPrintable(bytes) {
+    let printable = 0;
+    for (const b of bytes) {
+        if ((b >= 32 && b <= 126) || b === 10 || b === 13 || b === 9) printable++;
+    }
+    return bytes.length > 0 && (printable / bytes.length) > 0.8;
+}
+
+function tryDecodeMessage(bytes) {
+    try {
+        const fields = decodeFields(bytes);
+        if (fields.length === 0) return null;
+        // Validate: all field numbers should be reasonable (1-536870911)
+        for (const f of fields) {
+            if (f.fieldNumber < 1 || f.fieldNumber > 536870911) return null;
+        }
+        return fields;
+    } catch {
+        return null;
+    }
+}
+
+function decodeFields(bytes) {
+    const fields = [];
+    let offset = 0;
+    while (offset < bytes.length) {
+        const tag = readVarint(bytes, offset);
+        offset += tag.bytesRead;
+        const fieldNumber = Number(tag.value >> 3n);
+        const wireType = Number(tag.value & 7n);
+
+        let value, rawBytes;
+        switch (wireType) {
+            case 0: { // Varint
+                const v = readVarint(bytes, offset);
+                offset += v.bytesRead;
+                value = {
+                    raw: v.value,
+                    asInt: Number(v.value),
+                    asSint: Number(decodeZigZag(v.value)),
+                    asBool: v.value === 1n ? 'true' : v.value === 0n ? 'false' : null
+                };
+                break;
+            }
+            case 1: { // 64-bit
+                if (offset + 8 > bytes.length) throw new Error('Truncated 64-bit field');
+                rawBytes = bytes.slice(offset, offset + 8);
+                offset += 8;
+                let fixed64 = 0n;
+                for (let i = 7; i >= 0; i--) fixed64 = (fixed64 << 8n) | BigInt(rawBytes[i]);
+                value = { raw: fixed64, asDouble: bytesToFloat64(rawBytes), asFixed64: fixed64 };
+                break;
+            }
+            case 2: { // Length-delimited
+                const len = readVarint(bytes, offset);
+                offset += len.bytesRead;
+                const length = Number(len.value);
+                if (offset + length > bytes.length) throw new Error('Truncated length-delimited field');
+                rawBytes = bytes.slice(offset, offset + length);
+                offset += length;
+                const nested = tryDecodeMessage(rawBytes);
+                const asString = isPrintable(rawBytes) ? new TextDecoder().decode(rawBytes) : null;
+                value = { rawBytes, asString, nested, length };
+                break;
+            }
+            case 5: { // 32-bit
+                if (offset + 4 > bytes.length) throw new Error('Truncated 32-bit field');
+                rawBytes = bytes.slice(offset, offset + 4);
+                offset += 4;
+                let fixed32 = 0;
+                for (let i = 3; i >= 0; i--) fixed32 = (fixed32 << 8) | rawBytes[i];
+                value = { raw: fixed32, asFloat: bytesToFloat32(rawBytes), asFixed32: fixed32 >>> 0 };
+                break;
+            }
+            default:
+                throw new Error(`Unknown wire type ${wireType} at offset ${offset}`);
+        }
+        fields.push({ fieldNumber, wireType, value });
+    }
+    return fields;
+}
+
+const WIRE_NAMES = { 0: 'Varint', 1: '64-bit', 2: 'Length-delimited', 5: '32-bit' };
+
+function renderField(f, depth) {
+    const indent = depth * 20;
+    const wt = WIRE_NAMES[f.wireType] || `Unknown(${f.wireType})`;
+    let valHtml = '';
+
+    if (f.wireType === 0) {
+        const v = f.value;
+        valHtml = `<span class="field-val num">${v.asInt}</span>`;
+        const extras = [];
+        if (v.asSint !== v.asInt) extras.push(`sint: ${v.asSint}`);
+        if (v.asBool) extras.push(`bool: ${v.asBool}`);
+        if (v.raw > 2147483647n) extras.push(`uint64: ${v.raw}`);
+        if (extras.length) valHtml += `<span style="color:var(--muted);font-size:.78rem;margin-left:8px">(${extras.join(' | ')})</span>`;
+    } else if (f.wireType === 1) {
+        const v = f.value;
+        valHtml = `<span class="field-val num">${v.asDouble}</span>`;
+        valHtml += `<span style="color:var(--muted);font-size:.78rem;margin-left:8px">(fixed64: ${v.asFixed64})</span>`;
+    } else if (f.wireType === 5) {
+        const v = f.value;
+        valHtml = `<span class="field-val num">${v.asFloat.toFixed(6)}</span>`;
+        valHtml += `<span style="color:var(--muted);font-size:.78rem;margin-left:8px">(fixed32: ${v.asFixed32})</span>`;
+    } else if (f.wireType === 2) {
+        const v = f.value;
+        if (v.asString && !v.nested) {
+            valHtml = `<span class="field-val str">"${escapeHtml(v.asString)}"</span>`;
+            valHtml += `<span style="color:var(--muted);font-size:.78rem;margin-left:8px">(${v.length} bytes)</span>`;
+        } else if (v.nested) {
+            const id = 'nested_' + Math.random().toString(36).substr(2, 8);
+            valHtml = `<span style="color:var(--muted);font-size:.78rem">{message, ${v.length} bytes}</span>`;
+            if (v.asString) valHtml += `<span style="color:var(--muted);font-size:.75rem;margin-left:6px">or string: "${escapeHtml(v.asString.substring(0, 40))}"</span>`;
+            valHtml += `<div class="tree-node" id="${id}">${v.nested.map(nf => renderField(nf, depth + 1)).join('')}</div>`;
+        } else {
+            const hex = Array.from(v.rawBytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+            valHtml = `<span class="field-val bytes">[${hex}]</span>`;
+            valHtml += `<span style="color:var(--muted);font-size:.78rem;margin-left:8px">(${v.length} bytes)</span>`;
+        }
+    }
+
+    return `<div class="tree-field"><span class="field-num">field ${f.fieldNumber}</span><span class="wire-type">${wt}</span>${valHtml}</div>`;
+}
+
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function decode() {
+    const input = document.getElementById('input').value.trim();
+    const output = document.getElementById('output');
+    const error = document.getElementById('error');
+    const stats = document.getElementById('stats');
+
+    if (!input) {
+        output.innerHTML = '<span style="color:var(--muted)">Paste protobuf data to decode...</span>';
+        error.innerHTML = '';
+        stats.innerHTML = '';
+        return;
+    }
+
+    try {
+        let bytes;
+        if (inputFormat === 'base64') {
+            bytes = base64ToBytes(input);
+        } else {
+            bytes = hexToBytes(input);
+        }
+
+        const fields = decodeFields(bytes);
+        error.innerHTML = '';
+
+        if (fields.length === 0) {
+            output.innerHTML = '<span style="color:var(--muted)">No fields decoded (empty message)</span>';
+            stats.innerHTML = '';
+            return;
+        }
+
+        output.innerHTML = fields.map(f => renderField(f, 0)).join('');
+
+        const uniqueFields = new Set(fields.map(f => f.fieldNumber)).size;
+        stats.innerHTML = `
+            <div class="stat"><strong>${bytes.length}</strong> bytes</div>
+            <div class="stat"><strong>${fields.length}</strong> fields</div>
+            <div class="stat"><strong>${uniqueFields}</strong> unique field numbers</div>
+        `;
+    } catch (e) {
+        error.innerHTML = `<div class="error-msg">⚠ ${escapeHtml(e.message)}</div>`;
+        output.innerHTML = '';
+        stats.innerHTML = '';
+    }
+}
+
+// Auto-detect format on paste
+document.getElementById('input').addEventListener('paste', function(e) {
+    setTimeout(() => {
+        const val = this.value.trim();
+        if (/^[0-9a-fA-F\s:,]+$/.test(val) && !/[g-zG-Z+/=]/.test(val.replace(/\s/g, ''))) {
+            setFormat('hex');
+        } else {
+            setFormat('base64');
+        }
+        decode();
+    }, 0);
+});
+</script>
+</body>
+</html>

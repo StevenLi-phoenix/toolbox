@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flamegraph Viewer — Interactive Flame Graph Visualization | DevToolbox</title>
+    <meta name="description" content="Free online flamegraph viewer. Paste folded stack traces to generate interactive flame graphs. Zoom, search, and analyze performance profiles.">
+    <meta name="keywords" content="flamegraph, flame graph, performance profiling, stack trace, perf, cpu profile, visualization, developer tools">
+    <meta name="author" content="Steven Li">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/flamegraph.html">
+    <meta property="og:title" content="Flamegraph Viewer — Interactive Flame Graph Visualization">
+    <meta property="og:description" content="Visualize folded stack traces as interactive flame graphs. Zoom, search, and analyze performance data.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/flamegraph.html">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Flamegraph Viewer — Interactive Flame Graph Visualization">
+    <meta name="twitter:description" content="Visualize stack traces as interactive flame graphs.">
+    <link rel="stylesheet" href="toolbox.css">
+<style>
+  .fg-input textarea{width:100%;height:160px;font-family:var(--mono);font-size:.84rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);resize:vertical}
+  .fg-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+  .fg-controls input[type="search"]{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:.85rem;width:200px}
+  .color-opt{padding:4px 12px;border:1px solid var(--border);border-radius:99px;font-size:.8rem;cursor:pointer;background:var(--surface2);color:var(--text)}
+  .color-opt.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .fg-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow-x:auto;background:var(--bg);position:relative}
+  .fg-canvas{min-height:200px}
+  .fg-tooltip{position:fixed;padding:6px 10px;background:#222;color:#fff;font-size:.8rem;font-family:var(--mono);border-radius:4px;pointer-events:none;z-index:100;white-space:nowrap;display:none}
+  .breadcrumb{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0;font-size:.82rem}
+  .breadcrumb span{cursor:pointer;color:var(--accent);text-decoration:underline}
+  .breadcrumb span:last-child{color:var(--text);text-decoration:none;cursor:default}
+  .fg-stats{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+  .fg-stat{padding:6px 12px;background:var(--surface2);border-radius:var(--radius);font-size:.82rem}
+  .fg-stat strong{font-weight:700}
+  .sample-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .sample-btn{padding:3px 10px;font-size:.78rem;border:1px solid var(--border);border-radius:99px;background:var(--surface);cursor:pointer;color:var(--text)}
+  .sample-btn:hover{border-color:var(--accent)}
+  .fg-bar{cursor:pointer;transition:opacity .1s}
+  .fg-bar:hover{opacity:.85}
+  .fg-bar.highlight{stroke:#000;stroke-width:1.5}
+  .fg-bar.dimmed{opacity:.3}
+  @media(max-width:768px){.fg-controls{flex-direction:column;align-items:stretch}.fg-controls input[type="search"]{width:100%}}
+</style>
+</head>
+<body>
+<div class="container">
+    <a href="index.html" class="back">&larr; All Tools</a>
+    <h1>🔥 Flamegraph Viewer</h1>
+    <p class="subtitle">Paste folded stack traces to generate interactive flame graphs. Click to zoom, search to highlight functions.</p>
+
+    <div class="card">
+        <h2>Input — Folded Stacks</h2>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">Format: <code>func1;func2;func3 count</code> (one stack per line, semicolon-separated frames, space then sample count)</p>
+        <div class="fg-input">
+            <textarea id="input" placeholder="main;handle_request;db_query 150&#10;main;handle_request;render_template 80&#10;main;gc_collect 30"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button class="btn" onclick="renderGraph()">Generate Flamegraph</button>
+            <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+        </div>
+        <div class="sample-btns">
+            <span style="font-size:.78rem;color:var(--muted)">Samples:</span>
+            <button class="sample-btn" onclick="loadSample('web')">Web Server</button>
+            <button class="sample-btn" onclick="loadSample('gc')">GC Heavy</button>
+            <button class="sample-btn" onclick="loadSample('io')">I/O Bound</button>
+        </div>
+    </div>
+
+    <div class="card" id="graphCard" style="display:none">
+        <div class="fg-controls">
+            <input type="search" id="searchBox" placeholder="Search functions..." oninput="highlightSearch()">
+            <div style="display:flex;gap:4px">
+                <div class="color-opt active" onclick="setScheme('warm')">Warm</div>
+                <div class="color-opt" onclick="setScheme('cool')">Cool</div>
+                <div class="color-opt" onclick="setScheme('rainbow')">Rainbow</div>
+            </div>
+            <button class="btn btn-secondary" style="padding:4px 12px;font-size:.82rem" onclick="resetZoom()">Reset Zoom</button>
+            <button class="btn btn-secondary" style="padding:4px 12px;font-size:.82rem" onclick="exportSVG()">Export SVG</button>
+        </div>
+        <div class="breadcrumb" id="breadcrumb"><span onclick="resetZoom()">root</span></div>
+        <div class="fg-wrap">
+            <div class="fg-canvas" id="fgCanvas"></div>
+        </div>
+        <div class="fg-stats" id="fgStats"></div>
+    </div>
+
+    <div class="fg-tooltip" id="tooltip"></div>
+
+    <footer style="margin-top:2rem;text-align:center;color:var(--muted);font-size:.85rem">Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+
+<script>
+let rootNode = null;
+let zoomStack = [];
+let colorScheme = 'warm';
+let totalSamples = 0;
+
+const SAMPLES = {
+web: `main;server_loop;accept_connection;handle_request;parse_headers 120
+main;server_loop;accept_connection;handle_request;parse_body 45
+main;server_loop;accept_connection;handle_request;route_dispatch;user_controller;db_query;pg_execute 280
+main;server_loop;accept_connection;handle_request;route_dispatch;user_controller;db_query;pg_parse 90
+main;server_loop;accept_connection;handle_request;route_dispatch;user_controller;serialize_json 70
+main;server_loop;accept_connection;handle_request;route_dispatch;auth_middleware;verify_token;hmac_verify 60
+main;server_loop;accept_connection;handle_request;route_dispatch;auth_middleware;verify_token;decode_jwt 40
+main;server_loop;accept_connection;handle_request;send_response;compress_gzip 55
+main;server_loop;accept_connection;handle_request;send_response;write_socket 30
+main;server_loop;accept_connection;handle_request;log_request 20
+main;server_loop;accept_connection;handle_request;route_dispatch;static_handler;read_file 85
+main;server_loop;accept_connection;handle_request;route_dispatch;static_handler;mime_detect 15
+main;gc_collect;mark_phase 35
+main;gc_collect;sweep_phase 25`,
+gc: `main;app_loop;process_batch;allocate_objects 100
+main;app_loop;process_batch;transform_data 80
+main;app_loop;process_batch;write_results 40
+main;gc_collect;mark_phase;trace_roots 120
+main;gc_collect;mark_phase;trace_heap 200
+main;gc_collect;mark_phase;trace_stacks 60
+main;gc_collect;sweep_phase;free_objects 150
+main;gc_collect;sweep_phase;compact_heap 90
+main;gc_collect;finalize 30
+main;app_loop;process_batch;allocate_objects;gc_safepoint 50`,
+io: `main;event_loop;poll_io;epoll_wait 300
+main;event_loop;handle_events;read_socket;recv 120
+main;event_loop;handle_events;read_socket;decrypt_tls 80
+main;event_loop;handle_events;write_socket;send 90
+main;event_loop;handle_events;write_socket;encrypt_tls 60
+main;event_loop;handle_events;disk_io;read_file;page_fault 150
+main;event_loop;handle_events;disk_io;read_file;decompress 45
+main;event_loop;handle_events;disk_io;write_file;fsync 110
+main;event_loop;timer_tick;check_timeouts 25
+main;event_loop;timer_tick;fire_callbacks 35`
+};
+
+function buildTree(text) {
+    const root = { name: 'root', value: 0, children: {}, childList: [] };
+    let total = 0;
+    const lines = text.trim().split('\n');
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const lastSpace = trimmed.lastIndexOf(' ');
+        if (lastSpace === -1) continue;
+        const stackStr = trimmed.substring(0, lastSpace);
+        const count = parseInt(trimmed.substring(lastSpace + 1));
+        if (isNaN(count) || count <= 0) continue;
+        total += count;
+
+        const frames = stackStr.split(';');
+        let node = root;
+        for (const frame of frames) {
+            const fname = frame.trim();
+            if (!fname) continue;
+            if (!node.children[fname]) {
+                const child = { name: fname, value: 0, children: {}, childList: [], parent: node };
+                node.children[fname] = child;
+                node.childList.push(child);
+            }
+            node = node.children[fname];
+        }
+        node.value += count;
+    }
+
+    // Propagate values up
+    function calcTotal(n) {
+        let sum = n.value;
+        for (const c of n.childList) sum += calcTotal(c);
+        n.total = sum;
+        return sum;
+    }
+    calcTotal(root);
+    root.total = total;
+    totalSamples = total;
+    return root;
+}
+
+function getColor(name, depth) {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+    const h = Math.abs(hash);
+
+    if (colorScheme === 'warm') {
+        const hue = 0 + (h % 60);
+        const sat = 60 + (h % 30);
+        const lit = 55 + ((h >> 8) % 15);
+        return `hsl(${hue},${sat}%,${lit}%)`;
+    } else if (colorScheme === 'cool') {
+        const hue = 180 + (h % 80);
+        const sat = 50 + (h % 30);
+        const lit = 50 + ((h >> 8) % 15);
+        return `hsl(${hue},${sat}%,${lit}%)`;
+    } else {
+        const hue = h % 360;
+        const sat = 55 + (h % 25);
+        const lit = 50 + ((h >> 8) % 15);
+        return `hsl(${hue},${sat}%,${lit}%)`;
+    }
+}
+
+function renderGraph() {
+    const text = document.getElementById('input').value.trim();
+    if (!text) return;
+
+    rootNode = buildTree(text);
+    zoomStack = [rootNode];
+    document.getElementById('graphCard').style.display = 'block';
+    drawFlame();
+}
+
+function drawFlame() {
+    const canvas = document.getElementById('fgCanvas');
+    const zoomNode = zoomStack[zoomStack.length - 1];
+    const width = canvas.parentElement.clientWidth - 2;
+    const barHeight = 22;
+    const fontSize = 11;
+    const maxDepth = getMaxDepth(zoomNode);
+    const height = (maxDepth + 1) * barHeight + 10;
+    canvas.style.height = height + 'px';
+
+    const bars = [];
+    function walk(node, x, depth, parentTotal) {
+        const w = (node.total / zoomNode.total) * width;
+        if (w < 0.5) return;
+
+        bars.push({ node, x, y: height - (depth + 1) * barHeight, w, h: barHeight - 2, depth });
+
+        let childX = x;
+        // Sort children by total descending for stable layout
+        const sorted = [...node.childList].sort((a, b) => b.total - a.total);
+        for (const child of sorted) {
+            walk(child, childX, depth + 1, node.total);
+            childX += (child.total / zoomNode.total) * width;
+        }
+    }
+    walk(zoomNode, 0, 0, zoomNode.total);
+
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" style="display:block">`;
+    for (const bar of bars) {
+        const color = bar.node === zoomNode ? '#666' : getColor(bar.node.name, bar.depth);
+        const pct = ((bar.node.total / totalSamples) * 100).toFixed(1);
+        const label = bar.w > 40 ? truncate(bar.node.name, Math.floor(bar.w / 7)) : '';
+        svg += `<g class="fg-bar" data-name="${escapeAttr(bar.node.name)}" data-total="${bar.node.total}" data-pct="${pct}" data-self="${bar.node.value}"
+                    onclick="zoomTo(this)" onmouseenter="showTip(event,this)" onmouseleave="hideTip()">
+            <rect x="${bar.x}" y="${bar.y}" width="${Math.max(bar.w - 1, 1)}" height="${bar.h}" rx="2" fill="${color}" style="pointer-events:all"/>
+            ${label ? `<text x="${bar.x + 3}" y="${bar.y + bar.h - 5}" font-size="${fontSize}" font-family="var(--mono)" fill="#fff" style="pointer-events:none">${escapeHtml(label)}</text>` : ''}
+        </g>`;
+    }
+    svg += '</svg>';
+    canvas.innerHTML = svg;
+
+    // Stats
+    const uniqueFns = new Set();
+    function collectNames(n) { uniqueFns.add(n.name); for (const c of n.childList) collectNames(c); }
+    collectNames(zoomNode);
+    document.getElementById('fgStats').innerHTML = `
+        <div class="fg-stat"><strong>${totalSamples.toLocaleString()}</strong> total samples</div>
+        <div class="fg-stat"><strong>${zoomNode.total.toLocaleString()}</strong> visible samples</div>
+        <div class="fg-stat"><strong>${uniqueFns.size}</strong> unique functions</div>
+        <div class="fg-stat"><strong>${getMaxDepth(zoomNode)}</strong> max depth</div>
+    `;
+
+    updateBreadcrumb();
+}
+
+function getMaxDepth(node) {
+    let max = 0;
+    function walk(n, d) {
+        if (d > max) max = d;
+        for (const c of n.childList) walk(c, d + 1);
+    }
+    walk(node, 0);
+    return max;
+}
+
+function truncate(s, maxLen) {
+    return s.length > maxLen ? s.substring(0, maxLen - 1) + '…' : s;
+}
+
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeAttr(s) {
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function showTip(e, el) {
+    const tip = document.getElementById('tooltip');
+    const name = el.getAttribute('data-name');
+    const total = parseInt(el.getAttribute('data-total'));
+    const self = parseInt(el.getAttribute('data-self'));
+    const pct = el.getAttribute('data-pct');
+    tip.innerHTML = `<strong>${escapeHtml(name)}</strong><br>Total: ${total.toLocaleString()} (${pct}%)${self > 0 ? `<br>Self: ${self.toLocaleString()} (${((self/totalSamples)*100).toFixed(1)}%)` : ''}`;
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 12) + 'px';
+    tip.style.top = (e.clientY - 10) + 'px';
+}
+
+function hideTip() {
+    document.getElementById('tooltip').style.display = 'none';
+}
+
+document.addEventListener('mousemove', function(e) {
+    const tip = document.getElementById('tooltip');
+    if (tip.style.display === 'block') {
+        tip.style.left = (e.clientX + 12) + 'px';
+        tip.style.top = (e.clientY - 10) + 'px';
+    }
+});
+
+function zoomTo(el) {
+    const name = el.getAttribute('data-name');
+    const current = zoomStack[zoomStack.length - 1];
+    const target = findNode(current, name);
+    if (target && target.childList.length > 0) {
+        zoomStack.push(target);
+        drawFlame();
+    }
+}
+
+function findNode(root, name) {
+    if (root.name === name) return root;
+    for (const c of root.childList) {
+        const found = findNode(c, name);
+        if (found) return found;
+    }
+    return null;
+}
+
+function resetZoom() {
+    if (!rootNode) return;
+    zoomStack = [rootNode];
+    drawFlame();
+}
+
+function zoomToIndex(idx) {
+    zoomStack = zoomStack.slice(0, idx + 1);
+    drawFlame();
+}
+
+function updateBreadcrumb() {
+    const el = document.getElementById('breadcrumb');
+    el.innerHTML = zoomStack.map((n, i) =>
+        i < zoomStack.length - 1
+            ? `<span onclick="zoomToIndex(${i})">${escapeHtml(n.name)}</span> ›`
+            : `<span>${escapeHtml(n.name)}</span>`
+    ).join(' ');
+}
+
+function highlightSearch() {
+    const q = document.getElementById('searchBox').value.toLowerCase().trim();
+    document.querySelectorAll('.fg-bar').forEach(bar => {
+        const name = bar.getAttribute('data-name').toLowerCase();
+        if (q && name.includes(q)) {
+            bar.classList.add('highlight');
+            bar.classList.remove('dimmed');
+        } else if (q) {
+            bar.classList.remove('highlight');
+            bar.classList.add('dimmed');
+        } else {
+            bar.classList.remove('highlight', 'dimmed');
+        }
+    });
+}
+
+function setScheme(s) {
+    colorScheme = s;
+    document.querySelectorAll('.color-opt').forEach(el => el.classList.toggle('active', el.textContent.toLowerCase() === s));
+    if (rootNode) drawFlame();
+}
+
+function exportSVG() {
+    const svg = document.querySelector('#fgCanvas svg');
+    if (!svg) return;
+    const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'flamegraph.svg';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function loadSample(name) {
+    document.getElementById('input').value = SAMPLES[name];
+    renderGraph();
+}
+
+function clearAll() {
+    document.getElementById('input').value = '';
+    document.getElementById('graphCard').style.display = 'none';
+    rootNode = null;
+    zoomStack = [];
+}
+
+window.addEventListener('resize', () => { if (rootNode) drawFlame(); });
+</script>
+</body>
+</html>

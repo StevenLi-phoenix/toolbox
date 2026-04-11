@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERD Designer — Visual Database Schema Builder | DevToolbox</title>
+    <meta name="description" content="Free online ER diagram designer. Define tables, columns, and relationships visually. Export as SQL DDL. 100% client-side.">
+    <meta name="keywords" content="ER diagram, ERD designer, database schema, entity relationship, SQL DDL, table designer, developer tools">
+    <meta name="author" content="Steven Li">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/erd.html">
+    <meta property="og:title" content="ERD Designer — Visual Database Schema Builder">
+    <meta property="og:description" content="Design database schemas visually. Define tables, columns, types, constraints, and relationships. Export SQL DDL.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/erd.html">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="ERD Designer — Visual Database Schema Builder">
+    <meta name="twitter:description" content="Design database schemas visually with tables, columns, and relationships.">
+    <link rel="stylesheet" href="toolbox.css">
+<style>
+  .erd-layout{display:grid;grid-template-columns:320px 1fr;gap:16px;min-height:600px}
+  .sidebar{display:flex;flex-direction:column;gap:12px}
+  .table-form{display:flex;flex-direction:column;gap:8px}
+  .table-form input,.table-form select{padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem}
+  .col-row{display:grid;grid-template-columns:1fr 100px auto auto auto;gap:4px;align-items:center}
+  .col-row input,.col-row select{padding:4px 6px;font-size:.8rem}
+  .col-row label{font-size:.75rem;display:flex;align-items:center;gap:2px;cursor:pointer}
+  .col-list{max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+  .add-col-btn,.add-table-btn{padding:6px 12px;cursor:pointer}
+  .table-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .table-chip{padding:4px 10px;border:1px solid var(--border);border-radius:99px;font-size:.8rem;cursor:pointer;background:var(--surface2);transition:all .15s}
+  .table-chip:hover,.table-chip.active{border-color:var(--accent);background:var(--accent);color:#fff}
+  .table-chip .del{margin-left:4px;opacity:.6;cursor:pointer}
+  .table-chip .del:hover{opacity:1}
+  .canvas-wrap{border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden;background:var(--surface2);min-height:500px}
+  .canvas-wrap svg{width:100%;height:100%;position:absolute;top:0;left:0;pointer-events:none}
+  .canvas-wrap svg line{pointer-events:auto}
+  .erd-table{position:absolute;border:2px solid var(--border);border-radius:var(--radius);background:var(--surface);min-width:160px;box-shadow:var(--shadow);cursor:move;user-select:none;font-size:.82rem}
+  .erd-table.selected{border-color:var(--accent)}
+  .erd-table-header{padding:6px 10px;font-weight:700;background:var(--accent);color:#fff;border-radius:var(--radius) var(--radius) 0 0;font-family:var(--mono)}
+  .erd-table-col{padding:3px 10px;border-top:1px solid var(--border);font-family:var(--mono);display:flex;justify-content:space-between;gap:8px}
+  .erd-table-col .col-name{font-weight:600}
+  .erd-table-col .col-type{color:var(--muted);font-size:.78rem}
+  .erd-table-col .col-pk{color:var(--warning);font-size:.7rem;font-weight:700}
+  .erd-table-col .col-fk{color:var(--success);font-size:.7rem;font-weight:700}
+  .rel-form{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:end}
+  .rel-form select,.rel-form input{padding:4px 6px;font-size:.82rem}
+  .rel-form label{font-size:.75rem;font-weight:600;display:block;margin-bottom:2px}
+  .rel-list{display:flex;flex-direction:column;gap:4px;max-height:150px;overflow-y:auto}
+  .rel-item{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--surface2);border-radius:var(--radius);font-size:.8rem;font-family:var(--mono)}
+  .rel-item .del-rel{cursor:pointer;color:var(--error);font-weight:700}
+  .export-section textarea{width:100%;height:200px;font-family:var(--mono);font-size:.82rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);resize:vertical}
+  @media(max-width:768px){.erd-layout{grid-template-columns:1fr}.canvas-wrap{min-height:400px}}
+</style>
+</head>
+<body>
+<div class="container">
+    <a href="index.html" class="back">&larr; All Tools</a>
+    <h1>🗂️ ERD Designer</h1>
+    <p class="subtitle">Design database schemas visually — define tables, columns, constraints, and relationships. Export as SQL DDL.</p>
+
+    <div class="erd-layout">
+        <div class="sidebar">
+            <div class="card">
+                <h2>Tables</h2>
+                <div class="table-chips" id="tableChips"></div>
+                <div class="table-form" style="margin-top:8px">
+                    <div style="display:flex;gap:6px">
+                        <input type="text" id="newTableName" placeholder="Table name" style="flex:1" onkeydown="if(event.key==='Enter')addTable()">
+                        <button class="btn add-table-btn" onclick="addTable()">+ Table</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="colEditor" style="display:none">
+                <h2>Columns — <span id="editingTableName"></span></h2>
+                <div class="col-list" id="colList"></div>
+                <div style="display:grid;grid-template-columns:1fr 90px;gap:4px;margin-top:8px">
+                    <input type="text" id="newColName" placeholder="Column name" style="padding:4px 6px;font-size:.82rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono)">
+                    <select id="newColType" style="padding:4px 6px;font-size:.82rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+                        <option>INT</option><option>BIGINT</option><option>SERIAL</option>
+                        <option>VARCHAR</option><option>TEXT</option><option>CHAR</option>
+                        <option>BOOLEAN</option><option>DATE</option><option>TIMESTAMP</option>
+                        <option>FLOAT</option><option>DOUBLE</option><option>DECIMAL</option>
+                        <option>UUID</option><option>JSON</option><option>JSONB</option>
+                        <option>BLOB</option><option>BYTEA</option>
+                    </select>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+                    <label style="font-size:.8rem;cursor:pointer"><input type="checkbox" id="newColPK"> PK</label>
+                    <label style="font-size:.8rem;cursor:pointer"><input type="checkbox" id="newColNN"> NOT NULL</label>
+                    <label style="font-size:.8rem;cursor:pointer"><input type="checkbox" id="newColUQ"> UNIQUE</label>
+                    <button class="btn btn-secondary" onclick="addColumn()" style="margin-left:auto;padding:3px 10px;font-size:.8rem">+ Column</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Relationships</h2>
+                <div class="rel-form">
+                    <div><label>From (table.col)</label><select id="relFrom"></select></div>
+                    <div><label>Type</label><select id="relType"><option value="1:1">1 : 1</option><option value="1:N" selected>1 : N</option><option value="M:N">M : N</option></select></div>
+                    <div><label>To (table.col)</label><select id="relTo"></select></div>
+                </div>
+                <button class="btn btn-secondary" onclick="addRelationship()" style="margin-top:6px;width:100%;padding:4px">+ Relationship</button>
+                <div class="rel-list" id="relList" style="margin-top:8px"></div>
+            </div>
+
+            <div class="card">
+                <h2>Export SQL</h2>
+                <button class="btn" onclick="exportSQL()" style="width:100%;margin-bottom:8px">Generate DDL</button>
+                <textarea id="sqlOutput" readonly placeholder="Click 'Generate DDL' to see SQL..."></textarea>
+                <button class="btn btn-secondary" onclick="copySQL()" style="width:100%;margin-top:4px">Copy SQL</button>
+            </div>
+        </div>
+
+        <div class="canvas-wrap" id="canvas">
+            <svg id="relSvg"></svg>
+            <div id="tableCanvas"></div>
+            <div class="empty" id="canvasEmpty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">Add a table to get started</div>
+        </div>
+    </div>
+
+    <footer style="margin-top:2rem;text-align:center;color:var(--muted);font-size:.85rem">Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+
+<script>
+let tables = {};
+let relationships = [];
+let activeTable = null;
+let dragState = null;
+let tablePositions = {};
+let nextY = 20;
+
+function addTable() {
+    const input = document.getElementById('newTableName');
+    const name = input.value.trim().replace(/\s+/g, '_');
+    if (!name || tables[name]) return;
+    tables[name] = [];
+    tablePositions[name] = { x: 20 + (Object.keys(tables).length - 1) * 200 % 600, y: nextY };
+    if ((Object.keys(tables).length) % 3 === 0) nextY += 200;
+    input.value = '';
+    selectTable(name);
+    renderAll();
+}
+
+function deleteTable(name) {
+    delete tables[name];
+    delete tablePositions[name];
+    relationships = relationships.filter(r => {
+        const fromT = r.from.split('.')[0];
+        const toT = r.to.split('.')[0];
+        return fromT !== name && toT !== name;
+    });
+    if (activeTable === name) { activeTable = null; document.getElementById('colEditor').style.display = 'none'; }
+    renderAll();
+}
+
+function selectTable(name) {
+    activeTable = name;
+    document.getElementById('colEditor').style.display = 'block';
+    document.getElementById('editingTableName').textContent = name;
+    renderColumns();
+    renderTableChips();
+    renderCanvasTables();
+}
+
+function addColumn() {
+    if (!activeTable) return;
+    const nameEl = document.getElementById('newColName');
+    const name = nameEl.value.trim();
+    if (!name) return;
+    const type = document.getElementById('newColType').value;
+    const pk = document.getElementById('newColPK').checked;
+    const nn = document.getElementById('newColNN').checked;
+    const uq = document.getElementById('newColUQ').checked;
+    tables[activeTable].push({ name, type, pk, nn: pk || nn, uq });
+    nameEl.value = '';
+    document.getElementById('newColPK').checked = false;
+    document.getElementById('newColNN').checked = false;
+    document.getElementById('newColUQ').checked = false;
+    renderAll();
+}
+
+function deleteColumn(tbl, idx) {
+    const col = tables[tbl][idx];
+    const colRef = tbl + '.' + col.name;
+    relationships = relationships.filter(r => r.from !== colRef && r.to !== colRef);
+    tables[tbl].splice(idx, 1);
+    renderAll();
+}
+
+function renderColumns() {
+    const list = document.getElementById('colList');
+    if (!activeTable || !tables[activeTable]) { list.innerHTML = ''; return; }
+    list.innerHTML = tables[activeTable].map((c, i) =>
+        `<div class="col-row" style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">
+            <span style="font-family:var(--mono);font-weight:600;font-size:.82rem">${c.name}</span>
+            <span style="color:var(--muted);font-size:.78rem;font-family:var(--mono)">${c.type}</span>
+            ${c.pk ? '<span style="color:var(--warning);font-size:.7rem;font-weight:700">PK</span>' : ''}
+            ${c.nn ? '<span style="color:var(--muted);font-size:.7rem">NN</span>' : ''}
+            ${c.uq ? '<span style="color:var(--success);font-size:.7rem">UQ</span>' : ''}
+            <span style="cursor:pointer;color:var(--error);margin-left:auto;font-weight:700" onclick="deleteColumn('${activeTable}',${i})">×</span>
+        </div>`
+    ).join('');
+}
+
+function renderTableChips() {
+    const el = document.getElementById('tableChips');
+    el.innerHTML = Object.keys(tables).map(t =>
+        `<span class="table-chip${t === activeTable ? ' active' : ''}" onclick="selectTable('${t}')">${t}<span class="del" onclick="event.stopPropagation();deleteTable('${t}')">×</span></span>`
+    ).join('');
+}
+
+function renderCanvasTables() {
+    const canvas = document.getElementById('tableCanvas');
+    const empty = document.getElementById('canvasEmpty');
+    const tblNames = Object.keys(tables);
+    empty.style.display = tblNames.length ? 'none' : 'block';
+
+    canvas.innerHTML = tblNames.map(t => {
+        const pos = tablePositions[t];
+        const cols = tables[t];
+        return `<div class="erd-table${t === activeTable ? ' selected' : ''}" id="tbl_${t}" style="left:${pos.x}px;top:${pos.y}px"
+                     onmousedown="startDrag(event,'${t}')" onclick="selectTable('${t}')">
+            <div class="erd-table-header">${t}</div>
+            ${cols.map(c => `<div class="erd-table-col">
+                <span>${c.pk ? '<span class="col-pk">PK </span>' : ''}${isFK(t, c.name) ? '<span class="col-fk">FK </span>' : ''}<span class="col-name">${c.name}</span></span>
+                <span class="col-type">${c.type}${c.nn ? ' NN' : ''}${c.uq ? ' UQ' : ''}</span>
+            </div>`).join('')}
+            ${cols.length === 0 ? '<div class="erd-table-col" style="color:var(--muted);font-style:italic">No columns</div>' : ''}
+        </div>`;
+    }).join('');
+}
+
+function isFK(table, col) {
+    const ref = table + '.' + col;
+    return relationships.some(r => r.to === ref || r.from === ref) &&
+           !tables[table].find(c => c.name === col && c.pk);
+}
+
+function startDrag(e, tbl) {
+    if (e.target.classList.contains('del')) return;
+    e.preventDefault();
+    const el = document.getElementById('tbl_' + tbl);
+    const rect = el.getBoundingClientRect();
+    dragState = { tbl, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', stopDrag);
+}
+
+function onDrag(e) {
+    if (!dragState) return;
+    const canvas = document.getElementById('canvas');
+    const cRect = canvas.getBoundingClientRect();
+    const x = Math.max(0, e.clientX - cRect.left - dragState.offsetX);
+    const y = Math.max(0, e.clientY - cRect.top - dragState.offsetY);
+    tablePositions[dragState.tbl] = { x, y };
+    const el = document.getElementById('tbl_' + dragState.tbl);
+    if (el) { el.style.left = x + 'px'; el.style.top = y + 'px'; }
+    drawRelationships();
+}
+
+function stopDrag() {
+    dragState = null;
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', stopDrag);
+}
+
+function populateRelDropdowns() {
+    const fromSel = document.getElementById('relFrom');
+    const toSel = document.getElementById('relTo');
+    const options = [];
+    for (const t of Object.keys(tables)) {
+        for (const c of tables[t]) {
+            options.push(t + '.' + c.name);
+        }
+    }
+    const html = options.map(o => `<option value="${o}">${o}</option>`).join('');
+    fromSel.innerHTML = html;
+    toSel.innerHTML = html;
+}
+
+function addRelationship() {
+    const from = document.getElementById('relFrom').value;
+    const to = document.getElementById('relTo').value;
+    const type = document.getElementById('relType').value;
+    if (!from || !to || from === to) return;
+    if (relationships.some(r => r.from === from && r.to === to)) return;
+    relationships.push({ from, to, type });
+    renderAll();
+}
+
+function deleteRelationship(idx) {
+    relationships.splice(idx, 1);
+    renderAll();
+}
+
+function renderRelList() {
+    const el = document.getElementById('relList');
+    el.innerHTML = relationships.map((r, i) =>
+        `<div class="rel-item"><span>${r.from} ${r.type} ${r.to}</span><span class="del-rel" onclick="deleteRelationship(${i})">×</span></div>`
+    ).join('');
+}
+
+function drawRelationships() {
+    const svg = document.getElementById('relSvg');
+    const canvas = document.getElementById('canvas');
+    const cRect = canvas.getBoundingClientRect();
+    svg.setAttribute('width', canvas.clientWidth);
+    svg.setAttribute('height', canvas.clientHeight);
+
+    let html = '';
+    for (const r of relationships) {
+        const fromT = r.from.split('.')[0];
+        const toT = r.to.split('.')[0];
+        const fromEl = document.getElementById('tbl_' + fromT);
+        const toEl = document.getElementById('tbl_' + toT);
+        if (!fromEl || !toEl) continue;
+
+        const fRect = fromEl.getBoundingClientRect();
+        const tRect = toEl.getBoundingClientRect();
+
+        const fx = fRect.left + fRect.width / 2 - cRect.left;
+        const fy = fRect.top + fRect.height / 2 - cRect.top;
+        const tx = tRect.left + tRect.width / 2 - cRect.left;
+        const ty = tRect.top + tRect.height / 2 - cRect.top;
+
+        // Edge connection points
+        let x1, y1, x2, y2;
+        if (Math.abs(fx - tx) > Math.abs(fy - ty)) {
+            x1 = fx < tx ? fRect.right - cRect.left : fRect.left - cRect.left;
+            y1 = fy;
+            x2 = fx < tx ? tRect.left - cRect.left : tRect.right - cRect.left;
+            y2 = ty;
+        } else {
+            x1 = fx;
+            y1 = fy < ty ? fRect.bottom - cRect.top : fRect.top - cRect.top;
+            x2 = tx;
+            y2 = fy < ty ? tRect.top - cRect.top : tRect.bottom - cRect.top;
+        }
+
+        const color = r.type === '1:1' ? '#6366f1' : r.type === '1:N' ? '#059669' : '#d97706';
+        html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2" stroke-dasharray="${r.type === 'M:N' ? '6,3' : 'none'}"/>`;
+
+        // Labels
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+        html += `<text x="${mx}" y="${my - 6}" text-anchor="middle" fill="${color}" font-size="11" font-weight="600" font-family="var(--mono)">${r.type}</text>`;
+    }
+    svg.innerHTML = html;
+}
+
+function exportSQL() {
+    let sql = '';
+    const fkStatements = [];
+
+    for (const t of Object.keys(tables)) {
+        const cols = tables[t];
+        if (cols.length === 0) continue;
+        sql += `CREATE TABLE ${t} (\n`;
+        const colDefs = cols.map(c => {
+            let def = `  ${c.name} ${c.type}`;
+            if (c.nn) def += ' NOT NULL';
+            if (c.uq) def += ' UNIQUE';
+            return def;
+        });
+        const pks = cols.filter(c => c.pk).map(c => c.name);
+        if (pks.length) colDefs.push(`  PRIMARY KEY (${pks.join(', ')})`);
+        sql += colDefs.join(',\n') + '\n);\n\n';
+    }
+
+    for (const r of relationships) {
+        const [fromT, fromC] = r.from.split('.');
+        const [toT, toC] = r.to.split('.');
+        sql += `ALTER TABLE ${toT} ADD CONSTRAINT fk_${toT}_${toC}\n  FOREIGN KEY (${toC}) REFERENCES ${fromT}(${fromC});\n\n`;
+    }
+
+    document.getElementById('sqlOutput').value = sql || '-- No tables defined';
+}
+
+function copySQL() {
+    const text = document.getElementById('sqlOutput').value;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target;
+        btn.textContent = '✓ Copied';
+        setTimeout(() => btn.textContent = 'Copy SQL', 1200);
+    });
+}
+
+function renderAll() {
+    renderTableChips();
+    renderColumns();
+    renderCanvasTables();
+    populateRelDropdowns();
+    renderRelList();
+    requestAnimationFrame(drawRelationships);
+}
+
+// Load demo
+function loadDemo() {
+    tables = {
+        users: [
+            { name: 'id', type: 'SERIAL', pk: true, nn: true, uq: false },
+            { name: 'email', type: 'VARCHAR', pk: false, nn: true, uq: true },
+            { name: 'name', type: 'VARCHAR', pk: false, nn: true, uq: false },
+            { name: 'created_at', type: 'TIMESTAMP', pk: false, nn: true, uq: false }
+        ],
+        posts: [
+            { name: 'id', type: 'SERIAL', pk: true, nn: true, uq: false },
+            { name: 'user_id', type: 'INT', pk: false, nn: true, uq: false },
+            { name: 'title', type: 'VARCHAR', pk: false, nn: true, uq: false },
+            { name: 'body', type: 'TEXT', pk: false, nn: false, uq: false },
+            { name: 'published', type: 'BOOLEAN', pk: false, nn: true, uq: false }
+        ],
+        comments: [
+            { name: 'id', type: 'SERIAL', pk: true, nn: true, uq: false },
+            { name: 'post_id', type: 'INT', pk: false, nn: true, uq: false },
+            { name: 'user_id', type: 'INT', pk: false, nn: true, uq: false },
+            { name: 'body', type: 'TEXT', pk: false, nn: true, uq: false }
+        ]
+    };
+    tablePositions = { users: { x: 20, y: 20 }, posts: { x: 260, y: 20 }, comments: { x: 260, y: 250 } };
+    relationships = [
+        { from: 'users.id', to: 'posts.user_id', type: '1:N' },
+        { from: 'posts.id', to: 'comments.post_id', type: '1:N' },
+        { from: 'users.id', to: 'comments.user_id', type: '1:N' }
+    ];
+    selectTable('users');
+    renderAll();
+}
+
+loadDemo();
+window.addEventListener('resize', drawRelationships);
+</script>
+</body>
+</html>
