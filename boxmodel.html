@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS Box Model Visualizer - Free Interactive Box Model Tool</title>
+<meta name="description" content="Interactive CSS box model visualizer. Adjust margin, border, padding, and content dimensions. See the box model live and copy the CSS. 100% client-side.">
+<meta name="keywords" content="css box model, box model visualizer, css margin padding, box model calculator, css tool, box-sizing">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/boxmodel.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .box-viz { display: flex; justify-content: center; padding: 20px; }
+  .box-layer { display: flex; align-items: center; justify-content: center; position: relative; transition: all .2s; }
+  .layer-margin { background: #fef3c7; border: 1px dashed #d97706; }
+  .layer-border { background: #fde68a; }
+  .layer-padding { background: #bfdbfe; }
+  .layer-content { background: #93c5fd; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: .8rem; color: #1e3a5f; font-weight: 600; }
+  .layer-label { position: absolute; font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; opacity: .7; }
+  .layer-margin > .layer-label { top: 4px; left: 8px; color: #92400e; }
+  .layer-border > .layer-label { top: 4px; left: 8px; color: #78350f; }
+  .layer-padding > .layer-label { top: 4px; left: 8px; color: #1e40af; }
+  .layer-value { position: absolute; font-family: var(--mono); font-size: .72rem; color: inherit; }
+  .layer-margin .layer-value { color: #92400e; }
+  .layer-border .layer-value { color: #78350f; }
+  .layer-padding .layer-value { color: #1e40af; }
+  .val-top { top: 2px; left: 50%; transform: translateX(-50%); }
+  .val-right { right: 4px; top: 50%; transform: translateY(-50%); }
+  .val-bottom { bottom: 2px; left: 50%; transform: translateX(-50%); }
+  .val-left { left: 4px; top: 50%; transform: translateY(-50%); }
+  .controls-panel { display: grid; gap: 16px; }
+  .control-section { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .control-section h3 { font-size: .88rem; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .control-section h3 .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  .swatch-margin { background: #fef3c7; border: 1px solid #d97706; }
+  .swatch-border { background: #fde68a; border: 1px solid #d97706; }
+  .swatch-padding { background: #bfdbfe; border: 1px solid #3b82f6; }
+  .swatch-content { background: #93c5fd; border: 1px solid #2563eb; }
+  .sides-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sides-grid .field { margin: 0; }
+  .sides-grid label { font-size: .78rem; }
+  .sides-grid input { font-size: .85rem; padding: 6px 8px; }
+  .lock-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: .82rem; }
+  .lock-row input[type="checkbox"] { margin: 0; }
+  .content-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .box-sizing-toggle { display: flex; gap: 0; margin-bottom: 12px; }
+  .box-sizing-toggle button { flex: 1; padding: 6px 12px; font-size: .82rem; border: 1px solid var(--border); background: var(--surface); cursor: pointer; color: var(--text); }
+  .box-sizing-toggle button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .box-sizing-toggle button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+  .box-sizing-toggle button.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .total-size { margin-top: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .85rem; background: var(--surface2); }
+  .total-size strong { font-family: var(--mono); }
+  .output-area pre { margin: 0; max-height: 300px; overflow: auto; }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 768px) {
+    .layout { grid-template-columns: 1fr; }
+    .sides-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CSS Box Model Visualizer</h1>
+<p class="subtitle">Interactive box model editor — adjust margin, border, padding & content dimensions</p>
+
+<div class="card">
+  <h2>📐 Box Sizing</h2>
+  <div class="box-sizing-toggle">
+    <button class="active" onclick="setBoxSizing('content-box')">content-box</button>
+    <button onclick="setBoxSizing('border-box')">border-box</button>
+  </div>
+  <div style="font-size:.82rem;color:var(--muted)" id="boxSizingHint">Width/height set the content area only. Border and padding add to total size.</div>
+</div>
+
+<div class="layout">
+<div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="box-viz" id="boxViz"></div>
+  </div>
+  <div class="total-size" id="totalSize"></div>
+</div>
+
+<div class="controls-panel">
+  <div class="control-section">
+    <h3><span class="swatch swatch-margin"></span> Margin</h3>
+    <div class="lock-row"><input type="checkbox" id="lockMargin" checked onchange="syncLock('margin')"><label for="lockMargin">Lock all sides</label></div>
+    <div class="sides-grid">
+      <div class="field"><label>Top</label><input type="number" id="mt" value="16" min="0" oninput="onInput('margin','top')"></div>
+      <div class="field"><label>Right</label><input type="number" id="mr" value="16" min="0" oninput="onInput('margin','right')"></div>
+      <div class="field"><label>Bottom</label><input type="number" id="mb" value="16" min="0" oninput="onInput('margin','bottom')"></div>
+      <div class="field"><label>Left</label><input type="number" id="ml" value="16" min="0" oninput="onInput('margin','left')"></div>
+    </div>
+  </div>
+
+  <div class="control-section">
+    <h3><span class="swatch swatch-border"></span> Border</h3>
+    <div class="lock-row"><input type="checkbox" id="lockBorder" checked onchange="syncLock('border')"><label for="lockBorder">Lock all sides</label></div>
+    <div class="sides-grid">
+      <div class="field"><label>Top</label><input type="number" id="bt" value="2" min="0" oninput="onInput('border','top')"></div>
+      <div class="field"><label>Right</label><input type="number" id="br_" value="2" min="0" oninput="onInput('border','right')"></div>
+      <div class="field"><label>Bottom</label><input type="number" id="bb" value="2" min="0" oninput="onInput('border','bottom')"></div>
+      <div class="field"><label>Left</label><input type="number" id="bl" value="2" min="0" oninput="onInput('border','left')"></div>
+    </div>
+  </div>
+
+  <div class="control-section">
+    <h3><span class="swatch swatch-padding"></span> Padding</h3>
+    <div class="lock-row"><input type="checkbox" id="lockPadding" checked onchange="syncLock('padding')"><label for="lockPadding">Lock all sides</label></div>
+    <div class="sides-grid">
+      <div class="field"><label>Top</label><input type="number" id="pt" value="20" min="0" oninput="onInput('padding','top')"></div>
+      <div class="field"><label>Right</label><input type="number" id="pr" value="20" min="0" oninput="onInput('padding','right')"></div>
+      <div class="field"><label>Bottom</label><input type="number" id="pb" value="20" min="0" oninput="onInput('padding','bottom')"></div>
+      <div class="field"><label>Left</label><input type="number" id="pl" value="20" min="0" oninput="onInput('padding','left')"></div>
+    </div>
+  </div>
+
+  <div class="control-section">
+    <h3><span class="swatch swatch-content"></span> Content</h3>
+    <div class="content-row">
+      <div class="field"><label>Width</label><input type="number" id="cw" value="200" min="0" oninput="render()"></div>
+      <div class="field"><label>Height</label><input type="number" id="ch" value="120" min="0" oninput="render()"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="card">
+<h2>📋 Generated CSS</h2>
+<div class="output-area">
+  <div class="btn-row" style="margin-bottom:10px">
+    <button class="btn" onclick="copyCSS()">Copy CSS</button>
+  </div>
+  <pre><code id="output"></code></pre>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let boxSizing='content-box';
+
+const IDS={
+  margin:{top:'mt',right:'mr',bottom:'mb',left:'ml'},
+  border:{top:'bt',right:'br_',bottom:'bb',left:'bl'},
+  padding:{top:'pt',right:'pr',bottom:'pb',left:'pl'}
+};
+
+function n(id){return parseInt($(id).value)||0;}
+
+function setBoxSizing(mode){
+  boxSizing=mode;
+  document.querySelectorAll('.box-sizing-toggle button').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  $('boxSizingHint').textContent=mode==='content-box'
+    ?'Width/height set the content area only. Border and padding add to total size.'
+    :'Width/height include padding and border. Content area shrinks to fit.';
+  render();
+}
+
+function onInput(prop,side){
+  const lockId='lock'+prop.charAt(0).toUpperCase()+prop.slice(1);
+  if($(lockId).checked){
+    const val=$(IDS[prop][side]).value;
+    Object.values(IDS[prop]).forEach(id=>{$(id).value=val;});
+  }
+  render();
+}
+
+function syncLock(prop){
+  const lockId='lock'+prop.charAt(0).toUpperCase()+prop.slice(1);
+  if($(lockId).checked){
+    const first=Object.values(IDS[prop])[0];
+    const val=$(first).value;
+    Object.values(IDS[prop]).forEach(id=>{$(id).value=val;});
+    render();
+  }
+}
+
+function render(){
+  const mt=n('mt'),mr=n('mr'),mb=n('mb'),ml=n('ml');
+  const bt=n('bt'),br=n('br_'),bb=n('bb'),bl=n('bl');
+  const pt=n('pt'),pr=n('pr'),pb=n('pb'),pl=n('pl');
+  const cw=n('cw'),ch=n('ch');
+
+  // Scale factor for visualization (max ~350px wide)
+  const totalW=ml+bl+pl+cw+pr+br+mr;
+  const totalH=mt+bt+pt+ch+pb+bb+mb;
+  const scale=Math.min(1,350/Math.max(totalW,1),300/Math.max(totalH,1));
+  const s=v=>Math.max(Math.round(v*scale),v>0?12:0);
+
+  const viz=$('boxViz');
+  viz.innerHTML=`
+    <div class="box-layer layer-margin" style="padding:${s(mt)}px ${s(mr)}px ${s(mb)}px ${s(ml)}px;min-width:${s(ml+bl+pl+cw+pr+br+mr)}px">
+      <span class="layer-label">margin</span>
+      <span class="layer-value val-top">${mt}</span>
+      <span class="layer-value val-right">${mr}</span>
+      <span class="layer-value val-bottom">${mb}</span>
+      <span class="layer-value val-left">${ml}</span>
+      <div class="box-layer layer-border" style="padding:${s(bt)}px ${s(br)}px ${s(bb)}px ${s(bl)}px">
+        <span class="layer-label">border</span>
+        <span class="layer-value val-top">${bt}</span>
+        <span class="layer-value val-right">${br}</span>
+        <span class="layer-value val-bottom">${bb}</span>
+        <span class="layer-value val-left">${bl}</span>
+        <div class="box-layer layer-padding" style="padding:${s(pt)}px ${s(pr)}px ${s(pb)}px ${s(pl)}px">
+          <span class="layer-label">padding</span>
+          <span class="layer-value val-top">${pt}</span>
+          <span class="layer-value val-right">${pr}</span>
+          <span class="layer-value val-bottom">${pb}</span>
+          <span class="layer-value val-left">${pl}</span>
+          <div class="box-layer layer-content" style="width:${s(cw)}px;height:${s(ch)}px">
+            ${cw} × ${ch}
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  // Total size calculation
+  let renderedW, renderedH;
+  if(boxSizing==='content-box'){
+    renderedW=cw+pl+pr+bl+br;
+    renderedH=ch+pt+pb+bt+bb;
+  } else {
+    renderedW=cw;
+    renderedH=ch;
+  }
+  const outerW=renderedW+ml+mr;
+  const outerH=renderedH+mt+mb;
+
+  let contentActualW=cw,contentActualH=ch;
+  if(boxSizing==='border-box'){
+    contentActualW=Math.max(0,cw-pl-pr-bl-br);
+    contentActualH=Math.max(0,ch-pt-pb-bt-bb);
+  }
+
+  $('totalSize').innerHTML=`
+    <strong>Rendered box:</strong> ${renderedW}px × ${renderedH}px &nbsp;·&nbsp;
+    <strong>With margin:</strong> ${outerW}px × ${outerH}px
+    ${boxSizing==='border-box'?`<br><strong>Content area:</strong> ${contentActualW}px × ${contentActualH}px`:''}
+  `;
+
+  generateCSS(mt,mr,mb,ml,bt,br,bb,bl,pt,pr,pb,pl,cw,ch);
+}
+
+function shorthand(t,r,b,l){
+  if(t===r&&r===b&&b===l)return `${t}px`;
+  if(t===b&&r===l)return `${t}px ${r}px`;
+  if(r===l)return `${t}px ${r}px ${b}px`;
+  return `${t}px ${r}px ${b}px ${l}px`;
+}
+
+function generateCSS(mt,mr,mb,ml,bt,br,bb,bl,pt,pr,pb,pl,cw,ch){
+  let css=`.element {\n`;
+  css+=`  box-sizing: ${boxSizing};\n`;
+  css+=`  width: ${cw}px;\n`;
+  css+=`  height: ${ch}px;\n`;
+  if(mt||mr||mb||ml)css+=`  margin: ${shorthand(mt,mr,mb,ml)};\n`;
+  if(pt||pr||pb||pl)css+=`  padding: ${shorthand(pt,pr,pb,pl)};\n`;
+  if(bt||br||bb||bl){
+    if(bt===br&&br===bb&&bb===bl){
+      css+=`  border: ${bt}px solid #333;\n`;
+    } else {
+      if(bt)css+=`  border-top: ${bt}px solid #333;\n`;
+      if(br)css+=`  border-right: ${br}px solid #333;\n`;
+      if(bb)css+=`  border-bottom: ${bb}px solid #333;\n`;
+      if(bl)css+=`  border-left: ${bl}px solid #333;\n`;
+    }
+  }
+  css+=`}`;
+  $('output').textContent=css;
+}
+
+function copyCSS(){
+  navigator.clipboard.writeText($('output').textContent).then(()=>{
+    const t=$('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+  });
+}
+
+render();
+</script>
+</body>
+</html>
