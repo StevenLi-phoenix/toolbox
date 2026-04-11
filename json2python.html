@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON to Python Converter - Free Online Dataclass & Pydantic Generator</title>
+<meta name="description" content="Convert JSON objects to Python dataclasses, Pydantic models, and TypedDicts instantly. 100% client-side, no data sent to any server.">
+<meta name="keywords" content="json to python, json to dataclass, json to pydantic, json converter, python dataclass generator, pydantic model generator, typeddict, free online tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/json2python.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .options { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; align-items: center; }
+  .options label { font-size: .85rem; display: flex; align-items: center; gap: .3rem; cursor: pointer; }
+  .options select { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: .85rem; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  textarea { width: 100%; min-height: 350px; font-family: var(--mono); font-size: .85rem; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; tab-size: 4; }
+  .output-area { position: relative; }
+  .output-area textarea { background: var(--surface); }
+  .copy-btn { position: absolute; top: 8px; right: 8px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON &rarr; Python</h1>
+<p class="subtitle">Convert JSON objects to Python dataclasses, Pydantic models, or TypedDicts</p>
+
+<div class="card">
+<div class="options">
+  <label>Output format:
+    <select id="format" onchange="convert()">
+      <option value="dataclass">dataclass</option>
+      <option value="pydantic">Pydantic v2</option>
+      <option value="typeddict">TypedDict</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="optOptional" onchange="convert()"> Optional fields for nulls</label>
+  <label><input type="checkbox" id="optSnake" onchange="convert()"> snake_case keys</label>
+  <label><input type="checkbox" id="optFrozen" onchange="convert()"> Frozen / immutable</label>
+</div>
+</div>
+
+<div class="panels">
+  <div class="card">
+    <h2>JSON Input</h2>
+    <textarea id="input" placeholder='{"name": "Alice", "age": 30, "emails": ["a@b.com"]}'  oninput="convert()"></textarea>
+  </div>
+  <div class="card output-area">
+    <h2>Python Output</h2>
+    <button class="btn btn-secondary copy-btn" onclick="copyOutput()">Copy</button>
+    <textarea id="output" readonly></textarea>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">&check; Copied!</div>
+<footer>Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function toSnake(s) {
+  return s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[\-\s]+/g, '_').toLowerCase();
+}
+
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function toClassName(s) {
+  return s.replace(/[^a-zA-Z0-9_]/g, ' ').split(/[\s_]+/).map(capitalize).join('');
+}
+
+function inferType(val, key, nested, fmt, opts) {
+  if (val === null) return opts.optional ? 'None' : 'Any';
+  if (typeof val === 'string') return 'str';
+  if (typeof val === 'boolean') return 'bool';
+  if (typeof val === 'number') return Number.isInteger(val) ? 'int' : 'float';
+  if (Array.isArray(val)) {
+    if (val.length === 0) return 'list[Any]';
+    const inner = inferType(val[0], key, nested, fmt, opts);
+    return `list[${inner}]`;
+  }
+  if (typeof val === 'object') {
+    const cls = toClassName(key);
+    nested.push({ name: cls, obj: val });
+    return cls;
+  }
+  return 'Any';
+}
+
+function generateDataclass(name, obj, nested, opts) {
+  const lines = [];
+  const fields = Object.entries(obj);
+  lines.push(`@dataclass${opts.frozen ? '(frozen=True)' : ''}`);
+  lines.push(`class ${name}:`);
+  if (fields.length === 0) { lines.push('    pass'); return lines; }
+  for (const [key, val] of fields) {
+    const pyKey = opts.snake ? toSnake(key) : key;
+    let pyType = inferType(val, key, nested, 'dataclass', opts);
+    if (val === null && opts.optional) pyType = `Optional[${pyType === 'None' ? 'Any' : pyType}]`;
+    const defaultStr = val === null ? ' = None' : '';
+    lines.push(`    ${pyKey}: ${pyType}${defaultStr}`);
+  }
+  return lines;
+}
+
+function generatePydantic(name, obj, nested, opts) {
+  const lines = [];
+  const fields = Object.entries(obj);
+  lines.push(`class ${name}(BaseModel):`);
+  if (opts.frozen) lines.push('    model_config = ConfigDict(frozen=True)');
+  if (fields.length === 0) { lines.push('    pass'); return lines; }
+  for (const [key, val] of fields) {
+    const pyKey = opts.snake ? toSnake(key) : key;
+    let pyType = inferType(val, key, nested, 'pydantic', opts);
+    if (val === null && opts.optional) pyType = `Optional[${pyType === 'None' ? 'Any' : pyType}]`;
+    const alias = (opts.snake && pyKey !== key) ? ` = Field(alias="${key}")` : '';
+    const defaultStr = val === null && !alias ? ' = None' : '';
+    lines.push(`    ${pyKey}: ${pyType}${alias || defaultStr}`);
+  }
+  return lines;
+}
+
+function generateTypedDict(name, obj, nested, opts) {
+  const lines = [];
+  const fields = Object.entries(obj);
+  lines.push(`class ${name}(TypedDict${opts.frozen ? ', total=False' : ''}):`);
+  if (fields.length === 0) { lines.push('    pass'); return lines; }
+  for (const [key, val] of fields) {
+    const pyKey = opts.snake ? toSnake(key) : key;
+    let pyType = inferType(val, key, nested, 'typeddict', opts);
+    if (val === null && opts.optional) pyType = `Optional[${pyType === 'None' ? 'Any' : pyType}]`;
+    lines.push(`    ${pyKey}: ${pyType}`);
+  }
+  return lines;
+}
+
+function buildImports(fmt, code, opts) {
+  const imports = [];
+  if (fmt === 'dataclass') {
+    imports.push('from dataclasses import dataclass');
+  } else if (fmt === 'pydantic') {
+    const parts = ['BaseModel'];
+    if (code.includes('Field(')) parts.push('Field');
+    if (opts.frozen) parts.push('ConfigDict');
+    imports.push(`from pydantic import ${parts.join(', ')}`);
+  } else {
+    imports.push('from typing import TypedDict');
+  }
+  const typingParts = [];
+  if (code.includes('Optional[')) typingParts.push('Optional');
+  if (code.includes('Any')) typingParts.push('Any');
+  if (typingParts.length && fmt !== 'typeddict') {
+    imports.push(`from typing import ${typingParts.join(', ')}`);
+  } else if (typingParts.length && fmt === 'typeddict') {
+    const existing = imports[0];
+    const extra = typingParts.filter(t => t !== 'TypedDict');
+    if (extra.length) {
+      imports[0] = `from typing import TypedDict, ${extra.join(', ')}`;
+    }
+  }
+  return imports;
+}
+
+function convert() {
+  const raw = $('input').value.trim();
+  if (!raw) { $('output').value = ''; return; }
+
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (e) {
+    $('output').value = `# Error: ${e.message}`;
+    return;
+  }
+
+  if (typeof parsed !== 'object' || parsed === null) {
+    $('output').value = '# Error: Input must be a JSON object or array of objects';
+    return;
+  }
+
+  const fmt = $('format').value;
+  const opts = {
+    optional: $('optOptional').checked,
+    snake: $('optSnake').checked,
+    frozen: $('optFrozen').checked,
+  };
+
+  let rootObj = parsed;
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0 || typeof parsed[0] !== 'object') {
+      $('output').value = '# Error: Array must contain objects';
+      return;
+    }
+    rootObj = parsed[0];
+  }
+
+  const nested = [];
+  const gen = fmt === 'dataclass' ? generateDataclass
+            : fmt === 'pydantic' ? generatePydantic
+            : generateTypedDict;
+
+  const mainLines = gen('Root', rootObj, nested, opts);
+
+  // Process nested classes
+  const allClasses = [];
+  const seen = new Set();
+  while (nested.length > 0) {
+    const { name, obj } = nested.shift();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    allClasses.push(gen(name, obj, nested, opts));
+  }
+
+  // Build output: nested first, then main
+  const classCode = [...allClasses, mainLines].map(c => c.join('\n')).join('\n\n\n');
+  const imports = buildImports(fmt, classCode, opts);
+  const output = imports.join('\n') + '\n\n\n' + classCode + '\n';
+
+  $('output').value = output;
+}
+
+function copyOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const toast = $('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1500);
+  });
+}
+
+// Load sample on start
+$('input').value = JSON.stringify({
+  "id": 1,
+  "name": "Alice",
+  "email": "alice@example.com",
+  "is_active": true,
+  "score": 98.5,
+  "tags": ["admin", "user"],
+  "address": {
+    "street": "123 Main St",
+    "city": "Springfield",
+    "zip": "62701"
+  },
+  "metadata": null
+}, null, 2);
+convert();
+</script>
+</body>
+</html>
