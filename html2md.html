@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML to Markdown Converter - Free Online Tool</title>
+<meta name="description" content="Convert HTML to clean Markdown instantly. Handles headings, links, images, lists, tables, code blocks, and more. No data leaves your browser.">
+<meta name="keywords" content="html to markdown, html2md, convert html markdown, html markdown converter">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/html2md.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel textarea { width: 100%; height: 420px; resize: vertical; font-family: var(--mono); font-size: .85rem; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stats { font-size: .8rem; color: var(--muted); margin-top: 6px; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .panel textarea { height: 280px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HTML → Markdown</h1>
+<p class="subtitle">Convert HTML to clean Markdown — headings, links, images, lists, tables, code & more</p>
+
+<div class="toolbar">
+  <button class="btn" onclick="convert()">Convert</button>
+  <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+  <button class="btn btn-secondary" onclick="copyOutput()">Copy Output</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+
+<div class="panels">
+  <div class="panel card">
+    <h2>HTML Input</h2>
+    <textarea id="input" placeholder="Paste HTML here…" oninput="convert()"></textarea>
+    <div class="stats" id="inputStats"></div>
+  </div>
+  <div class="panel card">
+    <h2>Markdown Output</h2>
+    <textarea id="output" readonly></textarea>
+    <div class="stats" id="outputStats"></div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function convert() {
+  const html = $('input').value;
+  if (!html.trim()) { $('output').value = ''; updateStats(); return; }
+
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const md = nodeToMd(doc.body).trim();
+  $('output').value = cleanUp(md);
+  updateStats();
+}
+
+function nodeToMd(node) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent.replace(/\s+/g, ' ');
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+  const tag = node.tagName.toLowerCase();
+  const children = () => Array.from(node.childNodes).map(nodeToMd).join('');
+  const inner = children().trim();
+
+  switch (tag) {
+    case 'h1': return `\n\n# ${inner}\n\n`;
+    case 'h2': return `\n\n## ${inner}\n\n`;
+    case 'h3': return `\n\n### ${inner}\n\n`;
+    case 'h4': return `\n\n#### ${inner}\n\n`;
+    case 'h5': return `\n\n##### ${inner}\n\n`;
+    case 'h6': return `\n\n###### ${inner}\n\n`;
+
+    case 'p': return `\n\n${inner}\n\n`;
+    case 'br': return '  \n';
+    case 'hr': return '\n\n---\n\n';
+
+    case 'strong': case 'b': return inner ? `**${inner}**` : '';
+    case 'em': case 'i': return inner ? `*${inner}*` : '';
+    case 'del': case 's': return inner ? `~~${inner}~~` : '';
+    case 'code':
+      if (node.parentElement && node.parentElement.tagName.toLowerCase() === 'pre') return inner;
+      return inner ? `\`${inner}\`` : '';
+
+    case 'pre': {
+      const codeEl = node.querySelector('code');
+      const lang = codeEl ? (codeEl.className.match(/language-(\w+)/)||[])[1] || '' : '';
+      const code = (codeEl || node).textContent;
+      return `\n\n\`\`\`${lang}\n${code}\n\`\`\`\n\n`;
+    }
+
+    case 'a': {
+      const href = node.getAttribute('href') || '';
+      const title = node.getAttribute('title');
+      if (!inner) return '';
+      return title ? `[${inner}](${href} "${title}")` : `[${inner}](${href})`;
+    }
+
+    case 'img': {
+      const src = node.getAttribute('src') || '';
+      const alt = node.getAttribute('alt') || '';
+      const title = node.getAttribute('title');
+      return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`;
+    }
+
+    case 'ul': return '\n\n' + listToMd(node, 'ul', 0) + '\n\n';
+    case 'ol': return '\n\n' + listToMd(node, 'ol', 0) + '\n\n';
+    case 'li': return inner;
+
+    case 'blockquote': {
+      const lines = inner.split('\n').map(l => `> ${l}`).join('\n');
+      return `\n\n${lines}\n\n`;
+    }
+
+    case 'table': return '\n\n' + tableToMd(node) + '\n\n';
+
+    case 'div': case 'section': case 'article': case 'main': case 'aside':
+    case 'header': case 'footer': case 'nav': case 'figure': case 'figcaption':
+      return `\n\n${inner}\n\n`;
+
+    case 'span': case 'label': case 'abbr': case 'time':
+      return inner;
+
+    case 'script': case 'style': case 'noscript':
+      return '';
+
+    default:
+      return inner;
+  }
+}
+
+function listToMd(listNode, type, depth) {
+  const items = Array.from(listNode.children).filter(c => c.tagName.toLowerCase() === 'li');
+  const indent = '  '.repeat(depth);
+  return items.map((li, i) => {
+    const parts = [];
+    let text = '';
+    Array.from(li.childNodes).forEach(child => {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const ct = child.tagName.toLowerCase();
+        if (ct === 'ul' || ct === 'ol') {
+          parts.push({ type: 'list', node: child, listType: ct });
+        } else {
+          text += nodeToMd(child);
+        }
+      } else {
+        text += nodeToMd(child);
+      }
+    });
+    const bullet = type === 'ol' ? `${i + 1}. ` : '- ';
+    let result = `${indent}${bullet}${text.trim()}`;
+    parts.forEach(p => {
+      result += '\n' + listToMd(p.node, p.listType, depth + 1);
+    });
+    return result;
+  }).join('\n');
+}
+
+function tableToMd(table) {
+  const rows = Array.from(table.querySelectorAll('tr'));
+  if (!rows.length) return '';
+
+  const matrix = rows.map(row =>
+    Array.from(row.querySelectorAll('th, td')).map(cell =>
+      Array.from(cell.childNodes).map(nodeToMd).join('').trim().replace(/\|/g, '\\|')
+    )
+  );
+
+  const colCount = Math.max(...matrix.map(r => r.length));
+  matrix.forEach(r => { while (r.length < colCount) r.push(''); });
+
+  const header = matrix[0];
+  const sep = header.map(() => '---');
+  const body = matrix.slice(1);
+
+  const lines = [
+    '| ' + header.join(' | ') + ' |',
+    '| ' + sep.join(' | ') + ' |',
+    ...body.map(r => '| ' + r.join(' | ') + ' |')
+  ];
+  return lines.join('\n');
+}
+
+function cleanUp(md) {
+  return md
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\n+/, '')
+    .replace(/\n+$/, '\n');
+}
+
+function updateStats() {
+  const inLen = $('input').value.length;
+  const outLen = $('output').value.length;
+  $('inputStats').textContent = `${inLen.toLocaleString()} characters`;
+  $('outputStats').textContent = `${outLen.toLocaleString()} characters`;
+}
+
+function loadSample() {
+  $('input').value = `<h1>Project README</h1>
+<p>This is a <strong>sample document</strong> with <em>various</em> HTML elements.</p>
+
+<h2>Features</h2>
+<ul>
+  <li>Convert <code>HTML</code> to Markdown</li>
+  <li>Supports nested lists
+    <ul>
+      <li>Sub-item one</li>
+      <li>Sub-item two</li>
+    </ul>
+  </li>
+  <li>Tables, code blocks, and more</li>
+</ul>
+
+<h2>Code Example</h2>
+<pre><code class="language-js">function greet(name) {
+  return \`Hello, \${name}!\`;
+}</code></pre>
+
+<h2>Links & Images</h2>
+<p>Visit <a href="https://example.com" title="Example Site">Example</a> for more info.</p>
+<p><img src="https://via.placeholder.com/150" alt="Placeholder image"></p>
+
+<h2>Data Table</h2>
+<table>
+  <tr><th>Name</th><th>Language</th><th>Stars</th></tr>
+  <tr><td>React</td><td>JavaScript</td><td>220k</td></tr>
+  <tr><td>Vue</td><td>JavaScript</td><td>207k</td></tr>
+  <tr><td>Svelte</td><td>JavaScript</td><td>78k</td></tr>
+</table>
+
+<blockquote>
+  <p>This is a blockquote with <strong>bold</strong> text.</p>
+</blockquote>
+
+<hr>
+<p>That&rsquo;s all folks! Check the <a href="#features">features</a> above.</p>`;
+  convert();
+}
+
+function copyOutput() {
+  navigator.clipboard.writeText($('output').value).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+
+function clearAll() {
+  $('input').value = '';
+  $('output').value = '';
+  updateStats();
+}
+
+// Auto-convert on load if there's content
+if ($('input').value) convert();
+</script>
+</body>
+</html>
