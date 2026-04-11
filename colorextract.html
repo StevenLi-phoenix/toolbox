@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS Color Extractor — Free Online Tool</title>
+<meta name="description" content="Free online CSS color extractor. Paste CSS code and instantly extract all colors with previews, deduplication, and format conversion. No data leaves your browser.">
+<meta name="keywords" content="CSS color extractor, extract colors from CSS, color picker CSS, find colors in code, CSS color palette">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/colorextract.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .css-input { width: 100%; min-height: 300px; font-family: var(--mono); font-size: .85rem; line-height: 1.6; resize: vertical; padding: 12px; tab-size: 2; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; font-size: .85rem; }
+  .stat { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 12px; }
+  .stat strong { font-weight: 600; }
+  .color-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+  .color-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  .color-item:hover { border-color: var(--accent); box-shadow: var(--shadow-lg); }
+  .color-swatch { width: 40px; height: 40px; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0; }
+  .color-info { flex: 1; min-width: 0; }
+  .color-value { font-family: var(--mono); font-size: .82rem; word-break: break-all; }
+  .color-formats { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+  .color-count { font-size: .7rem; background: var(--surface2); border-radius: 10px; padding: 1px 8px; color: var(--muted); white-space: nowrap; }
+  .filter-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .filter-row select, .filter-row input { font-size: .85rem; padding: 4px 8px; }
+  .palette-strip { display: flex; height: 48px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); margin-bottom: 16px; }
+  .palette-strip div { flex: 1; cursor: pointer; position: relative; }
+  .palette-strip div:hover::after { content: attr(data-color); position: absolute; bottom: -24px; left: 50%; transform: translateX(-50%); font-size: .7rem; font-family: var(--mono); background: var(--bg); border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px; white-space: nowrap; z-index: 1; }
+  .empty-state { text-align: center; color: var(--muted); padding: 3rem; font-size: .9rem; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } .color-list { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🎨 CSS Color Extractor</h1>
+<p class="subtitle">Paste CSS code to extract all colors — hex, rgb, hsl, named colors — with previews and format conversion.</p>
+
+<div class="panels">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h2>CSS Input</h2>
+      <div style="display:flex;gap:6px;">
+        <button class="btn" onclick="extractColors()">Extract</button>
+        <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+      </div>
+    </div>
+    <textarea class="css-input" id="css-input" placeholder="Paste your CSS here...
+
+body {
+  background: #1a1a2e;
+  color: rgb(230, 230, 230);
+}
+
+.btn {
+  background: linear-gradient(135deg, #e94560, #0f3460);
+  border: 1px solid hsl(210, 50%, 40%);
+  color: white;
+}" spellcheck="false"></textarea>
+  </div>
+
+  <div class="card">
+    <h2>Extracted Colors</h2>
+    <div class="filter-row">
+      <label style="font-size:.85rem">Sort:
+        <select id="sort-by" onchange="renderResults()">
+          <option value="frequency">By frequency</option>
+          <option value="hue">By hue</option>
+          <option value="lightness">By lightness</option>
+          <option value="alpha">Alphabetical</option>
+        </select>
+      </label>
+      <label style="font-size:.85rem"><input type="checkbox" id="dedup" checked onchange="renderResults()"> Deduplicate</label>
+      <label style="font-size:.85rem">Format:
+        <select id="output-format" onchange="renderResults()">
+          <option value="original">Original</option>
+          <option value="hex">HEX</option>
+          <option value="rgb">RGB</option>
+          <option value="hsl">HSL</option>
+        </select>
+      </label>
+    </div>
+    <div id="stats" class="stats"></div>
+    <div id="palette-strip"></div>
+    <div id="color-results"></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2>Export</h2>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-secondary" onclick="exportAs('css')">CSS Variables</button>
+    <button class="btn btn-secondary" onclick="exportAs('scss')">SCSS Variables</button>
+    <button class="btn btn-secondary" onclick="exportAs('json')">JSON</button>
+    <button class="btn btn-secondary" onclick="exportAs('tailwind')">Tailwind Config</button>
+  </div>
+  <pre id="export-output" style="margin-top:12px;font-size:.82rem;display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;"></pre>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const CSS_NAMED_COLORS = {
+  'aliceblue':'#f0f8ff','antiquewhite':'#faebd7','aqua':'#00ffff','aquamarine':'#7fffd4',
+  'azure':'#f0ffff','beige':'#f5f5dc','bisque':'#ffe4c4','black':'#000000',
+  'blanchedalmond':'#ffebcd','blue':'#0000ff','blueviolet':'#8a2be2','brown':'#a52a2a',
+  'burlywood':'#deb887','cadetblue':'#5f9ea0','chartreuse':'#7fff00','chocolate':'#d2691e',
+  'coral':'#ff7f50','cornflowerblue':'#6495ed','cornsilk':'#fff8dc','crimson':'#dc143c',
+  'cyan':'#00ffff','darkblue':'#00008b','darkcyan':'#008b8b','darkgoldenrod':'#b8860b',
+  'darkgray':'#a9a9a9','darkgreen':'#006400','darkkhaki':'#bdb76b','darkmagenta':'#8b008b',
+  'darkolivegreen':'#556b2f','darkorange':'#ff8c00','darkorchid':'#9932cc','darkred':'#8b0000',
+  'darksalmon':'#e9967a','darkseagreen':'#8fbc8f','darkslateblue':'#483d8b','darkslategray':'#2f4f4f',
+  'darkturquoise':'#00ced1','darkviolet':'#9400d3','deeppink':'#ff1493','deepskyblue':'#00bfff',
+  'dimgray':'#696969','dodgerblue':'#1e90ff','firebrick':'#b22222','floralwhite':'#fffaf0',
+  'forestgreen':'#228b22','fuchsia':'#ff00ff','gainsboro':'#dcdcdc','ghostwhite':'#f8f8ff',
+  'gold':'#ffd700','goldenrod':'#daa520','gray':'#808080','green':'#008000',
+  'greenyellow':'#adff2f','honeydew':'#f0fff0','hotpink':'#ff69b4','indianred':'#cd5c5c',
+  'indigo':'#4b0082','ivory':'#fffff0','khaki':'#f0e68c','lavender':'#e6e6fa',
+  'lavenderblush':'#fff0f5','lawngreen':'#7cfc00','lemonchiffon':'#fffacd','lightblue':'#add8e6',
+  'lightcoral':'#f08080','lightcyan':'#e0ffff','lightgoldenrodyellow':'#fafad2','lightgray':'#d3d3d3',
+  'lightgreen':'#90ee90','lightpink':'#ffb6c1','lightsalmon':'#ffa07a','lightseagreen':'#20b2aa',
+  'lightskyblue':'#87cefa','lightslategray':'#778899','lightsteelblue':'#b0c4de','lightyellow':'#ffffe0',
+  'lime':'#00ff00','limegreen':'#32cd32','linen':'#faf0e6','magenta':'#ff00ff',
+  'maroon':'#800000','mediumaquamarine':'#66cdaa','mediumblue':'#0000cd','mediumorchid':'#ba55d3',
+  'mediumpurple':'#9370db','mediumseagreen':'#3cb371','mediumslateblue':'#7b68ee','mediumspringgreen':'#00fa9a',
+  'mediumturquoise':'#48d1cc','mediumvioletred':'#c71585','midnightblue':'#191970','mintcream':'#f5fffa',
+  'mistyrose':'#ffe4e1','moccasin':'#ffe4b5','navajowhite':'#ffdead','navy':'#000080',
+  'oldlace':'#fdf5e6','olive':'#808000','olivedrab':'#6b8e23','orange':'#ffa500',
+  'orangered':'#ff4500','orchid':'#da70d6','palegoldenrod':'#eee8aa','palegreen':'#98fb98',
+  'paleturquoise':'#afeeee','palevioletred':'#db7093','papayawhip':'#ffefd5','peachpuff':'#ffdab9',
+  'peru':'#cd853f','pink':'#ffc0cb','plum':'#dda0dd','powderblue':'#b0e0e6',
+  'purple':'#800080','rebeccapurple':'#663399','red':'#ff0000','rosybrown':'#bc8f8f',
+  'royalblue':'#4169e1','saddlebrown':'#8b4513','salmon':'#fa8072','sandybrown':'#f4a460',
+  'seagreen':'#2e8b57','seashell':'#fff5ee','sienna':'#a0522d','silver':'#c0c0c0',
+  'skyblue':'#87ceeb','slateblue':'#6a5acd','slategray':'#708090','snow':'#fffafa',
+  'springgreen':'#00ff7f','steelblue':'#4682b4','tan':'#d2b48c','teal':'#008080',
+  'thistle':'#d8bfd8','tomato':'#ff6347','turquoise':'#40e0d0','violet':'#ee82ee',
+  'wheat':'#f5deb3','white':'#ffffff','whitesmoke':'#f5f5f5','yellow':'#ffff00','yellowgreen':'#9acd32'
+};
+
+let extractedColors = [];
+
+function extractColors() {
+  const css = document.getElementById('css-input').value;
+  if (!css.trim()) return;
+  const colors = [];
+  const patterns = [
+    /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b/g,
+    /rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)/gi,
+    /hsla?\(\s*\d+\s*,\s*\d+%?\s*,\s*\d+%?\s*(?:,\s*[\d.]+\s*)?\)/gi
+  ];
+  patterns.forEach(p => {
+    let m;
+    while ((m = p.exec(css)) !== null) {
+      colors.push(m[0].trim());
+    }
+  });
+  // Named colors (word boundary, not CSS properties)
+  const words = css.match(/\b[a-zA-Z]+\b/g) || [];
+  words.forEach(w => {
+    if (CSS_NAMED_COLORS[w.toLowerCase()] && !['inherit','initial','unset','revert','none','auto','normal','transparent','currentcolor'].includes(w.toLowerCase())) {
+      colors.push(w.toLowerCase());
+    }
+  });
+  // Count occurrences
+  const countMap = {};
+  colors.forEach(c => {
+    const key = c.toLowerCase();
+    countMap[key] = (countMap[key] || 0) + 1;
+  });
+  extractedColors = Object.entries(countMap).map(([value, count]) => ({
+    original: value,
+    count,
+    hex: toHex(value),
+    rgb: toRgb(value),
+    hsl: toHsl(value)
+  }));
+  renderResults();
+}
+
+function toHex(color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 1;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function toRgb(color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 1;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function toHsl(color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 1;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  let h = 0, s = 0, l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case rn: h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6; break;
+      case gn: h = ((bn - rn) / d + 2) / 6; break;
+      case bn: h = ((rn - gn) / d + 4) / 6; break;
+    }
+  }
+  return `hsl(${Math.round(h * 360)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`;
+}
+
+function getHue(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  if (max === min) return 0;
+  let h;
+  const d = max - min;
+  switch (max) {
+    case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+    case g: h = ((b - r) / d + 2) / 6; break;
+    case b: h = ((r - g) / d + 4) / 6; break;
+  }
+  return h * 360;
+}
+
+function getLightness(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
+}
+
+function renderResults() {
+  const format = document.getElementById('output-format').value;
+  const sortBy = document.getElementById('sort-by').value;
+  const dedup = document.getElementById('dedup').checked;
+  let items = [...extractedColors];
+  if (dedup) {
+    const seen = new Set();
+    items = items.filter(c => {
+      if (seen.has(c.hex)) return false;
+      seen.add(c.hex);
+      return true;
+    });
+  }
+  switch (sortBy) {
+    case 'frequency': items.sort((a, b) => b.count - a.count); break;
+    case 'hue': items.sort((a, b) => getHue(a.hex) - getHue(b.hex)); break;
+    case 'lightness': items.sort((a, b) => getLightness(a.hex) - getLightness(b.hex)); break;
+    case 'alpha': items.sort((a, b) => a.hex.localeCompare(b.hex)); break;
+  }
+  // Stats
+  document.getElementById('stats').innerHTML = items.length > 0 ? `
+    <div class="stat"><strong>${extractedColors.length}</strong> total occurrences</div>
+    <div class="stat"><strong>${items.length}</strong> unique colors</div>
+  ` : '';
+  // Palette strip
+  const stripEl = document.getElementById('palette-strip');
+  if (items.length > 0) {
+    stripEl.innerHTML = '<div class="palette-strip">' + items.map(c =>
+      `<div style="background:${c.hex}" data-color="${c.hex}" onclick="copyColor('${c.hex}')"></div>`
+    ).join('') + '</div>';
+  } else {
+    stripEl.innerHTML = '';
+  }
+  // Color list
+  const resultsEl = document.getElementById('color-results');
+  if (items.length === 0) {
+    resultsEl.innerHTML = '<div class="empty-state">No colors extracted yet. Paste CSS and click Extract.</div>';
+    return;
+  }
+  resultsEl.innerHTML = '<div class="color-list">' + items.map(c => {
+    const display = format === 'hex' ? c.hex : format === 'rgb' ? c.rgb : format === 'hsl' ? c.hsl : c.original;
+    return `<div class="color-item" onclick="copyColor('${display.replace(/'/g, "\\'")}')">
+      <div class="color-swatch" style="background:${c.hex}"></div>
+      <div class="color-info">
+        <div class="color-value">${display}</div>
+        <div class="color-formats">${c.hex} · ${c.rgb}</div>
+      </div>
+      <span class="color-count">${c.count}×</span>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function copyColor(value) {
+  navigator.clipboard.writeText(value);
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1500);
+}
+
+function exportAs(fmt) {
+  const dedup = document.getElementById('dedup').checked;
+  let items = [...extractedColors];
+  if (dedup) {
+    const seen = new Set();
+    items = items.filter(c => { if (seen.has(c.hex)) return false; seen.add(c.hex); return true; });
+  }
+  if (items.length === 0) return;
+  const outEl = document.getElementById('export-output');
+  let output = '';
+  switch (fmt) {
+    case 'css':
+      output = ':root {\n' + items.map((c, i) => `  --color-${i + 1}: ${c.hex};`).join('\n') + '\n}';
+      break;
+    case 'scss':
+      output = items.map((c, i) => `$color-${i + 1}: ${c.hex};`).join('\n');
+      break;
+    case 'json':
+      output = JSON.stringify(items.map(c => ({ hex: c.hex, rgb: c.rgb, hsl: c.hsl, original: c.original, count: c.count })), null, 2);
+      break;
+    case 'tailwind':
+      const obj = {};
+      items.forEach((c, i) => obj[`color-${i + 1}`] = c.hex);
+      output = `module.exports = {\n  theme: {\n    extend: {\n      colors: ${JSON.stringify(obj, null, 8).replace(/^/gm, '      ').trim()}\n    }\n  }\n}`;
+      break;
+  }
+  outEl.textContent = output;
+  outEl.style.display = 'block';
+}
+
+function clearAll() {
+  document.getElementById('css-input').value = '';
+  extractedColors = [];
+  renderResults();
+  document.getElementById('export-output').style.display = 'none';
+}
+
+// Init
+renderResults();
+</script>
+</body>
+</html>

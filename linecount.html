@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code Line Counter — Free Online Tool</title>
+<meta name="description" content="Free online code line counter. Paste code to count total lines, blank lines, comment lines, and code lines with language detection. No data leaves your browser.">
+<meta name="keywords" content="line counter, code counter, LOC counter, lines of code, SLOC, blank lines, comment lines, code metrics">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/linecount.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .code-input { width: 100%; min-height: 350px; font-family: var(--mono); font-size: .85rem; line-height: 1.6; resize: vertical; padding: 12px; tab-size: 2; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; }
+  .stat-value { font-size: 1.8rem; font-weight: 700; line-height: 1.2; }
+  .stat-label { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+  .stat-code .stat-value { color: #15803d; }
+  .stat-blank .stat-value { color: #6366f1; }
+  .stat-comment .stat-value { color: #d97706; }
+  .stat-total .stat-value { color: var(--text); }
+  .bar-chart { display: flex; height: 32px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); margin-bottom: 16px; }
+  .bar-code { background: #22c55e; }
+  .bar-comment { background: #f59e0b; }
+  .bar-blank { background: #818cf8; }
+  .bar-section { position: relative; min-width: 2px; cursor: default; }
+  .bar-section:hover::after { content: attr(data-label); position: absolute; bottom: -24px; left: 50%; transform: translateX(-50%); font-size: .7rem; font-family: var(--mono); background: var(--bg); border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px; white-space: nowrap; z-index: 1; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: .82rem; margin-bottom: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+  .line-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .line-table th, .line-table td { padding: 6px 10px; border: 1px solid var(--border); text-align: left; }
+  .line-table th { background: var(--surface2); font-weight: 600; }
+  .line-table td:nth-child(n+2) { text-align: right; font-family: var(--mono); }
+  .lang-badge { display: inline-block; font-size: .78rem; padding: 2px 10px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); font-weight: 600; }
+  .drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 16px; text-align: center; color: var(--muted); font-size: .85rem; margin-bottom: 12px; transition: border-color .15s; }
+  .drop-zone.dragover { border-color: var(--accent); background: var(--surface2); }
+  .file-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .file-tag { font-size: .78rem; padding: 2px 10px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; gap: 4px; }
+  .file-tag button { background: none; border: none; cursor: pointer; font-size: .8rem; color: var(--muted); padding: 0; line-height: 1; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📊 Code Line Counter</h1>
+<p class="subtitle">Count lines of code, comments, and blanks with automatic language detection. Drop files or paste code.</p>
+
+<div class="panels">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h2>Input</h2>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <label style="font-size:.85rem">Language:
+          <select id="lang-select" onchange="analyze()">
+            <option value="auto">Auto-detect</option>
+            <option value="javascript">JavaScript</option>
+            <option value="typescript">TypeScript</option>
+            <option value="python">Python</option>
+            <option value="java">Java</option>
+            <option value="c">C / C++</option>
+            <option value="go">Go</option>
+            <option value="rust">Rust</option>
+            <option value="ruby">Ruby</option>
+            <option value="php">PHP</option>
+            <option value="swift">Swift</option>
+            <option value="kotlin">Kotlin</option>
+            <option value="css">CSS</option>
+            <option value="html">HTML</option>
+            <option value="sql">SQL</option>
+            <option value="shell">Shell / Bash</option>
+            <option value="yaml">YAML</option>
+          </select>
+        </label>
+        <button class="btn" onclick="analyze()">Count</button>
+      </div>
+    </div>
+    <div class="drop-zone" id="drop-zone">
+      Drop files here or <label style="color:var(--accent);cursor:pointer;text-decoration:underline">browse<input type="file" multiple hidden onchange="handleFiles(this.files)"></label>
+    </div>
+    <div class="file-list" id="file-list"></div>
+    <textarea class="code-input" id="code-input" placeholder="Paste your code here..." spellcheck="false" oninput="analyze()"></textarea>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div id="detected-lang"></div>
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card stat-total"><div class="stat-value" id="s-total">0</div><div class="stat-label">Total Lines</div></div>
+      <div class="stat-card stat-code"><div class="stat-value" id="s-code">0</div><div class="stat-label">Code Lines</div></div>
+      <div class="stat-card stat-comment"><div class="stat-value" id="s-comment">0</div><div class="stat-label">Comment Lines</div></div>
+      <div class="stat-card stat-blank"><div class="stat-value" id="s-blank">0</div><div class="stat-label">Blank Lines</div></div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Code</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Comments</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#818cf8"></div>Blank</div>
+    </div>
+    <div id="bar-chart"></div>
+    <div id="file-table"></div>
+  </div>
+</div>
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const LANG_COMMENTS = {
+  javascript: { line: '//', blockStart: '/*', blockEnd: '*/' },
+  typescript: { line: '//', blockStart: '/*', blockEnd: '*/' },
+  java:       { line: '//', blockStart: '/*', blockEnd: '*/' },
+  c:          { line: '//', blockStart: '/*', blockEnd: '*/' },
+  go:         { line: '//', blockStart: '/*', blockEnd: '*/' },
+  rust:       { line: '//', blockStart: '/*', blockEnd: '*/' },
+  swift:      { line: '//', blockStart: '/*', blockEnd: '*/' },
+  kotlin:     { line: '//', blockStart: '/*', blockEnd: '*/' },
+  css:        { line: null, blockStart: '/*', blockEnd: '*/' },
+  php:        { line: '//', blockStart: '/*', blockEnd: '*/', alt: '#' },
+  python:     { line: '#', blockStart: '"""', blockEnd: '"""', alt2: "'''" },
+  ruby:       { line: '#', blockStart: '=begin', blockEnd: '=end' },
+  shell:      { line: '#', blockStart: null, blockEnd: null },
+  yaml:       { line: '#', blockStart: null, blockEnd: null },
+  sql:        { line: '--', blockStart: '/*', blockEnd: '*/' },
+  html:       { line: null, blockStart: '<!--', blockEnd: '-->' }
+};
+
+const EXT_MAP = {
+  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  py: 'python', pyw: 'python',
+  java: 'java', kt: 'kotlin', kts: 'kotlin',
+  c: 'c', cpp: 'c', cc: 'c', h: 'c', hpp: 'c',
+  go: 'go', rs: 'rust', swift: 'swift',
+  rb: 'ruby', php: 'php',
+  css: 'css', scss: 'css', less: 'css',
+  html: 'html', htm: 'html', xml: 'html', svg: 'html',
+  sql: 'sql', sh: 'shell', bash: 'shell', zsh: 'shell',
+  yml: 'yaml', yaml: 'yaml'
+};
+
+let files = [];
+
+function detectLanguage(code, filename) {
+  if (filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    if (EXT_MAP[ext]) return EXT_MAP[ext];
+  }
+  if (/^#!\s*\/.*\b(python|python3)\b/.test(code)) return 'python';
+  if (/^#!\s*\/.*\b(bash|sh|zsh)\b/.test(code)) return 'shell';
+  if (/^#!\s*\/.*\bnode\b/.test(code)) return 'javascript';
+  if (/\bfunc\s+\w+\s*\(/.test(code) && /\bpackage\s+\w+/.test(code)) return 'go';
+  if (/\bfn\s+\w+\s*\(/.test(code) && /\blet\s+mut\b/.test(code)) return 'rust';
+  if (/\bdef\s+\w+\s*[:(]/.test(code) && /:\s*$/.test(code.split('\n')[0] || '')) return 'python';
+  if (/\bclass\s+\w+/.test(code) && /\bpublic\s+static\s+void\s+main/.test(code)) return 'java';
+  if (/\bimport\s+.*\bfrom\b/.test(code) || /\bconst\s+\w+\s*=/.test(code) || /\bconsole\.log\b/.test(code)) return 'javascript';
+  if (/^\s*SELECT\s|^\s*INSERT\s|^\s*CREATE\s/mi.test(code)) return 'sql';
+  if (/^---\s*$/m.test(code) && /^\w+:\s/m.test(code)) return 'yaml';
+  if (/<html|<div|<span|<!DOCTYPE/i.test(code)) return 'html';
+  if (/\{[\s\S]*?:\s*[\w#]/.test(code) && !/\bfunction\b/.test(code)) return 'css';
+  return 'javascript';
+}
+
+function countLines(code, lang) {
+  const lines = code.split('\n');
+  const config = LANG_COMMENTS[lang] || LANG_COMMENTS.javascript;
+  let total = lines.length;
+  let blank = 0, comment = 0, codeLines = 0;
+  let inBlock = false;
+  let blockEnd = config.blockEnd;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed === '') {
+      blank++;
+      continue;
+    }
+
+    if (inBlock) {
+      comment++;
+      if (blockEnd && trimmed.includes(blockEnd)) {
+        inBlock = false;
+      }
+      continue;
+    }
+
+    // Check block comment start
+    if (config.blockStart && trimmed.startsWith(config.blockStart)) {
+      comment++;
+      if (blockEnd && !trimmed.includes(blockEnd, config.blockStart.length)) {
+        inBlock = true;
+      }
+      continue;
+    }
+
+    // Python triple-quote docstrings
+    if (lang === 'python' && (trimmed.startsWith('"""') || trimmed.startsWith("'''"))) {
+      comment++;
+      const q = trimmed.startsWith('"""') ? '"""' : "'''";
+      if (!trimmed.slice(3).includes(q)) {
+        inBlock = true;
+        blockEnd = q;
+      }
+      continue;
+    }
+
+    // Ruby =begin/=end
+    if (lang === 'ruby' && trimmed === '=begin') {
+      comment++;
+      inBlock = true;
+      blockEnd = '=end';
+      continue;
+    }
+
+    // Line comments
+    if (config.line && trimmed.startsWith(config.line)) {
+      comment++;
+      continue;
+    }
+    if (config.alt && trimmed.startsWith(config.alt)) {
+      comment++;
+      continue;
+    }
+
+    codeLines++;
+  }
+
+  return { total, blank, comment, code: codeLines };
+}
+
+function analyze() {
+  const langSelect = document.getElementById('lang-select').value;
+  const input = document.getElementById('code-input').value;
+
+  if (files.length > 0) {
+    analyzeFiles(langSelect);
+    return;
+  }
+
+  if (!input.trim()) {
+    resetStats();
+    return;
+  }
+
+  const lang = langSelect === 'auto' ? detectLanguage(input) : langSelect;
+  const result = countLines(input, lang);
+
+  document.getElementById('detected-lang').innerHTML = `<span class="lang-badge" style="margin-bottom:12px;display:inline-block">${lang.charAt(0).toUpperCase() + lang.slice(1)}</span>`;
+  renderStats(result);
+  renderBar(result);
+  document.getElementById('file-table').innerHTML = '';
+}
+
+function analyzeFiles(langSelect) {
+  let totalResult = { total: 0, blank: 0, comment: 0, code: 0 };
+  const fileResults = [];
+
+  files.forEach(f => {
+    const lang = langSelect === 'auto' ? detectLanguage(f.content, f.name) : langSelect;
+    const result = countLines(f.content, lang);
+    fileResults.push({ name: f.name, lang, ...result });
+    totalResult.total += result.total;
+    totalResult.blank += result.blank;
+    totalResult.comment += result.comment;
+    totalResult.code += result.code;
+  });
+
+  document.getElementById('detected-lang').innerHTML = `<span class="lang-badge" style="margin-bottom:12px;display:inline-block">${files.length} file${files.length > 1 ? 's' : ''}</span>`;
+  renderStats(totalResult);
+  renderBar(totalResult);
+
+  // File breakdown table
+  let html = '<table class="line-table"><thead><tr><th>File</th><th>Language</th><th>Total</th><th>Code</th><th>Comments</th><th>Blank</th></tr></thead><tbody>';
+  fileResults.forEach(f => {
+    html += `<tr><td>${escapeHtml(f.name)}</td><td>${f.lang}</td><td>${f.total}</td><td>${f.code}</td><td>${f.comment}</td><td>${f.blank}</td></tr>`;
+  });
+  html += `<tr style="font-weight:700"><td>Total</td><td></td><td>${totalResult.total}</td><td>${totalResult.code}</td><td>${totalResult.comment}</td><td>${totalResult.blank}</td></tr>`;
+  html += '</tbody></table>';
+  document.getElementById('file-table').innerHTML = html;
+}
+
+function renderStats(r) {
+  document.getElementById('s-total').textContent = r.total;
+  document.getElementById('s-code').textContent = r.code;
+  document.getElementById('s-comment').textContent = r.comment;
+  document.getElementById('s-blank').textContent = r.blank;
+}
+
+function renderBar(r) {
+  const chartEl = document.getElementById('bar-chart');
+  if (r.total === 0) { chartEl.innerHTML = ''; return; }
+  const cp = (r.code / r.total * 100).toFixed(1);
+  const cmp = (r.comment / r.total * 100).toFixed(1);
+  const bp = (r.blank / r.total * 100).toFixed(1);
+  chartEl.innerHTML = `<div class="bar-chart">
+    <div class="bar-section bar-code" style="width:${cp}%" data-label="Code ${cp}%"></div>
+    <div class="bar-section bar-comment" style="width:${cmp}%" data-label="Comments ${cmp}%"></div>
+    <div class="bar-section bar-blank" style="width:${bp}%" data-label="Blank ${bp}%"></div>
+  </div>`;
+}
+
+function resetStats() {
+  renderStats({ total: 0, blank: 0, comment: 0, code: 0 });
+  document.getElementById('bar-chart').innerHTML = '';
+  document.getElementById('detected-lang').innerHTML = '';
+  document.getElementById('file-table').innerHTML = '';
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// File handling
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+
+function handleFiles(fileList) {
+  Array.from(fileList).forEach(f => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      files.push({ name: f.name, content: reader.result });
+      renderFileList();
+      analyze();
+    };
+    reader.readAsText(f);
+  });
+}
+
+function renderFileList() {
+  const el = document.getElementById('file-list');
+  el.innerHTML = files.map((f, i) => `
+    <span class="file-tag">${escapeHtml(f.name)} <button onclick="removeFile(${i})">&times;</button></span>
+  `).join('');
+}
+
+function removeFile(i) {
+  files.splice(i, 1);
+  renderFileList();
+  analyze();
+}
+</script>
+</body>
+</html>
