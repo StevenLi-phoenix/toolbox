@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII85 / Base85 Encoder & Decoder - Free Online Tool</title>
+<meta name="description" content="Encode and decode ASCII85 (Base85) data online. Supports btoa/atob Adobe format, Z85, and RFC 1924 variants. No data sent to any server.">
+<meta name="keywords" content="ascii85, base85, encoder, decoder, btoa, z85, rfc1924, binary encoding">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ascii85.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .panel textarea { width: 100%; min-height: 250px; font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+  .panel-header h2 { margin: 0; font-size: .95rem; }
+  .actions { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
+  .variant-row { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+  .variant-row label { font-size: .85rem; cursor: pointer; display: flex; align-items: center; gap: .3rem; }
+  .stats { font-size: .82rem; color: var(--muted); margin-top: .5rem; }
+  .status { font-size: .82rem; padding: 6px 10px; border-radius: var(--radius); margin-top: .5rem; }
+  .status.ok { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .status.err { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .info-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .info-table th, .info-table td { padding: 8px 12px; border: 1px solid var(--border); text-align: left; }
+  .info-table th { background: var(--surface2); font-weight: 600; }
+  .info-table code { font-family: var(--mono); font-size: .82rem; background: var(--surface2); padding: 2px 5px; border-radius: 3px; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">← All Tools</a>
+<h1>ASCII85 / Base85 Encoder & Decoder</h1>
+<p class="subtitle">Encode and decode text using ASCII85 (Base85) encoding variants</p>
+
+<div class="card">
+<div class="variant-row">
+  <strong style="font-size:.85rem">Variant:</strong>
+  <label><input type="radio" name="variant" value="adobe" checked onchange="resetStatus()"> Adobe (btoa)</label>
+  <label><input type="radio" name="variant" value="z85" onchange="resetStatus()"> Z85 (ZeroMQ)</label>
+  <label><input type="radio" name="variant" value="rfc1924" onchange="resetStatus()"> RFC 1924 (IPv6)</label>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📝 Plain Text / Hex</h2>
+      <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cp('inputText')">Copy</button>
+    </div>
+    <textarea id="inputText" placeholder="Enter text to encode..."></textarea>
+    <div class="stats" id="inputStats"></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <h2>🔐 ASCII85 Encoded</h2>
+      <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cp('outputText')">Copy</button>
+    </div>
+    <textarea id="outputText" placeholder="Enter ASCII85 data to decode..."></textarea>
+    <div class="stats" id="outputStats"></div>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn-primary" onclick="encode()">Encode →</button>
+  <button class="btn-primary" onclick="decode()">← Decode</button>
+  <button class="btn-secondary" onclick="clearAll()">Clear</button>
+  <button class="btn-secondary" onclick="loadSample()">Load Sample</button>
+</div>
+<div id="status"></div>
+</div>
+
+<div class="card">
+<h2>📖 ASCII85 Variants Reference</h2>
+<table class="info-table">
+<tr><th>Variant</th><th>Alphabet</th><th>Delimiters</th><th>Used In</th></tr>
+<tr><td>Adobe (btoa)</td><td><code>!</code> to <code>u</code> (33–117)</td><td><code>&lt;~</code> ... <code>~&gt;</code></td><td>PostScript, PDF</td></tr>
+<tr><td>Z85</td><td><code>0-9a-zA-Z.-:+=^!/*?&<>()[]{}@%$#</code></td><td>None</td><td>ZeroMQ, CurveZMQ</td></tr>
+<tr><td>RFC 1924</td><td><code>0-9A-Za-z!#$%&()*+-;<=>?@^_`{|}~</code></td><td>None</td><td>IPv6 representation</td></tr>
+</table>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+function getVariant() {
+  return document.querySelector('input[name="variant"]:checked').value;
+}
+
+// Adobe ASCII85 (btoa format)
+const adobe = {
+  encode(bytes) {
+    let result = '<~';
+    const pad = bytes.length % 4;
+    const padded = new Uint8Array(bytes.length + (pad ? 4 - pad : 0));
+    padded.set(bytes);
+
+    for (let i = 0; i < padded.length; i += 4) {
+      let val = (padded[i] << 24 | padded[i+1] << 16 | padded[i+2] << 8 | padded[i+3]) >>> 0;
+      if (val === 0 && i + 4 <= bytes.length) {
+        result += 'z';
+      } else {
+        const chars = [];
+        for (let j = 4; j >= 0; j--) {
+          chars[j] = String.fromCharCode((val % 85) + 33);
+          val = Math.floor(val / 85);
+        }
+        if (i + 4 > bytes.length && pad) {
+          result += chars.slice(0, pad + 1).join('');
+        } else {
+          result += chars.join('');
+        }
+      }
+    }
+    return result + '~>';
+  },
+
+  decode(str) {
+    str = str.trim();
+    if (str.startsWith('<~')) str = str.slice(2);
+    if (str.endsWith('~>')) str = str.slice(0, -2);
+    str = str.replace(/\s/g, '');
+
+    const bytes = [];
+    let i = 0;
+    while (i < str.length) {
+      if (str[i] === 'z') {
+        bytes.push(0, 0, 0, 0);
+        i++;
+        continue;
+      }
+      const block = str.slice(i, i + 5);
+      const padLen = 5 - block.length;
+      const padded = block + 'u'.repeat(padLen);
+
+      let val = 0;
+      for (let j = 0; j < 5; j++) {
+        const c = padded.charCodeAt(j) - 33;
+        if (c < 0 || c > 84) throw new Error(`Invalid character '${padded[j]}' at position ${i + j}`);
+        val = val * 85 + c;
+      }
+      if (val > 0xFFFFFFFF) throw new Error('Overflow in block at position ' + i);
+
+      bytes.push((val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF);
+      if (padLen > 0) {
+        bytes.splice(bytes.length - padLen);
+      }
+      i += block.length;
+    }
+    return new Uint8Array(bytes);
+  }
+};
+
+// Z85 encoding
+const Z85_CHARS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#';
+const z85 = {
+  encode(bytes) {
+    const pad = bytes.length % 4;
+    const padded = new Uint8Array(bytes.length + (pad ? 4 - pad : 0));
+    padded.set(bytes);
+    let result = '';
+
+    for (let i = 0; i < padded.length; i += 4) {
+      let val = (padded[i] << 24 | padded[i+1] << 16 | padded[i+2] << 8 | padded[i+3]) >>> 0;
+      const chars = [];
+      for (let j = 4; j >= 0; j--) {
+        chars[j] = Z85_CHARS[val % 85];
+        val = Math.floor(val / 85);
+      }
+      result += chars.join('');
+    }
+    if (pad) result = result.slice(0, -(5 - pad - 1 || 5));
+    return result;
+  },
+
+  decode(str) {
+    str = str.replace(/\s/g, '');
+    const padLen = str.length % 5;
+    const padded = str + Z85_CHARS[84].repeat(padLen ? 5 - padLen : 0);
+    const bytes = [];
+
+    for (let i = 0; i < padded.length; i += 5) {
+      let val = 0;
+      for (let j = 0; j < 5; j++) {
+        const idx = Z85_CHARS.indexOf(padded[i + j]);
+        if (idx < 0) throw new Error(`Invalid Z85 character '${padded[i + j]}' at position ${i + j}`);
+        val = val * 85 + idx;
+      }
+      bytes.push((val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF);
+    }
+    if (padLen) {
+      const remove = (5 - padLen) > 0 ? Math.floor((5 - padLen) * 4 / 5) : 0;
+      if (remove > 0) bytes.splice(bytes.length - remove);
+    }
+    return new Uint8Array(bytes);
+  }
+};
+
+// RFC 1924
+const RFC_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~';
+const rfc1924 = {
+  encode(bytes) {
+    const pad = bytes.length % 4;
+    const padded = new Uint8Array(bytes.length + (pad ? 4 - pad : 0));
+    padded.set(bytes);
+    let result = '';
+
+    for (let i = 0; i < padded.length; i += 4) {
+      let val = (padded[i] << 24 | padded[i+1] << 16 | padded[i+2] << 8 | padded[i+3]) >>> 0;
+      const chars = [];
+      for (let j = 4; j >= 0; j--) {
+        chars[j] = RFC_CHARS[val % 85];
+        val = Math.floor(val / 85);
+      }
+      result += chars.join('');
+    }
+    if (pad) result = result.slice(0, -(5 - pad - 1 || 5));
+    return result;
+  },
+
+  decode(str) {
+    str = str.replace(/\s/g, '');
+    const padLen = str.length % 5;
+    const padded = str + RFC_CHARS[84].repeat(padLen ? 5 - padLen : 0);
+    const bytes = [];
+
+    for (let i = 0; i < padded.length; i += 5) {
+      let val = 0;
+      for (let j = 0; j < 5; j++) {
+        const idx = RFC_CHARS.indexOf(padded[i + j]);
+        if (idx < 0) throw new Error(`Invalid RFC 1924 character '${padded[i + j]}' at position ${i + j}`);
+        val = val * 85 + idx;
+      }
+      bytes.push((val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF);
+    }
+    if (padLen) {
+      const remove = (5 - padLen) > 0 ? Math.floor((5 - padLen) * 4 / 5) : 0;
+      if (remove > 0) bytes.splice(bytes.length - remove);
+    }
+    return new Uint8Array(bytes);
+  }
+};
+
+function getEncoder() {
+  const v = getVariant();
+  if (v === 'z85') return z85;
+  if (v === 'rfc1924') return rfc1924;
+  return adobe;
+}
+
+function encode() {
+  const input = $('inputText').value;
+  if (!input) return;
+  try {
+    const bytes = new TextEncoder().encode(input);
+    const enc = getEncoder();
+    const result = enc.encode(bytes);
+    $('outputText').value = result;
+    updateStats();
+    showStatus('✓ Encoded ' + bytes.length + ' bytes → ' + result.length + ' chars (' + Math.round(result.length / bytes.length * 100) + '% of original)', 'ok');
+  } catch (e) {
+    showStatus('✕ ' + e.message, 'err');
+  }
+}
+
+function decode() {
+  const input = $('outputText').value;
+  if (!input) return;
+  try {
+    const enc = getEncoder();
+    const bytes = enc.decode(input);
+    const text = new TextDecoder().decode(bytes);
+    $('inputText').value = text;
+    updateStats();
+    showStatus('✓ Decoded ' + input.replace(/\s/g, '').length + ' chars → ' + bytes.length + ' bytes', 'ok');
+  } catch (e) {
+    showStatus('✕ ' + e.message, 'err');
+  }
+}
+
+function updateStats() {
+  const input = $('inputText').value;
+  const output = $('outputText').value;
+  $('inputStats').textContent = input ? `${new TextEncoder().encode(input).length} bytes · ${input.length} chars` : '';
+  $('outputStats').textContent = output ? `${output.replace(/\s/g, '').length} chars` : '';
+}
+
+function showStatus(msg, type) {
+  const el = $('status');
+  el.textContent = msg;
+  el.className = 'status' + (type ? ' ' + type : '');
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function resetStatus() { showStatus('', ''); }
+
+function clearAll() {
+  $('inputText').value = '';
+  $('outputText').value = '';
+  $('inputStats').textContent = '';
+  $('outputStats').textContent = '';
+  resetStatus();
+}
+
+function loadSample() {
+  $('inputText').value = 'Hello, ASCII85! This encoding is used in PostScript and PDF files. It converts every 4 bytes into 5 printable ASCII characters.';
+  encode();
+}
+
+function cp(id) {
+  const text = $(id).value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+$('inputText').addEventListener('input', updateStats);
+$('outputText').addEventListener('input', updateStats);
+</script>
+</body>
+</html>

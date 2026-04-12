@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON ⇄ YAML Converter - Free Online Tool</title>
+<meta name="description" content="Convert between JSON and YAML formats instantly. Bidirectional conversion with syntax validation and formatting. No data sent to any server.">
+<meta name="keywords" content="json to yaml, yaml to json, json yaml converter, format converter, data format, free tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/json2yaml.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; align-items: stretch; }
+  .panel { display: flex; flex-direction: column; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+  .panel-header h2 { margin: 0; font-size: .95rem; }
+  .panel textarea { flex: 1; min-height: 400px; font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .arrows { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .5rem; padding: 0 .75rem; }
+  .arrows button { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; font-size: 1.1rem; line-height: 1; }
+  .arrows button:hover { background: var(--surface2); }
+  .status { font-size: .82rem; padding: 6px 10px; border-radius: var(--radius); margin-top: .5rem; }
+  .status.ok { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .status.err { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .indent-select { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; background: var(--bg); color: var(--text); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .arrows { flex-direction: row; padding: .5rem 0; }
+    .arrows button { transform: rotate(90deg); }
+    .panel textarea { min-height: 250px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">← All Tools</a>
+<h1>JSON ⇄ YAML Converter</h1>
+<p class="subtitle">Convert between JSON and YAML formats with live validation</p>
+
+<div class="card">
+<div class="panels">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📄 JSON</h2>
+      <div class="row" style="gap:.5rem;align-items:center">
+        <label style="font-size:.82rem;color:var(--muted)">Indent:</label>
+        <select id="jsonIndent" class="indent-select" onchange="convertToJson()">
+          <option value="2" selected>2 spaces</option>
+          <option value="4">4 spaces</option>
+          <option value="\t">Tab</option>
+        </select>
+        <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cp('jsonInput')">Copy</button>
+      </div>
+    </div>
+    <textarea id="jsonInput" placeholder='{"name": "example", "version": "1.0"}' oninput="clearStatus()"></textarea>
+    <div id="jsonStatus"></div>
+  </div>
+  <div class="arrows">
+    <button onclick="convertToYaml()" title="JSON → YAML">→</button>
+    <button onclick="convertToJson()" title="YAML → JSON">←</button>
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📝 YAML</h2>
+      <div class="row" style="gap:.5rem;align-items:center">
+        <label style="font-size:.82rem;color:var(--muted)">Indent:</label>
+        <select id="yamlIndent" class="indent-select" onchange="convertToYaml()">
+          <option value="2" selected>2 spaces</option>
+          <option value="4">4 spaces</option>
+        </select>
+        <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cp('yamlInput')">Copy</button>
+      </div>
+    </div>
+    <textarea id="yamlInput" placeholder="name: example&#10;version: '1.0'" oninput="clearStatus()"></textarea>
+    <div id="yamlStatus"></div>
+  </div>
+</div>
+</div>
+
+<div class="card">
+<h2>💡 Quick Examples</h2>
+<div class="row" style="flex-wrap:wrap;gap:.5rem">
+  <button class="btn-secondary" onclick="loadExample('simple')">Simple Object</button>
+  <button class="btn-secondary" onclick="loadExample('nested')">Nested Config</button>
+  <button class="btn-secondary" onclick="loadExample('array')">Array Data</button>
+  <button class="btn-secondary" onclick="loadExample('docker')">Docker Compose</button>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+// Minimal YAML parser and serializer (no external deps)
+const YAML = {
+  parse(str) {
+    str = str.replace(/\r\n/g, '\n').replace(/\t/g, '  ');
+    const lines = str.split('\n');
+    return this._parseLines(lines, 0, 0).value;
+  },
+
+  _parseLines(lines, start, baseIndent) {
+    const result = {};
+    let arr = null;
+    let i = start;
+    let isArray = false;
+
+    while (i < lines.length) {
+      const line = lines[i];
+      const trimmed = line.replace(/\s+$/, '');
+      if (trimmed === '' || trimmed.startsWith('#')) { i++; continue; }
+
+      const indent = line.search(/\S/);
+      if (indent < baseIndent) break;
+      if (indent > baseIndent && !isArray) break;
+
+      // Array item
+      if (trimmed.match(/^- /)) {
+        if (!isArray && arr === null) { isArray = true; arr = []; }
+        if (isArray) {
+          const itemContent = trimmed.slice(2);
+          if (itemContent.includes(':') && !itemContent.startsWith('{') && !itemContent.startsWith('"') && !itemContent.startsWith("'")) {
+            // Object in array
+            const subLines = [' '.repeat(indent + 2) + itemContent];
+            let j = i + 1;
+            while (j < lines.length) {
+              const nl = lines[j];
+              const nt = nl.replace(/\s+$/, '');
+              if (nt === '' || nt.startsWith('#')) { j++; continue; }
+              const ni = nl.search(/\S/);
+              if (ni <= indent) break;
+              if (ni === indent && nt.startsWith('- ')) break;
+              subLines.push(nl);
+              j++;
+            }
+            const sub = this._parseLines(subLines, 0, indent + 2);
+            arr.push(sub.value);
+            i = j;
+            continue;
+          } else {
+            arr.push(this._parseScalar(itemContent));
+            i++;
+            continue;
+          }
+        }
+      }
+
+      // Key: value
+      const match = trimmed.match(/^([^:]+?):\s*(.*)/);
+      if (match) {
+        const key = this._parseScalar(match[1].trim());
+        const val = match[2].trim();
+
+        if (val === '' || val === '|' || val === '>') {
+          // Block scalar or nested
+          let j = i + 1;
+          if (val === '|' || val === '>') {
+            // Multiline string
+            let blockLines = [];
+            while (j < lines.length) {
+              const nl = lines[j];
+              const nt = nl.replace(/\s+$/, '');
+              if (nt === '') { blockLines.push(''); j++; continue; }
+              const ni = nl.search(/\S/);
+              if (ni <= indent) break;
+              blockLines.push(nl.slice(indent + 2));
+              j++;
+            }
+            while (blockLines.length && blockLines[blockLines.length - 1] === '') blockLines.pop();
+            result[key] = val === '|' ? blockLines.join('\n') : blockLines.join(' ');
+            i = j;
+          } else {
+            // Could be nested object or array
+            if (j < lines.length) {
+              const nextLine = lines[j];
+              const nextTrimmed = nextLine.replace(/\s+$/, '');
+              if (nextTrimmed === '' || nextTrimmed.startsWith('#')) { result[key] = null; i = j; continue; }
+              const nextIndent = nextLine.search(/\S/);
+              if (nextIndent > indent) {
+                const sub = this._parseLines(lines, j, nextIndent);
+                result[key] = sub.isArr ? sub.value : sub.value;
+                i = sub.end;
+              } else {
+                result[key] = null;
+                i = j;
+              }
+            } else {
+              result[key] = null;
+              i = j;
+            }
+          }
+        } else {
+          result[key] = this._parseScalar(val);
+          i++;
+        }
+      } else {
+        i++;
+      }
+    }
+
+    if (isArray && arr) return { value: arr, end: i, isArr: true };
+    return { value: result, end: i, isArr: false };
+  },
+
+  _parseScalar(str) {
+    if (str === '' || str === 'null' || str === '~') return null;
+    if (str === 'true') return true;
+    if (str === 'false') return false;
+    if (/^-?\d+$/.test(str)) return parseInt(str, 10);
+    if (/^-?\d+\.\d+$/.test(str)) return parseFloat(str);
+    if (/^['"].*['"]$/.test(str)) return str.slice(1, -1);
+    // Inline array
+    if (str.startsWith('[') && str.endsWith(']')) {
+      try { return JSON.parse(str); } catch(e) {
+        return str.slice(1, -1).split(',').map(s => this._parseScalar(s.trim()));
+      }
+    }
+    // Inline object
+    if (str.startsWith('{') && str.endsWith('}')) {
+      try { return JSON.parse(str); } catch(e) { return str; }
+    }
+    return str;
+  },
+
+  stringify(obj, indent = 2, level = 0) {
+    if (obj === null || obj === undefined) return 'null\n';
+    if (typeof obj === 'string') {
+      if (obj.includes('\n')) {
+        const pad = ' '.repeat(indent * (level));
+        return '|\n' + obj.split('\n').map(l => pad + ' '.repeat(indent) + l).join('\n') + '\n';
+      }
+      if (/^[\d]|[:#{}[\],&*?|>!'"%@`]/.test(obj) || obj === 'true' || obj === 'false' || obj === 'null' || obj === '' || /^\s|\s$/.test(obj)) {
+        return "'" + obj.replace(/'/g, "''") + "'\n";
+      }
+      return obj + '\n';
+    }
+    if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj) + '\n';
+
+    const pad = ' '.repeat(indent * level);
+    const childPad = ' '.repeat(indent * (level + 1));
+
+    if (Array.isArray(obj)) {
+      if (obj.length === 0) return '[]\n';
+      let out = '\n';
+      for (const item of obj) {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          const keys = Object.keys(item);
+          if (keys.length > 0) {
+            const firstKey = keys[0];
+            const firstVal = this.stringify(item[firstKey], indent, level + 2).trimEnd();
+            out += pad + '- ' + firstKey + ': ' + (typeof item[firstKey] === 'object' && item[firstKey] !== null ? firstVal : firstVal) + '\n';
+            for (let k = 1; k < keys.length; k++) {
+              const v = this.stringify(item[keys[k]], indent, level + 2);
+              if (typeof item[keys[k]] === 'object' && item[keys[k]] !== null) {
+                out += childPad + keys[k] + ':' + (v.startsWith('\n') ? v : ' ' + v);
+              } else {
+                out += childPad + keys[k] + ': ' + v;
+              }
+            }
+          } else {
+            out += pad + '- {}\n';
+          }
+        } else if (Array.isArray(item)) {
+          const v = this.stringify(item, indent, level + 1);
+          out += pad + '-' + (v.startsWith('\n') ? v : ' ' + v);
+        } else {
+          out += pad + '- ' + this.stringify(item, indent, level + 1).trimStart();
+        }
+      }
+      return out;
+    }
+
+    if (typeof obj === 'object') {
+      const keys = Object.keys(obj);
+      if (keys.length === 0) return '{}\n';
+      let out = '\n';
+      for (const key of keys) {
+        const safeKey = /[:#{}[\],&*?|>!'"%@`\s]/.test(key) ? "'" + key.replace(/'/g, "''") + "'" : key;
+        const val = obj[key];
+        if (val && typeof val === 'object') {
+          const v = this.stringify(val, indent, level + 1);
+          out += pad + safeKey + ':' + (v.startsWith('\n') ? v : ' ' + v);
+        } else {
+          out += pad + safeKey + ': ' + this.stringify(val, indent, level + 1);
+        }
+      }
+      return out;
+    }
+
+    return String(obj) + '\n';
+  }
+};
+
+function convertToYaml() {
+  const jsonStr = $('jsonInput').value.trim();
+  if (!jsonStr) { showStatus('jsonStatus', ''); showStatus('yamlStatus', ''); return; }
+  try {
+    const obj = JSON.parse(jsonStr);
+    showStatus('jsonStatus', '✓ Valid JSON', 'ok');
+    const indent = parseInt($('yamlIndent').value) || 2;
+    let yaml = YAML.stringify(obj, indent, 0);
+    // Remove leading newline for top-level objects
+    if (yaml.startsWith('\n')) yaml = yaml.slice(1);
+    $('yamlInput').value = yaml.trimEnd();
+    showStatus('yamlStatus', '✓ Converted successfully', 'ok');
+  } catch (e) {
+    showStatus('jsonStatus', '✕ ' + e.message, 'err');
+    showStatus('yamlStatus', '', '');
+  }
+}
+
+function convertToJson() {
+  const yamlStr = $('yamlInput').value.trim();
+  if (!yamlStr) { showStatus('jsonStatus', ''); showStatus('yamlStatus', ''); return; }
+  try {
+    const obj = YAML.parse(yamlStr);
+    showStatus('yamlStatus', '✓ Valid YAML', 'ok');
+    const indentVal = $('jsonIndent').value;
+    const indent = indentVal === '\\t' ? '\t' : parseInt(indentVal);
+    $('jsonInput').value = JSON.stringify(obj, null, indent);
+    showStatus('jsonStatus', '✓ Converted successfully', 'ok');
+  } catch (e) {
+    showStatus('yamlStatus', '✕ ' + e.message, 'err');
+    showStatus('jsonStatus', '', '');
+  }
+}
+
+function showStatus(id, msg, type) {
+  const el = $(id);
+  el.textContent = msg;
+  el.className = 'status' + (type ? ' ' + type : '');
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function clearStatus() {
+  showStatus('jsonStatus', '');
+  showStatus('yamlStatus', '');
+}
+
+const examples = {
+  simple: {
+    json: { name: "my-app", version: "1.0.0", description: "A simple application", private: true }
+  },
+  nested: {
+    json: { server: { host: "0.0.0.0", port: 8080, ssl: { enabled: true, cert: "/etc/ssl/cert.pem", key: "/etc/ssl/key.pem" } }, database: { host: "localhost", port: 5432, name: "mydb", pool: { min: 2, max: 10 } }, logging: { level: "info", format: "json" } }
+  },
+  array: {
+    json: { users: [{ id: 1, name: "Alice", roles: ["admin", "user"] }, { id: 2, name: "Bob", roles: ["user"] }], total: 2 }
+  },
+  docker: {
+    json: { version: "3.8", services: { web: { image: "nginx:alpine", ports: ["80:80", "443:443"], volumes: ["./html:/usr/share/nginx/html:ro"], restart: "unless-stopped" }, db: { image: "postgres:15", environment: { POSTGRES_DB: "myapp", POSTGRES_USER: "admin", POSTGRES_PASSWORD: "secret" }, volumes: ["pgdata:/var/lib/postgresql/data"] } }, volumes: { pgdata: null } }
+  }
+};
+
+function loadExample(name) {
+  const ex = examples[name];
+  $('jsonInput').value = JSON.stringify(ex.json, null, 2);
+  convertToYaml();
+}
+
+function cp(id) {
+  const text = $(id).value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+</script>
+</body>
+</html>
