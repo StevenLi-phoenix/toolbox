@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base58 Encoder / Decoder - Free Online Tool</title>
+<meta name="description" content="Free online Base58 encoder and decoder. Supports Bitcoin, Ripple, and Flickr alphabets. Convert text, hex, or raw bytes to/from Base58. 100% client-side.">
+<meta name="keywords" content="base58, base58 encoder, base58 decoder, bitcoin base58, base58check, ripple base58">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/base58.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 120px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; background: var(--bg); color: var(--text); resize: vertical; }
+  .row-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .row-head h3 { font-size: .9rem; font-weight: 600; }
+  select, input[type=text] { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .85rem; background: var(--bg); color: var(--text); }
+  .opt-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .opt-row label { font-size: .82rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .status { font-size: .82rem; margin-top: 8px; padding: 6px 10px; border-radius: var(--radius); }
+  .status.ok { background: #ecfdf5; color: var(--success); }
+  .status.err { background: #fef2f2; color: var(--error); }
+  @media (max-width: 768px) { .layout { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">← All Tools</a>
+<h1>Base58 Encoder / Decoder</h1>
+<p class="subtitle">Encode and decode Base58 strings. Supports Bitcoin, Ripple, and Flickr alphabets — plus hex &amp; text I/O.</p>
+
+<div class="card" style="padding:16px">
+  <div class="opt-row">
+    <label>Alphabet
+      <select id="alpha">
+        <option value="btc">Bitcoin (default)</option>
+        <option value="ripple">Ripple</option>
+        <option value="flickr">Flickr</option>
+      </select>
+    </label>
+    <label>Input format
+      <select id="inFmt">
+        <option value="text">Text (UTF-8)</option>
+        <option value="hex">Hex</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="chk"> Base58Check (4-byte SHA-256² checksum)</label>
+  </div>
+</div>
+
+<div class="layout" style="margin-top:16px">
+  <div class="card" style="padding:16px">
+    <div class="row-head"><h3>Input</h3><button class="btn btn-secondary" onclick="clr('input')">Clear</button></div>
+    <textarea id="input" placeholder="Type text or paste a Base58 string..." oninput="go()"></textarea>
+    <div id="inStatus"></div>
+  </div>
+  <div class="card" style="padding:16px">
+    <div class="row-head"><h3>Output</h3>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="swap()">⇄ Swap</button>
+        <button class="btn" onclick="cp()">Copy</button>
+      </div>
+    </div>
+    <textarea id="output" readonly placeholder="Result will appear here..."></textarea>
+    <div id="outStatus"></div>
+  </div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <h3 style="font-size:.9rem;margin-bottom:8px">About Base58</h3>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.5">
+    Base58 is a binary-to-text encoding used in Bitcoin, IPFS, and other protocols. It omits visually ambiguous characters (0/O, I/l) making addresses easier to read and transcribe. Base58Check adds a 4-byte double-SHA-256 checksum to detect typos.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+const ALPHABETS = {
+  btc:    '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz',
+  ripple: 'rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz',
+  flickr: '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'
+};
+
+let mode='encode'; // or 'decode'
+
+function encode(bytes, alpha){
+  if(bytes.length===0) return '';
+  // count leading zeros
+  let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++;
+  // convert base 256 -> base 58
+  const size=Math.ceil(bytes.length*138/100)+1;
+  const b58=new Uint8Array(size);
+  let length=0;
+  for(let i=zeros;i<bytes.length;i++){
+    let carry=bytes[i];
+    let j=0;
+    for(let k=size-1;(carry!==0||j<length)&&k>=0;k--,j++){
+      carry+=256*b58[k];
+      b58[k]=carry%58;
+      carry=Math.floor(carry/58);
+    }
+    length=j;
+  }
+  let it=size-length;
+  while(it<size && b58[it]===0) it++;
+  let str=alpha[0].repeat(zeros);
+  for(;it<size;it++) str+=alpha[b58[it]];
+  return str;
+}
+
+function decode(str, alpha){
+  if(str.length===0) return new Uint8Array(0);
+  const map={};
+  for(let i=0;i<alpha.length;i++) map[alpha[i]]=i;
+  let zeros=0; while(zeros<str.length && str[zeros]===alpha[0]) zeros++;
+  const size=Math.ceil(str.length*733/1000)+1;
+  const b256=new Uint8Array(size);
+  let length=0;
+  for(let i=zeros;i<str.length;i++){
+    const ch=str[i];
+    if(!(ch in map)) throw new Error('Invalid character: '+ch);
+    let carry=map[ch];
+    let j=0;
+    for(let k=size-1;(carry!==0||j<length)&&k>=0;k--,j++){
+      carry+=58*b256[k];
+      b256[k]=carry%256;
+      carry=Math.floor(carry/256);
+    }
+    length=j;
+  }
+  let it=size-length;
+  while(it<size && b256[it]===0) it++;
+  const out=new Uint8Array(zeros+(size-it));
+  for(let i=zeros;i<out.length;i++) out[i]=b256[it++];
+  return out;
+}
+
+async function sha256(bytes){
+  const buf=await crypto.subtle.digest('SHA-256',bytes);
+  return new Uint8Array(buf);
+}
+
+function hexToBytes(h){
+  h=h.replace(/\s+/g,'').replace(/^0x/i,'');
+  if(h.length%2!==0) throw new Error('Hex must have even length');
+  if(!/^[0-9a-f]*$/i.test(h)) throw new Error('Invalid hex characters');
+  const b=new Uint8Array(h.length/2);
+  for(let i=0;i<b.length;i++) b[i]=parseInt(h.substr(i*2,2),16);
+  return b;
+}
+
+function bytesToHex(b){
+  return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+function setStatus(id,msg,ok){
+  const el=$(id);
+  if(!msg){el.innerHTML='';return;}
+  el.innerHTML=`<div class="status ${ok?'ok':'err'}">${msg}</div>`;
+}
+
+async function go(){
+  const input=$('input').value;
+  const alpha=ALPHABETS[$('alpha').value];
+  const inFmt=$('inFmt').value;
+  const check=$('chk').checked;
+  setStatus('inStatus','');setStatus('outStatus','');
+  if(!input){$('output').value='';return;}
+  try {
+    if(mode==='encode'){
+      let bytes;
+      if(inFmt==='hex') bytes=hexToBytes(input.trim());
+      else bytes=new TextEncoder().encode(input);
+      if(check){
+        const h1=await sha256(bytes);
+        const h2=await sha256(h1);
+        const combined=new Uint8Array(bytes.length+4);
+        combined.set(bytes,0);
+        combined.set(h2.slice(0,4),bytes.length);
+        bytes=combined;
+      }
+      $('output').value=encode(bytes,alpha);
+      setStatus('outStatus',`${bytes.length} bytes → ${$('output').value.length} chars`,true);
+    } else {
+      let bytes=decode(input.trim(),alpha);
+      if(check){
+        if(bytes.length<4) throw new Error('Too short for checksum');
+        const payload=bytes.slice(0,-4);
+        const csum=bytes.slice(-4);
+        const h1=await sha256(payload);
+        const h2=await sha256(h1);
+        for(let i=0;i<4;i++) if(h2[i]!==csum[i]) throw new Error('Checksum mismatch');
+        bytes=payload;
+        setStatus('inStatus','✓ Checksum valid',true);
+      }
+      if(inFmt==='hex') $('output').value=bytesToHex(bytes);
+      else {
+        try { $('output').value=new TextDecoder('utf-8',{fatal:false}).decode(bytes); }
+        catch(e){ $('output').value=bytesToHex(bytes); }
+      }
+      setStatus('outStatus',`${bytes.length} bytes decoded`,true);
+    }
+  } catch(e) {
+    $('output').value='';
+    setStatus('outStatus',e.message,false);
+  }
+}
+
+function swap(){
+  mode=mode==='encode'?'decode':'encode';
+  const i=$('input').value, o=$('output').value;
+  $('input').value=o; $('output').value=i;
+  go();
+}
+
+function clr(id){$(id).value='';go();}
+
+function cp(){
+  const v=$('output').value;
+  if(!v) return;
+  navigator.clipboard.writeText(v).then(()=>{
+    const t=$('toast');t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'),1500);
+  });
+}
+
+document.querySelectorAll('select,input[type=checkbox]').forEach(el=>el.addEventListener('change',go));
+$('input').value='Hello, World!';
+go();
+</script>
+</body>
+</html>

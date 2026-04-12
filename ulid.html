@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ULID Generator & Decoder - Free Online Tool</title>
+<meta name="description" content="Generate and decode ULIDs (Universally Unique Lexicographically Sortable Identifiers). Bulk generation, timestamp extraction, and conversion to/from UUIDs. 100% client-side.">
+<meta name="keywords" content="ulid, ulid generator, ulid decoder, sortable id, universally unique id, ulid to uuid">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ulid.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .ulid-out { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-family: var(--mono); font-size: 1.1rem; word-break: break-all; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .ulid-out .id-split { letter-spacing: 0.5px; }
+  .ulid-out .id-split .ts { color: var(--success); font-weight: 700; }
+  .ulid-out .id-split .rnd { color: var(--text); }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .controls input[type=number], .controls input[type=datetime-local] { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .85rem; background: var(--bg); color: var(--text); }
+  .bulk { width: 100%; min-height: 180px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .82rem; background: var(--bg); color: var(--text); resize: vertical; }
+  .decode-input { width: 100%; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .9rem; background: var(--bg); color: var(--text); }
+  .info-grid { display: grid; grid-template-columns: 140px 1fr; gap: 8px 16px; margin-top: 12px; font-size: .85rem; }
+  .info-grid .k { color: var(--muted); font-weight: 600; }
+  .info-grid .v { font-family: var(--mono); word-break: break-all; }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; }
+  .meta { color: var(--muted); font-size: .8rem; }
+  @media (max-width: 768px) { .info-grid { grid-template-columns: 1fr; gap: 2px 0; } .info-grid .k { margin-top: 6px; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">← All Tools</a>
+<h1>ULID Generator &amp; Decoder</h1>
+<p class="subtitle">Generate Universally Unique Lexicographically Sortable Identifiers. 26-char Crockford Base32, 48-bit millisecond timestamp + 80 bits of randomness. Sortable like an incremented counter.</p>
+
+<div class="card" style="padding:20px">
+  <h2 style="font-size:1rem;margin-bottom:12px">Generate</h2>
+  <div class="ulid-out">
+    <span id="main" class="id-split"></span>
+    <button class="btn" onclick="cp($('main').textContent)">Copy</button>
+  </div>
+  <div class="meta" id="mainMeta" style="margin-top:8px"></div>
+  <div style="margin-top:14px" class="controls">
+    <button class="btn" onclick="newOne()">Generate New</button>
+    <label style="font-size:.82rem;color:var(--muted)">Timestamp override
+      <input type="datetime-local" id="tsOverride" step="1" oninput="fromOverride()">
+    </label>
+    <button class="btn btn-secondary" onclick="$('tsOverride').value='';newOne()">Use now</button>
+  </div>
+</div>
+
+<div class="card" style="padding:20px;margin-top:16px">
+  <h2 style="font-size:1rem;margin-bottom:12px">Bulk Generate</h2>
+  <div class="controls" style="margin-bottom:10px">
+    <label style="font-size:.82rem;color:var(--muted)">Count
+      <input type="number" id="bulkCount" value="20" min="1" max="10000">
+    </label>
+    <label style="font-size:.82rem;color:var(--muted)"><input type="checkbox" id="monoChk" checked> Monotonic within same ms</label>
+    <button class="btn" onclick="bulk()">Generate</button>
+    <button class="btn btn-secondary" onclick="cp($('bulkOut').value)">Copy All</button>
+  </div>
+  <textarea id="bulkOut" class="bulk" readonly></textarea>
+</div>
+
+<div class="card" style="padding:20px;margin-top:16px">
+  <h2 style="font-size:1rem;margin-bottom:12px">Decode</h2>
+  <input id="decodeIn" class="decode-input" placeholder="Paste a ULID (26 chars) or UUID..." oninput="decode()">
+  <div id="decodeErr" class="err"></div>
+  <div id="decodeOut"></div>
+</div>
+
+<div class="card" style="padding:20px;margin-top:16px">
+  <h3 style="font-size:.9rem;margin-bottom:8px">ULID Spec</h3>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    Format: <code>01ARZ3NDEKTSV4RRFFQ69G5FAV</code> — 26 characters in Crockford's Base32 alphabet (no I, L, O, U). First 10 chars encode a 48-bit Unix millisecond timestamp; last 16 chars encode 80 random bits. Max time: 10889 AD. Sortable lexicographically by creation time. Equivalent to a 128-bit integer, convertible to UUID.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+const ALPHA='0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const DEC={};for(let i=0;i<ALPHA.length;i++) DEC[ALPHA[i]]=i;
+
+function encodeTime(ms,len){
+  if(ms<0||ms>=2**48) throw new Error('Time out of range');
+  let out='';
+  for(let i=len-1;i>=0;i--){
+    out=ALPHA[ms%32]+out;
+    ms=Math.floor(ms/32);
+  }
+  return out;
+}
+
+function encodeRandom(len){
+  const bytes=new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  let out='';
+  for(let i=0;i<len;i++) out+=ALPHA[bytes[i]&0x1f];
+  return out;
+}
+
+function genUlid(ms){
+  if(ms===undefined) ms=Date.now();
+  return encodeTime(ms,10)+encodeRandom(16);
+}
+
+// Monotonic generator
+let lastMs=0, lastRand=null;
+function genMonotonic(){
+  const ms=Date.now();
+  if(ms===lastMs && lastRand){
+    // increment last random by 1
+    const arr=[...lastRand];
+    for(let i=arr.length-1;i>=0;i--){
+      let v=DEC[arr[i]];
+      if(v<31){ arr[i]=ALPHA[v+1]; lastRand=arr.join(''); return encodeTime(ms,10)+lastRand; }
+      arr[i]=ALPHA[0];
+    }
+    // overflow: regenerate
+    lastRand=encodeRandom(16);
+    return encodeTime(ms,10)+lastRand;
+  }
+  lastMs=ms;
+  lastRand=encodeRandom(16);
+  return encodeTime(ms,10)+lastRand;
+}
+
+function decodeTime(str){
+  if(str.length!==10) throw new Error('Time part must be 10 chars');
+  let ms=0;
+  for(let i=0;i<10;i++){
+    const v=DEC[str[i]];
+    if(v===undefined) throw new Error('Invalid char: '+str[i]);
+    ms=ms*32+v;
+  }
+  return ms;
+}
+
+function ulidToUuid(ulid){
+  if(ulid.length!==26) throw new Error('Must be 26 chars');
+  // Convert 26 chars to 128-bit big integer, then to UUID format
+  let hex='';
+  // each char = 5 bits. total 130 bits. first char only uses 2 bits (top bits must be 0).
+  // Use bit buffer
+  let bits='';
+  for(let i=0;i<26;i++){
+    const v=DEC[ulid[i].toUpperCase()];
+    if(v===undefined) throw new Error('Invalid char: '+ulid[i]);
+    bits+=v.toString(2).padStart(5,'0');
+  }
+  // drop first 2 bits
+  bits=bits.slice(2);
+  if(bits.length!==128) throw new Error('Bad length');
+  for(let i=0;i<bits.length;i+=4){
+    hex+=parseInt(bits.substr(i,4),2).toString(16);
+  }
+  return `${hex.substr(0,8)}-${hex.substr(8,4)}-${hex.substr(12,4)}-${hex.substr(16,4)}-${hex.substr(20,12)}`;
+}
+
+function uuidToUlid(uuid){
+  const hex=uuid.replace(/-/g,'').toLowerCase();
+  if(hex.length!==32||!/^[0-9a-f]+$/.test(hex)) throw new Error('Invalid UUID');
+  let bits='';
+  for(const c of hex) bits+=parseInt(c,16).toString(2).padStart(4,'0');
+  bits='00'+bits; // pad to 130
+  let out='';
+  for(let i=0;i<130;i+=5){
+    out+=ALPHA[parseInt(bits.substr(i,5),2)];
+  }
+  return out;
+}
+
+function renderMain(ulid){
+  $('main').innerHTML=`<span class="ts">${ulid.slice(0,10)}</span><span class="rnd">${ulid.slice(10)}</span>`;
+  const ms=decodeTime(ulid.slice(0,10));
+  $('mainMeta').textContent=`Timestamp: ${new Date(ms).toISOString()} (${ms} ms)`;
+}
+
+function newOne(){
+  const override=$('tsOverride').value;
+  let ms;
+  if(override){
+    ms=new Date(override).getTime();
+    if(!Number.isFinite(ms)){ms=Date.now();}
+  } else ms=Date.now();
+  renderMain(genUlid(ms));
+}
+
+function fromOverride(){ newOne(); }
+
+function bulk(){
+  const n=Math.min(10000,Math.max(1,parseInt($('bulkCount').value)||20));
+  const mono=$('monoChk').checked;
+  const lines=[];
+  lastMs=0;lastRand=null;
+  for(let i=0;i<n;i++){
+    lines.push(mono?genMonotonic():genUlid());
+  }
+  $('bulkOut').value=lines.join('\n');
+}
+
+function decode(){
+  const v=$('decodeIn').value.trim().toUpperCase();
+  $('decodeErr').textContent='';
+  $('decodeOut').innerHTML='';
+  if(!v) return;
+  try {
+    let ulid;
+    if(v.includes('-')||v.length===32){
+      // UUID
+      ulid=uuidToUlid(v);
+    } else if(v.length===26){
+      ulid=v;
+    } else {
+      throw new Error('Must be a 26-char ULID or UUID');
+    }
+    const ms=decodeTime(ulid.slice(0,10));
+    const uuid=ulidToUuid(ulid);
+    const date=new Date(ms);
+    const rel=Math.round((ms-Date.now())/1000);
+    const relStr=rel===0?'just now':(rel<0?`${-rel}s ago`:`in ${rel}s`);
+    $('decodeOut').innerHTML=`<div class="info-grid">
+      <div class="k">ULID</div><div class="v">${ulid}</div>
+      <div class="k">Time part</div><div class="v">${ulid.slice(0,10)}</div>
+      <div class="k">Random part</div><div class="v">${ulid.slice(10)}</div>
+      <div class="k">Timestamp (ms)</div><div class="v">${ms}</div>
+      <div class="k">ISO 8601</div><div class="v">${date.toISOString()}</div>
+      <div class="k">Local</div><div class="v">${date.toLocaleString()} (${relStr})</div>
+      <div class="k">UUID</div><div class="v">${uuid}</div>
+    </div>`;
+  } catch(e) {
+    $('decodeErr').textContent=e.message;
+  }
+}
+
+function cp(v){
+  if(!v) return;
+  navigator.clipboard.writeText(v).then(()=>{
+    const t=$('toast');t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'),1500);
+  });
+}
+
+newOne();
+bulk();
+</script>
+</body>
+</html>
