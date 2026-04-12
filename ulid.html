@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ULID Generator & Decoder — Lexicographic IDs</title>
+<meta name="description" content="Generate and decode ULIDs (Universally Unique Lexicographically Sortable Identifiers). See timestamp, randomness, monotonic mode. 100% client-side.">
+<meta name="keywords" content="ulid, universally unique, lexicographically sortable, identifier, generator, decoder, crockford base32">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ulid.html">
+<meta property="og:title" content="ULID Generator & Decoder">
+<meta property="og:description" content="Generate and decode ULIDs with timestamp & randomness inspection.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/ulid.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .ulid-list { display: grid; gap: 6px; margin-top: 10px; max-height: 340px; overflow: auto; }
+  .ulid-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .82rem; background: var(--surface2); }
+  .ulid-row .id { flex: 1; word-break: break-all; }
+  .ulid-row .ts-part { color: var(--muted); }
+  .ulid-row .rand-part { color: var(--text); }
+  .ulid-row .icon-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 3px 8px; border-radius: 4px; cursor: pointer; font-family: var(--mono); font-size: .75rem; }
+  .ulid-row .icon-btn:hover { color: var(--text); border-color: var(--text); }
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .decode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 12px; }
+  .decode-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; }
+  .decode-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
+  .decode-tile strong { font-family: var(--mono); word-break: break-all; }
+  input[type=text], input[type=number] { font-family: var(--mono); }
+  @media (max-width: 768px) { .opts { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>ULID Generator & Decoder</h1>
+  <p class="subtitle">Generate and inspect ULIDs — 128-bit identifiers combining a 48-bit timestamp with 80 bits of randomness, encoded as 26 characters of Crockford Base32.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:10px;">Generate ULIDs</h2>
+    <div class="opts">
+      <label>Count:
+        <input type="number" id="count" value="5" min="1" max="200" style="width:80px;">
+      </label>
+      <label><input type="checkbox" id="monotonic"> Monotonic (sortable within same ms)</label>
+      <button class="btn btn-primary" onclick="generate()">Generate</button>
+      <button class="btn btn-secondary" onclick="copyAll()">Copy all</button>
+    </div>
+    <div class="ulid-list" id="list"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:10px;">Decode a ULID</h2>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="decodeInput" placeholder="01H8XYZ456789ABCDEFGHJKMNP" style="flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);">
+      <button class="btn" onclick="decode()">Decode</button>
+    </div>
+    <div class="decode-grid" id="decoded"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About ULID</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      A <strong>ULID</strong> is a 128-bit identifier defined as 48 bits of Unix time in milliseconds followed by 80 bits of cryptographic randomness, encoded using Crockford Base32 (exclude I, L, O, U). ULIDs are lexicographically sortable, URL-safe, and case-insensitive. <strong>Monotonic mode</strong> ensures that IDs generated within the same millisecond sort in order by incrementing the random component instead of regenerating it.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const ALPHA = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const DECODE = {};
+for (let i = 0; i < ALPHA.length; i++) DECODE[ALPHA[i]] = i;
+
+function encodeTime(ms, len) {
+  let out = '';
+  for (let i = len - 1; i >= 0; i--) {
+    const mod = ms % 32;
+    out = ALPHA[mod] + out;
+    ms = (ms - mod) / 32;
+  }
+  return out;
+}
+function encodeRandom(bytes) {
+  // 80 bits = 10 bytes → 16 base32 chars
+  // convert big-endian bytes to base32
+  let bits = 0, value = 0, out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    value = (value << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) { bits -= 5; out += ALPHA[(value >>> bits) & 31]; }
+  }
+  if (bits > 0) out += ALPHA[(value << (5 - bits)) & 31];
+  return out;
+}
+
+let lastTime = 0;
+let lastRand = null;
+
+function incrementRand(arr) {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i] === 0xff) arr[i] = 0;
+    else { arr[i]++; return true; }
+  }
+  return false;
+}
+
+function generateOne(monotonic) {
+  const now = Date.now();
+  const timePart = encodeTime(now, 10);
+  let randBytes;
+  if (monotonic && now === lastTime && lastRand) {
+    randBytes = lastRand.slice();
+    if (!incrementRand(randBytes)) throw new Error('Monotonic overflow');
+  } else {
+    randBytes = new Uint8Array(10);
+    crypto.getRandomValues(randBytes);
+  }
+  lastTime = now;
+  lastRand = randBytes;
+  return timePart + encodeRandom(randBytes);
+}
+
+function generate() {
+  const n = Math.min(200, Math.max(1, parseInt(document.getElementById('count').value) || 1));
+  const mono = document.getElementById('monotonic').checked;
+  lastTime = 0; lastRand = null;
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const id = generateOne(mono);
+    const row = document.createElement('div');
+    row.className = 'ulid-row';
+    row.innerHTML = `
+      <div class="id"><span class="ts-part">${id.slice(0,10)}</span><span class="rand-part">${id.slice(10)}</span></div>
+      <button class="icon-btn" title="Copy">Copy</button>
+    `;
+    row.querySelector('button').addEventListener('click', () => copyText(id));
+    list.appendChild(row);
+  }
+}
+
+function copyAll() {
+  const ids = [...document.querySelectorAll('.ulid-row .id')].map(el => el.textContent).join('\n');
+  if (ids) copyText(ids);
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function decodeTime(s) {
+  let time = 0;
+  for (let i = 0; i < s.length; i++) {
+    const v = DECODE[s[i]];
+    if (v === undefined) throw new Error('Invalid character "' + s[i] + '"');
+    time = time * 32 + v;
+  }
+  return time;
+}
+
+function decodeRandomBytes(s) {
+  // 16 base32 chars → 10 bytes (80 bits)
+  let bits = 0, value = 0;
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    const v = DECODE[s[i]];
+    if (v === undefined) throw new Error('Invalid character "' + s[i] + '"');
+    value = (value << 5) | v;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; out.push((value >>> bits) & 0xff); }
+  }
+  return new Uint8Array(out);
+}
+
+function decode() {
+  const el = document.getElementById('decoded');
+  const statusEl = document.getElementById('status');
+  statusEl.className = 'status';
+  el.innerHTML = '';
+  let input = document.getElementById('decodeInput').value.trim().toUpperCase();
+  if (!input) return;
+  // Crockford friendly: replace I,L→1 ; O→0
+  input = input.replace(/O/g, '0').replace(/[IL]/g, '1').replace(/-/g, '');
+  if (input.length !== 26) {
+    statusEl.className = 'status show error';
+    statusEl.textContent = 'ULID must be 26 characters (got ' + input.length + ')';
+    return;
+  }
+  try {
+    const timePart = input.slice(0, 10);
+    const randPart = input.slice(10);
+    const time = decodeTime(timePart);
+    if (time > 0xffffffffffff) throw new Error('Timestamp overflow (> 48 bits)');
+    const rand = decodeRandomBytes(randPart);
+    const date = new Date(time);
+    const hex = [...rand].map(b => b.toString(16).padStart(2, '0')).join('');
+    el.innerHTML = `
+      <div class="decode-tile"><span>Timestamp (ms)</span><strong>${time}</strong></div>
+      <div class="decode-tile"><span>Date (UTC)</span><strong>${date.toISOString()}</strong></div>
+      <div class="decode-tile"><span>Date (local)</span><strong>${date.toLocaleString()}</strong></div>
+      <div class="decode-tile"><span>Time component</span><strong>${timePart}</strong></div>
+      <div class="decode-tile"><span>Random component</span><strong>${randPart}</strong></div>
+      <div class="decode-tile"><span>Random (hex)</span><strong>${hex}</strong></div>
+    `;
+  } catch (e) {
+    statusEl.className = 'status show error';
+    statusEl.textContent = 'Decode error: ' + e.message;
+  }
+}
+
+document.getElementById('decodeInput').addEventListener('keydown', e => { if (e.key === 'Enter') decode(); });
+generate();
+</script>
+</body>
+</html>

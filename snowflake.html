@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snowflake ID Decoder — Twitter, Discord, Instagram</title>
+<meta name="description" content="Decode and generate Snowflake IDs from Twitter, Discord, Instagram, Sony. Extract timestamp, worker, and sequence bits. 100% client-side.">
+<meta name="keywords" content="snowflake, twitter, discord, instagram, id, decoder, generator, timestamp">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/snowflake.html">
+<meta property="og:title" content="Snowflake ID Decoder">
+<meta property="og:description" content="Decode Twitter, Discord &amp; Instagram Snowflake IDs. Extract timestamp, worker, and sequence.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/snowflake.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .opts select, .opts input[type=text], .opts input[type=number] { padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-family: var(--mono); }
+  .decode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+  .decode-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; }
+  .decode-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
+  .decode-tile strong { font-family: var(--mono); word-break: break-all; }
+  .bits { font-family: var(--mono); font-size: .78rem; margin-top: 12px; padding: 10px; background: var(--surface2); border-radius: var(--radius); overflow-x: auto; white-space: nowrap; }
+  .bits .t { color: #fbbf24; }
+  .bits .w { color: #60a5fa; }
+  .bits .s { color: #34d399; }
+  .bits .sign { color: var(--muted); }
+  .legend { display: flex; gap: 14px; font-size: .75rem; margin-top: 8px; flex-wrap: wrap; }
+  .legend span::before { content: '■ '; }
+  .legend .t { color: #fbbf24; }
+  .legend .w { color: #60a5fa; }
+  .legend .s { color: #34d399; }
+  .input-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .input-row input { flex: 1; min-width: 250px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-family: var(--mono); font-size: .9rem; }
+  @media (max-width: 768px) { .opts { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Snowflake ID Decoder</h1>
+  <p class="subtitle">Decode and generate Snowflake IDs — 64-bit identifiers used by Twitter, Discord, Instagram, Sony, and more. Extract timestamp, worker, and sequence components.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:10px;">Decode Snowflake ID</h2>
+    <div class="opts">
+      <label>Preset:
+        <select id="preset">
+          <option value="twitter">Twitter (1288834974657)</option>
+          <option value="discord">Discord (1420070400000)</option>
+          <option value="instagram">Instagram (1314220021721)</option>
+          <option value="sony">Sony (1420070400000)</option>
+          <option value="custom">Custom epoch…</option>
+        </select>
+      </label>
+      <label>Epoch (ms):
+        <input type="number" id="epoch" value="1288834974657" style="width:190px;">
+      </label>
+    </div>
+    <div class="input-row">
+      <input type="text" id="idInput" placeholder="Enter a 64-bit Snowflake ID (e.g. 1541815603606036480)">
+      <button class="btn" onclick="decode()">Decode</button>
+      <button class="btn btn-secondary" onclick="sample()">Sample</button>
+    </div>
+    <div class="decode-grid" id="decoded"></div>
+    <div class="legend"><span class="t">sign+timestamp (42 bit)</span><span class="w">worker (10 bit)</span><span class="s">sequence (12 bit)</span></div>
+    <div class="bits" id="bits"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:10px;">Generate Snowflake from date</h2>
+    <div class="opts">
+      <label>Date (UTC):
+        <input type="text" id="genDate" placeholder="2024-01-01T00:00:00Z">
+      </label>
+      <label>Worker:
+        <input type="number" id="genWorker" value="0" min="0" max="1023" style="width:100px;">
+      </label>
+      <label>Sequence:
+        <input type="number" id="genSeq" value="0" min="0" max="4095" style="width:100px;">
+      </label>
+      <button class="btn btn-primary" onclick="generate()">Generate</button>
+    </div>
+    <div class="decode-grid" id="generated"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About Snowflake IDs</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      A <strong>Snowflake ID</strong> is a 64-bit integer first used by Twitter for distributed unique-ID generation. The layout (most significant bit → least): 1 unused sign bit, 41 bits of milliseconds since a custom epoch, 10 bits of worker/machine ID (5 datacenter + 5 worker for Twitter, or a combined ID), and 12 bits of a per-millisecond sequence. Because time is in the high bits, IDs are roughly monotonic. Different services use different epochs — <strong>Twitter</strong>: 2010-11-04, <strong>Discord</strong>: 2015-01-01, <strong>Instagram</strong>: 2011-08-24.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const PRESETS = {
+  twitter:   { epoch: 1288834974657n, label: 'Twitter' },
+  discord:   { epoch: 1420070400000n, label: 'Discord' },
+  instagram: { epoch: 1314220021721n, label: 'Instagram' },
+  sony:      { epoch: 1420070400000n, label: 'Sony' },
+};
+
+const presetSel = document.getElementById('preset');
+const epochInp = document.getElementById('epoch');
+
+presetSel.addEventListener('change', () => {
+  if (presetSel.value !== 'custom') {
+    epochInp.value = PRESETS[presetSel.value].epoch.toString();
+  }
+});
+epochInp.addEventListener('input', () => { presetSel.value = 'custom'; });
+
+function getEpoch() {
+  try { return BigInt(epochInp.value || '0'); }
+  catch { return 0n; }
+}
+
+function decode() {
+  const el = document.getElementById('decoded');
+  const bitsEl = document.getElementById('bits');
+  const status = document.getElementById('status');
+  status.className = 'status';
+  el.innerHTML = ''; bitsEl.innerHTML = '';
+  const raw = document.getElementById('idInput').value.trim();
+  if (!raw) return;
+  let id;
+  try { id = BigInt(raw); }
+  catch { status.className = 'status show error'; status.textContent = 'Not a valid integer'; return; }
+  if (id < 0n) { status.className = 'status show error'; status.textContent = 'Snowflake must be non-negative'; return; }
+
+  const epoch = getEpoch();
+  const timestamp = (id >> 22n) + epoch;
+  const worker = (id >> 12n) & 0x3ffn;
+  const sequence = id & 0xfffn;
+  const dc = (worker >> 5n) & 0x1fn;
+  const wk = worker & 0x1fn;
+  const date = new Date(Number(timestamp));
+  const binary = id.toString(2).padStart(64, '0');
+  const offsetMs = (id >> 22n).toString();
+
+  el.innerHTML = `
+    <div class="decode-tile"><span>Date (UTC)</span><strong>${isFinite(date) ? date.toISOString() : 'Invalid'}</strong></div>
+    <div class="decode-tile"><span>Date (local)</span><strong>${isFinite(date) ? date.toLocaleString() : 'Invalid'}</strong></div>
+    <div class="decode-tile"><span>Unix ms</span><strong>${timestamp}</strong></div>
+    <div class="decode-tile"><span>Offset from epoch (ms)</span><strong>${offsetMs}</strong></div>
+    <div class="decode-tile"><span>Worker ID (10 bit)</span><strong>${worker}</strong></div>
+    <div class="decode-tile"><span>Datacenter / Worker (5+5)</span><strong>${dc} / ${wk}</strong></div>
+    <div class="decode-tile"><span>Sequence (12 bit)</span><strong>${sequence}</strong></div>
+    <div class="decode-tile"><span>Binary length</span><strong>${id.toString(2).length} bit</strong></div>
+  `;
+
+  bitsEl.innerHTML =
+    `<span class="sign">${binary[0]}</span>` +
+    `<span class="t">${binary.slice(1, 42)}</span> ` +
+    `<span class="w">${binary.slice(42, 52)}</span> ` +
+    `<span class="s">${binary.slice(52, 64)}</span>`;
+}
+
+function generate() {
+  const el = document.getElementById('generated');
+  el.innerHTML = '';
+  const dateStr = document.getElementById('genDate').value.trim() || new Date().toISOString();
+  const worker = BigInt(document.getElementById('genWorker').value || '0') & 0x3ffn;
+  const seq = BigInt(document.getElementById('genSeq').value || '0') & 0xfffn;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) {
+    el.innerHTML = `<div class="decode-tile"><span>Error</span><strong>Invalid date</strong></div>`;
+    return;
+  }
+  const epoch = getEpoch();
+  const ms = BigInt(d.getTime()) - epoch;
+  if (ms < 0n) {
+    el.innerHTML = `<div class="decode-tile"><span>Error</span><strong>Date is before epoch</strong></div>`;
+    return;
+  }
+  const id = (ms << 22n) | (worker << 12n) | seq;
+  el.innerHTML = `
+    <div class="decode-tile"><span>Snowflake ID</span><strong>${id}</strong></div>
+    <div class="decode-tile"><span>Hex</span><strong>0x${id.toString(16)}</strong></div>
+    <div class="decode-tile"><span>Binary (64 bit)</span><strong>${id.toString(2).padStart(64, '0')}</strong></div>
+  `;
+}
+
+function sample() {
+  const p = presetSel.value;
+  const samples = {
+    twitter:   '1541815603606036480',
+    discord:   '175928847299117063',
+    instagram: '2852537749154908224',
+    sony:      '175928847299117063',
+    custom:    '1541815603606036480',
+  };
+  document.getElementById('idInput').value = samples[p] || samples.twitter;
+  decode();
+}
+
+document.getElementById('idInput').addEventListener('keydown', e => { if (e.key === 'Enter') decode(); });
+document.getElementById('genDate').value = new Date().toISOString();
+</script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base32 Encoder / Decoder — RFC 4648, Hex, Crockford</title>
+<meta name="description" content="Encode and decode Base32 strings in RFC 4648, Base32Hex, and Crockford variants. 100% client-side — your data never leaves your browser.">
+<meta name="keywords" content="base32, rfc4648, base32hex, crockford, encoder, decoder, totp">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/base32.html">
+<meta property="og:title" content="Base32 Encoder / Decoder">
+<meta property="og:description" content="Encode and decode Base32 with RFC 4648, Hex, and Crockford alphabets.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/base32.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .io { display: grid; gap: 12px; }
+  .io textarea { min-height: 140px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .opts code { font-family: var(--mono); font-size: .75rem; color: var(--muted); }
+  .arrow { text-align: center; font-size: 1.4rem; color: var(--muted); padding: 4px 0; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
+  .meta-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; }
+  .meta-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 2px; }
+  .meta-tile strong { font-family: var(--mono); word-break: break-all; }
+  @media (max-width: 768px) { .opts { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Base32 Encoder / Decoder</h1>
+  <p class="subtitle">Encode and decode Base32 strings. Supports RFC 4648 (standard &amp; TOTP), Base32Hex, and Crockford's Base32.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="opts">
+      <label>Variant:
+        <select id="variant">
+          <option value="rfc4648">RFC 4648 (standard)</option>
+          <option value="rfc4648hex">Base32Hex</option>
+          <option value="crockford">Crockford</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="pad" checked> Add <code>=</code> padding</label>
+      <label>Input:
+        <select id="mode">
+          <option value="utf8">UTF-8 text</option>
+          <option value="hex">Hex bytes</option>
+        </select>
+      </label>
+    </div>
+    <div class="opts"><code id="alpha-display"></code></div>
+
+    <div class="io">
+      <div>
+        <label for="input">Input</label>
+        <textarea id="input" placeholder="Enter text, hex, or Base32 string..."></textarea>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="encode()">Encode →</button>
+          <button class="btn" onclick="decode()">← Decode</button>
+          <button class="btn btn-secondary" onclick="swapIO()">Swap</button>
+          <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+          <button class="btn btn-secondary" onclick="clearIO()">Clear</button>
+        </div>
+      </div>
+      <div class="arrow">⇅</div>
+      <div>
+        <label for="output">Output</label>
+        <textarea id="output" placeholder="Result will appear here..."></textarea>
+        <div class="btn-row">
+          <button class="btn" onclick="copyOutput()">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta-grid" id="meta"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About Base32</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      Base32 encodes binary data as ASCII using a 32-character alphabet. <strong>RFC 4648</strong> (<code>A-Z2-7</code>) is the standard used by TOTP / 2FA secrets. <strong>Base32Hex</strong> (<code>0-9A-V</code>) preserves byte ordering under sort. <strong>Crockford</strong> (<code>0-9A-Z</code> excluding I L O U) is human-friendly and case-insensitive. Each 5 bytes produces 8 characters with <code>=</code> padding for short blocks.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const ALPHABETS = {
+  rfc4648:    'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567',
+  rfc4648hex: '0123456789ABCDEFGHIJKLMNOPQRSTUV',
+  crockford:  '0123456789ABCDEFGHJKMNPQRSTVWXYZ',
+};
+
+function getAlphabet() { return ALPHABETS[document.getElementById('variant').value]; }
+
+function base32Encode(bytes, alpha, pad) {
+  if (bytes.length === 0) return '';
+  let bits = 0, value = 0, out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    value = (value << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out += alpha[(value >>> bits) & 31];
+    }
+  }
+  if (bits > 0) out += alpha[(value << (5 - bits)) & 31];
+  if (pad) while (out.length % 8) out += '=';
+  return out;
+}
+
+function base32Decode(str, variant) {
+  let alpha = ALPHABETS[variant];
+  let input = str.replace(/=+$/g, '');
+  if (variant === 'crockford') {
+    input = input.toUpperCase().replace(/-/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
+  } else {
+    input = input.toUpperCase();
+  }
+  const map = {};
+  for (let i = 0; i < alpha.length; i++) map[alpha[i]] = i;
+  const out = [];
+  let bits = 0, value = 0;
+  for (let i = 0; i < input.length; i++) {
+    const c = input[i];
+    if (c === ' ' || c === '\n' || c === '\r' || c === '\t') continue;
+    const v = map[c];
+    if (v === undefined) throw new Error('Invalid character "' + c + '" at position ' + i);
+    value = (value << 5) | v;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push((value >>> bits) & 0xff);
+    }
+  }
+  return new Uint8Array(out);
+}
+
+function hexToBytes(hex) {
+  hex = hex.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (hex.length % 2 !== 0) throw new Error('Hex string must have even length');
+  if (!/^[0-9a-fA-F]*$/.test(hex)) throw new Error('Invalid hex characters');
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+function bytesToHex(bytes) {
+  return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() { document.getElementById('status').className = 'status'; }
+
+function updateAlphaDisplay() {
+  document.getElementById('alpha-display').textContent = 'Alphabet: ' + getAlphabet();
+}
+
+function encode() {
+  clearStatus();
+  const input = document.getElementById('input').value;
+  if (!input) { document.getElementById('output').value = ''; renderMeta(null); return; }
+  try {
+    const mode = document.getElementById('mode').value;
+    const bytes = mode === 'hex' ? hexToBytes(input.trim()) : new TextEncoder().encode(input);
+    const encoded = base32Encode(bytes, getAlphabet(), document.getElementById('pad').checked);
+    document.getElementById('output').value = encoded;
+    renderMeta({ bytes: bytes.length, chars: encoded.length });
+  } catch (e) {
+    setStatus('Encode error: ' + e.message, 'error');
+  }
+}
+
+function decode() {
+  clearStatus();
+  const input = document.getElementById('input').value.trim();
+  if (!input) { document.getElementById('output').value = ''; renderMeta(null); return; }
+  try {
+    const bytes = base32Decode(input, document.getElementById('variant').value);
+    const mode = document.getElementById('mode').value;
+    let output;
+    if (mode === 'hex') output = bytesToHex(bytes);
+    else {
+      try { output = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+      catch { output = bytesToHex(bytes); setStatus('Not valid UTF-8, showing hex', 'warning'); }
+    }
+    document.getElementById('output').value = output;
+    renderMeta({ bytes: bytes.length, chars: input.length });
+  } catch (e) {
+    setStatus('Decode error: ' + e.message, 'error');
+  }
+}
+
+function renderMeta(info) {
+  const el = document.getElementById('meta');
+  if (!info) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="meta-tile"><span>Byte length</span><strong>${info.bytes}</strong></div>
+    <div class="meta-tile"><span>Base32 chars</span><strong>${info.chars}</strong></div>
+    <div class="meta-tile"><span>Expansion</span><strong>${(info.chars / Math.max(info.bytes, 1)).toFixed(2)}×</strong></div>
+  `;
+}
+
+function swapIO() {
+  const a = document.getElementById('input');
+  const b = document.getElementById('output');
+  [a.value, b.value] = [b.value, a.value];
+}
+function clearIO() {
+  document.getElementById('input').value = '';
+  document.getElementById('output').value = '';
+  renderMeta(null);
+  clearStatus();
+}
+function loadSample() {
+  document.getElementById('mode').value = 'utf8';
+  document.getElementById('input').value = 'Hello, Base32!';
+  encode();
+}
+function copyOutput() {
+  const text = document.getElementById('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+document.getElementById('variant').addEventListener('change', updateAlphaDisplay);
+updateAlphaDisplay();
+</script>
+</body>
+</html>
