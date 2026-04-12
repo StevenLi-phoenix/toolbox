@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Punycode / IDN Encoder & Decoder - Free Online Tool</title>
+<meta name="description" content="Free online Punycode encoder and decoder. Convert internationalized domain names (IDN) to ASCII-compatible encoding and back. No data sent to any server.">
+<meta name="keywords" content="punycode, idn, internationalized domain name, encoder, decoder, xn--, unicode domain, ace">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/punycode.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .swap-btn { display: flex; justify-content: center; margin: .75rem 0; }
+  .swap-btn button { font-size: 1.2rem; padding: .4rem 1.2rem; }
+  .info-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; }
+  .info-chip { font-size: .78rem; padding: .25rem .6rem; background: var(--surface2); border-radius: var(--radius); color: var(--muted); font-family: var(--mono); }
+  .batch-list { list-style: none; padding: 0; margin: 0; }
+  .batch-list li { display: flex; justify-content: space-between; align-items: center; padding: .5rem .75rem; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: .85rem; gap: .5rem; }
+  .batch-list li:last-child { border-bottom: none; }
+  .batch-list .arrow { color: var(--muted); flex-shrink: 0; }
+  .batch-list .domain { word-break: break-all; }
+  .example-btn { font-size: .78rem; padding: .2rem .5rem; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Punycode / IDN Converter</h1>
+<p class="subtitle">Encode internationalized domain names (IDN) to Punycode (xn--) and decode them back to Unicode.</p>
+
+<div class="card">
+<h2>Single Domain</h2>
+<div class="panels">
+  <div>
+    <label>Unicode Domain</label>
+    <input type="text" id="unicodeInput" placeholder="e.g. münchen.de, 例え.jp" oninput="encodeFromUnicode()">
+  </div>
+  <div>
+    <label>Punycode (ACE)</label>
+    <input type="text" id="punycodeInput" placeholder="e.g. xn--mnchen-3ya.de" oninput="decodeFromPunycode()">
+  </div>
+</div>
+<div class="info-row" id="infoRow"></div>
+<div class="btn-row" style="margin-top:.75rem">
+  <button class="btn btn-secondary" onclick="copyResult('punycodeInput')">Copy Punycode</button>
+  <button class="btn btn-secondary" onclick="copyResult('unicodeInput')">Copy Unicode</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Try Examples</h2>
+<div class="btn-row" style="flex-wrap:wrap;gap:.4rem">
+  <button class="btn btn-secondary example-btn" onclick="loadExample('münchen.de')">münchen.de</button>
+  <button class="btn btn-secondary example-btn" onclick="loadExample('例え.jp')">例え.jp</button>
+  <button class="btn btn-secondary example-btn" onclick="loadExample('россия.рф')">россия.рф</button>
+  <button class="btn btn-secondary example-btn" onclick="loadExample('中文.com')">中文.com</button>
+  <button class="btn btn-secondary example-btn" onclick="loadExample('café.fr')">café.fr</button>
+  <button class="btn btn-secondary example-btn" onclick="loadExample('ñoño.cl')">ñoño.cl</button>
+  <button class="btn btn-secondary example-btn" onclick="loadExample('日本語.jp')">日本語.jp</button>
+  <button class="btn btn-secondary example-btn" onclick="loadExample('bücher.de')">bücher.de</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Batch Convert</h2>
+<label>Enter one domain per line</label>
+<textarea id="batchInput" rows="5" placeholder="münchen.de&#10;例え.jp&#10;xn--mnchen-3ya.de"></textarea>
+<div class="btn-row" style="margin-top:.5rem">
+  <button class="btn" onclick="batchConvert()">Convert All</button>
+  <button class="btn btn-secondary" onclick="copyBatch()">Copy Results</button>
+</div>
+<ul class="batch-list" id="batchResults"></ul>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+/* Punycode encoder/decoder — RFC 3492 */
+const puny = (() => {
+  const BASE = 36, TMIN = 1, TMAX = 26, SKEW = 38, DAMP = 700, INITIAL_BIAS = 72, INITIAL_N = 128, DELIMITER = '-';
+
+  function adapt(delta, numPoints, first) {
+    delta = first ? Math.floor(delta / DAMP) : delta >> 1;
+    delta += Math.floor(delta / numPoints);
+    let k = 0;
+    while (delta > ((BASE - TMIN) * TMAX) >> 1) {
+      delta = Math.floor(delta / (BASE - TMIN));
+      k += BASE;
+    }
+    return k + Math.floor((BASE - TMIN + 1) * delta / (delta + SKEW));
+  }
+
+  function digitToChar(d) {
+    return String.fromCharCode(d < 26 ? d + 97 : d - 26 + 48);
+  }
+
+  function charToDigit(c) {
+    const code = c.charCodeAt(0);
+    if (code >= 48 && code <= 57) return code - 48 + 26;
+    if (code >= 65 && code <= 90) return code - 65;
+    if (code >= 97 && code <= 122) return code - 97;
+    return BASE;
+  }
+
+  function encode(input) {
+    const output = [];
+    const codePoints = [...input].map(c => c.codePointAt(0));
+    const basicChars = codePoints.filter(cp => cp < 128);
+    basicChars.forEach(cp => output.push(String.fromCodePoint(cp)));
+    let h = basicChars.length;
+    const b = h;
+    if (b > 0) output.push(DELIMITER);
+
+    let n = INITIAL_N, delta = 0, bias = INITIAL_BIAS;
+    while (h < codePoints.length) {
+      let m = Infinity;
+      codePoints.forEach(cp => { if (cp >= n && cp < m) m = cp; });
+      delta += (m - n) * (h + 1);
+      n = m;
+      for (const cp of codePoints) {
+        if (cp < n) delta++;
+        if (cp === n) {
+          let q = delta;
+          for (let k = BASE; ; k += BASE) {
+            const t = k <= bias ? TMIN : (k >= bias + TMAX ? TMAX : k - bias);
+            if (q < t) break;
+            output.push(digitToChar(t + ((q - t) % (BASE - t))));
+            q = Math.floor((q - t) / (BASE - t));
+          }
+          output.push(digitToChar(q));
+          bias = adapt(delta, h + 1, h === b);
+          delta = 0;
+          h++;
+        }
+      }
+      delta++;
+      n++;
+    }
+    return output.join('');
+  }
+
+  function decode(input) {
+    const output = [];
+    let i = 0, n = INITIAL_N, bias = INITIAL_BIAS;
+    let basic = input.lastIndexOf(DELIMITER);
+    if (basic < 0) basic = 0;
+    for (let j = 0; j < basic; j++) {
+      output.push(input.charCodeAt(j));
+    }
+    let pos = basic > 0 ? basic + 1 : 0;
+    while (pos < input.length) {
+      let oldi = i, w = 1;
+      for (let k = BASE; ; k += BASE) {
+        if (pos >= input.length) throw new Error('Invalid punycode');
+        const digit = charToDigit(input[pos++]);
+        if (digit >= BASE) throw new Error('Invalid punycode character');
+        i += digit * w;
+        const t = k <= bias ? TMIN : (k >= bias + TMAX ? TMAX : k - bias);
+        if (digit < t) break;
+        w *= (BASE - t);
+      }
+      const len = output.length + 1;
+      bias = adapt(i - oldi, len, oldi === 0);
+      n += Math.floor(i / len);
+      i %= len;
+      output.splice(i, 0, n);
+      i++;
+    }
+    return String.fromCodePoint(...output);
+  }
+
+  function toASCII(domain) {
+    return domain.split('.').map(label => {
+      if (/[^\x00-\x7F]/.test(label)) {
+        return 'xn--' + encode(label);
+      }
+      return label;
+    }).join('.');
+  }
+
+  function toUnicode(domain) {
+    return domain.split('.').map(label => {
+      if (label.toLowerCase().startsWith('xn--')) {
+        try { return decode(label.slice(4)); } catch { return label; }
+      }
+      return label;
+    }).join('.');
+  }
+
+  return { encode, decode, toASCII, toUnicode };
+})();
+
+const $=id=>document.getElementById(id);
+
+function encodeFromUnicode() {
+  const val = $('unicodeInput').value;
+  if (!val) { $('punycodeInput').value = ''; updateInfo(''); return; }
+  try {
+    const result = puny.toASCII(val);
+    $('punycodeInput').value = result;
+    updateInfo(val, result);
+  } catch (e) {
+    $('punycodeInput').value = 'Error: ' + e.message;
+    $('infoRow').innerHTML = '';
+  }
+}
+
+function decodeFromPunycode() {
+  const val = $('punycodeInput').value;
+  if (!val) { $('unicodeInput').value = ''; updateInfo(''); return; }
+  try {
+    const result = puny.toUnicode(val);
+    $('unicodeInput').value = result;
+    updateInfo(result, val);
+  } catch (e) {
+    $('unicodeInput').value = 'Error: ' + e.message;
+    $('infoRow').innerHTML = '';
+  }
+}
+
+function updateInfo(unicode, ascii) {
+  if (!unicode) { $('infoRow').innerHTML = ''; return; }
+  const codePoints = [...unicode].map(c => 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0'));
+  const isAsciiOnly = !/[^\x00-\x7F]/.test(unicode);
+  $('infoRow').innerHTML =
+    `<span class="info-chip">Code points: ${codePoints.join(' ')}</span>` +
+    `<span class="info-chip">${isAsciiOnly ? 'ASCII only' : 'Contains non-ASCII'}</span>` +
+    (ascii ? `<span class="info-chip">Length: ${ascii.length} chars</span>` : '');
+}
+
+function loadExample(domain) {
+  $('unicodeInput').value = domain;
+  encodeFromUnicode();
+}
+
+function clearAll() {
+  $('unicodeInput').value = '';
+  $('punycodeInput').value = '';
+  $('infoRow').innerHTML = '';
+}
+
+function batchConvert() {
+  const lines = $('batchInput').value.split('\n').filter(l => l.trim());
+  const list = $('batchResults');
+  list.innerHTML = '';
+  lines.forEach(line => {
+    const domain = line.trim();
+    const li = document.createElement('li');
+    let from, to;
+    if (domain.toLowerCase().includes('xn--')) {
+      from = domain;
+      try { to = puny.toUnicode(domain); } catch { to = '(error)'; }
+    } else {
+      from = domain;
+      try { to = puny.toASCII(domain); } catch { to = '(error)'; }
+    }
+    li.innerHTML = `<span class="domain">${esc(from)}</span><span class="arrow">&rarr;</span><span class="domain">${esc(to)}</span>`;
+    list.appendChild(li);
+  });
+}
+
+function copyBatch() {
+  const items = $('batchResults').querySelectorAll('li');
+  if (!items.length) return;
+  const text = [...items].map(li => {
+    const spans = li.querySelectorAll('.domain');
+    return spans[0].textContent + ' → ' + spans[1].textContent;
+  }).join('\n');
+  navigator.clipboard.writeText(text).then(() => showToast('Copied!'));
+}
+
+function copyResult(id) {
+  const val = $(id).value;
+  if (!val) return;
+  navigator.clipboard.writeText(val).then(() => showToast('Copied!'));
+}
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = '✓ ' + msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS Nesting Converter - Free Online Tool</title>
+<meta name="description" content="Free online CSS nesting converter. Convert flat CSS to nested syntax and nested CSS back to flat. Supports native CSS nesting and SCSS-style nesting. No data sent to any server.">
+<meta name="keywords" content="css nesting, css converter, nested css, flat css, scss nesting, css syntax, css3 nesting">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cssnesting.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .panel textarea { min-height: 350px; font-family: var(--mono); font-size: .85rem; tab-size: 2; }
+  .direction-row { display: flex; justify-content: center; gap: .5rem; margin-bottom: 1rem; }
+  .direction-row .btn.active { background: var(--text); color: var(--bg); }
+  .stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .75rem; }
+  .stat { font-size: .78rem; color: var(--muted); }
+  .stat strong { color: var(--text); }
+  .error-msg { color: var(--error); font-size: .85rem; margin-top: .5rem; }
+  .example-btns { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+  .example-btns button { font-size: .78rem; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .panel textarea { min-height: 250px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CSS Nesting Converter</h1>
+<p class="subtitle">Convert flat CSS to native nested syntax and vice versa. Supports &amp; parent selectors, media queries, and pseudo-classes.</p>
+
+<div class="card">
+<div class="direction-row">
+  <button class="btn active" id="btnFlat2Nest" onclick="setMode('flat2nest')">Flat &rarr; Nested</button>
+  <button class="btn btn-secondary" id="btnNest2Flat" onclick="setMode('nest2flat')">Nested &rarr; Flat</button>
+</div>
+
+<div class="example-btns">
+  <button class="btn btn-secondary" onclick="loadExample('basic')">Basic</button>
+  <button class="btn btn-secondary" onclick="loadExample('pseudo')">Pseudo-classes</button>
+  <button class="btn btn-secondary" onclick="loadExample('media')">Media Queries</button>
+  <button class="btn btn-secondary" onclick="loadExample('complex')">Complex</button>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <label id="inputLabel">Flat CSS (Input)</label>
+    <textarea id="input" placeholder="Paste your CSS here..." oninput="convert()"></textarea>
+  </div>
+  <div class="panel">
+    <label id="outputLabel">Nested CSS (Output)</label>
+    <textarea id="output" readonly placeholder="Converted CSS will appear here..."></textarea>
+  </div>
+</div>
+
+<div id="errorMsg" class="error-msg"></div>
+<div class="stats" id="stats"></div>
+
+<div class="btn-row" style="margin-top:.75rem">
+  <button class="btn" onclick="convert()">Convert</button>
+  <button class="btn btn-secondary" onclick="copyOutput()">Copy Output</button>
+  <button class="btn btn-secondary" onclick="swapPanels()">Swap</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let mode = 'flat2nest';
+
+const examples = {
+  basic: {
+    flat: `.nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.nav a {
+  color: #333;
+  text-decoration: none;
+}
+
+.nav a:hover {
+  color: #0066cc;
+}
+
+.nav .logo {
+  font-weight: bold;
+  font-size: 1.2rem;
+}`,
+    nested: `.nav {
+  display: flex;
+  gap: 1rem;
+
+  & a {
+    color: #333;
+    text-decoration: none;
+
+    &:hover {
+      color: #0066cc;
+    }
+  }
+
+  & .logo {
+    font-weight: bold;
+    font-size: 1.2rem;
+  }
+}`
+  },
+  pseudo: {
+    flat: `.btn {
+  padding: 8px 16px;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: #555;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+
+.btn::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+}`,
+    nested: `.btn {
+  padding: 8px 16px;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+
+  &:hover {
+    background: #555;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #0066cc;
+    outline-offset: 2px;
+  }
+
+  &::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+  }
+}`
+  },
+  media: {
+    flat: `.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .container {
+    padding: 0 .5rem;
+  }
+}`,
+    nested: `.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+
+  @media (max-width: 768px) {
+    padding: 0 .5rem;
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}`
+  },
+  complex: {
+    flat: `.card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.card .card-header {
+  padding: 1rem;
+  background: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+}
+
+.card .card-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.card .card-body {
+  padding: 1rem;
+}
+
+.card .card-body p {
+  color: #666;
+  line-height: 1.6;
+}
+
+.card .card-footer {
+  padding: .75rem 1rem;
+  border-top: 1px solid #ddd;
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+}`,
+    nested: `.card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+
+  &:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,.1);
+  }
+
+  & .card-header {
+    padding: 1rem;
+    background: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+
+    & h2 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+  }
+
+  & .card-body {
+    padding: 1rem;
+
+    & p {
+      color: #666;
+      line-height: 1.6;
+    }
+  }
+
+  & .card-footer {
+    padding: .75rem 1rem;
+    border-top: 1px solid #ddd;
+    display: flex;
+    justify-content: flex-end;
+    gap: .5rem;
+  }
+}`
+  }
+};
+
+function setMode(m) {
+  mode = m;
+  $('btnFlat2Nest').className = m === 'flat2nest' ? 'btn active' : 'btn btn-secondary';
+  $('btnNest2Flat').className = m === 'nest2flat' ? 'btn active' : 'btn btn-secondary';
+  $('inputLabel').textContent = m === 'flat2nest' ? 'Flat CSS (Input)' : 'Nested CSS (Input)';
+  $('outputLabel').textContent = m === 'flat2nest' ? 'Nested CSS (Output)' : 'Flat CSS (Output)';
+  convert();
+}
+
+function loadExample(name) {
+  const ex = examples[name];
+  $('input').value = mode === 'flat2nest' ? ex.flat : ex.nested;
+  convert();
+}
+
+/* ---- Flat → Nested converter ---- */
+function flatToNested(css) {
+  const rules = parseFlatCSS(css);
+  const tree = buildNestingTree(rules);
+  return renderTree(tree, 0);
+}
+
+function parseFlatCSS(css) {
+  const rules = [];
+  // Remove comments
+  css = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  let i = 0;
+  while (i < css.length) {
+    // Skip whitespace
+    while (i < css.length && /\s/.test(css[i])) i++;
+    if (i >= css.length) break;
+
+    // Check for @media or @-rules
+    if (css[i] === '@') {
+      const atStart = i;
+      // Find the opening brace
+      const braceIdx = css.indexOf('{', i);
+      if (braceIdx === -1) break;
+      const atRule = css.slice(i, braceIdx).trim();
+      // Find matching closing brace
+      let depth = 1, j = braceIdx + 1;
+      while (j < css.length && depth > 0) {
+        if (css[j] === '{') depth++;
+        if (css[j] === '}') depth--;
+        j++;
+      }
+      const inner = css.slice(braceIdx + 1, j - 1).trim();
+      const innerRules = parseFlatCSS(inner);
+      rules.push({ type: 'at-rule', atRule, children: innerRules });
+      i = j;
+    } else {
+      // Regular rule
+      const braceIdx = css.indexOf('{', i);
+      if (braceIdx === -1) break;
+      const selector = css.slice(i, braceIdx).trim();
+      let depth = 1, j = braceIdx + 1;
+      while (j < css.length && depth > 0) {
+        if (css[j] === '{') depth++;
+        if (css[j] === '}') depth--;
+        j++;
+      }
+      const body = css.slice(braceIdx + 1, j - 1).trim();
+      rules.push({ type: 'rule', selector, body });
+      i = j;
+    }
+  }
+  return rules;
+}
+
+function buildNestingTree(rules) {
+  // Group rules by common parent selector
+  const tree = [];
+  const selectorMap = new Map();
+
+  for (const rule of rules) {
+    if (rule.type === 'at-rule') {
+      // Distribute @media rules into their selectors
+      for (const child of rule.children) {
+        if (child.type === 'rule') {
+          const key = child.selector;
+          if (!selectorMap.has(key)) {
+            selectorMap.set(key, { selector: key, props: '', children: [], atRules: [] });
+          }
+          selectorMap.get(key).atRules.push({ atRule: rule.atRule, body: child.body });
+        }
+      }
+      continue;
+    }
+
+    const parts = parseSelector(rule.selector);
+    if (parts.length === 1) {
+      // Top-level selector
+      if (!selectorMap.has(parts[0])) {
+        selectorMap.set(parts[0], { selector: parts[0], props: '', children: [], atRules: [] });
+      }
+      const node = selectorMap.get(parts[0]);
+      node.props = node.props ? node.props + '\n' + rule.body : rule.body;
+    } else {
+      // Nested: parent + child
+      const parent = parts[0];
+      const child = parts.slice(1).join(' ');
+      if (!selectorMap.has(parent)) {
+        selectorMap.set(parent, { selector: parent, props: '', children: [], atRules: [] });
+      }
+      const parentNode = selectorMap.get(parent);
+      // Check if child is a pseudo-class/element
+      const prefix = child.startsWith(':') || child.startsWith('::') ? '&' : '& ';
+      parentNode.children.push({ selector: prefix + child, props: rule.body, children: [], atRules: [] });
+    }
+  }
+
+  for (const [, node] of selectorMap) {
+    tree.push(node);
+  }
+  return tree;
+}
+
+function parseSelector(sel) {
+  // Split selector into parent and child parts
+  // Handle: ".parent .child", ".parent:hover", ".parent::before", ".parent > .child"
+  const trimmed = sel.trim();
+
+  // Check for pseudo-class/element on the main selector
+  // e.g., ".btn:hover" → [".btn", ":hover"]
+  const pseudoMatch = trimmed.match(/^([^:>\s+~]+)(:{1,2}[\w-]+(?:\([^)]*\))?)$/);
+  if (pseudoMatch) {
+    return [pseudoMatch[1], pseudoMatch[2]];
+  }
+
+  // Split on spaces (simple approach), but respect combinators
+  const spaceIdx = trimmed.search(/\s+/);
+  if (spaceIdx === -1) return [trimmed];
+
+  const parent = trimmed.slice(0, spaceIdx);
+  const rest = trimmed.slice(spaceIdx).trim();
+  return [parent, rest];
+}
+
+function renderTree(tree, indent) {
+  const pad = '  '.repeat(indent);
+  const lines = [];
+
+  for (const node of tree) {
+    lines.push(`${pad}${node.selector} {`);
+    if (node.props) {
+      node.props.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed) lines.push(`${pad}  ${trimmed}`);
+      });
+    }
+    if (node.props && (node.children.length || node.atRules.length)) {
+      lines.push('');
+    }
+    for (const child of node.children) {
+      lines.push(...renderTree([child], indent + 1).split('\n'));
+    }
+    for (const at of node.atRules) {
+      lines.push('');
+      lines.push(`${pad}  ${at.atRule} {`);
+      at.body.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed) lines.push(`${pad}    ${trimmed}`);
+      });
+      lines.push(`${pad}  }`);
+    }
+    lines.push(`${pad}}`);
+    if (indent === 0) lines.push('');
+  }
+  return lines.join('\n');
+}
+
+/* ---- Nested → Flat converter ---- */
+function nestedToFlat(css) {
+  const rules = parseNestedCSS(css);
+  const flat = flattenRules(rules, '');
+  return flat.map(r => {
+    if (r.atRule) {
+      const inner = r.children.map(c => `  ${c.selector} {\n${c.body.split('\n').map(l => '    ' + l.trim()).join('\n')}\n  }`).join('\n\n');
+      return `${r.atRule} {\n${inner}\n}`;
+    }
+    return `${r.selector} {\n${r.body.split('\n').map(l => '  ' + l.trim()).join('\n')}\n}`;
+  }).join('\n\n') + '\n';
+}
+
+function parseNestedCSS(css) {
+  css = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = [];
+  let i = 0;
+
+  while (i < css.length) {
+    while (i < css.length && /\s/.test(css[i])) i++;
+    if (i >= css.length) break;
+
+    const braceIdx = css.indexOf('{', i);
+    if (braceIdx === -1) break;
+    const header = css.slice(i, braceIdx).trim();
+    let depth = 1, j = braceIdx + 1;
+    while (j < css.length && depth > 0) {
+      if (css[j] === '{') depth++;
+      if (css[j] === '}') depth--;
+      j++;
+    }
+    const body = css.slice(braceIdx + 1, j - 1);
+    // Separate properties from nested rules
+    const { props, children } = separatePropsAndChildren(body);
+    rules.push({ header, props, children });
+    i = j;
+  }
+  return rules;
+}
+
+function separatePropsAndChildren(body) {
+  let props = [];
+  const children = [];
+  let i = 0;
+  const lines = [];
+
+  // First, extract nested blocks
+  while (i < body.length) {
+    // Find next { that starts a nested block
+    const braceIdx = body.indexOf('{', i);
+    if (braceIdx === -1) {
+      // Rest is properties
+      const rest = body.slice(i).trim();
+      if (rest) props.push(rest);
+      break;
+    }
+
+    // Everything before the header of this block is properties
+    // Find the start of the header (go backward from brace to find newline or start)
+    let headerStart = braceIdx;
+    while (headerStart > i && body[headerStart - 1] !== '}' && body[headerStart - 1] !== ';' && body[headerStart - 1] !== '\n') {
+      headerStart--;
+    }
+
+    // Anything between i and headerStart is properties
+    const beforeBlock = body.slice(i, headerStart).trim();
+    if (beforeBlock) {
+      props.push(beforeBlock);
+    }
+
+    const header = body.slice(headerStart, braceIdx).trim();
+
+    // Find the matching closing brace
+    let depth = 1, j = braceIdx + 1;
+    while (j < body.length && depth > 0) {
+      if (body[j] === '{') depth++;
+      if (body[j] === '}') depth--;
+      j++;
+    }
+    const innerBody = body.slice(braceIdx + 1, j - 1);
+    const { props: childProps, children: childChildren } = separatePropsAndChildren(innerBody);
+    children.push({ header, props: childProps, children: childChildren });
+    i = j;
+  }
+
+  return { props: props.join('\n'), children };
+}
+
+function flattenRules(rules, parentSelector) {
+  const flat = [];
+
+  for (const rule of rules) {
+    let fullSelector;
+    if (rule.header.startsWith('@')) {
+      // At-rule — collect its children flattened
+      const innerFlat = flattenRules(rule.children, parentSelector);
+      if (parentSelector && innerFlat.length === 0 && rule.props) {
+        // @media inside a selector
+        flat.push({
+          atRule: rule.header,
+          children: [{ selector: parentSelector, body: cleanProps(rule.props) }]
+        });
+      } else if (innerFlat.length > 0) {
+        flat.push({
+          atRule: rule.header,
+          children: innerFlat
+        });
+      }
+      continue;
+    }
+
+    if (parentSelector) {
+      if (rule.header.startsWith('&')) {
+        fullSelector = parentSelector + rule.header.slice(1);
+      } else {
+        fullSelector = parentSelector + ' ' + rule.header;
+      }
+    } else {
+      fullSelector = rule.header;
+    }
+
+    if (rule.props.trim()) {
+      flat.push({ selector: fullSelector, body: cleanProps(rule.props) });
+    }
+
+    if (rule.children.length) {
+      flat.push(...flattenRules(rule.children, fullSelector));
+    }
+  }
+  return flat;
+}
+
+function cleanProps(props) {
+  return props.split('\n')
+    .map(l => l.trim())
+    .filter(l => l && l !== '}')
+    .join('\n');
+}
+
+/* ---- Main logic ---- */
+function convert() {
+  const input = $('input').value.trim();
+  $('errorMsg').textContent = '';
+  if (!input) { $('output').value = ''; $('stats').innerHTML = ''; return; }
+
+  try {
+    let result;
+    if (mode === 'flat2nest') {
+      result = flatToNested(input);
+    } else {
+      result = nestedToFlat(input);
+    }
+    $('output').value = result.trim();
+    updateStats(input, result.trim());
+  } catch (e) {
+    $('errorMsg').textContent = 'Parse error: ' + e.message;
+    $('output').value = '';
+    $('stats').innerHTML = '';
+  }
+}
+
+function updateStats(input, output) {
+  const inLines = input.split('\n').length;
+  const outLines = output.split('\n').length;
+  const diff = outLines - inLines;
+  const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
+  $('stats').innerHTML =
+    `<span class="stat">Input: <strong>${inLines}</strong> lines</span>` +
+    `<span class="stat">Output: <strong>${outLines}</strong> lines</span>` +
+    `<span class="stat">Difference: <strong>${diffStr}</strong> lines</span>`;
+}
+
+function copyOutput() {
+  const val = $('output').value;
+  if (!val) return;
+  navigator.clipboard.writeText(val).then(() => {
+    const t = $('toast');
+    t.textContent = '✓ Copied!';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+  });
+}
+
+function swapPanels() {
+  const input = $('input').value;
+  const output = $('output').value;
+  $('input').value = output;
+  $('output').value = '';
+  // Flip mode
+  setMode(mode === 'flat2nest' ? 'nest2flat' : 'flat2nest');
+}
+
+function clearAll() {
+  $('input').value = '';
+  $('output').value = '';
+  $('errorMsg').textContent = '';
+  $('stats').innerHTML = '';
+}
+
+// Auto-convert on load if examples used
+</script>
+</body>
+</html>
