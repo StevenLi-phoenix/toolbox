@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Resizer - Free Online Tool</title>
+<meta name="description" content="Resize images client-side by dimensions or percentage. Maintain aspect ratio, preview results, and download. No data leaves your browser.">
+<meta name="keywords" content="image resizer, resize image online, scale image, free image tool, client-side image resize">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/imageresize.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px; }
+  .control-group { display: flex; flex-direction: column; gap: 4px; }
+  .control-group label { font-size: .82rem; font-weight: 600; color: var(--muted); }
+  .control-group input[type="number"] { width: 100px; font-family: var(--mono); }
+  .control-group select { font-family: var(--sans); padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+  .lock-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; cursor: pointer; font-size: 1rem; line-height: 1; }
+  .lock-btn.locked { background: var(--surface2); }
+  .preview-area { display: flex; gap: 20px; flex-wrap: wrap; }
+  .preview-box { flex: 1; min-width: 250px; }
+  .preview-box h3 { font-size: .85rem; color: var(--muted); margin-bottom: 8px; }
+  .preview-img-wrap { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); min-height: 200px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+  .preview-img-wrap img { max-width: 100%; max-height: 400px; object-fit: contain; }
+  .preview-img-wrap .empty { color: var(--muted); font-size: .85rem; padding: 40px; text-align: center; }
+  .file-drop { border: 2px dashed var(--border); border-radius: var(--radius); padding: 40px 20px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+  .file-drop:hover, .file-drop.dragover { border-color: var(--accent); background: var(--surface2); }
+  .file-drop input { display: none; }
+  .info-row { display: flex; gap: 16px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-top: 8px; }
+  .info-row span { font-family: var(--mono); }
+  .mode-tabs { display: flex; gap: 0; margin-bottom: 12px; }
+  .mode-tab { padding: 6px 14px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; font-size: .85rem; }
+  .mode-tab:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .mode-tab:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+  .mode-tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .quality-slider { display: flex; align-items: center; gap: 8px; }
+  .quality-slider input[type="range"] { flex: 1; max-width: 150px; }
+  @media (max-width: 768px) {
+    .preview-area { flex-direction: column; }
+    .controls { flex-direction: column; align-items: stretch; }
+    .control-group input[type="number"] { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🖼️ Image Resizer</h1>
+<p class="subtitle">Resize images by dimensions or percentage. 100% client-side — no uploads.</p>
+
+<div class="container">
+  <div class="card">
+    <h2>📂 Upload Image</h2>
+    <div class="file-drop" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <input type="file" id="file-input" accept="image/*">
+      <div>Drop an image here or <strong>click to browse</strong></div>
+      <div style="font-size:.8rem;color:var(--muted);margin-top:6px">Supports PNG, JPG, GIF, WebP, SVG</div>
+    </div>
+    <div class="info-row" id="original-info"></div>
+  </div>
+
+  <div class="card" id="resize-card" style="display:none">
+    <h2>📐 Resize Options</h2>
+    <div class="mode-tabs">
+      <div class="mode-tab active" data-mode="pixels" onclick="setMode('pixels')">Pixels</div>
+      <div class="mode-tab" data-mode="percent" onclick="setMode('percent')">Percentage</div>
+    </div>
+    <div class="controls" id="pixel-controls">
+      <div class="control-group">
+        <label>Width (px)</label>
+        <input type="number" id="width" min="1" max="10000" oninput="onWidthChange()">
+      </div>
+      <button class="lock-btn locked" id="lock-btn" onclick="toggleLock()" title="Lock aspect ratio">🔗</button>
+      <div class="control-group">
+        <label>Height (px)</label>
+        <input type="number" id="height" min="1" max="10000" oninput="onHeightChange()">
+      </div>
+    </div>
+    <div class="controls" id="percent-controls" style="display:none">
+      <div class="control-group">
+        <label>Scale (%)</label>
+        <input type="number" id="scale" min="1" max="1000" value="50" oninput="onScaleChange()">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn-secondary" onclick="setPresetScale(25)">25%</button>
+      <button class="btn-secondary" onclick="setPresetScale(50)">50%</button>
+      <button class="btn-secondary" onclick="setPresetScale(75)">75%</button>
+      <button class="btn-secondary" onclick="setPresetScale(150)">150%</button>
+      <button class="btn-secondary" onclick="setPresetScale(200)">200%</button>
+    </div>
+    <div style="margin-top:14px">
+      <div class="control-group">
+        <label>Output Format</label>
+        <select id="format" onchange="updatePreview()">
+          <option value="image/png">PNG</option>
+          <option value="image/jpeg">JPEG</option>
+          <option value="image/webp">WebP</option>
+        </select>
+      </div>
+      <div class="quality-slider" id="quality-row" style="margin-top:8px;display:none">
+        <label style="font-size:.82rem;font-weight:600;color:var(--muted)">Quality</label>
+        <input type="range" id="quality" min="10" max="100" value="92" oninput="qualityLabel.textContent=this.value+'%';updatePreview()">
+        <span id="quality-label" style="font-size:.82rem;font-family:var(--mono)">92%</span>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <button class="btn-primary" onclick="updatePreview()">🔄 Resize</button>
+      <button class="btn-primary" id="download-btn" onclick="downloadImage()" style="display:none">⬇ Download</button>
+    </div>
+  </div>
+
+  <div class="card" id="preview-card" style="display:none">
+    <h2>👁️ Preview</h2>
+    <div class="preview-area">
+      <div class="preview-box">
+        <h3>Original</h3>
+        <div class="preview-img-wrap"><img id="original-preview"></div>
+      </div>
+      <div class="preview-box">
+        <h3>Resized</h3>
+        <div class="preview-img-wrap"><img id="resized-preview"></div>
+      </div>
+    </div>
+    <div class="info-row" id="resized-info"></div>
+  </div>
+</div>
+
+<footer>
+  <div>Built with ☕ by Steven Li · No data leaves your browser</div>
+  <div><a href="index.html">← Back to Toolbox</a></div>
+</footer>
+
+<script>
+const fileInput = document.getElementById('file-input');
+const dropZone = document.getElementById('drop-zone');
+const widthInput = document.getElementById('width');
+const heightInput = document.getElementById('height');
+const scaleInput = document.getElementById('scale');
+const lockBtn = document.getElementById('lock-btn');
+const formatSelect = document.getElementById('format');
+const qualitySlider = document.getElementById('quality');
+const qualityRow = document.getElementById('quality-row');
+const qualityLabel = document.getElementById('quality-label');
+const originalPreview = document.getElementById('original-preview');
+const resizedPreview = document.getElementById('resized-preview');
+
+let originalImg = null;
+let aspectRatio = 1;
+let locked = true;
+let mode = 'pixels';
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFile(fileInput.files[0]); });
+
+formatSelect.addEventListener('change', () => {
+  const fmt = formatSelect.value;
+  qualityRow.style.display = (fmt === 'image/jpeg' || fmt === 'image/webp') ? 'flex' : 'none';
+});
+
+function loadFile(file) {
+  if (!file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      originalImg = img;
+      aspectRatio = img.width / img.height;
+      widthInput.value = img.width;
+      heightInput.value = img.height;
+      scaleInput.value = 100;
+      originalPreview.src = e.target.result;
+      document.getElementById('original-info').innerHTML =
+        `<span>Original: ${img.width} × ${img.height}</span><span>Size: ${(file.size / 1024).toFixed(1)} KB</span><span>Type: ${file.type}</span>`;
+      document.getElementById('resize-card').style.display = '';
+      document.getElementById('preview-card').style.display = '';
+      document.getElementById('download-btn').style.display = 'none';
+      resizedPreview.src = '';
+      document.getElementById('resized-info').innerHTML = '';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+  document.getElementById('pixel-controls').style.display = m === 'pixels' ? 'flex' : 'none';
+  document.getElementById('percent-controls').style.display = m === 'percent' ? 'flex' : 'none';
+}
+
+function toggleLock() {
+  locked = !locked;
+  lockBtn.textContent = locked ? '🔗' : '🔓';
+  lockBtn.classList.toggle('locked', locked);
+}
+
+function onWidthChange() {
+  if (locked && originalImg) {
+    heightInput.value = Math.round(widthInput.value / aspectRatio);
+  }
+}
+
+function onHeightChange() {
+  if (locked && originalImg) {
+    widthInput.value = Math.round(heightInput.value * aspectRatio);
+  }
+}
+
+function onScaleChange() {
+  if (!originalImg) return;
+  const s = scaleInput.value / 100;
+  widthInput.value = Math.round(originalImg.width * s);
+  heightInput.value = Math.round(originalImg.height * s);
+}
+
+function setPresetScale(pct) {
+  scaleInput.value = pct;
+  setMode('percent');
+  onScaleChange();
+  updatePreview();
+}
+
+function updatePreview() {
+  if (!originalImg) return;
+  let w, h;
+  if (mode === 'percent') {
+    const s = scaleInput.value / 100;
+    w = Math.round(originalImg.width * s);
+    h = Math.round(originalImg.height * s);
+    widthInput.value = w;
+    heightInput.value = h;
+  } else {
+    w = parseInt(widthInput.value) || 1;
+    h = parseInt(heightInput.value) || 1;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(originalImg, 0, 0, w, h);
+  const fmt = formatSelect.value;
+  const quality = (fmt === 'image/jpeg' || fmt === 'image/webp') ? qualitySlider.value / 100 : undefined;
+  const dataUrl = canvas.toDataURL(fmt, quality);
+  resizedPreview.src = dataUrl;
+  const sizeKB = (dataUrl.length * 3 / 4 / 1024).toFixed(1);
+  document.getElementById('resized-info').innerHTML =
+    `<span>Resized: ${w} × ${h}</span><span>~${sizeKB} KB</span><span>Format: ${fmt.split('/')[1].toUpperCase()}</span>`;
+  document.getElementById('download-btn').style.display = '';
+}
+
+function downloadImage() {
+  if (!resizedPreview.src) return;
+  const a = document.createElement('a');
+  const ext = formatSelect.value.split('/')[1];
+  a.download = 'resized.' + (ext === 'jpeg' ? 'jpg' : ext);
+  a.href = resizedPreview.src;
+  a.click();
+}
+</script>
+</body>
+</html>

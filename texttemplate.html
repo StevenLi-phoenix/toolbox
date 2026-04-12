@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Template Engine - Free Online Tool</title>
+<meta name="description" content="Fill text templates with variables using {{variable}} syntax. Preview rendered output, manage variable sets, and copy results. No data leaves your browser.">
+<meta name="keywords" content="text template, template engine, variable substitution, mustache template, text generator, mail merge">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/texttemplate.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .var-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .var-row input { flex: 1; font-family: var(--mono); font-size: .85rem; }
+  .var-name { max-width: 140px; font-weight: 600; }
+  .var-remove { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1rem; padding: 4px; }
+  .var-remove:hover { color: var(--error); }
+  #template {
+    font-family: var(--mono);
+    font-size: .85rem;
+    line-height: 1.6;
+    min-height: 200px;
+    resize: vertical;
+  }
+  .output-wrap {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: .85rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 200px;
+    max-height: 500px;
+    overflow-y: auto;
+  }
+  .output-wrap .unfilled { background: #fef08a; padding: 1px 4px; border-radius: 2px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .stats { font-size: .82rem; color: var(--muted); margin-top: 8px; display: flex; gap: 16px; }
+  .bulk-area { display: none; margin-top: 12px; }
+  .bulk-area textarea { font-family: var(--mono); font-size: .82rem; min-height: 100px; resize: vertical; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .var-name { max-width: 100px; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📝 Text Template Engine</h1>
+<p class="subtitle">Fill templates with <code>{{variable}}</code> placeholders. Great for emails, messages, and code snippets.</p>
+
+<div class="container">
+  <div class="card">
+    <h2>📄 Template</h2>
+    <div class="presets">
+      <button class="btn-secondary" onclick="loadPreset('email')">Email</button>
+      <button class="btn-secondary" onclick="loadPreset('greeting')">Greeting</button>
+      <button class="btn-secondary" onclick="loadPreset('api')">API Response</button>
+      <button class="btn-secondary" onclick="loadPreset('sql')">SQL Query</button>
+      <button class="btn-secondary" onclick="loadPreset('html')">HTML Snippet</button>
+    </div>
+    <textarea id="template" placeholder="Hello {{name}},
+
+Your order #{{order_id}} has been {{status}}.
+
+Thank you,
+{{company}}">Hello {{name}},
+
+Your order #{{order_id}} has been {{status}}.
+Expected delivery: {{delivery_date}}.
+
+Thank you for choosing {{company}}!
+
+Best regards,
+{{sender_name}}</textarea>
+    <div class="stats" id="template-stats"></div>
+  </div>
+
+  <div class="panels">
+    <div class="card">
+      <h2>🔧 Variables</h2>
+      <div id="vars-list"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn-secondary" onclick="addVariable()">+ Add Variable</button>
+        <button class="btn-secondary" onclick="toggleBulk()">📋 Bulk Edit</button>
+      </div>
+      <div class="bulk-area" id="bulk-area">
+        <p style="font-size:.8rem;color:var(--muted);margin-bottom:6px">One per line: <code>name = value</code></p>
+        <textarea id="bulk-input" placeholder="name = John Doe&#10;order_id = 12345&#10;status = shipped"></textarea>
+        <button class="btn-secondary" style="margin-top:6px" onclick="applyBulk()">Apply</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>✨ Output</h2>
+      <div class="output-wrap" id="output"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn-primary" onclick="copyOutput()">📋 Copy</button>
+        <button class="btn-secondary" onclick="downloadOutput()">⬇ Download</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" style="display:none"></div>
+
+<footer>
+  <div>Built with ☕ by Steven Li · No data leaves your browser</div>
+  <div><a href="index.html">← Back to Toolbox</a></div>
+</footer>
+
+<script>
+const templateEl = document.getElementById('template');
+const outputEl = document.getElementById('output');
+const varsListEl = document.getElementById('vars-list');
+const statsEl = document.getElementById('template-stats');
+const toastEl = document.getElementById('toast');
+
+const presets = {
+  email: {
+    template: `Dear {{recipient}},
+
+I'm writing to follow up on {{topic}}.
+
+As discussed on {{date}}, we agreed to {{action}}.
+
+Please let me know if you have any questions.
+
+Best regards,
+{{sender}}
+{{title}} at {{company}}`,
+    vars: { recipient: 'Jane Smith', topic: 'the Q3 roadmap', date: '2026-04-10', action: 'finalize the design by Friday', sender: 'John Doe', title: 'Product Manager', company: 'Acme Corp' }
+  },
+  greeting: {
+    template: `Hi {{name}}! 👋
+
+Welcome to {{platform}}. Your username is {{username}} and your account was created on {{created_date}}.
+
+Get started: {{getting_started_url}}`,
+    vars: { name: 'Alex', platform: 'DevToolbox', username: 'alex_dev', created_date: '2026-04-12', getting_started_url: 'https://example.com/start' }
+  },
+  api: {
+    template: `{
+  "status": "{{status}}",
+  "message": "{{message}}",
+  "data": {
+    "id": {{id}},
+    "name": "{{name}}",
+    "email": "{{email}}",
+    "role": "{{role}}"
+  },
+  "timestamp": "{{timestamp}}"
+}`,
+    vars: { status: 'success', message: 'User retrieved', id: '42', name: 'Alice', email: 'alice@example.com', role: 'admin', timestamp: '2026-04-12T10:30:00Z' }
+  },
+  sql: {
+    template: `SELECT {{columns}}
+FROM {{table}}
+WHERE {{where_column}} = '{{where_value}}'
+ORDER BY {{order_by}} {{direction}}
+LIMIT {{limit}};`,
+    vars: { columns: 'id, name, email, created_at', table: 'users', where_column: 'status', where_value: 'active', order_by: 'created_at', direction: 'DESC', limit: '50' }
+  },
+  html: {
+    template: `<div class="card">
+  <img src="{{image_url}}" alt="{{alt_text}}">
+  <h2>{{title}}</h2>
+  <p>{{description}}</p>
+  <a href="{{link_url}}" class="btn">{{button_text}}</a>
+</div>`,
+    vars: { image_url: 'https://example.com/photo.jpg', alt_text: 'Product photo', title: 'Amazing Widget', description: 'The best widget you have ever seen.', link_url: '/products/widget', button_text: 'Learn More' }
+  }
+};
+
+let variables = {};
+
+function extractVariables(text) {
+  const matches = text.match(/\{\{(\w+)\}\}/g) || [];
+  return [...new Set(matches.map(m => m.slice(2, -2)))];
+}
+
+function renderVarsList() {
+  const names = extractVariables(templateEl.value);
+  // Add any found variables that don't exist yet
+  names.forEach(n => { if (!(n in variables)) variables[n] = ''; });
+  varsListEl.innerHTML = '';
+  names.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'var-row';
+    row.innerHTML = `<input class="var-name" value="${escapeAttr(name)}" readonly title="${escapeAttr(name)}">
+      <input class="var-value" value="${escapeAttr(variables[name] || '')}" placeholder="value..." oninput="updateVar('${escapeAttr(name)}', this.value)">
+      <button class="var-remove" onclick="removeVar('${escapeAttr(name)}')" title="Remove">✕</button>`;
+    varsListEl.appendChild(row);
+  });
+  updateOutput();
+}
+
+function escapeAttr(s) { return s.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function updateVar(name, value) {
+  variables[name] = value;
+  updateOutput();
+}
+
+function removeVar(name) {
+  delete variables[name];
+  renderVarsList();
+}
+
+function addVariable() {
+  const name = prompt('Variable name:');
+  if (!name || !/^\w+$/.test(name)) return;
+  variables[name] = '';
+  templateEl.value += ' {{' + name + '}}';
+  renderVarsList();
+}
+
+function updateOutput() {
+  const tmpl = templateEl.value;
+  const names = extractVariables(tmpl);
+  let filled = 0;
+  let result = escapeHtml(tmpl).replace(/\{\{(\w+)\}\}/g, (match, name) => {
+    if (variables[name]) {
+      filled++;
+      return escapeHtml(variables[name]);
+    }
+    return '<span class="unfilled">' + match + '</span>';
+  });
+  outputEl.innerHTML = result;
+  statsEl.innerHTML = `<span>${names.length} variable${names.length !== 1 ? 's' : ''}</span><span>${filled} filled</span><span>${names.length - filled} remaining</span>`;
+}
+
+function loadPreset(name) {
+  const p = presets[name];
+  if (!p) return;
+  templateEl.value = p.template;
+  variables = { ...p.vars };
+  renderVarsList();
+}
+
+function toggleBulk() {
+  const area = document.getElementById('bulk-area');
+  area.style.display = area.style.display === 'none' ? 'block' : 'none';
+  if (area.style.display === 'block') {
+    const lines = Object.entries(variables).map(([k, v]) => k + ' = ' + v).join('\n');
+    document.getElementById('bulk-input').value = lines;
+  }
+}
+
+function applyBulk() {
+  const lines = document.getElementById('bulk-input').value.split('\n');
+  lines.forEach(line => {
+    const idx = line.indexOf('=');
+    if (idx === -1) return;
+    const key = line.slice(0, idx).trim();
+    const val = line.slice(idx + 1).trim();
+    if (key && /^\w+$/.test(key)) variables[key] = val;
+  });
+  renderVarsList();
+  showToast('Variables applied');
+}
+
+function copyOutput() {
+  const tmpl = templateEl.value;
+  const text = tmpl.replace(/\{\{(\w+)\}\}/g, (match, name) => variables[name] || match);
+  navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
+}
+
+function downloadOutput() {
+  const tmpl = templateEl.value;
+  const text = tmpl.replace(/\{\{(\w+)\}\}/g, (match, name) => variables[name] || match);
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.download = 'rendered-template.txt';
+  a.href = URL.createObjectURL(blob);
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.style.display = 'block';
+  setTimeout(() => { toastEl.style.display = 'none'; }, 2000);
+}
+
+templateEl.addEventListener('input', renderVarsList);
+renderVarsList();
+</script>
+</body>
+</html>
