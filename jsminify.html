@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JavaScript Minifier - Free Online JS Minify & Beautify Tool</title>
+<meta name="description" content="Free online JavaScript minifier and beautifier. Minify JS code to reduce file size or beautify compressed code. 100% client-side, no data sent to any server.">
+<meta name="keywords" content="javascript minifier, js minify, js beautify, uglify, compress javascript, code minification, free js tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsminify.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel { display: flex; flex-direction: column; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .panel-header h2 { font-size: .9rem; font-weight: 600; margin: 0; }
+  .panel-body { flex: 1; padding: 0; }
+  .panel-body textarea {
+    width: 100%; height: 320px; border: none; padding: 14px;
+    font-family: var(--mono); font-size: .82rem; line-height: 1.6;
+    background: var(--bg); color: var(--text); resize: vertical; outline: none;
+    box-sizing: border-box;
+  }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .stats-bar { display: flex; gap: 20px; flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .stat-value { font-size: .95rem; font-weight: 600; font-family: var(--mono); }
+  .stat-value.good { color: var(--success); }
+  .stat-value.neutral { color: var(--text); }
+  .options { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .options label { display: flex; align-items: center; gap: 6px; font-size: .85rem; cursor: pointer; }
+  .error-msg { color: var(--error); font-size: .85rem; padding: 8px 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius); margin-top: 8px; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .panel-body textarea { height: 220px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JavaScript Minifier</h1>
+<p class="subtitle">Minify or beautify JavaScript code instantly. See size savings in real-time.</p>
+
+<div class="options">
+  <label><input type="checkbox" id="optRemoveComments" checked> Remove comments</label>
+  <label><input type="checkbox" id="optCollapseWhitespace" checked> Collapse whitespace</label>
+  <label><input type="checkbox" id="optRemoveNewlines" checked> Remove newlines</label>
+  <label><input type="checkbox" id="optShortenBools" checked> Shorten booleans</label>
+</div>
+
+<div class="panels">
+  <div class="card panel">
+    <div class="panel-header"><h2>Input</h2><button class="btn btn-ghost" onclick="clearInput()">Clear</button></div>
+    <div class="panel-body">
+      <textarea id="input" placeholder="Paste JavaScript code here..." spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="card panel">
+    <div class="panel-header"><h2>Output</h2><button class="btn btn-ghost" onclick="copyOutput()">Copy</button></div>
+    <div class="panel-body">
+      <textarea id="output" placeholder="Minified or beautified output will appear here..." readonly spellcheck="false"></textarea>
+    </div>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn btn-primary" onclick="minify()">Minify</button>
+  <button class="btn btn-secondary" onclick="beautify()">Beautify</button>
+  <button class="btn btn-secondary" onclick="swapPanels()">&#8646; Swap</button>
+</div>
+
+<div class="stats-bar" id="stats" style="display:none">
+  <div class="stat"><span class="stat-label">Original</span><span class="stat-value neutral" id="statOriginal">—</span></div>
+  <div class="stat"><span class="stat-label">Output</span><span class="stat-value neutral" id="statOutput">—</span></div>
+  <div class="stat"><span class="stat-label">Saved</span><span class="stat-value good" id="statSaved">—</span></div>
+  <div class="stat"><span class="stat-label">Reduction</span><span class="stat-value good" id="statPercent">—</span></div>
+  <div class="stat"><span class="stat-label">Lines</span><span class="stat-value neutral" id="statLines">—</span></div>
+</div>
+<div id="error"></div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(2) + ' MB';
+}
+
+function countLines(s) { return s ? s.split('\n').length : 0; }
+
+function showStats(original, output) {
+  const origBytes = new TextEncoder().encode(original).length;
+  const outBytes = new TextEncoder().encode(output).length;
+  const saved = origBytes - outBytes;
+  const pct = origBytes > 0 ? ((saved / origBytes) * 100).toFixed(1) : '0.0';
+  $('statOriginal').textContent = formatBytes(origBytes);
+  $('statOutput').textContent = formatBytes(outBytes);
+  $('statSaved').textContent = (saved >= 0 ? '-' : '+') + formatBytes(Math.abs(saved));
+  $('statPercent').textContent = (saved >= 0 ? '-' : '+') + pct + '%';
+  $('statLines').textContent = countLines(original) + ' → ' + countLines(output);
+  $('stats').style.display = 'flex';
+}
+
+function removeComments(code) {
+  let result = '';
+  let i = 0;
+  while (i < code.length) {
+    // String literals
+    if (code[i] === '"' || code[i] === "'" || code[i] === '`') {
+      const quote = code[i];
+      result += code[i++];
+      while (i < code.length && code[i] !== quote) {
+        if (code[i] === '\\') { result += code[i++]; }
+        if (i < code.length) result += code[i++];
+      }
+      if (i < code.length) result += code[i++];
+    }
+    // Regex literals (basic detection)
+    else if (code[i] === '/' && i + 1 < code.length && code[i+1] === '/') {
+      // Single-line comment
+      while (i < code.length && code[i] !== '\n') i++;
+    }
+    else if (code[i] === '/' && i + 1 < code.length && code[i+1] === '*') {
+      // Multi-line comment
+      i += 2;
+      while (i + 1 < code.length && !(code[i] === '*' && code[i+1] === '/')) i++;
+      i += 2;
+    }
+    else {
+      result += code[i++];
+    }
+  }
+  return result;
+}
+
+function minify() {
+  $('error').innerHTML = '';
+  const code = $('input').value;
+  if (!code.trim()) return;
+
+  try {
+    let out = code;
+
+    if ($('optRemoveComments').checked) {
+      out = removeComments(out);
+    }
+
+    if ($('optCollapseWhitespace').checked) {
+      // Collapse multiple spaces/tabs to single space (not inside strings)
+      out = collapseWhitespace(out);
+    }
+
+    if ($('optRemoveNewlines').checked) {
+      out = removeNewlines(out);
+    }
+
+    if ($('optShortenBools').checked) {
+      out = out.replace(/\btrue\b/g, '!0').replace(/\bfalse\b/g, '!1');
+    }
+
+    // Final cleanup
+    out = out.replace(/\n{2,}/g, '\n').trim();
+
+    $('output').value = out;
+    showStats(code, out);
+  } catch(e) {
+    $('error').innerHTML = '<div class="error-msg">Error: ' + e.message + '</div>';
+  }
+}
+
+function collapseWhitespace(code) {
+  let result = '';
+  let i = 0;
+  while (i < code.length) {
+    if (code[i] === '"' || code[i] === "'" || code[i] === '`') {
+      const quote = code[i];
+      result += code[i++];
+      while (i < code.length && code[i] !== quote) {
+        if (code[i] === '\\') result += code[i++];
+        if (i < code.length) result += code[i++];
+      }
+      if (i < code.length) result += code[i++];
+    } else if (code[i] === ' ' || code[i] === '\t') {
+      result += ' ';
+      while (i < code.length && (code[i] === ' ' || code[i] === '\t')) i++;
+    } else {
+      result += code[i++];
+    }
+  }
+  return result;
+}
+
+function removeNewlines(code) {
+  let result = '';
+  let i = 0;
+  const needsSpaceBefore = /[a-zA-Z0-9_$]$/;
+  const needsSpaceAfter = /^[a-zA-Z0-9_$]/;
+
+  while (i < code.length) {
+    if (code[i] === '"' || code[i] === "'" || code[i] === '`') {
+      const quote = code[i];
+      result += code[i++];
+      while (i < code.length && code[i] !== quote) {
+        if (code[i] === '\\') result += code[i++];
+        if (i < code.length) result += code[i++];
+      }
+      if (i < code.length) result += code[i++];
+    } else if (code[i] === '\n' || code[i] === '\r') {
+      // Add space if needed to avoid merging identifiers
+      const before = result;
+      while (i < code.length && (code[i] === '\n' || code[i] === '\r' || code[i] === ' ' || code[i] === '\t')) i++;
+      if (i < code.length && needsSpaceBefore.test(before) && needsSpaceAfter.test(code[i])) {
+        result += ' ';
+      }
+    } else {
+      result += code[i++];
+    }
+  }
+  return result;
+}
+
+function beautify() {
+  $('error').innerHTML = '';
+  const code = $('input').value;
+  if (!code.trim()) return;
+
+  try {
+    let out = '';
+    let indent = 0;
+    const tab = '  ';
+    let i = 0;
+    let inString = false;
+    let stringChar = '';
+
+    while (i < code.length) {
+      const ch = code[i];
+
+      // Handle strings
+      if (!inString && (ch === '"' || ch === "'" || ch === '`')) {
+        inString = true;
+        stringChar = ch;
+        out += ch;
+        i++;
+        continue;
+      }
+      if (inString) {
+        if (ch === '\\') {
+          out += ch;
+          i++;
+          if (i < code.length) { out += code[i]; i++; }
+          continue;
+        }
+        if (ch === stringChar) inString = false;
+        out += ch;
+        i++;
+        continue;
+      }
+
+      if (ch === '{' || ch === '[') {
+        out += ch + '\n';
+        indent++;
+        out += tab.repeat(indent);
+        i++;
+      } else if (ch === '}' || ch === ']') {
+        indent = Math.max(0, indent - 1);
+        out += '\n' + tab.repeat(indent) + ch;
+        i++;
+      } else if (ch === ';') {
+        out += ';\n' + tab.repeat(indent);
+        i++;
+      } else if (ch === ',') {
+        out += ',\n' + tab.repeat(indent);
+        i++;
+      } else {
+        out += ch;
+        i++;
+      }
+    }
+
+    // Clean up extra blank lines and trailing spaces
+    out = out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+
+    $('output').value = out;
+    showStats(code, out);
+  } catch(e) {
+    $('error').innerHTML = '<div class="error-msg">Error: ' + e.message + '</div>';
+  }
+}
+
+function swapPanels() {
+  const inp = $('input').value;
+  $('input').value = $('output').value;
+  $('output').value = inp;
+}
+
+function clearInput() {
+  $('input').value = '';
+  $('output').value = '';
+  $('stats').style.display = 'none';
+  $('error').innerHTML = '';
+}
+
+function copyOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+// Auto-minify on option change
+document.querySelectorAll('.options input').forEach(el => {
+  el.addEventListener('change', () => {
+    if ($('output').value) minify();
+  });
+});
+</script>
+</body>
+</html>
