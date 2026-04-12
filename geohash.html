@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geohash Encoder & Decoder — Free Online Tool</title>
+<meta name="description" content="Encode latitude/longitude to geohash and decode geohashes back to coordinates. See bounding box, precision, and neighbors. 100% client-side.">
+<meta name="keywords" content="geohash, geohash encoder, geohash decoder, geospatial, latitude longitude, bounding box, neighbors">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/geohash.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .field-row { display: grid; grid-template-columns: 1fr 1fr 120px; gap: 10px; align-items: end; }
+  .field-row label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+  .field-row input, .field-row select {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border);
+    border-radius: var(--radius); font: inherit; background: var(--bg); color: var(--text);
+  }
+  .geohash-out {
+    font-family: var(--mono); font-size: 1.5rem; letter-spacing: .12em;
+    text-align: center; padding: 14px; margin-top: 14px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    word-break: break-all;
+  }
+  .info-grid {
+    display: grid; grid-template-columns: 160px 1fr; gap: 6px 14px;
+    margin-top: 14px; font-size: .87rem;
+  }
+  .info-grid .lbl { color: var(--muted); }
+  .info-grid .val { font-family: var(--mono); }
+
+  .neighbors {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    margin-top: 12px; max-width: 380px;
+  }
+  .neighbor-cell {
+    text-align: center; padding: 10px 6px; font-family: var(--mono); font-size: .82rem;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+    cursor: pointer; word-break: break-all;
+  }
+  .neighbor-cell:hover { background: var(--surface2); }
+  .neighbor-cell.center { background: var(--surface2); border-color: var(--text); font-weight: 600; }
+  .neighbor-cell .dir { display: block; font-size: .68rem; color: var(--muted); margin-bottom: 2px; font-family: var(--sans); text-transform: uppercase; }
+
+  .preset-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .preset-btns button { font-size: .78rem; }
+
+  @media (max-width: 768px) {
+    .field-row { grid-template-columns: 1fr; }
+    .info-grid { grid-template-columns: 1fr; gap: 2px 0; }
+    .info-grid .lbl { margin-top: 6px; }
+    .geohash-out { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Geohash Encoder &amp; Decoder</h1>
+<p class="subtitle">Convert latitude/longitude to geohash, decode geohashes to bounding boxes, and explore neighbor cells</p>
+
+<div class="card">
+  <h2>Encode Coordinates &rarr; Geohash</h2>
+  <div class="field-row">
+    <div>
+      <label for="latIn">Latitude</label>
+      <input id="latIn" type="number" step="any" value="48.8584" oninput="encode()">
+    </div>
+    <div>
+      <label for="lonIn">Longitude</label>
+      <input id="lonIn" type="number" step="any" value="2.2945" oninput="encode()">
+    </div>
+    <div>
+      <label for="precIn">Precision</label>
+      <select id="precIn" onchange="encode()">
+        <option>3</option><option>4</option><option>5</option>
+        <option>6</option><option>7</option><option selected>8</option>
+        <option>9</option><option>10</option><option>11</option><option>12</option>
+      </select>
+    </div>
+  </div>
+  <div class="preset-btns">
+    <button class="btn btn-secondary" onclick="setLL(48.8584,2.2945)">Eiffel Tower</button>
+    <button class="btn btn-secondary" onclick="setLL(40.7128,-74.0060)">New York</button>
+    <button class="btn btn-secondary" onclick="setLL(35.6595,139.7006)">Tokyo</button>
+    <button class="btn btn-secondary" onclick="setLL(-33.8568,151.2153)">Sydney</button>
+    <button class="btn btn-secondary" onclick="setLL(0,0)">Null Island</button>
+  </div>
+  <div id="encodeOut" class="geohash-out">—</div>
+  <div id="encodeInfo" class="info-grid"></div>
+</div>
+
+<div class="card">
+  <h2>Decode Geohash &rarr; Coordinates</h2>
+  <input id="hashIn" type="text" placeholder="u09tunqu" value="u09tunqu" oninput="decode()"
+    style="width:100%;font-family:var(--mono);font-size:1.1rem;letter-spacing:.1em;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+  <div id="decodeInfo" class="info-grid"></div>
+  <h3 style="font-size:.9rem;margin-top:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Neighbors</h3>
+  <div class="neighbors" id="neighbors"></div>
+</div>
+
+<div class="card">
+  <h2>About Geohash</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    A <strong>geohash</strong> encodes a latitude/longitude pair into a short alphanumeric string by interleaving binary subdivisions of the world. Each character adds ~5 bits of precision &mdash; longer strings = smaller cells. Geohashes are <strong>prefix-searchable</strong>: nearby points share leading characters, making them ideal for spatial indexing in databases without geo extensions.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+
+function encodeGeohash(lat, lon, precision) {
+  let latR = [-90, 90], lonR = [-180, 180];
+  let bit = 0, ch = 0, even = true, hash = '';
+  while (hash.length < precision) {
+    if (even) {
+      const mid = (lonR[0] + lonR[1]) / 2;
+      if (lon >= mid) { ch = (ch << 1) | 1; lonR[0] = mid; }
+      else { ch = ch << 1; lonR[1] = mid; }
+    } else {
+      const mid = (latR[0] + latR[1]) / 2;
+      if (lat >= mid) { ch = (ch << 1) | 1; latR[0] = mid; }
+      else { ch = ch << 1; latR[1] = mid; }
+    }
+    even = !even;
+    if (++bit === 5) { hash += BASE32[ch]; bit = 0; ch = 0; }
+  }
+  return hash;
+}
+
+function decodeGeohash(hash) {
+  let latR = [-90, 90], lonR = [-180, 180];
+  let even = true;
+  for (const c of hash.toLowerCase()) {
+    const idx = BASE32.indexOf(c);
+    if (idx < 0) return null;
+    for (let mask = 16; mask; mask >>= 1) {
+      const bit = (idx & mask) ? 1 : 0;
+      if (even) {
+        const mid = (lonR[0] + lonR[1]) / 2;
+        if (bit) lonR[0] = mid; else lonR[1] = mid;
+      } else {
+        const mid = (latR[0] + latR[1]) / 2;
+        if (bit) latR[0] = mid; else latR[1] = mid;
+      }
+      even = !even;
+    }
+  }
+  return { latR, lonR, lat: (latR[0] + latR[1]) / 2, lon: (lonR[0] + lonR[1]) / 2 };
+}
+
+// Adjacent cell algorithm (David Troy)
+const NEIGHBOR = {
+  n: ['p0r21436x8zb9dcf5h7kjnmqesgutwvy', 'bc01fg45238967deuvhjyznpkmstqrwx'],
+  s: ['14365h7k9dcfesgujnmqp0r2twvyx8zb', '238967debc01fg45kmstqrwxuvhjyznp'],
+  e: ['bc01fg45238967deuvhjyznpkmstqrwx', 'p0r21436x8zb9dcf5h7kjnmqesgutwvy'],
+  w: ['238967debc01fg45kmstqrwxuvhjyznp', '14365h7k9dcfesgujnmqp0r2twvyx8zb']
+};
+const BORDER = {
+  n: ['prxz', 'bcfguvyz'],
+  s: ['028b', '0145hjnp'],
+  e: ['bcfguvyz', 'prxz'],
+  w: ['0145hjnp', '028b']
+};
+
+function adjacent(hash, dir) {
+  hash = hash.toLowerCase();
+  if (!hash.length) return '';
+  const last = hash[hash.length - 1];
+  let parent = hash.slice(0, -1);
+  const type = hash.length % 2;
+  if (BORDER[dir][type].indexOf(last) !== -1 && parent.length) {
+    parent = adjacent(parent, dir);
+  }
+  return parent + BASE32[NEIGHBOR[dir][type].indexOf(last)];
+}
+
+function neighborsOf(hash) {
+  const n = adjacent(hash, 'n');
+  const s = adjacent(hash, 's');
+  const e = adjacent(hash, 'e');
+  const w = adjacent(hash, 'w');
+  return {
+    nw: adjacent(n, 'w'), n, ne: adjacent(n, 'e'),
+    w, c: hash, e,
+    sw: adjacent(s, 'w'), s, se: adjacent(s, 'e')
+  };
+}
+
+function fmt(n, d = 6) { return Number(n).toFixed(d); }
+
+function encode() {
+  const lat = parseFloat($('latIn').value);
+  const lon = parseFloat($('lonIn').value);
+  const p = +$('precIn').value;
+  if (!isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    $('encodeOut').textContent = 'Invalid coordinates';
+    $('encodeInfo').innerHTML = '';
+    return;
+  }
+  const hash = encodeGeohash(lat, lon, p);
+  $('encodeOut').textContent = hash;
+  const dec = decodeGeohash(hash);
+  const latErr = (dec.latR[1] - dec.latR[0]) / 2;
+  const lonErr = (dec.lonR[1] - dec.lonR[0]) / 2;
+  // approx cell size in meters at this latitude
+  const mPerDegLat = 111320;
+  const mPerDegLon = 111320 * Math.cos(lat * Math.PI / 180);
+  const heightM = (dec.latR[1] - dec.latR[0]) * mPerDegLat;
+  const widthM = (dec.lonR[1] - dec.lonR[0]) * mPerDegLon;
+  $('encodeInfo').innerHTML = [
+    ['Center', fmt(dec.lat) + ', ' + fmt(dec.lon)],
+    ['Latitude error', '\u00b1' + fmt(latErr) + '\u00b0'],
+    ['Longitude error', '\u00b1' + fmt(lonErr) + '\u00b0'],
+    ['Cell size', fmtMeters(widthM) + ' \u00d7 ' + fmtMeters(heightM)]
+  ].map(([k, v]) => '<div class="lbl">' + k + '</div><div class="val">' + v + '</div>').join('');
+  // Sync into decoder
+  $('hashIn').value = hash;
+  decode();
+}
+
+function fmtMeters(m) {
+  if (m >= 1000) return (m / 1000).toFixed(2) + ' km';
+  if (m >= 1) return m.toFixed(1) + ' m';
+  return (m * 100).toFixed(1) + ' cm';
+}
+
+function decode() {
+  const hash = ($('hashIn').value || '').trim().toLowerCase();
+  if (!hash) {
+    $('decodeInfo').innerHTML = '';
+    $('neighbors').innerHTML = '';
+    return;
+  }
+  const dec = decodeGeohash(hash);
+  if (!dec) {
+    $('decodeInfo').innerHTML = '<div class="lbl">Error</div><div class="val" style="color:var(--error)">Invalid geohash characters</div>';
+    $('neighbors').innerHTML = '';
+    return;
+  }
+  $('decodeInfo').innerHTML = [
+    ['Center latitude', fmt(dec.lat)],
+    ['Center longitude', fmt(dec.lon)],
+    ['SW corner', fmt(dec.latR[0]) + ', ' + fmt(dec.lonR[0])],
+    ['NE corner', fmt(dec.latR[1]) + ', ' + fmt(dec.lonR[1])],
+    ['Precision', String(hash.length) + ' chars']
+  ].map(([k, v]) => '<div class="lbl">' + k + '</div><div class="val">' + v + '</div>').join('');
+
+  const n = neighborsOf(hash);
+  const cells = [
+    ['NW', n.nw], ['N', n.n], ['NE', n.ne],
+    ['W', n.w], ['Center', n.c], ['E', n.e],
+    ['SW', n.sw], ['S', n.s], ['SE', n.se]
+  ];
+  $('neighbors').innerHTML = cells.map(([d, h]) =>
+    '<div class="neighbor-cell ' + (d === 'Center' ? 'center' : '') + '" onclick="loadHash(\'' + h + '\')"><span class="dir">' + d + '</span>' + h + '</div>'
+  ).join('');
+}
+
+function loadHash(h) {
+  $('hashIn').value = h;
+  decode();
+  const dec = decodeGeohash(h);
+  if (dec) {
+    $('latIn').value = fmt(dec.lat);
+    $('lonIn').value = fmt(dec.lon);
+    $('precIn').value = h.length;
+  }
+}
+
+function setLL(lat, lon) {
+  $('latIn').value = lat;
+  $('lonIn').value = lon;
+  encode();
+}
+
+encode();
+</script>
+</body>
+</html>

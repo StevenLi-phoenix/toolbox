@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Levenshtein Distance Calculator — Free Online Tool</title>
+<meta name="description" content="Calculate Levenshtein edit distance, similarity ratio, and visualize the optimal alignment between two strings. Also computes Hamming and Jaro-Winkler similarity.">
+<meta name="keywords" content="levenshtein distance, edit distance, string similarity, hamming distance, jaro winkler, fuzzy matching">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/levenshtein.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .input-row label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+  .input-row input {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: 1rem;
+    background: var(--bg); color: var(--text);
+  }
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin-top: 14px;
+  }
+  .stat {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; text-align: center;
+  }
+  .stat-val { font-family: var(--mono); font-size: 1.5rem; font-weight: 600; color: var(--text); }
+  .stat-lbl { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+
+  .alignment {
+    font-family: var(--mono); font-size: 1rem; line-height: 1.6; margin-top: 14px;
+    padding: 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow-x: auto; white-space: pre;
+  }
+  .ch { display: inline-block; min-width: 1ch; padding: 0 1px; border-radius: 3px; }
+  .ch.match { color: var(--text); }
+  .ch.sub { background: #fef3c7; color: #92400e; }
+  .ch.ins { background: #dcfce7; color: #166534; }
+  .ch.del { background: #fee2e2; color: #991b1b; }
+  .ch.gap { color: var(--muted); }
+
+  .ops-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: .82rem; }
+  .op-badge { padding: 4px 10px; border-radius: 12px; font-family: var(--mono); }
+  .op-badge.sub { background: #fef3c7; color: #92400e; }
+  .op-badge.ins { background: #dcfce7; color: #166534; }
+  .op-badge.del { background: #fee2e2; color: #991b1b; }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .78rem; color: var(--muted); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
+
+  .controls { display: flex; gap: 14px; align-items: center; margin-top: 10px; font-size: .85rem; flex-wrap: wrap; }
+
+  @media (max-width: 768px) {
+    .input-row { grid-template-columns: 1fr; }
+    .stat-val { font-size: 1.2rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>String Edit Distance</h1>
+<p class="subtitle">Compute Levenshtein distance, similarity ratio, and visualize the optimal alignment between two strings &mdash; useful for fuzzy matching, spell checking, and diff tools</p>
+
+<div class="card">
+  <h2>Inputs</h2>
+  <div class="input-row">
+    <div>
+      <label for="strA">String A</label>
+      <input id="strA" type="text" value="kitten" oninput="compute()" autocomplete="off">
+    </div>
+    <div>
+      <label for="strB">String B</label>
+      <input id="strB" type="text" value="sitting" oninput="compute()" autocomplete="off">
+    </div>
+  </div>
+  <div class="controls">
+    <label><input type="checkbox" id="caseInsensitive" onchange="compute()"> Case-insensitive</label>
+    <label><input type="checkbox" id="trimWS" onchange="compute()"> Trim whitespace</label>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Metrics</h2>
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="lev">—</div><div class="stat-lbl">Levenshtein</div></div>
+    <div class="stat"><div class="stat-val" id="ratio">—</div><div class="stat-lbl">Similarity</div></div>
+    <div class="stat"><div class="stat-val" id="ham">—</div><div class="stat-lbl">Hamming</div></div>
+    <div class="stat"><div class="stat-val" id="jw">—</div><div class="stat-lbl">Jaro-Winkler</div></div>
+    <div class="stat"><div class="stat-val" id="lcs">—</div><div class="stat-lbl">LCS Length</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Alignment</h2>
+  <p style="font-size:.82rem;color:var(--muted)">Highlights the minimum-cost edits to transform A into B.</p>
+  <div class="legend">
+    <span><span class="swatch" style="background:#fef3c7"></span> substitution</span>
+    <span><span class="swatch" style="background:#dcfce7"></span> insertion (in B)</span>
+    <span><span class="swatch" style="background:#fee2e2"></span> deletion (from A)</span>
+    <span><span class="swatch" style="background:var(--surface)"></span> gap (–)</span>
+  </div>
+  <div class="alignment" id="alignA">A:</div>
+  <div class="alignment" id="alignB" style="margin-top:6px">B:</div>
+  <div class="ops-list" id="opsList"></div>
+</div>
+
+<div class="card">
+  <h2>About These Metrics</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    <strong>Levenshtein</strong> is the minimum number of single-character insertions, deletions, or substitutions to transform one string into another. <strong>Similarity ratio</strong> is <code>1 - distance / max(len)</code>.
+    <strong>Hamming</strong> distance counts position-wise mismatches (defined only for equal-length strings).
+    <strong>Jaro-Winkler</strong> is a similarity score from 0 to 1 that gives extra weight to matching prefixes &mdash; commonly used for record linkage and name matching.
+    <strong>LCS</strong> is the length of the longest common subsequence.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return { dist: n, matrix: null };
+  if (!n) return { dist: m, matrix: null };
+  const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return { dist: dp[m][n], matrix: dp };
+}
+
+function backtrack(a, b, dp) {
+  if (!dp) {
+    if (!a.length) return { ops: [...b].map(c => ({ op: 'ins', a: '', b: c })), alignA: '-'.repeat(b.length), alignB: b };
+    if (!b.length) return { ops: [...a].map(c => ({ op: 'del', a: c, b: '' })), alignA: a, alignB: '-'.repeat(a.length) };
+  }
+  let i = a.length, j = b.length;
+  const ops = []; let alA = '', alB = '';
+  const tagA = [], tagB = [];
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)) {
+      const op = a[i - 1] === b[j - 1] ? 'match' : 'sub';
+      ops.unshift({ op, a: a[i - 1], b: b[j - 1] });
+      alA = a[i - 1] + alA; alB = b[j - 1] + alB;
+      tagA.unshift(op); tagB.unshift(op);
+      i--; j--;
+    } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+      ops.unshift({ op: 'del', a: a[i - 1], b: '' });
+      alA = a[i - 1] + alA; alB = '-' + alB;
+      tagA.unshift('del'); tagB.unshift('gap');
+      i--;
+    } else {
+      ops.unshift({ op: 'ins', a: '', b: b[j - 1] });
+      alA = '-' + alA; alB = b[j - 1] + alB;
+      tagA.unshift('gap'); tagB.unshift('ins');
+      j--;
+    }
+  }
+  return { ops, alignA: alA, alignB: alB, tagA, tagB };
+}
+
+function hamming(a, b) {
+  if (a.length !== b.length) return null;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++;
+  return d;
+}
+
+function jaroWinkler(a, b) {
+  if (a === b) return 1;
+  if (!a.length || !b.length) return 0;
+  const matchDist = Math.floor(Math.max(a.length, b.length) / 2) - 1;
+  const aMatches = new Array(a.length).fill(false);
+  const bMatches = new Array(b.length).fill(false);
+  let matches = 0;
+  for (let i = 0; i < a.length; i++) {
+    const start = Math.max(0, i - matchDist);
+    const end = Math.min(i + matchDist + 1, b.length);
+    for (let j = start; j < end; j++) {
+      if (bMatches[j] || a[i] !== b[j]) continue;
+      aMatches[i] = true; bMatches[j] = true; matches++; break;
+    }
+  }
+  if (!matches) return 0;
+  let trans = 0, k = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (!aMatches[i]) continue;
+    while (!bMatches[k]) k++;
+    if (a[i] !== b[k]) trans++;
+    k++;
+  }
+  trans /= 2;
+  const jaro = (matches / a.length + matches / b.length + (matches - trans) / matches) / 3;
+  let prefix = 0;
+  for (let i = 0; i < Math.min(4, a.length, b.length); i++) {
+    if (a[i] === b[i]) prefix++; else break;
+  }
+  return jaro + prefix * 0.1 * (1 - jaro);
+}
+
+function lcsLen(a, b) {
+  const m = a.length, n = b.length;
+  if (!m || !n) return 0;
+  let prev = new Int32Array(n + 1);
+  let curr = new Int32Array(n + 1);
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      curr[j] = a[i - 1] === b[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], curr[j - 1]);
+    }
+    [prev, curr] = [curr, prev];
+    curr.fill(0);
+  }
+  return prev[n];
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function renderAligned(label, str, tags) {
+  let html = label + ' ';
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i] === ' ' ? '\u00a0' : escapeHtml(str[i]);
+    html += '<span class="ch ' + (tags[i] || 'match') + '">' + ch + '</span>';
+  }
+  return html;
+}
+
+function compute() {
+  let a = $('strA').value;
+  let b = $('strB').value;
+  if ($('caseInsensitive').checked) { a = a.toLowerCase(); b = b.toLowerCase(); }
+  if ($('trimWS').checked) { a = a.trim(); b = b.trim(); }
+
+  const { dist, matrix } = levenshtein(a, b);
+  $('lev').textContent = dist;
+  const maxLen = Math.max(a.length, b.length);
+  const ratio = maxLen ? (1 - dist / maxLen) : 1;
+  $('ratio').textContent = (ratio * 100).toFixed(1) + '%';
+
+  const ham = hamming(a, b);
+  $('ham').textContent = ham === null ? 'N/A' : ham;
+
+  const jw = jaroWinkler(a, b);
+  $('jw').textContent = jw.toFixed(4);
+
+  $('lcs').textContent = lcsLen(a, b);
+
+  const bt = backtrack(a, b, matrix);
+  $('alignA').innerHTML = renderAligned('A:', bt.alignA, bt.tagA || []);
+  $('alignB').innerHTML = renderAligned('B:', bt.alignB, bt.tagB || []);
+
+  const counts = { sub: 0, ins: 0, del: 0 };
+  bt.ops.forEach(o => { if (o.op !== 'match') counts[o.op]++; });
+  $('opsList').innerHTML =
+    '<span class="op-badge sub">' + counts.sub + ' substitutions</span>' +
+    '<span class="op-badge ins">' + counts.ins + ' insertions</span>' +
+    '<span class="op-badge del">' + counts.del + ' deletions</span>';
+}
+
+compute();
+</script>
+</body>
+</html>
