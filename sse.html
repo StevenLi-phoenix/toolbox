@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSE Tester - Free Online Server-Sent Events Client</title>
+<meta name="description" content="Free online Server-Sent Events (SSE) tester. Connect to SSE endpoints, view events live, filter by type, and inspect payloads. No data stored.">
+<meta name="keywords" content="sse tester, server-sent events, eventsource, streaming api, sse client, sse debug, event stream">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sse.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .conn-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .conn-bar input { flex: 1; min-width: 200px; font-family: var(--mono); font-size: .9rem; }
+  .conn-status { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: 600; padding: 4px 12px; border-radius: 99px; border: 1px solid var(--border); white-space: nowrap; }
+  .conn-status .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .conn-status.disconnected .dot { background: var(--muted); }
+  .conn-status.connecting .dot { background: #eab308; animation: pulse 1s infinite; }
+  .conn-status.connected .dot { background: var(--success); }
+  .conn-status.error .dot { background: var(--error); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
+  .header-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .header-row input { flex: 1; font-family: var(--mono); font-size: .85rem; }
+  .header-row .btn { padding: 6px 12px; font-size: .82rem; }
+  .add-header { font-size: .82rem; cursor: pointer; color: var(--accent); background: none; border: none; padding: 4px 0; margin-top: 4px; }
+  .add-header:hover { text-decoration: underline; }
+
+  .filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .filter-bar input { flex: 1; min-width: 150px; font-family: var(--mono); font-size: .85rem; }
+  .filter-bar label { font-size: .82rem; color: var(--muted); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+
+  .log { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .log-entry { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: .82rem; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-meta { display: flex; gap: 12px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
+  .log-type { font-weight: 700; color: var(--accent, #2563eb); font-family: var(--mono); font-size: .8rem; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--accent, #2563eb) 10%, transparent); }
+  .log-time { color: var(--muted); font-family: var(--mono); font-size: .75rem; }
+  .log-id { color: var(--muted); font-family: var(--mono); font-size: .75rem; }
+  .log-data { font-family: var(--mono); font-size: .82rem; word-break: break-all; white-space: pre-wrap; color: var(--text); background: var(--bg); padding: 6px 8px; border-radius: var(--radius); margin-top: 4px; max-height: 200px; overflow-y: auto; }
+  .log-entry.sys { opacity: .7; }
+  .log-entry.sys .log-type { background: none; color: var(--muted); }
+  .log-entry.err .log-type { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
+
+  .stats-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+  .stat-item { font-size: .82rem; color: var(--muted); }
+  .stat-item strong { color: var(--text); }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  .reconnect-info { font-size: .82rem; color: var(--muted); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+
+  @media (max-width: 768px) {
+    .conn-bar { flex-direction: column; }
+    .conn-bar input { min-width: 100%; }
+    .filter-bar { flex-direction: column; }
+    .toolbar { flex-direction: column; align-items: stretch; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>SSE Tester</h1>
+<p class="subtitle">Connect to Server-Sent Events endpoints and inspect streaming events in real-time</p>
+
+<div class="card">
+<h2>🔌 Connection</h2>
+<div class="conn-bar">
+  <input type="text" id="urlInput" placeholder="https://example.com/events" spellcheck="false">
+  <button class="btn" id="connectBtn" onclick="toggleConnection()">Connect</button>
+  <span class="conn-status disconnected" id="status"><span class="dot"></span><span id="statusText">Disconnected</span></span>
+</div>
+<div id="headersContainer">
+  <div class="header-row" data-idx="0">
+    <input type="text" placeholder="Header name" class="hdr-name">
+    <input type="text" placeholder="Header value" class="hdr-val">
+    <button class="btn btn-secondary" onclick="removeHeader(this)" title="Remove">&times;</button>
+  </div>
+</div>
+<button class="add-header" onclick="addHeader()">+ Add custom header</button>
+<div class="reconnect-info">
+  <label><input type="checkbox" id="autoReconnect" checked> Auto-reconnect</label>
+  <span id="reconnectStatus"></span>
+</div>
+</div>
+
+<div class="card">
+<h2>📡 Events</h2>
+<div class="filter-bar">
+  <input type="text" id="filterType" placeholder="Filter by event type..." oninput="applyFilter()">
+  <input type="text" id="filterText" placeholder="Search event data..." oninput="applyFilter()">
+  <label><input type="checkbox" id="showSys" checked onchange="applyFilter()"> System</label>
+  <label><input type="checkbox" id="autoJson" checked> Pretty JSON</label>
+</div>
+<div class="toolbar">
+  <button class="btn btn-secondary" onclick="clearLog()">Clear</button>
+  <button class="btn btn-secondary" onclick="exportLog()">Export</button>
+  <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+</div>
+<div class="log" id="log">
+  <div class="empty" id="emptyState">Connect to an SSE endpoint to see events</div>
+</div>
+<div class="stats-row">
+  <span class="stat-item">Events: <strong id="statEvents">0</strong></span>
+  <span class="stat-item">Data: <strong id="statBytes">0 B</strong></span>
+  <span class="stat-item">Types: <strong id="statTypes">0</strong></span>
+  <span class="stat-item">Duration: <strong id="statDuration">—</strong></span>
+</div>
+</div>
+
+<div class="card">
+<h2>ℹ️ About SSE</h2>
+<p style="font-size:.85rem;color:var(--muted);line-height:1.6;margin:0">
+Server-Sent Events (SSE) provide a simple way to push real-time updates from server to client over HTTP.
+Unlike WebSockets, SSE is one-directional (server → client), uses standard HTTP, supports automatic reconnection,
+and works through proxies. The browser's <code>EventSource</code> API handles connection management.
+Common use cases include live feeds, AI streaming responses, notifications, and log tailing.
+</p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let es=null, events=[], startTime=null, reconnectTimer=null, eventTypes=new Set(), totalBytes=0;
+
+function setStatus(state, text) {
+  const el=$('status');
+  el.className='conn-status '+state;
+  $('statusText').textContent=text;
+}
+
+function addHeader() {
+  const c=$('headersContainer');
+  const row=document.createElement('div');
+  row.className='header-row';
+  row.innerHTML='<input type="text" placeholder="Header name" class="hdr-name"><input type="text" placeholder="Header value" class="hdr-val"><button class="btn btn-secondary" onclick="removeHeader(this)" title="Remove">&times;</button>';
+  c.appendChild(row);
+}
+
+function removeHeader(btn) {
+  const row=btn.parentElement;
+  const c=$('headersContainer');
+  if(c.children.length>1) row.remove();
+  else { row.querySelector('.hdr-name').value=''; row.querySelector('.hdr-val').value=''; }
+}
+
+function getHeaders() {
+  const h={};
+  document.querySelectorAll('.header-row').forEach(row=>{
+    const n=row.querySelector('.hdr-name').value.trim();
+    const v=row.querySelector('.hdr-val').value.trim();
+    if(n) h[n]=v;
+  });
+  return h;
+}
+
+function toggleConnection() {
+  if(es) disconnect(); else connect();
+}
+
+function connect() {
+  const url=$('urlInput').value.trim();
+  if(!url) { $('urlInput').focus(); return; }
+
+  clearReconnectTimer();
+  setStatus('connecting','Connecting...');
+  $('connectBtn').textContent='Disconnect';
+  $('emptyState').style.display='none';
+  startTime=Date.now();
+  updateDuration();
+
+  const headers=getHeaders();
+  const hasCustomHeaders=Object.keys(headers).length>0;
+
+  if(hasCustomHeaders) {
+    connectWithFetch(url, headers);
+  } else {
+    connectWithEventSource(url);
+  }
+}
+
+function connectWithEventSource(url) {
+  try {
+    es=new EventSource(url);
+    es._type='eventsource';
+
+    es.onopen=()=>{
+      setStatus('connected','Connected');
+      logSystem('Connected to '+url);
+    };
+
+    es.onmessage=(e)=>{
+      handleEvent('message', e.data, e.lastEventId);
+    };
+
+    es.onerror=()=>{
+      if(es.readyState===EventSource.CLOSED) {
+        setStatus('error','Closed');
+        logSystem('Connection closed by server');
+        handleDisconnect();
+      } else if(es.readyState===EventSource.CONNECTING) {
+        setStatus('connecting','Reconnecting...');
+        logSystem('Reconnecting...');
+      }
+    };
+  } catch(err) {
+    setStatus('error','Error');
+    logError('Failed to connect: '+err.message);
+    handleDisconnect();
+  }
+}
+
+function connectWithFetch(url, headers) {
+  const ctrl=new AbortController();
+  es={abort:()=>ctrl.abort(), _type:'fetch', close:()=>ctrl.abort()};
+
+  fetch(url, {headers, signal:ctrl.signal}).then(async res=>{
+    if(!res.ok) {
+      setStatus('error','HTTP '+res.status);
+      logError('HTTP '+res.status+' '+res.statusText);
+      handleDisconnect();
+      return;
+    }
+    setStatus('connected','Connected');
+    logSystem('Connected to '+url+' (fetch mode — custom headers)');
+
+    const reader=res.body.getReader();
+    const decoder=new TextDecoder();
+    let buffer='';
+    let currentEvent={type:'message',data:'',id:''};
+
+    while(true) {
+      const {done, value}=await reader.read();
+      if(done) break;
+      buffer+=decoder.decode(value, {stream:true});
+      const lines=buffer.split('\n');
+      buffer=lines.pop();
+
+      for(const line of lines) {
+        if(line.startsWith('event:')) {
+          currentEvent.type=line.slice(6).trim();
+        } else if(line.startsWith('data:')) {
+          currentEvent.data+=(currentEvent.data?'\n':'')+line.slice(5).trim();
+        } else if(line.startsWith('id:')) {
+          currentEvent.id=line.slice(3).trim();
+        } else if(line==='') {
+          if(currentEvent.data) {
+            handleEvent(currentEvent.type, currentEvent.data, currentEvent.id);
+          }
+          currentEvent={type:'message',data:'',id:''};
+        }
+      }
+    }
+    setStatus('disconnected','Closed');
+    logSystem('Stream ended');
+    handleDisconnect();
+  }).catch(err=>{
+    if(err.name==='AbortError') return;
+    setStatus('error','Error');
+    logError('Fetch error: '+err.message);
+    handleDisconnect();
+  });
+}
+
+function handleEvent(type, data, id) {
+  totalBytes+=new Blob([data]).size;
+  eventTypes.add(type);
+  const entry={type, data, id, time:new Date(), index:events.length};
+  events.push(entry);
+  renderEntry(entry);
+  updateStats();
+}
+
+function renderEntry(entry) {
+  const log=$('log');
+  const div=document.createElement('div');
+  div.className='log-entry';
+  div.dataset.type=entry.type||'';
+  div.dataset.sys=entry.sys?'1':'';
+  div.dataset.err=entry.err?'1':'';
+  if(entry.sys) div.classList.add('sys');
+  if(entry.err) div.classList.add('err');
+
+  let dataHtml='';
+  if(entry.data!==undefined) {
+    let display=entry.data;
+    if($('autoJson').checked) {
+      try { display=JSON.stringify(JSON.parse(entry.data),null,2); } catch(e){}
+    }
+    dataHtml='<div class="log-data">'+escapeHtml(display)+'</div>';
+  }
+
+  const timeStr=entry.time.toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3});
+  const idStr=entry.id?'<span class="log-id">id: '+escapeHtml(entry.id)+'</span>':'';
+
+  div.innerHTML='<div class="log-meta"><span class="log-type">'+escapeHtml(entry.type||'system')+'</span><span class="log-time">'+timeStr+'</span>'+idStr+'</div>'+dataHtml;
+  log.appendChild(div);
+
+  if($('autoScroll').checked) log.scrollTop=log.scrollHeight;
+  applyFilterToEntry(div);
+}
+
+function logSystem(msg) {
+  const entry={type:'system', data:msg, time:new Date(), index:events.length, sys:true};
+  events.push(entry);
+  renderEntry(entry);
+}
+
+function logError(msg) {
+  const entry={type:'error', data:msg, time:new Date(), index:events.length, err:true};
+  events.push(entry);
+  renderEntry(entry);
+}
+
+function disconnect() {
+  clearReconnectTimer();
+  if(es) {
+    if(es._type==='fetch') es.abort();
+    else es.close();
+    es=null;
+  }
+  setStatus('disconnected','Disconnected');
+  $('connectBtn').textContent='Connect';
+  logSystem('Disconnected');
+}
+
+function handleDisconnect() {
+  es=null;
+  $('connectBtn').textContent='Connect';
+  if($('autoReconnect').checked) {
+    $('reconnectStatus').textContent='Reconnecting in 3s...';
+    reconnectTimer=setTimeout(()=>{
+      $('reconnectStatus').textContent='';
+      connect();
+    }, 3000);
+  }
+}
+
+function clearReconnectTimer() {
+  if(reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer=null; }
+  $('reconnectStatus').textContent='';
+}
+
+function clearLog() {
+  events=[];
+  eventTypes.clear();
+  totalBytes=0;
+  $('log').innerHTML='<div class="empty" id="emptyState">No events yet</div>';
+  updateStats();
+}
+
+function exportLog() {
+  const lines=events.map(e=>{
+    const t=e.time.toISOString();
+    return t+' ['+e.type+']'+(e.id?' id='+e.id:'')+' '+(e.data||'');
+  }).join('\n');
+  const blob=new Blob([lines],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='sse-events-'+Date.now()+'.log';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function applyFilter() {
+  document.querySelectorAll('#log .log-entry').forEach(applyFilterToEntry);
+}
+
+function applyFilterToEntry(div) {
+  const typeFilter=$('filterType').value.toLowerCase().trim();
+  const textFilter=$('filterText').value.toLowerCase().trim();
+  const showSys=$('showSys').checked;
+
+  let show=true;
+  if(div.dataset.sys==='1' && !showSys) show=false;
+  if(typeFilter && !(div.dataset.type||'').toLowerCase().includes(typeFilter)) show=false;
+  if(textFilter) {
+    const dataEl=div.querySelector('.log-data');
+    if(!dataEl || !dataEl.textContent.toLowerCase().includes(textFilter)) show=false;
+  }
+  div.style.display=show?'':'none';
+}
+
+function updateStats() {
+  $('statEvents').textContent=events.filter(e=>!e.sys&&!e.err).length;
+  $('statTypes').textContent=eventTypes.size;
+  $('statBytes').textContent=formatBytes(totalBytes);
+}
+
+function updateDuration() {
+  if(!startTime) { $('statDuration').textContent='—'; return; }
+  const s=Math.floor((Date.now()-startTime)/1000);
+  const m=Math.floor(s/60);
+  const h=Math.floor(m/60);
+  $('statDuration').textContent=h>0?h+'h '+m%60+'m':m>0?m+'m '+s%60+'s':s+'s';
+  requestAnimationFrame(()=>setTimeout(updateDuration,1000));
+}
+
+function formatBytes(b) {
+  if(b<1024) return b+' B';
+  if(b<1048576) return (b/1024).toFixed(1)+' KB';
+  return (b/1048576).toFixed(1)+' MB';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+$('urlInput').addEventListener('keydown', e=>{ if(e.key==='Enter') toggleConnection(); });
+</script>
+</body>
+</html>
