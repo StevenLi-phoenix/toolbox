@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP Basic Auth Builder — Encode &amp; Decode</title>
+<meta name="description" content="Build and decode HTTP Basic Authentication headers. Generate Authorization: Basic base64 strings and decode existing ones. 100% client-side.">
+<meta name="keywords" content="http basic auth, authorization header, base64, credentials, api">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/basicauth.html">
+<meta property="og:title" content="HTTP Basic Auth Builder">
+<meta property="og:description" content="Build and decode HTTP Basic Authentication headers.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/basicauth.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .result-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-family: var(--mono);
+    font-size: .85rem;
+    word-break: break-all;
+    min-height: 20px;
+  }
+  .label-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+  .label-row label { margin:0; }
+  .snippet-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .snippet-tabs .tab { padding:6px 14px; font-size:.78rem; border-radius:99px; border:1px solid var(--border); background:var(--surface); color:var(--muted); cursor:pointer; font-weight:600; }
+  .snippet-tabs .tab.active { background: var(--accent); color:#fff; border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>HTTP Basic Auth Builder</h1>
+  <p class="subtitle">Build <code>Authorization: Basic</code> headers from a username and password, or decode an existing one.</p>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:1rem;margin-bottom:10px;">Encode credentials</h2>
+    <div class="field">
+      <label for="username">Username</label>
+      <input type="text" id="username" placeholder="alice" oninput="encode()">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="text" id="password" placeholder="s3cret" oninput="encode()">
+    </div>
+
+    <div class="label-row">
+      <label>Base64-encoded credentials</label>
+      <button class="btn btn-secondary btn-sm" onclick="copyFrom('b64out')">Copy</button>
+    </div>
+    <div class="result-box" id="b64out">—</div>
+
+    <div class="label-row" style="margin-top:12px;">
+      <label>Full Authorization header</label>
+      <button class="btn btn-secondary btn-sm" onclick="copyFrom('headerOut')">Copy</button>
+    </div>
+    <div class="result-box" id="headerOut">—</div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:1rem;margin-bottom:10px;">Decode existing header</h2>
+    <div class="field">
+      <label for="decodeIn">Authorization header or base64 credentials</label>
+      <input type="text" id="decodeIn" placeholder="Basic YWxpY2U6czNjcmV0" oninput="decode()">
+    </div>
+    <div class="row">
+      <div style="flex:1;min-width:200px;">
+        <div class="label-row"><label>Username</label><button class="btn btn-secondary btn-sm" onclick="copyFrom('duser')">Copy</button></div>
+        <div class="result-box" id="duser">—</div>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <div class="label-row"><label>Password</label><button class="btn btn-secondary btn-sm" onclick="copyFrom('dpass')">Copy</button></div>
+        <div class="result-box" id="dpass">—</div>
+      </div>
+    </div>
+    <div class="status" id="decodeStatus"></div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:1rem;margin-bottom:10px;">Code snippets</h2>
+    <div class="snippet-tabs">
+      <button class="tab active" data-snip="curl">curl</button>
+      <button class="tab" data-snip="fetch">fetch</button>
+      <button class="tab" data-snip="axios">axios</button>
+      <button class="tab" data-snip="python">python</button>
+      <button class="tab" data-snip="node">node http</button>
+    </div>
+    <div class="label-row"><label id="snipLabel">curl</label><button class="btn btn-secondary btn-sm" onclick="copyFrom('snipOut')">Copy</button></div>
+    <div class="result-box" id="snipOut" style="white-space:pre-wrap;">—</div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:1rem;margin-bottom:8px;">⚠ Security notice</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      HTTP Basic Auth encodes credentials with Base64, not encryption. They are trivially decoded by anyone who can read the request. <strong>Always send over HTTPS</strong>, never over plain HTTP. For public APIs prefer bearer tokens, OAuth, or signed requests.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function b64encode(str) {
+  // Handle UTF-8 safely
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+function b64decode(str) {
+  const bin = atob(str);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+function encode() {
+  const u = document.getElementById('username').value;
+  const p = document.getElementById('password').value;
+  if (!u && !p) {
+    document.getElementById('b64out').textContent = '—';
+    document.getElementById('headerOut').textContent = '—';
+    renderSnippet();
+    return;
+  }
+  const b64 = b64encode(u + ':' + p);
+  document.getElementById('b64out').textContent = b64;
+  document.getElementById('headerOut').textContent = 'Authorization: Basic ' + b64;
+  renderSnippet();
+}
+
+function decode() {
+  const raw = document.getElementById('decodeIn').value.trim();
+  const status = document.getElementById('decodeStatus');
+  status.className = 'status';
+  const u = document.getElementById('duser');
+  const p = document.getElementById('dpass');
+  if (!raw) { u.textContent = '—'; p.textContent = '—'; return; }
+  let b64 = raw;
+  const m = raw.match(/^Basic\s+(.+)$/i);
+  if (m) b64 = m[1].trim();
+  try {
+    const decoded = b64decode(b64);
+    const idx = decoded.indexOf(':');
+    if (idx === -1) {
+      u.textContent = decoded;
+      p.textContent = '(no colon found)';
+      status.className = 'status show warning';
+      status.textContent = 'Decoded value does not contain a colon separator.';
+      return;
+    }
+    u.textContent = decoded.slice(0, idx) || '(empty)';
+    p.textContent = decoded.slice(idx + 1) || '(empty)';
+  } catch (e) {
+    u.textContent = '—'; p.textContent = '—';
+    status.className = 'status show error';
+    status.textContent = 'Invalid Base64 input';
+  }
+}
+
+const tabs = document.querySelectorAll('.snippet-tabs .tab');
+let activeSnip = 'curl';
+tabs.forEach(t => t.addEventListener('click', () => {
+  tabs.forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  activeSnip = t.dataset.snip;
+  document.getElementById('snipLabel').textContent = t.textContent;
+  renderSnippet();
+}));
+
+function renderSnippet() {
+  const u = document.getElementById('username').value || 'user';
+  const p = document.getElementById('password').value || 'pass';
+  const b64 = b64encode(u + ':' + p);
+  const url = 'https://api.example.com/resource';
+  let out = '';
+  switch (activeSnip) {
+    case 'curl':
+      out = `curl -u "${u}:${p}" ${url}\n# or\ncurl -H "Authorization: Basic ${b64}" ${url}`;
+      break;
+    case 'fetch':
+      out = `fetch("${url}", {\n  headers: { "Authorization": "Basic ${b64}" }\n});`;
+      break;
+    case 'axios':
+      out = `axios.get("${url}", {\n  auth: { username: "${u}", password: "${p}" }\n});`;
+      break;
+    case 'python':
+      out = `import requests\nrequests.get("${url}", auth=("${u}", "${p}"))`;
+      break;
+    case 'node':
+      out = `const https = require("https");\nhttps.get("${url}", {\n  headers: { "Authorization": "Basic ${b64}" }\n}, res => { /* ... */ });`;
+      break;
+  }
+  document.getElementById('snipOut').textContent = out;
+}
+
+function copyFrom(id) {
+  const text = document.getElementById(id).textContent;
+  if (!text || text === '—') return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+renderSnippet();
+</script>
+</body>
+</html>

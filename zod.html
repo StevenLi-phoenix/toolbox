@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON → Zod Schema Generator</title>
+<meta name="description" content="Generate Zod schemas from JSON data. Turn API responses and config objects into typed Zod validators instantly. 100% client-side.">
+<meta name="keywords" content="zod, schema, typescript, json, generator, validator">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/zod.html">
+<meta property="og:title" content="JSON → Zod Schema Generator">
+<meta property="og:description" content="Generate Zod schemas from JSON data instantly.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/zod.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .layout textarea { min-height: 420px; font-family: var(--mono); font-size: .82rem; }
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0; font-size: .85rem; }
+  .opts label { font-weight: 400; display: flex; gap: 6px; align-items: center; }
+  @media (max-width: 768px) { .layout { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>JSON → Zod Schema</h1>
+  <p class="subtitle">Paste JSON data and generate a matching <code>zod</code> schema with inferred types, optional fields, and unions.</p>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <div class="opts">
+      <label>Root name: <input type="text" id="rootName" value="Schema" style="width:120px;"></label>
+      <label><input type="checkbox" id="optInfer" checked> Export type via z.infer</label>
+      <label><input type="checkbox" id="optStrict"> .strict() on objects</label>
+      <label><input type="checkbox" id="optNullable" checked> Treat null as .nullable()</label>
+      <label><input type="checkbox" id="optUnion" checked> Infer union types in arrays</label>
+    </div>
+
+    <div class="layout">
+      <div>
+        <label for="jsonInput">JSON Input</label>
+        <textarea id="jsonInput" placeholder="Paste JSON here..." oninput="generate()"></textarea>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+          <button class="btn btn-secondary" onclick="formatJson()">Format</button>
+          <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+        </div>
+      </div>
+      <div>
+        <label for="zodOutput">Zod Schema</label>
+        <textarea id="zodOutput" readonly placeholder="import { z } from 'zod';"></textarea>
+        <div class="btn-row">
+          <button class="btn" onclick="copyOutput()">Copy</button>
+          <button class="btn btn-secondary" onclick="downloadFile()">Download .ts</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const RESERVED = new Set(['break','case','catch','class','const','continue','debugger','default','delete','do','else','enum','export','extends','false','finally','for','function','if','import','in','instanceof','new','null','return','super','switch','this','throw','true','try','typeof','var','void','while','with','yield']);
+
+function isValidIdent(k) {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) && !RESERVED.has(k);
+}
+
+function quoteKey(k) {
+  return isValidIdent(k) ? k : JSON.stringify(k);
+}
+
+function typeOf(v) {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  return typeof v;
+}
+
+function inferSchema(value, indent, opts) {
+  const pad = '  '.repeat(indent);
+  const pad2 = '  '.repeat(indent + 1);
+  const t = typeOf(value);
+  if (t === 'null') return 'z.null()';
+  if (t === 'boolean') return 'z.boolean()';
+  if (t === 'number') return Number.isInteger(value) ? 'z.number().int()' : 'z.number()';
+  if (t === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) return 'z.string().datetime()';
+    if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)) return 'z.string().uuid()';
+    if (/^https?:\/\//.test(value)) return 'z.string().url()';
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) return 'z.string().email()';
+    return 'z.string()';
+  }
+  if (t === 'array') {
+    if (value.length === 0) return 'z.array(z.unknown())';
+    const itemSchemas = value.map(v => inferSchema(v, indent, opts));
+    const unique = [...new Set(itemSchemas)];
+    if (unique.length === 1 || !opts.unionArrays) return `z.array(${unique[0]})`;
+    return `z.array(z.union([${unique.join(', ')}]))`;
+  }
+  if (t === 'object') {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return 'z.object({})';
+    const lines = keys.map(k => {
+      let child = inferSchema(value[k], indent + 1, opts);
+      if (value[k] === null && opts.nullable) {
+        // Already z.null() — convert to z.unknown().nullable() is awkward; keep as z.null()
+      }
+      return `${pad2}${quoteKey(k)}: ${child},`;
+    });
+    let inner = `z.object({\n${lines.join('\n')}\n${pad}})`;
+    if (opts.strict) inner += '.strict()';
+    return inner;
+  }
+  return 'z.unknown()';
+}
+
+function pascalCase(s) {
+  return s.replace(/(^|[_\-\s]+)(\w)/g, (_, __, c) => c.toUpperCase()).replace(/[^A-Za-z0-9]/g, '');
+}
+
+function generate() {
+  const raw = document.getElementById('jsonInput').value.trim();
+  const status = document.getElementById('status');
+  const out = document.getElementById('zodOutput');
+  status.className = 'status';
+  if (!raw) { out.value = ''; return; }
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    status.className = 'status show error';
+    status.textContent = 'Invalid JSON: ' + e.message;
+    return;
+  }
+  const name = pascalCase(document.getElementById('rootName').value || 'Schema');
+  const opts = {
+    strict: document.getElementById('optStrict').checked,
+    nullable: document.getElementById('optNullable').checked,
+    unionArrays: document.getElementById('optUnion').checked,
+  };
+  const schema = inferSchema(data, 0, opts);
+  let code = `import { z } from 'zod';\n\nexport const ${name} = ${schema};\n`;
+  if (document.getElementById('optInfer').checked) {
+    code += `\nexport type ${name} = z.infer<typeof ${name}>;\n`;
+  }
+  out.value = code;
+}
+
+function loadSample() {
+  document.getElementById('jsonInput').value = JSON.stringify({
+    id: "c56a4180-65aa-42ec-a945-5fd21dec0538",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    age: 37,
+    isAdmin: false,
+    website: "https://example.com",
+    createdAt: "2024-01-15T10:30:00Z",
+    tags: ["math", "programming"],
+    address: {
+      city: "London",
+      zip: "SW1A 1AA"
+    },
+    preferences: null
+  }, null, 2);
+  generate();
+}
+
+function formatJson() {
+  try {
+    const parsed = JSON.parse(document.getElementById('jsonInput').value);
+    document.getElementById('jsonInput').value = JSON.stringify(parsed, null, 2);
+    generate();
+  } catch (e) {
+    const s = document.getElementById('status');
+    s.className = 'status show error';
+    s.textContent = 'Invalid JSON: ' + e.message;
+  }
+}
+
+function clearAll() {
+  document.getElementById('jsonInput').value = '';
+  document.getElementById('zodOutput').value = '';
+  document.getElementById('status').className = 'status';
+}
+
+function copyOutput() {
+  const text = document.getElementById('zodOutput').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function downloadFile() {
+  const text = document.getElementById('zodOutput').value;
+  if (!text) return;
+  const name = pascalCase(document.getElementById('rootName').value || 'Schema');
+  const blob = new Blob([text], { type: 'text/typescript' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name.toLowerCase() + '.schema.ts';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+['rootName','optInfer','optStrict','optNullable','optUnion'].forEach(id => {
+  document.getElementById(id).addEventListener('change', generate);
+  document.getElementById(id).addEventListener('input', generate);
+});
+</script>
+</body>
+</html>
