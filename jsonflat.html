@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Flatten & Unflatten - Free Online Tool</title>
+<meta name="description" content="Flatten deeply nested JSON to dot-notation paths or unflatten flat key-value pairs back into nested objects. Useful for config files, form data, and env variables.">
+<meta name="keywords" content="json flatten, json unflatten, dot notation, nested json, json converter, json transform, free tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonflat.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .mode-toggle{display:flex;gap:0;margin-bottom:1rem}
+  .mode-toggle button{flex:1;padding:.6rem 1rem;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:.85rem;font-weight:600;transition:all .15s}
+  .mode-toggle button:first-child{border-radius:var(--radius) 0 0 var(--radius)}
+  .mode-toggle button:last-child{border-radius:0 var(--radius) var(--radius) 0}
+  .mode-toggle button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .options-row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:1rem;font-size:.85rem}
+  .options-row label{font-weight:600}
+  .options-row select{padding:4px 8px}
+  .stats{display:flex;flex-wrap:wrap;gap:16px;padding:10px 0;font-size:.82rem;color:var(--muted)}
+  .stat b{color:var(--text)}
+  textarea{font-family:var(--mono);font-size:.85rem;min-height:220px}
+  .error-msg{color:var(--error);font-size:.82rem;margin-top:4px;min-height:1.2em}
+  @media(max-width:768px){.panels{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON Flatten & Unflatten</h1>
+<p class="subtitle">Convert between nested JSON and flat dot-notation key-value pairs</p>
+
+<div class="card">
+<div class="mode-toggle">
+  <button class="active" id="btnFlatten" onclick="setMode('flatten')">Flatten (nested → flat)</button>
+  <button id="btnUnflatten" onclick="setMode('unflatten')">Unflatten (flat → nested)</button>
+</div>
+
+<div class="options-row">
+  <label>Separator:</label>
+  <select id="separator" onchange="convert()">
+    <option value=".">Dot (.)</option>
+    <option value="/">Slash (/)</option>
+    <option value="_">Underscore (_)</option>
+    <option value="__">Double underscore (__)</option>
+  </select>
+  <label><input type="checkbox" id="preserveArrays" checked onchange="convert()"> Preserve arrays with [n]</label>
+</div>
+</div>
+
+<div class="panels" style="display:flex;gap:1rem">
+<div class="card" style="flex:1;min-width:0">
+  <h2 id="inputLabel">📥 Nested JSON (Input)</h2>
+  <textarea id="input" placeholder='{"user":{"name":"Alice","age":30,"tags":["dev","admin"]}}' oninput="convert()"></textarea>
+  <div class="error-msg" id="inputError"></div>
+</div>
+<div class="card" style="flex:1;min-width:0">
+  <h2 id="outputLabel">📤 Flattened JSON (Output)</h2>
+  <textarea id="output" readonly></textarea>
+  <div class="stats" id="stats"></div>
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="copyOutput()">📋 Copy</button>
+    <button class="btn btn-secondary" onclick="download()">⬇️ Download</button>
+    <button class="btn btn-secondary" onclick="swapPanels()">🔄 Swap</button>
+  </div>
+</div>
+</div>
+
+<div class="card">
+<h2>Examples</h2>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+  <button class="btn btn-secondary" onclick="loadExample('basic')">Basic Object</button>
+  <button class="btn btn-secondary" onclick="loadExample('nested')">Deeply Nested</button>
+  <button class="btn btn-secondary" onclick="loadExample('array')">With Arrays</button>
+  <button class="btn btn-secondary" onclick="loadExample('config')">Config File</button>
+</div>
+</div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+let mode='flatten';
+
+const examples={
+  basic:`{
+  "user": {
+    "name": "Alice",
+    "age": 30,
+    "email": "alice@example.com"
+  },
+  "active": true
+}`,
+  nested:`{
+  "company": {
+    "name": "Acme Corp",
+    "address": {
+      "street": "123 Main St",
+      "city": "Springfield",
+      "state": "IL",
+      "zip": "62701"
+    },
+    "departments": {
+      "engineering": {
+        "head": "Bob",
+        "employees": 42
+      },
+      "marketing": {
+        "head": "Carol",
+        "employees": 15
+      }
+    }
+  }
+}`,
+  array:`{
+  "users": [
+    {"name": "Alice", "roles": ["admin", "user"]},
+    {"name": "Bob", "roles": ["user"]}
+  ],
+  "meta": {
+    "total": 2,
+    "tags": ["active", "verified"]
+  }
+}`,
+  config:`{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "myapp",
+    "pool": {
+      "min": 2,
+      "max": 10,
+      "idle": 30000
+    }
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "ttl": 3600
+  },
+  "logging": {
+    "level": "info",
+    "format": "json"
+  }
+}`
+};
+
+function setMode(m){
+  mode=m;
+  document.getElementById('btnFlatten').classList.toggle('active',m==='flatten');
+  document.getElementById('btnUnflatten').classList.toggle('active',m==='unflatten');
+  document.getElementById('inputLabel').textContent=m==='flatten'?'📥 Nested JSON (Input)':'📥 Flat JSON (Input)';
+  document.getElementById('outputLabel').textContent=m==='flatten'?'📤 Flattened JSON (Output)':'📤 Nested JSON (Output)';
+  convert();
+}
+
+function getSep(){return document.getElementById('separator').value}
+function useArrayBrackets(){return document.getElementById('preserveArrays').checked}
+
+function flatten(obj,prefix='',sep='.'){
+  const result={};
+  function recurse(cur,path){
+    if(cur===null||typeof cur!=='object'){
+      result[path]=cur;
+      return;
+    }
+    if(Array.isArray(cur)){
+      if(cur.length===0){result[path]=[];return}
+      cur.forEach((item,i)=>{
+        const key=useArrayBrackets()?`${path}[${i}]`:`${path}${sep}${i}`;
+        recurse(item,key);
+      });
+    }else{
+      const keys=Object.keys(cur);
+      if(keys.length===0){result[path]={};return}
+      keys.forEach(k=>{
+        const newPath=path?`${path}${sep}${k}`:k;
+        recurse(cur[k],newPath);
+      });
+    }
+  }
+  recurse(obj,prefix);
+  return result;
+}
+
+function unflatten(obj,sep='.'){
+  const result={};
+  for(const flatKey of Object.keys(obj)){
+    const parts=[];
+    let remaining=flatKey;
+    while(remaining.length>0){
+      const bracketMatch=remaining.match(/^\[(\d+)\]/);
+      if(bracketMatch){
+        parts.push(parseInt(bracketMatch[1]));
+        remaining=remaining.slice(bracketMatch[0].length);
+        if(remaining.startsWith(sep))remaining=remaining.slice(sep.length);
+        continue;
+      }
+      const sepIdx=remaining.indexOf(sep);
+      const bracketIdx=remaining.indexOf('[');
+      if(sepIdx===-1&&bracketIdx===-1){
+        parts.push(isNumericKey(remaining)?parseInt(remaining):remaining);
+        break;
+      }
+      let nextBreak;
+      if(sepIdx===-1)nextBreak=bracketIdx;
+      else if(bracketIdx===-1)nextBreak=sepIdx;
+      else nextBreak=Math.min(sepIdx,bracketIdx);
+
+      if(nextBreak===bracketIdx){
+        const part=remaining.slice(0,nextBreak);
+        if(part)parts.push(part);
+        remaining=remaining.slice(nextBreak);
+      }else{
+        const part=remaining.slice(0,nextBreak);
+        parts.push(isNumericKey(part)?parseInt(part):part);
+        remaining=remaining.slice(nextBreak+sep.length);
+      }
+    }
+    let cur=result;
+    for(let i=0;i<parts.length-1;i++){
+      const key=parts[i];
+      const nextKey=parts[i+1];
+      if(cur[key]===undefined){
+        cur[key]=typeof nextKey==='number'?[]:{};
+      }
+      cur=cur[key];
+    }
+    cur[parts[parts.length-1]]=obj[flatKey];
+  }
+  return result;
+}
+
+function isNumericKey(s){return/^\d+$/.test(s)}
+
+function convert(){
+  const input=document.getElementById('input').value.trim();
+  const errEl=document.getElementById('inputError');
+  const outEl=document.getElementById('output');
+  const statsEl=document.getElementById('stats');
+  errEl.textContent='';
+  if(!input){outEl.value='';statsEl.innerHTML='';return}
+
+  try{
+    const parsed=JSON.parse(input);
+    const sep=getSep();
+    let result;
+    if(mode==='flatten'){
+      result=flatten(parsed,'',sep);
+    }else{
+      result=unflatten(parsed,sep);
+    }
+    const output=JSON.stringify(result,null,2);
+    outEl.value=output;
+    const inKeys=countKeys(parsed);
+    const outKeys=countKeys(result);
+    const depth=mode==='flatten'?1:maxDepth(result);
+    statsEl.innerHTML=`<span>Input keys: <b>${inKeys}</b></span><span>Output keys: <b>${outKeys}</b></span><span>Max depth: <b>${depth}</b></span>`;
+  }catch(e){
+    errEl.textContent='Invalid JSON: '+e.message;
+    outEl.value='';
+    statsEl.innerHTML='';
+  }
+}
+
+function countKeys(obj){
+  if(obj===null||typeof obj!=='object')return 0;
+  let count=Object.keys(obj).length;
+  for(const v of Object.values(obj)){
+    if(v&&typeof v==='object')count+=countKeys(v);
+  }
+  return count;
+}
+
+function maxDepth(obj,d=0){
+  if(obj===null||typeof obj!=='object')return d;
+  let max=d;
+  for(const v of Object.values(obj)){
+    max=Math.max(max,maxDepth(v,d+1));
+  }
+  return max;
+}
+
+function copyOutput(){
+  navigator.clipboard.writeText(document.getElementById('output').value).then(()=>{
+    const t=document.getElementById('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+  });
+}
+
+function download(){
+  const blob=new Blob([document.getElementById('output').value],{type:'application/json'});
+  const a=document.createElement('a');
+  a.download=mode==='flatten'?'flattened.json':'unflattened.json';
+  a.href=URL.createObjectURL(blob);a.click();
+}
+
+function swapPanels(){
+  const out=document.getElementById('output').value;
+  if(!out)return;
+  document.getElementById('input').value=out;
+  setMode(mode==='flatten'?'unflatten':'flatten');
+}
+
+function loadExample(name){
+  if(mode==='unflatten')setMode('flatten');
+  document.getElementById('input').value=examples[name];
+  convert();
+}
+
+// Load default example
+document.getElementById('input').value=examples.basic;
+convert();
+</script>
+</body>
+</html>
