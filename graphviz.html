@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graphviz DOT Renderer - Free Online Graph Visualizer</title>
+<meta name="description" content="Free online Graphviz DOT renderer. Create directed graphs, flowcharts, and dependency diagrams with live preview. No data sent to any server.">
+<meta name="keywords" content="graphviz, dot language, graph visualizer, flowchart, directed graph, dependency diagram, free graphviz tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/graphviz.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  #dotInput { min-height: 350px; font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  #output { min-height: 350px; display: flex; align-items: center; justify-content: center; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+  #output svg { max-width: 100%; height: auto; }
+  .error-msg { color: var(--error); font-size: .85rem; font-family: var(--mono); padding: 8px 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius); margin-top: 8px; white-space: pre-wrap; word-break: break-word; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .engine-select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font: inherit; font-size: .85rem; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Graphviz DOT Renderer</h1>
+<p class="subtitle">Write DOT language and render directed graphs, flowcharts, and dependency diagrams instantly.</p>
+
+<div class="toolbar">
+  <select id="engine" class="engine-select" onchange="render()">
+    <option value="dot">dot (hierarchical)</option>
+    <option value="neato">neato (spring model)</option>
+    <option value="fdp">fdp (force-directed)</option>
+    <option value="circo">circo (circular)</option>
+    <option value="twopi">twopi (radial)</option>
+    <option value="osage">osage (clustered)</option>
+  </select>
+  <button class="btn-secondary" onclick="downloadSVG()">⬇ Download SVG</button>
+  <button class="btn-secondary" onclick="downloadPNG()">⬇ Download PNG</button>
+  <button class="btn-secondary" onclick="copyDot()">📋 Copy DOT</button>
+</div>
+
+<div class="presets">
+  <button class="btn-secondary" onclick="loadPreset('simple')">Simple Graph</button>
+  <button class="btn-secondary" onclick="loadPreset('flowchart')">Flowchart</button>
+  <button class="btn-secondary" onclick="loadPreset('dependency')">Dependencies</button>
+  <button class="btn-secondary" onclick="loadPreset('state')">State Machine</button>
+  <button class="btn-secondary" onclick="loadPreset('cluster')">Clusters</button>
+</div>
+
+<div class="panels">
+  <div class="card">
+    <h2>📝 DOT Source</h2>
+    <textarea id="dotInput" placeholder="Enter DOT language here...">digraph G {
+  rankdir=LR;
+  node [shape=box, style="rounded,filled", fillcolor="#e8f4fd", fontname="Helvetica"];
+  edge [color="#666"];
+
+  Start -> Parse -> Validate;
+  Validate -> Transform -> Output;
+  Validate -> Error [color="red", label="invalid"];
+  Error -> Parse [style=dashed, label="retry"];
+
+  Start [fillcolor="#d4edda", label="Input"];
+  Output [fillcolor="#d4edda", label="Result"];
+  Error [fillcolor="#f8d7da", label="Error"];
+}</textarea>
+    <div id="errorBox"></div>
+  </div>
+  <div class="card">
+    <h2>📊 Preview</h2>
+    <div id="output"><div class="empty">Loading renderer...</div></div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.11.0/lib/viz-standalone.js"></script>
+<script>
+let viz = null;
+
+async function initViz() {
+  try {
+    viz = await Viz.instance();
+    render();
+  } catch (e) {
+    document.getElementById('output').innerHTML = '<div class="empty">Failed to load Graphviz renderer. Check your connection.</div>';
+  }
+}
+
+function render() {
+  if (!viz) return;
+  const dot = document.getElementById('dotInput').value;
+  const engine = document.getElementById('engine').value;
+  const output = document.getElementById('output');
+  const errorBox = document.getElementById('errorBox');
+
+  if (!dot.trim()) {
+    output.innerHTML = '<div class="empty">Enter DOT code to render a graph</div>';
+    errorBox.innerHTML = '';
+    return;
+  }
+
+  try {
+    const svg = viz.renderSVGElement(dot, { engine });
+    output.innerHTML = '';
+    output.appendChild(svg);
+    errorBox.innerHTML = '';
+  } catch (e) {
+    errorBox.innerHTML = '<div class="error-msg">' + escapeHTML(e.message) + '</div>';
+  }
+}
+
+function escapeHTML(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function downloadSVG() {
+  const svg = document.querySelector('#output svg');
+  if (!svg) return;
+  const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'graph.svg';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function downloadPNG() {
+  const svg = document.querySelector('#output svg');
+  if (!svg) return;
+  const svgData = new XMLSerializer().serializeToString(svg);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.width * 2;
+    canvas.height = img.height * 2;
+    ctx.scale(2, 2);
+    ctx.drawImage(img, 0, 0);
+    canvas.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'graph.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  };
+  img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+}
+
+function copyDot() {
+  navigator.clipboard.writeText(document.getElementById('dotInput').value);
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+const PRESETS = {
+  simple: `digraph G {
+  A -> B -> C;
+  A -> D -> C;
+  B -> D;
+}`,
+  flowchart: `digraph Flowchart {
+  rankdir=TB;
+  node [shape=box, style="rounded,filled", fillcolor="#e8f4fd", fontname="Helvetica"];
+
+  start [shape=oval, fillcolor="#d4edda", label="Start"];
+  decision [shape=diamond, fillcolor="#fff3cd", label="Valid?"];
+  process [label="Process Data"];
+  save [label="Save Results"];
+  error [label="Log Error", fillcolor="#f8d7da"];
+  end_ [shape=oval, fillcolor="#d4edda", label="End"];
+
+  start -> process -> decision;
+  decision -> save [label="yes"];
+  decision -> error [label="no"];
+  save -> end_;
+  error -> end_;
+}`,
+  dependency: `digraph Dependencies {
+  rankdir=BT;
+  node [shape=box, style="rounded,filled", fillcolor="#e8f4fd", fontname="Helvetica"];
+
+  app [label="App", fillcolor="#d4edda"];
+  router [label="Router"];
+  auth [label="Auth Service"];
+  db [label="Database"];
+  cache [label="Cache"];
+  logger [label="Logger"];
+  config [label="Config"];
+
+  app -> router;
+  app -> auth;
+  router -> auth;
+  auth -> db;
+  auth -> cache;
+  db -> config;
+  cache -> config;
+  auth -> logger;
+  router -> logger;
+}`,
+  state: `digraph StateMachine {
+  rankdir=LR;
+  node [shape=circle, style=filled, fillcolor="#e8f4fd", fontname="Helvetica", width=1];
+
+  idle [fillcolor="#d4edda"];
+  loading [fillcolor="#fff3cd"];
+  success [fillcolor="#d4edda"];
+  error [fillcolor="#f8d7da"];
+
+  idle -> loading [label="fetch"];
+  loading -> success [label="resolve"];
+  loading -> error [label="reject"];
+  success -> idle [label="reset"];
+  error -> loading [label="retry"];
+  error -> idle [label="dismiss"];
+}`,
+  cluster: `digraph Clusters {
+  compound=true;
+  node [shape=box, style="rounded,filled", fillcolor="#e8f4fd", fontname="Helvetica"];
+
+  subgraph cluster_frontend {
+    label="Frontend";
+    style="dashed";
+    color="#999";
+    react [label="React App"];
+    api_client [label="API Client"];
+    react -> api_client;
+  }
+
+  subgraph cluster_backend {
+    label="Backend";
+    style="dashed";
+    color="#999";
+    server [label="Express Server"];
+    middleware [label="Auth Middleware"];
+    controller [label="Controller"];
+    server -> middleware -> controller;
+  }
+
+  subgraph cluster_data {
+    label="Data Layer";
+    style="dashed";
+    color="#999";
+    postgres [label="PostgreSQL"];
+    redis [label="Redis"];
+  }
+
+  api_client -> server [lhead=cluster_backend];
+  controller -> postgres;
+  controller -> redis;
+}`
+};
+
+function loadPreset(name) {
+  document.getElementById('dotInput').value = PRESETS[name];
+  render();
+}
+
+document.getElementById('dotInput').addEventListener('input', render);
+initViz();
+</script>
+</body>
+</html>
