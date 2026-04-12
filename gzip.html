@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gzip Compress & Decompress - Free Online Tool</title>
+<meta name="description" content="Free online Gzip compressor and decompressor. Compress text to gzip, decompress gzip data, view compression ratio. 100% client-side using the browser CompressionStream API.">
+<meta name="keywords" content="gzip, compress, decompress, deflate, compression, online tool, free, developer tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/gzip.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:12px 0}
+.stat{background:var(--surface2);border-radius:var(--radius);padding:12px;text-align:center}
+.stat-value{font-size:1.4rem;font-weight:700;font-family:var(--mono)}
+.stat-label{font-size:.78rem;color:var(--muted);margin-top:2px}
+.output-box{position:relative}
+.output-box textarea{min-height:160px}
+.drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:2rem;text-align:center;color:var(--muted);cursor:pointer;transition:border-color .15s,background .15s}
+.drop-zone.dragover{border-color:var(--accent);background:var(--surface2)}
+.drop-zone input[type="file"]{display:none}
+@media(max-width:768px){.stats-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Gzip Compress & Decompress</h1>
+  <p class="subtitle">Compress text to gzip or decompress gzip data using the browser's native CompressionStream API.</p>
+
+  <div class="card">
+    <h2>📝 Input</h2>
+    <div class="tabs">
+      <button class="tab active" onclick="setTab('text',this)">Text</button>
+      <button class="tab" onclick="setTab('file',this)">File</button>
+    </div>
+    <div id="tab-text">
+      <textarea id="input" placeholder="Paste text to compress or Base64-encoded gzip data to decompress..." aria-label="Input text"></textarea>
+    </div>
+    <div id="tab-file" style="display:none">
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" onchange="handleFile(event)">
+        📁 Drop a file here or click to select
+        <div id="fileName" style="margin-top:8px;font-size:.85rem"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" onclick="compress()">🗜️ Compress</button>
+      <button class="btn btn-secondary" onclick="decompress()">📦 Decompress</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+  </div>
+
+  <div id="statsSection" style="display:none">
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-value" id="origSize">—</div><div class="stat-label">Original Size</div></div>
+      <div class="stat"><div class="stat-value" id="compSize">—</div><div class="stat-label">Compressed Size</div></div>
+      <div class="stat"><div class="stat-value" id="ratio">—</div><div class="stat-label">Ratio</div></div>
+      <div class="stat"><div class="stat-value" id="saved">—</div><div class="stat-label">Saved</div></div>
+    </div>
+  </div>
+
+  <div class="card output-box">
+    <h2>📋 Output</h2>
+    <div class="toggle-row" style="margin-bottom:8px">
+      <label><input type="radio" name="outfmt" value="base64" checked> Base64</label>
+      <label><input type="radio" name="outfmt" value="hex"> Hex</label>
+    </div>
+    <textarea id="output" placeholder="Result will appear here..." readonly aria-label="Output"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="copyOutput()">📋 Copy</button>
+      <button class="btn btn-secondary" onclick="downloadOutput()">💾 Download</button>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+  Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+let currentTab='text';
+let lastCompressedBytes=null;
+let lastOriginalBytes=null;
+
+function setTab(tab,btn){
+  currentTab=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-text').style.display=tab==='text'?'':'none';
+  document.getElementById('tab-file').style.display=tab==='file'?'':'none';
+}
+
+function showStatus(msg,type){
+  const el=document.getElementById('status');
+  el.textContent=msg;
+  el.className='status '+type;
+  if(type==='success')setTimeout(()=>el.className='status',4000);
+}
+
+function formatSize(bytes){
+  if(bytes<1024)return bytes+' B';
+  if(bytes<1048576)return (bytes/1024).toFixed(1)+' KB';
+  return (bytes/1048576).toFixed(2)+' MB';
+}
+
+function updateStats(orig,comp){
+  document.getElementById('statsSection').style.display='';
+  document.getElementById('origSize').textContent=formatSize(orig);
+  document.getElementById('compSize').textContent=formatSize(comp);
+  const r=orig>0?((comp/orig)*100).toFixed(1):'0';
+  document.getElementById('ratio').textContent=r+'%';
+  const s=orig>0?(((orig-comp)/orig)*100).toFixed(1):'0';
+  document.getElementById('saved').textContent=s+'%';
+}
+
+function getOutputFormat(){
+  return document.querySelector('input[name="outfmt"]:checked').value;
+}
+
+function bytesToBase64(bytes){
+  let binary='';
+  for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function base64ToBytes(b64){
+  const binary=atob(b64.replace(/\s/g,''));
+  const bytes=new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToHex(bytes){
+  return Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join(' ');
+}
+
+function hexToBytes(hex){
+  const clean=hex.replace(/\s/g,'');
+  const bytes=new Uint8Array(clean.length/2);
+  for(let i=0;i<bytes.length;i++)bytes[i]=parseInt(clean.substr(i*2,2),16);
+  return bytes;
+}
+
+function displayOutput(bytes){
+  lastCompressedBytes=bytes;
+  const fmt=getOutputFormat();
+  document.getElementById('output').value=fmt==='base64'?bytesToBase64(bytes):bytesToHex(bytes);
+}
+
+document.querySelectorAll('input[name="outfmt"]').forEach(r=>{
+  r.addEventListener('change',()=>{
+    if(lastCompressedBytes)displayOutput(lastCompressedBytes);
+  });
+});
+
+async function compressBytes(data){
+  const cs=new CompressionStream('gzip');
+  const writer=cs.writable.getWriter();
+  writer.write(data);
+  writer.close();
+  const chunks=[];
+  const reader=cs.readable.getReader();
+  while(true){
+    const{done,value}=await reader.read();
+    if(done)break;
+    chunks.push(value);
+  }
+  let total=0;
+  chunks.forEach(c=>total+=c.length);
+  const result=new Uint8Array(total);
+  let offset=0;
+  chunks.forEach(c=>{result.set(c,offset);offset+=c.length});
+  return result;
+}
+
+async function decompressBytes(data){
+  const ds=new DecompressionStream('gzip');
+  const writer=ds.writable.getWriter();
+  writer.write(data);
+  writer.close();
+  const chunks=[];
+  const reader=ds.readable.getReader();
+  while(true){
+    const{done,value}=await reader.read();
+    if(done)break;
+    chunks.push(value);
+  }
+  let total=0;
+  chunks.forEach(c=>total+=c.length);
+  const result=new Uint8Array(total);
+  let offset=0;
+  chunks.forEach(c=>{result.set(c,offset);offset+=c.length});
+  return result;
+}
+
+async function getInputBytes(){
+  if(currentTab==='file'&&lastFileBytes){
+    return lastFileBytes;
+  }
+  const text=document.getElementById('input').value;
+  if(!text.trim())return null;
+  return new TextEncoder().encode(text);
+}
+
+async function compress(){
+  try{
+    const inputBytes=await getInputBytes();
+    if(!inputBytes){showStatus('Please enter text or select a file.','error');return}
+    const compressed=await compressBytes(inputBytes);
+    lastOriginalBytes=inputBytes;
+    displayOutput(compressed);
+    updateStats(inputBytes.length,compressed.length);
+    showStatus('Compressed successfully!','success');
+  }catch(e){
+    showStatus('Compression error: '+e.message,'error');
+  }
+}
+
+async function decompress(){
+  try{
+    let inputBytes;
+    if(currentTab==='file'&&lastFileBytes){
+      inputBytes=lastFileBytes;
+    }else{
+      const text=document.getElementById('input').value.trim();
+      if(!text){showStatus('Please enter gzip data to decompress.','error');return}
+      try{
+        inputBytes=base64ToBytes(text);
+      }catch{
+        try{
+          inputBytes=hexToBytes(text);
+        }catch{
+          showStatus('Input must be valid Base64 or hex-encoded gzip data.','error');
+          return;
+        }
+      }
+    }
+    const decompressed=await decompressBytes(inputBytes);
+    const text=new TextDecoder().decode(decompressed);
+    document.getElementById('output').value=text;
+    lastCompressedBytes=null;
+    updateStats(decompressed.length,inputBytes.length);
+    showStatus('Decompressed successfully!','success');
+  }catch(e){
+    showStatus('Decompression error: invalid gzip data.','error');
+  }
+}
+
+let lastFileBytes=null;
+function handleFile(e){
+  const file=e.target.files[0];
+  if(!file)return;
+  document.getElementById('fileName').textContent=file.name+' ('+formatSize(file.size)+')';
+  const reader=new FileReader();
+  reader.onload=function(){
+    lastFileBytes=new Uint8Array(reader.result);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function copyOutput(){
+  const text=document.getElementById('output').value;
+  if(!text){showStatus('Nothing to copy.','error');return}
+  navigator.clipboard.writeText(text).then(()=>{
+    const toast=document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'),2000);
+  }).catch(()=>showStatus('Copy failed.','error'));
+}
+
+function downloadOutput(){
+  if(lastCompressedBytes){
+    const blob=new Blob([lastCompressedBytes],{type:'application/gzip'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='output.gz';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }else{
+    const text=document.getElementById('output').value;
+    if(!text){showStatus('Nothing to download.','error');return}
+    const blob=new Blob([text],{type:'text/plain'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='output.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+}
+
+function clearAll(){
+  document.getElementById('input').value='';
+  document.getElementById('output').value='';
+  document.getElementById('status').className='status';
+  document.getElementById('statsSection').style.display='none';
+  document.getElementById('fileName').textContent='';
+  lastCompressedBytes=null;
+  lastOriginalBytes=null;
+  lastFileBytes=null;
+}
+
+// Drag and drop
+const dz=document.getElementById('dropZone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
+dz.addEventListener('drop',e=>{
+  e.preventDefault();dz.classList.remove('dragover');
+  if(e.dataTransfer.files.length){
+    document.getElementById('fileInput').files=e.dataTransfer.files;
+    handleFile({target:{files:e.dataTransfer.files}});
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Wrap & Column Formatter - Free Online Tool</title>
+<meta name="description" content="Free online text wrap tool. Wrap text at specified column width, unwrap paragraphs, add line prefixes. Perfect for commit messages, code comments, and terminal output.">
+<meta name="keywords" content="text wrap, word wrap, column width, line wrap, commit message, code comments, text formatter, online tool, free">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/textwrap.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.controls label{font-size:.85rem;color:var(--muted)}
+.controls input[type="number"]{width:70px}
+.controls input[type="text"]{width:100px}
+.ruler{font-family:var(--mono);font-size:.75rem;color:var(--muted);overflow-x:auto;white-space:pre;padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px;user-select:none}
+.stats-row{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:var(--muted);margin-top:8px}
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.presets button{font-size:.78rem;padding:4px 10px}
+@media(max-width:768px){.controls{flex-direction:column;align-items:stretch}}
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Text Wrap & Column Formatter</h1>
+  <p class="subtitle">Wrap text at a specified column width, unwrap paragraphs, or add line prefixes. Great for commit messages, code comments, and terminal output.</p>
+
+  <div class="card">
+    <h2>📝 Input</h2>
+    <textarea id="input" rows="10" placeholder="Paste your text here..." aria-label="Input text"></textarea>
+  </div>
+
+  <div class="card">
+    <h2>⚙️ Options</h2>
+    <div class="controls">
+      <label>Column width: <input type="number" id="colWidth" value="80" min="10" max="500"></label>
+      <label>Prefix: <input type="text" id="prefix" placeholder="e.g. // or # "></label>
+      <label><input type="checkbox" id="breakLong"> Break long words</label>
+      <label><input type="checkbox" id="trimLines" checked> Trim trailing spaces</label>
+    </div>
+    <div class="presets">
+      <span style="font-size:.82rem;color:var(--muted);line-height:2">Presets:</span>
+      <button class="btn btn-secondary" onclick="setPreset(72,'')">Git commit (72)</button>
+      <button class="btn btn-secondary" onclick="setPreset(80,'')">Terminal (80)</button>
+      <button class="btn btn-secondary" onclick="setPreset(100,'')">Wide (100)</button>
+      <button class="btn btn-secondary" onclick="setPreset(120,'')">Ultra-wide (120)</button>
+      <button class="btn btn-secondary" onclick="setPreset(80,'// ')">JS comment</button>
+      <button class="btn btn-secondary" onclick="setPreset(80,'# ')">Python/Shell</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" onclick="wrapText()">↩️ Wrap Text</button>
+      <button class="btn btn-secondary" onclick="unwrapText()">↔️ Unwrap / Join Lines</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📋 Output</h2>
+    <div class="ruler" id="ruler"></div>
+    <textarea id="output" rows="12" readonly aria-label="Output text"></textarea>
+    <div class="stats-row">
+      <span id="statLines">Lines: 0</span>
+      <span id="statMaxCol">Max col: 0</span>
+      <span id="statChars">Chars: 0</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="copyOutput()">📋 Copy</button>
+      <button class="btn btn-secondary" onclick="useAsInput()">⬆️ Use as Input</button>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+  Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank" rel="noopener">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+function showStatus(msg,type){
+  const el=document.getElementById('status');
+  el.textContent=msg;
+  el.className='status '+type;
+  if(type==='success')setTimeout(()=>el.className='status',3000);
+}
+
+function setPreset(width,prefix){
+  document.getElementById('colWidth').value=width;
+  document.getElementById('prefix').value=prefix;
+}
+
+function buildRuler(width){
+  let r='';
+  for(let i=1;i<=width;i++){
+    if(i%10===0)r+='|';
+    else if(i%5===0)r+='+';
+    else r+='·';
+  }
+  document.getElementById('ruler').textContent=r;
+}
+
+function wrapLine(text,width,breakLong){
+  if(text.length<=width)return [text];
+  const words=text.split(/(\s+)/);
+  const lines=[];
+  let current='';
+
+  for(let i=0;i<words.length;i++){
+    const word=words[i];
+    if(/^\s+$/.test(word)){
+      if(current.length+word.length<=width){
+        current+=word;
+      }else{
+        lines.push(current);
+        current='';
+      }
+      continue;
+    }
+    if(current.length===0){
+      if(word.length<=width){
+        current=word;
+      }else if(breakLong){
+        let remaining=word;
+        while(remaining.length>width){
+          lines.push(remaining.slice(0,width));
+          remaining=remaining.slice(width);
+        }
+        current=remaining;
+      }else{
+        current=word;
+      }
+    }else if(current.length+1+word.length<=width){
+      current+=' '+word;
+    }else{
+      lines.push(current);
+      if(word.length>width&&breakLong){
+        let remaining=word;
+        while(remaining.length>width){
+          lines.push(remaining.slice(0,width));
+          remaining=remaining.slice(width);
+        }
+        current=remaining;
+      }else{
+        current=word;
+      }
+    }
+  }
+  if(current)lines.push(current);
+  return lines;
+}
+
+function wrapText(){
+  const input=document.getElementById('input').value;
+  if(!input.trim()){showStatus('Please enter some text.','error');return}
+  const width=parseInt(document.getElementById('colWidth').value)||80;
+  const prefix=document.getElementById('prefix').value;
+  const breakLong=document.getElementById('breakLong').checked;
+  const trimLines=document.getElementById('trimLines').checked;
+  const effectiveWidth=width-prefix.length;
+
+  if(effectiveWidth<10){showStatus('Column width too small for the given prefix.','error');return}
+
+  const paragraphs=input.split('\n');
+  const result=[];
+
+  for(const para of paragraphs){
+    if(para.trim()===''){
+      result.push(prefix);
+      continue;
+    }
+    const wrapped=wrapLine(para,effectiveWidth,breakLong);
+    for(let line of wrapped){
+      if(trimLines)line=line.replace(/\s+$/,'');
+      result.push(prefix+line);
+    }
+  }
+
+  const output=result.join('\n');
+  document.getElementById('output').value=output;
+  updateStats(output);
+  buildRuler(width);
+  showStatus('Text wrapped at '+width+' columns!','success');
+}
+
+function unwrapText(){
+  const input=document.getElementById('input').value;
+  if(!input.trim()){showStatus('Please enter some text.','error');return}
+
+  const lines=input.split('\n');
+  const paragraphs=[];
+  let current=[];
+
+  for(const line of lines){
+    if(line.trim()===''){
+      if(current.length>0){
+        paragraphs.push(current.join(' '));
+        current=[];
+      }
+      paragraphs.push('');
+    }else{
+      current.push(line.trim());
+    }
+  }
+  if(current.length>0)paragraphs.push(current.join(' '));
+
+  const output=paragraphs.join('\n');
+  document.getElementById('output').value=output;
+  updateStats(output);
+  buildRuler(parseInt(document.getElementById('colWidth').value)||80);
+  showStatus('Lines joined into paragraphs!','success');
+}
+
+function updateStats(text){
+  const lines=text.split('\n');
+  const maxCol=Math.max(...lines.map(l=>l.length));
+  document.getElementById('statLines').textContent='Lines: '+lines.length;
+  document.getElementById('statMaxCol').textContent='Max col: '+maxCol;
+  document.getElementById('statChars').textContent='Chars: '+text.length;
+}
+
+function copyOutput(){
+  const text=document.getElementById('output').value;
+  if(!text){showStatus('Nothing to copy.','error');return}
+  navigator.clipboard.writeText(text).then(()=>{
+    const toast=document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'),2000);
+  }).catch(()=>showStatus('Copy failed.','error'));
+}
+
+function useAsInput(){
+  const output=document.getElementById('output').value;
+  if(!output)return;
+  document.getElementById('input').value=output;
+  document.getElementById('output').value='';
+}
+
+function clearAll(){
+  document.getElementById('input').value='';
+  document.getElementById('output').value='';
+  document.getElementById('status').className='status';
+  document.getElementById('ruler').textContent='';
+  document.getElementById('statLines').textContent='Lines: 0';
+  document.getElementById('statMaxCol').textContent='Max col: 0';
+  document.getElementById('statChars').textContent='Chars: 0';
+}
+
+buildRuler(80);
+</script>
+</body>
+</html>
