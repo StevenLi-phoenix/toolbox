@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML Validator & Linter - Free Online Tool</title>
+<meta name="description" content="Validate and lint HTML code for common issues: unclosed tags, deprecated elements, missing attributes, accessibility problems. 100% client-side.">
+<meta name="keywords" content="html validator, html linter, html checker, html audit, accessibility checker, html errors">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/htmlvalidate.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin:1rem 0}
+  .summary-card{border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;background:var(--surface)}
+  .summary-card .val{font-size:1.5rem;font-weight:700}
+  .summary-card .label{font-size:.78rem;color:var(--muted);margin-top:2px}
+  .summary-card.errors .val{color:var(--error)}
+  .summary-card.warnings .val{color:var(--warning)}
+  .summary-card.info .val{color:var(--accent)}
+  .summary-card.pass .val{color:var(--success)}
+  .issue-list{margin:1rem 0}
+  .issue{display:flex;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);margin:6px 0;background:var(--surface);align-items:flex-start}
+  .issue-icon{font-size:1.1rem;flex-shrink:0;margin-top:1px}
+  .issue-body{flex:1;min-width:0}
+  .issue-msg{font-size:.88rem;line-height:1.4}
+  .issue-detail{font-size:.78rem;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+  .issue.error{border-left:3px solid var(--error)}
+  .issue.warning{border-left:3px solid var(--warning)}
+  .issue.info{border-left:3px solid var(--accent)}
+  .filter-row{display:flex;gap:8px;flex-wrap:wrap;margin:1rem 0}
+  .filter-btn{padding:4px 14px;border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem;cursor:pointer;background:var(--surface);color:var(--text);transition:all .15s}
+  .filter-btn.active{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+  .score-badge{display:inline-block;padding:4px 16px;border-radius:var(--radius);font-weight:700;font-size:1.1rem;color:#fff}
+  .score-good{background:var(--success)}
+  .score-ok{background:var(--warning)}
+  .score-bad{background:var(--error)}
+  @media(max-width:768px){
+    .summary-grid{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HTML Validator & Linter</h1>
+<p class="subtitle">Check HTML for common errors, deprecated elements, missing attributes, and accessibility issues</p>
+
+<div class="card">
+<h2>📝 Paste HTML</h2>
+<textarea id="input" placeholder="Paste your HTML here..."></textarea>
+<div class="btn-row">
+<button class="btn" onclick="validate()">✅ Validate</button>
+<button class="btn-secondary" onclick="loadSample()">📋 Load Sample</button>
+<button class="btn-secondary" onclick="$id('input').value='';$id('results').innerHTML=''">🗑️ Clear</button>
+</div>
+</div>
+
+<div id="results"></div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+function $id(id){return document.getElementById(id)}
+
+const DEPRECATED_ELEMENTS=['acronym','applet','basefont','big','blink','center','dir','font','frame','frameset','isindex','marquee','menu','nobr','noframes','plaintext','s','strike','tt','u','xmp'];
+const VOID_ELEMENTS=['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr'];
+const REQUIRED_ALT_ELEMENTS=['img','area'];
+const HEADING_ELEMENTS=['h1','h2','h3','h4','h5','h6'];
+
+function validate(){
+  const html=$id('input').value.trim();
+  if(!html){$id('results').innerHTML='<p class="empty">Paste some HTML to validate.</p>';return}
+
+  const issues=[];
+
+  // Parse with DOMParser
+  const parser=new DOMParser();
+  const doc=parser.parseFromString(html,'text/html');
+
+  // Check parser errors
+  const parserErrors=doc.querySelectorAll('parsererror');
+  parserErrors.forEach(pe=>{
+    issues.push({type:'error',msg:'HTML parsing error',detail:pe.textContent.slice(0,120)});
+  });
+
+  // Check deprecated elements
+  DEPRECATED_ELEMENTS.forEach(tag=>{
+    const els=doc.querySelectorAll(tag);
+    if(els.length){
+      issues.push({type:'warning',msg:`Deprecated element <${tag}> used ${els.length} time(s)`,detail:`Replace <${tag}> with modern CSS or semantic HTML.`});
+    }
+  });
+
+  // Check for missing alt on images
+  doc.querySelectorAll('img').forEach(img=>{
+    if(!img.hasAttribute('alt')){
+      const src=img.getAttribute('src')||'(no src)';
+      issues.push({type:'error',msg:'Image missing alt attribute',detail:`<img src="${esc(src.slice(0,60))}"> — required for accessibility.`});
+    }
+  });
+
+  // Check empty alt on non-decorative images
+  doc.querySelectorAll('img[alt=""]').forEach(img=>{
+    if(!img.getAttribute('role')){
+      issues.push({type:'info',msg:'Image has empty alt text',detail:'Empty alt marks image as decorative. Add role="presentation" if intentional.'});
+    }
+  });
+
+  // Check anchor links
+  doc.querySelectorAll('a').forEach(a=>{
+    const href=a.getAttribute('href');
+    if(!href&&!a.hasAttribute('name')&&!a.hasAttribute('id')){
+      issues.push({type:'warning',msg:'Anchor tag without href attribute',detail:`<a>${esc(a.textContent.slice(0,40))}...</a> — add href or use <button> instead.`});
+    }
+    if(href==='#'){
+      issues.push({type:'info',msg:'Link has href="#"',detail:'Consider using a <button> for interactive elements instead of href="#".'});
+    }
+    // Check target=_blank without rel
+    if(a.getAttribute('target')==='_blank'&&!a.getAttribute('rel')){
+      issues.push({type:'warning',msg:'target="_blank" without rel="noopener"',detail:'Add rel="noopener noreferrer" for security when using target="_blank".'});
+    }
+  });
+
+  // Check form inputs for labels
+  doc.querySelectorAll('input,select,textarea').forEach(el=>{
+    const type=el.getAttribute('type');
+    if(type==='hidden'||type==='submit'||type==='button'||type==='reset')return;
+    const id=el.getAttribute('id');
+    const ariaLabel=el.getAttribute('aria-label')||el.getAttribute('aria-labelledby');
+    if(!ariaLabel&&(!id||!doc.querySelector(`label[for="${id}"]`))){
+      issues.push({type:'warning',msg:`Form input missing associated label`,detail:`<${el.tagName.toLowerCase()} type="${type||'text'}"> needs a <label for="..."> or aria-label.`});
+    }
+  });
+
+  // Check heading hierarchy
+  const headings=doc.querySelectorAll('h1,h2,h3,h4,h5,h6');
+  let prevLevel=0;
+  const h1Count=[...doc.querySelectorAll('h1')].length;
+  if(h1Count>1){
+    issues.push({type:'warning',msg:`Multiple <h1> elements found (${h1Count})`,detail:'Best practice is to have exactly one <h1> per page.'});
+  }
+  headings.forEach(h=>{
+    const level=parseInt(h.tagName[1]);
+    if(prevLevel&&level>prevLevel+1){
+      issues.push({type:'warning',msg:`Heading level skipped: <h${prevLevel}> → <h${level}>`,detail:'Heading levels should not skip (e.g., h2 → h4). Use sequential levels.'});
+    }
+    prevLevel=level;
+  });
+
+  // Check for inline styles
+  const inlineStyles=doc.querySelectorAll('[style]');
+  if(inlineStyles.length>3){
+    issues.push({type:'info',msg:`${inlineStyles.length} elements use inline styles`,detail:'Consider using CSS classes instead of inline styles for better maintainability.'});
+  }
+
+  // Check for empty elements that shouldn't be empty
+  ['p','div','span','li','td','th','section','article'].forEach(tag=>{
+    doc.querySelectorAll(tag).forEach(el=>{
+      if(!el.textContent.trim()&&!el.querySelector('*')&&!el.innerHTML.trim()){
+        issues.push({type:'info',msg:`Empty <${tag}> element found`,detail:'Consider removing empty elements or adding content.'});
+      }
+    });
+  });
+
+  // Check meta viewport
+  if(html.includes('<head')&&!html.includes('viewport')){
+    issues.push({type:'warning',msg:'Missing viewport meta tag',detail:'Add <meta name="viewport" content="width=device-width, initial-scale=1.0"> for responsive design.'});
+  }
+
+  // Check doctype
+  if(!html.trim().toLowerCase().startsWith('<!doctype')){
+    issues.push({type:'info',msg:'Missing DOCTYPE declaration',detail:'Add <!DOCTYPE html> at the top for standards mode rendering.'});
+  }
+
+  // Check lang attribute
+  const htmlEl=doc.querySelector('html');
+  if(htmlEl&&!htmlEl.getAttribute('lang')&&html.includes('<html')){
+    issues.push({type:'warning',msg:'Missing lang attribute on <html>',detail:'Add lang="en" (or appropriate language) for accessibility and SEO.'});
+  }
+
+  // Check for deprecated attributes
+  doc.querySelectorAll('[align],[bgcolor],[border],[cellpadding],[cellspacing],[width][not="img")],[height]:not(img)').forEach(el=>{
+    const attrs=[];
+    ['align','bgcolor','border','cellpadding','cellspacing'].forEach(a=>{
+      if(el.hasAttribute(a))attrs.push(a);
+    });
+    if(attrs.length){
+      issues.push({type:'warning',msg:`Deprecated attribute(s): ${attrs.join(', ')}`,detail:`On <${el.tagName.toLowerCase()}>. Use CSS instead.`});
+    }
+  });
+
+  // Check for event handler attributes
+  const eventAttrs=['onclick','onload','onerror','onmouseover','onmouseout','onfocus','onblur','onchange','onsubmit'];
+  eventAttrs.forEach(attr=>{
+    const els=doc.querySelectorAll(`[${attr}]`);
+    if(els.length){
+      issues.push({type:'info',msg:`Inline event handler "${attr}" found (${els.length}×)`,detail:'Consider using addEventListener() for better separation of concerns.'});
+    }
+  });
+
+  // Check unclosed tags via regex on raw HTML
+  const openTags=[];
+  const tagRegex=/<\/?([a-z][a-z0-9]*)\b[^>]*\/?>/gi;
+  let tm;
+  while((tm=tagRegex.exec(html))!==null){
+    const full=tm[0];
+    const tag=tm[1].toLowerCase();
+    if(VOID_ELEMENTS.includes(tag))continue;
+    if(full.startsWith('</')){
+      if(openTags.length&&openTags[openTags.length-1]===tag){
+        openTags.pop();
+      }
+    }else if(!full.endsWith('/>')){
+      openTags.push(tag);
+    }
+  }
+  // Note: This is a simple check and may have false positives
+  if(openTags.length>0&&openTags.length<=5){
+    issues.push({type:'error',msg:`Potentially unclosed tag(s): ${openTags.map(t=>'<'+t+'>').join(', ')}`,detail:'These tags may be missing closing tags. Check your HTML structure.'});
+  }
+
+  // Check title
+  if(html.includes('<head')&&!doc.querySelector('title')){
+    issues.push({type:'warning',msg:'Missing <title> element',detail:'Every page should have a <title> for SEO and accessibility.'});
+  }
+
+  renderResults(issues);
+}
+
+function renderResults(issues){
+  const errors=issues.filter(i=>i.type==='error');
+  const warnings=issues.filter(i=>i.type==='warning');
+  const infos=issues.filter(i=>i.type==='info');
+  const total=issues.length;
+  const score=Math.max(0,100-errors.length*10-warnings.length*5-infos.length*1);
+  const scoreClass=score>=80?'score-good':score>=50?'score-ok':'score-bad';
+
+  let html=`
+  <div class="summary-grid">
+    <div class="summary-card"><div class="val"><span class="score-badge ${scoreClass}">${score}/100</span></div><div class="label">Score</div></div>
+    <div class="summary-card errors"><div class="val">${errors.length}</div><div class="label">Errors</div></div>
+    <div class="summary-card warnings"><div class="val">${warnings.length}</div><div class="label">Warnings</div></div>
+    <div class="summary-card info"><div class="val">${infos.length}</div><div class="label">Info</div></div>
+    <div class="summary-card pass"><div class="val">${total===0?'✓':'—'}</div><div class="label">${total===0?'All Clear':'Issues Found'}</div></div>
+  </div>`;
+
+  if(total===0){
+    html+=`<div class="card" style="text-align:center;padding:2rem"><h2 style="color:var(--success)">✅ No issues found!</h2><p style="color:var(--muted);margin-top:8px">Your HTML looks good.</p></div>`;
+  }else{
+    html+=`<div class="filter-row">
+      <button class="filter-btn active" onclick="filterIssues('all',this)">All (${total})</button>
+      <button class="filter-btn" onclick="filterIssues('error',this)">Errors (${errors.length})</button>
+      <button class="filter-btn" onclick="filterIssues('warning',this)">Warnings (${warnings.length})</button>
+      <button class="filter-btn" onclick="filterIssues('info',this)">Info (${infos.length})</button>
+    </div>`;
+    html+=`<div class="issue-list" id="issue-list">`;
+    issues.forEach(i=>{
+      const icon=i.type==='error'?'❌':i.type==='warning'?'⚠️':'ℹ️';
+      html+=`<div class="issue ${i.type}" data-type="${i.type}"><span class="issue-icon">${icon}</span><div class="issue-body"><div class="issue-msg">${esc(i.msg)}</div><div class="issue-detail">${esc(i.detail)}</div></div></div>`;
+    });
+    html+=`</div>`;
+  }
+
+  $id('results').innerHTML=html;
+}
+
+function filterIssues(type,btn){
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.issue').forEach(el=>{
+    el.style.display=(type==='all'||el.dataset.type===type)?'flex':'none';
+  });
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+function loadSample(){
+  $id('input').value=`<html>
+<head>
+  <title>My Page</title>
+</head>
+<body>
+  <h1>Welcome to My Site</h1>
+  <h3>About Us</h3>
+  <p></p>
+
+  <img src="photo.jpg">
+  <img src="banner.png" alt="">
+
+  <a target="_blank" href="https://example.com">External Link</a>
+  <a>Click here</a>
+  <a href="#">Go</a>
+
+  <form>
+    <input type="text" id="name">
+    <input type="email">
+    <select>
+      <option>Choose...</option>
+    </select>
+    <button type="submit">Submit</button>
+  </form>
+
+  <center>Centered text</center>
+  <font color="red">Red text</font>
+  <marquee>Scrolling text</marquee>
+
+  <table border="1" cellpadding="5" bgcolor="#eee">
+    <tr><td>Data</td></tr>
+  </table>
+
+  <div style="color: red; font-size: 12px;">Inline 1</div>
+  <div style="margin: 10px;">Inline 2</div>
+  <div style="padding: 5px;">Inline 3</div>
+  <div style="background: blue;">Inline 4</div>
+
+  <div onclick="alert('hi')">Click me</div>
+</body>
+</html>`;
+  validate();
+}
+</script>
+</body>
+</html>

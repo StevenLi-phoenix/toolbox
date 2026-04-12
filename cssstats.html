@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS Statistics Analyzer - Free Online Tool</title>
+<meta name="description" content="Analyze CSS code for statistics: selector count, specificity scores, color usage, font sizes, media queries, and more. 100% client-side.">
+<meta name="keywords" content="css statistics, css analyzer, css metrics, selector count, specificity, css audit, css complexity">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cssstats.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin:1rem 0}
+  .stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center}
+  .stat-card .val{font-size:1.5rem;font-weight:700;color:var(--text)}
+  .stat-card .label{font-size:.78rem;color:var(--muted);margin-top:2px}
+  .detail-section{margin:1.5rem 0}
+  .detail-section h3{font-size:.95rem;font-weight:600;margin-bottom:.5rem;border-bottom:1px solid var(--border);padding-bottom:6px}
+  .color-swatch{display:inline-flex;align-items:center;gap:6px;margin:4px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem;font-family:var(--mono);background:var(--surface)}
+  .color-dot{width:18px;height:18px;border-radius:4px;border:1px solid var(--border);flex-shrink:0}
+  .bar-chart{margin:8px 0}
+  .bar-row{display:flex;align-items:center;gap:8px;margin:3px 0;font-size:.82rem}
+  .bar-label{width:120px;flex-shrink:0;text-align:right;font-family:var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar-track{flex:1;height:18px;background:var(--surface2);border-radius:3px;overflow:hidden}
+  .bar-fill{height:100%;background:var(--accent);border-radius:3px;min-width:2px;transition:width .3s}
+  .bar-count{width:40px;font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+  .tag-list{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .tag{padding:3px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:.78rem;font-family:var(--mono);background:var(--surface)}
+  .spec-high{color:var(--error);font-weight:600}
+  .spec-med{color:var(--warning)}
+  .spec-low{color:var(--success)}
+  @media(max-width:768px){
+    .stats-grid{grid-template-columns:repeat(2,1fr)}
+    .bar-label{width:80px;font-size:.75rem}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CSS Statistics Analyzer</h1>
+<p class="subtitle">Analyze CSS code for metrics — selectors, specificity, colors, fonts, media queries, and more</p>
+
+<div class="card">
+<h2>📝 Paste CSS</h2>
+<textarea id="input" placeholder="Paste your CSS here..."></textarea>
+<div class="btn-row">
+<button class="btn" onclick="analyze()">📊 Analyze</button>
+<button class="btn-secondary" onclick="loadSample()">📋 Load Sample</button>
+<button class="btn-secondary" onclick="$id('input').value='';$id('results').innerHTML=''">🗑️ Clear</button>
+</div>
+</div>
+
+<div id="results"></div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+function $id(id){return document.getElementById(id)}
+
+function analyze(){
+  const css=$id('input').value.trim();
+  if(!css){$id('results').innerHTML='<p class="empty">Paste some CSS to analyze.</p>';return}
+
+  const stats=collectStats(css);
+  renderResults(stats);
+}
+
+function collectStats(css){
+  // Strip comments
+  const stripped=css.replace(/\/\*[\s\S]*?\*\//g,'');
+
+  // Rules
+  const rules=[];
+  const ruleRegex=/([^{}]+)\{([^{}]*)\}/g;
+  let m;
+  while((m=ruleRegex.exec(stripped))!==null){
+    const selectorGroup=m[1].trim();
+    const body=m[2].trim();
+    if(selectorGroup.startsWith('@'))continue;
+    const selectors=selectorGroup.split(',').map(s=>s.trim()).filter(Boolean);
+    const declarations=body.split(';').map(d=>d.trim()).filter(Boolean);
+    rules.push({selectors,declarations,raw:m[0]});
+  }
+
+  // Selectors
+  const allSelectors=rules.flatMap(r=>r.selectors);
+  const allDeclarations=rules.flatMap(r=>r.declarations);
+
+  // Properties
+  const propCounts={};
+  const values=[];
+  allDeclarations.forEach(d=>{
+    const i=d.indexOf(':');
+    if(i===-1)return;
+    const prop=d.slice(0,i).trim().toLowerCase();
+    const val=d.slice(i+1).trim();
+    propCounts[prop]=(propCounts[prop]||0)+1;
+    values.push({prop,val});
+  });
+
+  // Colors
+  const colorSet=new Set();
+  const colorRegex=/#(?:[0-9a-f]{3,8})\b|rgba?\([^)]+\)|hsla?\([^)]+\)|(?:transparent|currentcolor|inherit)\b/gi;
+  values.forEach(({val})=>{
+    let cm;
+    while((cm=colorRegex.exec(val))!==null){
+      const c=cm[0].toLowerCase();
+      if(c!=='inherit'&&c!=='transparent')colorSet.add(c);
+    }
+  });
+  // Also check named colors
+  const namedColors=['red','blue','green','black','white','gray','grey','orange','yellow','purple','pink','brown','cyan','magenta','navy','teal','olive','maroon','lime','aqua','silver','fuchsia'];
+  values.forEach(({val})=>{
+    namedColors.forEach(nc=>{
+      if(new RegExp('\\b'+nc+'\\b','i').test(val))colorSet.add(nc);
+    });
+  });
+
+  // Font sizes
+  const fontSizes=new Set();
+  values.filter(v=>v.prop==='font-size').forEach(v=>fontSizes.add(v.val));
+
+  // Font families
+  const fontFamilies=new Set();
+  values.filter(v=>v.prop==='font-family'||v.prop==='font').forEach(v=>{
+    v.val.split(',').forEach(f=>{
+      const clean=f.trim().replace(/['"]/g,'');
+      if(clean)fontFamilies.add(clean);
+    });
+  });
+
+  // Media queries
+  const mediaQueries=[];
+  const mqRegex=/@media\s*([^{]+)/g;
+  while((m=mqRegex.exec(css))!==null){
+    mediaQueries.push(m[1].trim());
+  }
+
+  // Specificity
+  const specificities=allSelectors.map(s=>({selector:s,spec:calcSpecificity(s)}));
+  specificities.sort((a,b)=>{
+    const sa=a.spec,sb=b.spec;
+    return(sb[0]-sa[0])||(sb[1]-sa[1])||(sb[2]-sa[2]);
+  });
+
+  // !important count
+  let importantCount=0;
+  allDeclarations.forEach(d=>{if(/!important/i.test(d))importantCount++});
+
+  // Unique selectors
+  const uniqueSelectors=new Set(allSelectors);
+
+  // ID selectors
+  const idSelectors=allSelectors.filter(s=>/#[a-zA-Z]/.test(s));
+
+  // @keyframes, @import, @font-face
+  const keyframes=(css.match(/@keyframes/gi)||[]).length;
+  const imports=(css.match(/@import/gi)||[]).length;
+  const fontFaces=(css.match(/@font-face/gi)||[]).length;
+
+  // File size
+  const sizeBytes=new Blob([css]).size;
+
+  return {
+    rules:rules.length,
+    totalSelectors:allSelectors.length,
+    uniqueSelectors:uniqueSelectors.size,
+    totalDeclarations:allDeclarations.length,
+    propCounts,
+    colors:[...colorSet],
+    fontSizes:[...fontSizes],
+    fontFamilies:[...fontFamilies],
+    mediaQueries,
+    specificities,
+    importantCount,
+    idSelectors:idSelectors.length,
+    keyframes,
+    imports,
+    fontFaces,
+    sizeBytes
+  };
+}
+
+function calcSpecificity(sel){
+  let a=0,b=0,c=0;
+  // Remove :not() wrapper but keep contents
+  sel=sel.replace(/:not\(([^)]*)\)/g,'$1');
+  // IDs
+  a=(sel.match(/#[a-zA-Z_-][a-zA-Z0-9_-]*/g)||[]).length;
+  // Classes, attributes, pseudo-classes
+  b=(sel.match(/\.[a-zA-Z_-][a-zA-Z0-9_-]*/g)||[]).length
+    +(sel.match(/\[[^\]]+\]/g)||[]).length
+    +(sel.match(/:[a-zA-Z][a-zA-Z-]*(?:\([^)]*\))?/g)||[]).length
+    -(sel.match(/::?[a-zA-Z][a-zA-Z-]*/g)||[]).filter(p=>
+      /^::?(before|after|first-line|first-letter|placeholder|selection|marker|backdrop)$/i.test(p)).length;
+  // Elements, pseudo-elements
+  const stripped=sel.replace(/#[a-zA-Z_-][a-zA-Z0-9_-]*/g,'')
+    .replace(/\.[a-zA-Z_-][a-zA-Z0-9_-]*/g,'')
+    .replace(/\[[^\]]+\]/g,'')
+    .replace(/:[a-zA-Z][a-zA-Z-]*(?:\([^)]*\))?/g,'')
+    .replace(/[>+~ *]/g,' ').trim();
+  c=(stripped.match(/[a-zA-Z_-][a-zA-Z0-9_-]*/g)||[]).length
+    +(sel.match(/::?(?:before|after|first-line|first-letter|placeholder|selection|marker|backdrop)/gi)||[]).length;
+  return [a,b,c];
+}
+
+function renderResults(s){
+  const top10Props=Object.entries(s.propCounts).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const maxProp=top10Props.length?top10Props[0][1]:1;
+
+  let html=`
+  <div class="stats-grid">
+    <div class="stat-card"><div class="val">${s.rules}</div><div class="label">Rules</div></div>
+    <div class="stat-card"><div class="val">${s.totalSelectors}</div><div class="label">Selectors</div></div>
+    <div class="stat-card"><div class="val">${s.uniqueSelectors}</div><div class="label">Unique Selectors</div></div>
+    <div class="stat-card"><div class="val">${s.totalDeclarations}</div><div class="label">Declarations</div></div>
+    <div class="stat-card"><div class="val">${s.colors.length}</div><div class="label">Unique Colors</div></div>
+    <div class="stat-card"><div class="val">${s.fontSizes.length}</div><div class="label">Font Sizes</div></div>
+    <div class="stat-card"><div class="val">${s.mediaQueries.length}</div><div class="label">Media Queries</div></div>
+    <div class="stat-card"><div class="val">${s.importantCount}</div><div class="label">!important</div></div>
+    <div class="stat-card"><div class="val">${s.idSelectors}</div><div class="label">ID Selectors</div></div>
+    <div class="stat-card"><div class="val">${fmt(s.sizeBytes)}</div><div class="label">File Size</div></div>
+  </div>`;
+
+  // Top properties
+  if(top10Props.length){
+    html+=`<div class="detail-section"><h3>📊 Top Properties</h3><div class="bar-chart">`;
+    top10Props.forEach(([prop,count])=>{
+      const pct=Math.round((count/maxProp)*100);
+      html+=`<div class="bar-row"><span class="bar-label">${esc(prop)}</span><div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div><span class="bar-count">${count}</span></div>`;
+    });
+    html+=`</div></div>`;
+  }
+
+  // Colors
+  if(s.colors.length){
+    html+=`<div class="detail-section"><h3>🎨 Colors Used (${s.colors.length})</h3><div class="tag-list">`;
+    s.colors.forEach(c=>{
+      html+=`<span class="color-swatch" onclick="copyText('${esc(c)}')"><span class="color-dot" style="background:${esc(c)}"></span>${esc(c)}</span>`;
+    });
+    html+=`</div></div>`;
+  }
+
+  // Font sizes
+  if(s.fontSizes.length){
+    html+=`<div class="detail-section"><h3>🔤 Font Sizes (${s.fontSizes.length})</h3><div class="tag-list">`;
+    s.fontSizes.forEach(f=>{html+=`<span class="tag">${esc(f)}</span>`});
+    html+=`</div></div>`;
+  }
+
+  // Font families
+  if(s.fontFamilies.length){
+    html+=`<div class="detail-section"><h3>Aa Font Families (${s.fontFamilies.length})</h3><div class="tag-list">`;
+    s.fontFamilies.forEach(f=>{html+=`<span class="tag">${esc(f)}</span>`});
+    html+=`</div></div>`;
+  }
+
+  // Media queries
+  if(s.mediaQueries.length){
+    html+=`<div class="detail-section"><h3>📱 Media Queries (${s.mediaQueries.length})</h3><div class="tag-list">`;
+    s.mediaQueries.forEach(q=>{html+=`<span class="tag">${esc(q)}</span>`});
+    html+=`</div></div>`;
+  }
+
+  // Specificity top 10
+  if(s.specificities.length){
+    const top=s.specificities.slice(0,10);
+    html+=`<div class="detail-section"><h3>🎯 Highest Specificity Selectors</h3><div class="bar-chart">`;
+    top.forEach(({selector,spec})=>{
+      const score=spec[0]*100+spec[1]*10+spec[2];
+      const cls=spec[0]>0?'spec-high':spec[1]>2?'spec-med':'spec-low';
+      html+=`<div class="bar-row"><span class="bar-label" title="${esc(selector)}">${esc(selector)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.min(100,score*5)}%;background:${spec[0]>0?'var(--error)':spec[1]>2?'var(--warning)':'var(--success)'}"></div></div><span class="bar-count ${cls}">(${spec.join(',')})</span></div>`;
+    });
+    html+=`</div></div>`;
+  }
+
+  // At-rules
+  if(s.keyframes||s.imports||s.fontFaces){
+    html+=`<div class="detail-section"><h3>📦 At-Rules</h3><div class="tag-list">`;
+    if(s.keyframes)html+=`<span class="tag">@keyframes × ${s.keyframes}</span>`;
+    if(s.imports)html+=`<span class="tag">@import × ${s.imports}</span>`;
+    if(s.fontFaces)html+=`<span class="tag">@font-face × ${s.fontFaces}</span>`;
+    html+=`</div></div>`;
+  }
+
+  $id('results').innerHTML=html;
+}
+
+function fmt(bytes){
+  if(bytes<1024)return bytes+' B';
+  return (bytes/1024).toFixed(1)+' KB';
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+function copyText(t){
+  navigator.clipboard.writeText(t).then(()=>{
+    const toast=$id('toast');toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1500);
+  });
+}
+
+function loadSample(){
+  $id('input').value=`/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --primary: #3b82f6;
+  --danger: #ef4444;
+  --bg: #ffffff;
+  --text: #111827;
+  --radius: 8px;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+}
+
+h1, h2, h3 { font-weight: 700; }
+h1 { font-size: 2.5rem; }
+h2 { font-size: 1.75rem; }
+h3 { font-size: 1.25rem; }
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+#main-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  background: #1e293b;
+  color: white;
+}
+
+#main-nav .logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.btn {
+  display: inline-flex;
+  padding: 8px 20px;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white !important;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white !important;
+}
+
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+input[type="text"],
+input[type="email"],
+textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+  .container { padding: 0 12px; }
+  h1 { font-size: 1.75rem; }
+  #main-nav { flex-direction: column; }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --text: #f1f5f9;
+  }
+}`;
+  analyze();
+}
+</script>
+</body>
+</html>
