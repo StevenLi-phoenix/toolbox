@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAML Decoder - Free Online SAML Assertion Inspector</title>
+<meta name="description" content="Decode and inspect SAML assertions, responses, and metadata. Base64 decode, inflate, and format XML. No data leaves your browser.">
+<meta name="keywords" content="SAML decoder, SAML assertion, SAML response, SSO debugger, Base64 decode, XML inspector, SAML 2.0">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/saml.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .decode-options { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .decode-options label { font-size: .85rem; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .field-list { display: grid; gap: 8px; }
+  .field-row { display: flex; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); align-items: baseline; }
+  .field-label { font-size: .82rem; font-weight: 600; min-width: 120px; color: var(--muted); flex-shrink: 0; }
+  .field-value { font-family: var(--mono); font-size: .82rem; word-break: break-all; }
+  .field-value.success { color: var(--success); }
+  .field-value.error { color: var(--error); }
+  .field-value.warning { color: var(--warning); }
+  .xml-output { font-family: var(--mono); font-size: .78rem; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); white-space: pre-wrap; word-break: break-all; max-height: 500px; overflow: auto; line-height: 1.6; tab-size: 2; }
+  .xml-tag { color: #0550ae; }
+  .xml-attr { color: #953800; }
+  .xml-val { color: #0a3069; }
+  .xml-comment { color: var(--muted); font-style: italic; }
+  .attr-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  .attr-table th { text-align: left; padding: 6px 10px; background: var(--surface2); border: 1px solid var(--border); font-weight: 600; }
+  .attr-table td { padding: 6px 10px; border: 1px solid var(--border); font-family: var(--mono); word-break: break-all; }
+  .section-title { font-size: .9rem; font-weight: 600; margin: 12px 0 8px; display: flex; align-items: center; gap: 6px; }
+  @media (max-width: 768px) { .field-row { flex-direction: column; gap: 2px; } .field-label { min-width: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>SAML Decoder</h1>
+<p class="subtitle">Decode and inspect SAML assertions, responses &amp; metadata for SSO debugging</p>
+
+<div class="card">
+<h2>📥 Input</h2>
+<div class="decode-options">
+  <label><input type="checkbox" id="urlDecode" checked> URL-decode first</label>
+  <label><input type="checkbox" id="inflateData"> Inflate (deflate-compressed)</label>
+</div>
+<textarea id="input" placeholder="Paste Base64-encoded SAML assertion, response, or raw XML here..." oninput="decode()"></textarea>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <button class="btn" onclick="decode()">Decode</button>
+  <button class="btn-secondary" onclick="loadSample()">Load Sample</button>
+  <button class="btn-secondary" onclick="$('input').value='';clearOutput()">Clear</button>
+</div>
+</div>
+
+<div class="card" id="fields-card" style="display:none">
+<h2>📋 SAML Summary</h2>
+<div class="field-list" id="fields"></div>
+
+<div id="attrs-section" style="display:none">
+<div class="section-title">👤 Attributes</div>
+<table class="attr-table" id="attrs-table"><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody id="attrs-body"></tbody></table>
+</div>
+
+<div id="conditions-section" style="display:none">
+<div class="section-title">⏱️ Conditions</div>
+<div class="field-list" id="conditions"></div>
+</div>
+</div>
+
+<div class="card" id="xml-card" style="display:none">
+<h2>📄 Formatted XML</h2>
+<div style="display:flex;gap:8px;margin-bottom:8px">
+  <button class="btn-secondary" onclick="copyXml()">📋 Copy XML</button>
+</div>
+<div class="xml-output" id="xml-output"></div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let decodedXml='';
+
+function clearOutput(){
+  $('fields-card').style.display='none';
+  $('xml-card').style.display='none';
+  decodedXml='';
+}
+
+function decode(){
+  const raw=$('input').value.trim();
+  if(!raw){clearOutput();return;}
+  let xml=raw;
+  try {
+    // Check if it's already XML
+    if(!xml.startsWith('<')){
+      let decoded=xml;
+      if($('urlDecode').checked){
+        decoded=decodeURIComponent(decoded.replace(/\+/g,' '));
+      }
+      if($('inflateData').checked){
+        const bin=Uint8Array.from(atob(decoded),c=>c.charCodeAt(0));
+        const ds=new DecompressionStream('deflate-raw');
+        const reader=ds.readable.getReader();
+        const writer=ds.writable.getWriter();
+        writer.write(bin);writer.close();
+        inflateAndParse(reader);
+        return;
+      }
+      xml=atob(decoded);
+    }
+    parseAndDisplay(xml);
+  } catch(e){
+    $('fields-card').style.display='';
+    $('fields').innerHTML=`<div class="field-row"><span class="field-label">Error</span><span class="field-value error">${esc(e.message)}</span></div>`;
+    $('xml-card').style.display='none';
+  }
+}
+
+async function inflateAndParse(reader){
+  const chunks=[];
+  try {
+    while(true){
+      const {done,value}=await reader.read();
+      if(done) break;
+      chunks.push(value);
+    }
+    const total=chunks.reduce((a,c)=>a+c.length,0);
+    const result=new Uint8Array(total);
+    let off=0;
+    for(const c of chunks){result.set(c,off);off+=c.length;}
+    parseAndDisplay(new TextDecoder().decode(result));
+  } catch(e){
+    $('fields-card').style.display='';
+    $('fields').innerHTML=`<div class="field-row"><span class="field-label">Error</span><span class="field-value error">Inflate failed: ${esc(e.message)}</span></div>`;
+  }
+}
+
+function parseAndDisplay(xml){
+  decodedXml=xml;
+  const parser=new DOMParser();
+  const doc=parser.parseFromString(xml,'text/xml');
+  const err=doc.querySelector('parsererror');
+  if(err){
+    $('fields-card').style.display='';
+    $('fields').innerHTML=`<div class="field-row"><span class="field-label">Parse Error</span><span class="field-value error">${esc(err.textContent.substring(0,200))}</span></div>`;
+    $('xml-card').style.display='none';
+    return;
+  }
+  extractFields(doc);
+  displayXml(xml);
+}
+
+function ns(doc,local){
+  const saml2='urn:oasis:names:tc:SAML:2.0:assertion';
+  const saml1='urn:oasis:names:tc:SAML:1.0:assertion';
+  const proto='urn:oasis:names:tc:SAML:2.0:protocol';
+  return doc.getElementsByTagNameNS(saml2,local).length
+    ? doc.getElementsByTagNameNS(saml2,local)
+    : doc.getElementsByTagNameNS(saml1,local).length
+    ? doc.getElementsByTagNameNS(saml1,local)
+    : doc.getElementsByTagNameNS(proto,local).length
+    ? doc.getElementsByTagNameNS(proto,local)
+    : doc.getElementsByTagName(local).length
+    ? doc.getElementsByTagName(local)
+    : [];
+}
+
+function extractFields(doc){
+  const fields=[];
+  // Detect type
+  const root=doc.documentElement;
+  const rootLocal=root.localName;
+  fields.push({label:'Type',value:rootLocal,cls:''});
+  if(root.getAttribute('ID')) fields.push({label:'ID',value:root.getAttribute('ID')});
+  if(root.getAttribute('IssueInstant')) fields.push({label:'Issue Instant',value:root.getAttribute('IssueInstant')});
+  if(root.getAttribute('Version')) fields.push({label:'Version',value:root.getAttribute('Version')});
+  if(root.getAttribute('Destination')) fields.push({label:'Destination',value:root.getAttribute('Destination')});
+  // Status
+  const statusCode=[...ns(doc,'StatusCode')];
+  if(statusCode.length){
+    const val=statusCode[0].getAttribute('Value')||'';
+    const short=val.split(':').pop();
+    fields.push({label:'Status',value:short,cls:short==='Success'?'success':'error'});
+  }
+  // Issuer
+  const issuers=[...ns(doc,'Issuer')];
+  if(issuers.length) fields.push({label:'Issuer',value:issuers[0].textContent});
+  // NameID
+  const nameIds=[...ns(doc,'NameID')];
+  if(nameIds.length){
+    const n=nameIds[0];
+    fields.push({label:'NameID',value:n.textContent});
+    if(n.getAttribute('Format')){
+      fields.push({label:'NameID Format',value:n.getAttribute('Format').split(':').pop()});
+    }
+  }
+  // Subject confirmation
+  const subConf=[...ns(doc,'SubjectConfirmationData')];
+  if(subConf.length){
+    const s=subConf[0];
+    if(s.getAttribute('NotOnOrAfter')) fields.push({label:'Not On Or After',value:s.getAttribute('NotOnOrAfter')});
+    if(s.getAttribute('Recipient')) fields.push({label:'Recipient',value:s.getAttribute('Recipient')});
+  }
+  // AuthnStatement
+  const authn=[...ns(doc,'AuthnStatement')];
+  if(authn.length){
+    if(authn[0].getAttribute('AuthnInstant')) fields.push({label:'AuthN Instant',value:authn[0].getAttribute('AuthnInstant')});
+    if(authn[0].getAttribute('SessionIndex')) fields.push({label:'Session Index',value:authn[0].getAttribute('SessionIndex')});
+  }
+  // AuthnContext
+  const ctx=[...ns(doc,'AuthnContextClassRef')];
+  if(ctx.length) fields.push({label:'AuthN Context',value:ctx[0].textContent.split(':').pop()});
+  // Signature
+  const sig=doc.getElementsByTagNameNS('http://www.w3.org/2000/09/xmldsig#','Signature');
+  fields.push({label:'Signed',value:sig.length?'Yes':'No',cls:sig.length?'success':'warning'});
+
+  let html='';
+  for(const f of fields){
+    html+=`<div class="field-row"><span class="field-label">${esc(f.label)}</span><span class="field-value ${f.cls||''}">${esc(f.value||'—')}</span></div>`;
+  }
+  $('fields').innerHTML=html;
+  $('fields-card').style.display='';
+
+  // Attributes
+  const attrStmts=[...ns(doc,'AttributeStatement')];
+  const tbody=$('attrs-body');
+  tbody.innerHTML='';
+  if(attrStmts.length){
+    const attrs=[...ns(doc,'Attribute')];
+    for(const attr of attrs){
+      const name=attr.getAttribute('Name')||attr.getAttribute('FriendlyName')||'';
+      const vals=[...attr.getElementsByTagNameNS('*','AttributeValue')].map(v=>v.textContent).join(', ');
+      tbody.innerHTML+=`<tr><td>${esc(name.split('/').pop()||name)}</td><td>${esc(vals)}</td></tr>`;
+    }
+    $('attrs-section').style.display='';
+  } else {
+    $('attrs-section').style.display='none';
+  }
+
+  // Conditions
+  const conds=[...ns(doc,'Conditions')];
+  const condDiv=$('conditions');
+  condDiv.innerHTML='';
+  if(conds.length){
+    const c=conds[0];
+    if(c.getAttribute('NotBefore')) condDiv.innerHTML+=`<div class="field-row"><span class="field-label">Not Before</span><span class="field-value">${esc(c.getAttribute('NotBefore'))}</span></div>`;
+    if(c.getAttribute('NotOnOrAfter')) condDiv.innerHTML+=`<div class="field-row"><span class="field-label">Not On Or After</span><span class="field-value">${esc(c.getAttribute('NotOnOrAfter'))}</span></div>`;
+    const audiences=[...ns(doc,'Audience')];
+    for(const a of audiences){
+      condDiv.innerHTML+=`<div class="field-row"><span class="field-label">Audience</span><span class="field-value">${esc(a.textContent)}</span></div>`;
+    }
+    $('conditions-section').style.display=condDiv.innerHTML?'':'none';
+  } else {
+    $('conditions-section').style.display='none';
+  }
+}
+
+function displayXml(xml){
+  // Pretty-print XML
+  let formatted='';
+  try {
+    const parser=new DOMParser();
+    const doc=parser.parseFromString(xml,'text/xml');
+    formatted=prettyXml(doc.documentElement,0);
+  } catch(e){
+    formatted=xml;
+  }
+  $('xml-output').innerHTML=highlightXml(formatted);
+  $('xml-card').style.display='';
+}
+
+function prettyXml(node,indent){
+  const pad='  '.repeat(indent);
+  if(node.nodeType===3){
+    const t=node.textContent.trim();
+    return t?pad+t+'\n':'';
+  }
+  if(node.nodeType===8) return pad+'<!--'+node.textContent+'-->\n';
+  if(node.nodeType!==1) return '';
+  let s=pad+'<'+node.nodeName;
+  for(const attr of node.attributes){
+    s+=` ${attr.name}="${attr.value}"`;
+  }
+  const children=[...node.childNodes].filter(c=>c.nodeType===1||(c.nodeType===3&&c.textContent.trim())||c.nodeType===8);
+  if(!children.length){
+    return s+'/>\n';
+  }
+  if(children.length===1&&children[0].nodeType===3){
+    return s+'>'+children[0].textContent.trim()+'</'+node.nodeName+'>\n';
+  }
+  s+='>\n';
+  for(const child of children){
+    s+=prettyXml(child,indent+1);
+  }
+  s+=pad+'</'+node.nodeName+'>\n';
+  return s;
+}
+
+function highlightXml(xml){
+  return esc(xml)
+    .replace(/&lt;(\/?[\w:.-]+)/g,'&lt;<span class="xml-tag">$1</span>')
+    .replace(/([\w:.-]+)=&quot;([^&]*?)&quot;/g,'<span class="xml-attr">$1</span>=&quot;<span class="xml-val">$2</span>&quot;')
+    .replace(/&lt;!--(.+?)--&gt;/g,'<span class="xml-comment">&lt;!--$1--&gt;</span>');
+}
+
+function esc(s){
+  const d=document.createElement('div');d.textContent=s;return d.innerHTML;
+}
+
+function copyXml(){
+  navigator.clipboard.writeText(decodedXml);
+  const t=$('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+}
+
+function loadSample(){
+  const sampleXml=`<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_response123" Version="2.0" IssueInstant="2025-01-15T12:00:00Z" Destination="https://sp.example.com/acs">
+  <saml:Issuer>https://idp.example.com</saml:Issuer>
+  <samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>
+  <saml:Assertion ID="_assert456" Version="2.0" IssueInstant="2025-01-15T12:00:00Z">
+    <saml:Issuer>https://idp.example.com</saml:Issuer>
+    <saml:Subject>
+      <saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">user@example.com</saml:NameID>
+      <saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
+        <saml:SubjectConfirmationData NotOnOrAfter="2025-01-15T12:05:00Z" Recipient="https://sp.example.com/acs"/>
+      </saml:SubjectConfirmation>
+    </saml:Subject>
+    <saml:Conditions NotBefore="2025-01-15T11:59:00Z" NotOnOrAfter="2025-01-15T12:05:00Z">
+      <saml:AudienceRestriction><saml:Audience>https://sp.example.com</saml:Audience></saml:AudienceRestriction>
+    </saml:Conditions>
+    <saml:AuthnStatement AuthnInstant="2025-01-15T12:00:00Z" SessionIndex="_session789">
+      <saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext>
+    </saml:AuthnStatement>
+    <saml:AttributeStatement>
+      <saml:Attribute Name="email"><saml:AttributeValue>user@example.com</saml:AttributeValue></saml:Attribute>
+      <saml:Attribute Name="firstName"><saml:AttributeValue>Jane</saml:AttributeValue></saml:Attribute>
+      <saml:Attribute Name="lastName"><saml:AttributeValue>Doe</saml:AttributeValue></saml:Attribute>
+      <saml:Attribute Name="role"><saml:AttributeValue>admin</saml:AttributeValue></saml:Attribute>
+    </saml:AttributeStatement>
+  </saml:Assertion>
+</samlp:Response>`;
+  $('input').value=btoa(sampleXml);
+  decode();
+}
+</script>
+</body>
+</html>

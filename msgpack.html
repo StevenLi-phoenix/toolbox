@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MessagePack Encoder/Decoder - Free Online Tool</title>
+<meta name="description" content="Encode JSON to MessagePack and decode MessagePack to JSON. View hex dumps and compare sizes. No data leaves your browser.">
+<meta name="keywords" content="messagepack, msgpack, encoder, decoder, JSON, binary serialization, hex dump, developer tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/msgpack.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .mode-tabs { display: flex; gap: 0; margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; width: fit-content; }
+  .mode-tab { padding: 8px 18px; font-size: .85rem; border: none; background: var(--surface); color: var(--muted); cursor: pointer; border-right: 1px solid var(--border); font-weight: 500; }
+  .mode-tab:last-child { border-right: none; }
+  .mode-tab.active { background: var(--accent); color: #fff; }
+  .hex-dump { font-family: var(--mono); font-size: .78rem; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow: auto; line-height: 1.6; }
+  .hex-offset { color: var(--muted); }
+  .hex-byte { color: #0550ae; }
+  .hex-ascii { color: #953800; }
+  .stats { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+  .stat { text-align: center; }
+  .stat-val { font-size: 1.1rem; font-weight: 700; font-family: var(--mono); }
+  .stat-label { font-size: .78rem; color: var(--muted); }
+  .output-area { font-family: var(--mono); font-size: .82rem; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow: auto; }
+  .btn-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .type-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: .78rem; }
+  .type-legend span { padding: 2px 8px; border-radius: var(--radius); background: var(--surface2); border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>MessagePack Encoder / Decoder</h1>
+<p class="subtitle">Convert between JSON and MessagePack binary format</p>
+
+<div class="card">
+<div class="mode-tabs">
+  <button class="mode-tab active" onclick="setMode('encode',this)">JSON → MsgPack</button>
+  <button class="mode-tab" onclick="setMode('decode',this)">MsgPack → JSON</button>
+</div>
+
+<div id="encode-mode">
+  <h2>📝 JSON Input</h2>
+  <textarea id="json-input" placeholder='{"name": "hello", "count": 42, "active": true, "tags": ["a", "b"]}'></textarea>
+  <div class="btn-row">
+    <button class="btn" onclick="encode()">Encode to MessagePack</button>
+    <button class="btn-secondary" onclick="loadSample()">Load Sample</button>
+  </div>
+</div>
+
+<div id="decode-mode" style="display:none">
+  <h2>📝 MessagePack Hex Input</h2>
+  <textarea id="hex-input" placeholder="Paste hex-encoded MessagePack bytes (e.g. 82a46e616d65a568656c6c6f...)"></textarea>
+  <div class="btn-row">
+    <button class="btn" onclick="decodeHex()">Decode to JSON</button>
+  </div>
+</div>
+</div>
+
+<div class="card" id="result-card" style="display:none">
+<h2>📤 Result</h2>
+
+<div id="encode-result">
+  <h3 style="font-size:.9rem;margin:0 0 8px">Hex Dump</h3>
+  <div class="hex-dump" id="hex-dump"></div>
+
+  <h3 style="font-size:.9rem;margin:12px 0 8px">Raw Hex</h3>
+  <div class="output-area" id="raw-hex" style="font-size:.75rem"></div>
+
+  <div class="stats" id="stats"></div>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="copyHex()">📋 Copy Hex</button>
+    <button class="btn-secondary" onclick="downloadBin()">⬇️ Download .msgpack</button>
+  </div>
+</div>
+
+<div id="decode-result" style="display:none">
+  <h3 style="font-size:.9rem;margin:0 0 8px">Decoded JSON</h3>
+  <div class="output-area" id="json-output"></div>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="copyJson()">📋 Copy JSON</button>
+  </div>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let currentMode='encode', lastBytes=null, lastJson='';
+
+function setMode(m, btn){
+  currentMode=m;
+  document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  $('encode-mode').style.display=m==='encode'?'':'none';
+  $('decode-mode').style.display=m==='decode'?'':'none';
+  $('result-card').style.display='none';
+}
+
+// ─── MessagePack Encoder ───
+function mpEncode(val){
+  const parts=[];
+  function write(v){
+    if(v===null||v===undefined){
+      parts.push(0xc0);
+    } else if(typeof v==='boolean'){
+      parts.push(v?0xc3:0xc2);
+    } else if(typeof v==='number'){
+      if(Number.isInteger(v)){
+        if(v>=0){
+          if(v<128) parts.push(v);
+          else if(v<256){parts.push(0xcc);parts.push(v);}
+          else if(v<65536){parts.push(0xcd);push16(v);}
+          else if(v<0x100000000){parts.push(0xce);push32(v);}
+          else {parts.push(0xcf);push64(v);}
+        } else {
+          if(v>=-32) parts.push(v&0xff);
+          else if(v>=-128){parts.push(0xd0);parts.push(v&0xff);}
+          else if(v>=-32768){parts.push(0xd1);push16(v&0xffff);}
+          else if(v>=-0x80000000){parts.push(0xd2);push32(v&0xffffffff);}
+          else {parts.push(0xd3);push64s(v);}
+        }
+      } else {
+        // float64
+        parts.push(0xcb);
+        const buf=new ArrayBuffer(8);
+        new DataView(buf).setFloat64(0,v);
+        const a=new Uint8Array(buf);
+        for(let i=0;i<8;i++) parts.push(a[i]);
+      }
+    } else if(typeof v==='string'){
+      const enc=new TextEncoder().encode(v);
+      const len=enc.length;
+      if(len<32){parts.push(0xa0|len);}
+      else if(len<256){parts.push(0xd9);parts.push(len);}
+      else if(len<65536){parts.push(0xda);push16(len);}
+      else {parts.push(0xdb);push32(len);}
+      for(const b of enc) parts.push(b);
+    } else if(Array.isArray(v)){
+      const len=v.length;
+      if(len<16) parts.push(0x90|len);
+      else if(len<65536){parts.push(0xdc);push16(len);}
+      else {parts.push(0xdd);push32(len);}
+      for(const item of v) write(item);
+    } else if(typeof v==='object'){
+      const keys=Object.keys(v);
+      const len=keys.length;
+      if(len<16) parts.push(0x80|len);
+      else if(len<65536){parts.push(0xde);push16(len);}
+      else {parts.push(0xdf);push32(len);}
+      for(const k of keys){write(k);write(v[k]);}
+    }
+  }
+  function push16(n){parts.push((n>>8)&0xff);parts.push(n&0xff);}
+  function push32(n){parts.push((n>>>24)&0xff);parts.push((n>>>16)&0xff);parts.push((n>>>8)&0xff);parts.push(n&0xff);}
+  function push64(n){
+    const hi=Math.floor(n/0x100000000);
+    const lo=n>>>0;
+    push32(hi);push32(lo);
+  }
+  function push64s(n){
+    // For negative int64
+    if(n>=-0x80000000){push32(0xffffffff);push32(n&0xffffffff);}
+    else {push64(n+0x10000000000000000);}
+  }
+  write(val);
+  return new Uint8Array(parts);
+}
+
+// ─── MessagePack Decoder ───
+function mpDecode(bytes){
+  let pos=0;
+  function read(){
+    const b=bytes[pos++];
+    // positive fixint
+    if(b<=0x7f) return b;
+    // fixmap
+    if((b&0xf0)===0x80) return readMap(b&0x0f);
+    // fixarray
+    if((b&0xf0)===0x90) return readArray(b&0x0f);
+    // fixstr
+    if((b&0xe0)===0xa0) return readStr(b&0x1f);
+    // negative fixint
+    if(b>=0xe0) return b-256;
+    switch(b){
+      case 0xc0:return null;
+      case 0xc2:return false;
+      case 0xc3:return true;
+      case 0xc4:{const n=bytes[pos++];return readBin(n);}
+      case 0xc5:{const n=read16();return readBin(n);}
+      case 0xc6:{const n=read32();return readBin(n);}
+      case 0xca:{const buf=new ArrayBuffer(4);const v=new DataView(buf);for(let i=0;i<4;i++)v.setUint8(i,bytes[pos++]);return v.getFloat32(0);}
+      case 0xcb:{const buf=new ArrayBuffer(8);const v=new DataView(buf);for(let i=0;i<8;i++)v.setUint8(i,bytes[pos++]);return v.getFloat64(0);}
+      case 0xcc:return bytes[pos++];
+      case 0xcd:return read16();
+      case 0xce:return read32();
+      case 0xcf:return read64();
+      case 0xd0:{const v=bytes[pos++];return v>127?v-256:v;}
+      case 0xd1:{const v=read16();return v>32767?v-65536:v;}
+      case 0xd2:{const v=read32();return v>0x7fffffff?v-0x100000000:v;}
+      case 0xd3:return read64s();
+      case 0xd9:{const n=bytes[pos++];return readStr(n);}
+      case 0xda:{const n=read16();return readStr(n);}
+      case 0xdb:{const n=read32();return readStr(n);}
+      case 0xdc:{const n=read16();return readArray(n);}
+      case 0xdd:{const n=read32();return readArray(n);}
+      case 0xde:{const n=read16();return readMap(n);}
+      case 0xdf:{const n=read32();return readMap(n);}
+      // fixext
+      case 0xd4:pos+=2;return {ext:true,type:bytes[pos-2],data:bytes[pos-1]};
+      case 0xd5:pos+=3;return {ext:true};
+      case 0xd6:pos+=5;return {ext:true};
+      case 0xd7:pos+=9;return {ext:true};
+      case 0xd8:pos+=17;return {ext:true};
+      default:return undefined;
+    }
+  }
+  function read16(){const a=bytes[pos++],b=bytes[pos++];return(a<<8)|b;}
+  function read32(){const a=bytes[pos++],b=bytes[pos++],c=bytes[pos++],d=bytes[pos++];return((a<<24)|(b<<16)|(c<<8)|d)>>>0;}
+  function read64(){const hi=read32(),lo=read32();return hi*0x100000000+lo;}
+  function read64s(){const hi=read32(),lo=read32();if(hi>0x7fffffff)return -(0x100000000-lo+(0xffffffff-hi)*0x100000000);return hi*0x100000000+lo;}
+  function readStr(len){const slice=bytes.slice(pos,pos+len);pos+=len;return new TextDecoder().decode(slice);}
+  function readBin(len){const slice=bytes.slice(pos,pos+len);pos+=len;return Array.from(slice).map(b=>b.toString(16).padStart(2,'0')).join('');}
+  function readArray(len){const arr=[];for(let i=0;i<len;i++)arr.push(read());return arr;}
+  function readMap(len){const obj={};for(let i=0;i<len;i++){const k=read();obj[k]=read();}return obj;}
+  return read();
+}
+
+function encode(){
+  const raw=$('json-input').value.trim();
+  if(!raw)return;
+  try {
+    const json=JSON.parse(raw);
+    lastBytes=mpEncode(json);
+    showEncodeResult(raw);
+  } catch(e){
+    alert('Invalid JSON: '+e.message);
+  }
+}
+
+function showEncodeResult(rawJson){
+  const bytes=lastBytes;
+  // Hex dump
+  let dump='';
+  for(let i=0;i<bytes.length;i+=16){
+    const offset=i.toString(16).padStart(8,'0');
+    let hex='',ascii='';
+    for(let j=0;j<16;j++){
+      if(i+j<bytes.length){
+        hex+=bytes[i+j].toString(16).padStart(2,'0')+' ';
+        const c=bytes[i+j];
+        ascii+=(c>=32&&c<127)?String.fromCharCode(c):'.';
+      } else {
+        hex+='   ';ascii+=' ';
+      }
+      if(j===7)hex+=' ';
+    }
+    dump+=`<span class="hex-offset">${offset}</span>  <span class="hex-byte">${hex}</span> <span class="hex-ascii">|${ascii}|</span>\n`;
+  }
+  $('hex-dump').innerHTML=dump;
+  $('raw-hex').textContent=Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join('');
+
+  // Stats
+  const jsonSize=new TextEncoder().encode(rawJson).length;
+  const mpSize=bytes.length;
+  const ratio=((1-mpSize/jsonSize)*100).toFixed(1);
+  $('stats').innerHTML=`
+    <div class="stat"><div class="stat-val">${jsonSize}</div><div class="stat-label">JSON bytes</div></div>
+    <div class="stat"><div class="stat-val">${mpSize}</div><div class="stat-label">MsgPack bytes</div></div>
+    <div class="stat"><div class="stat-val">${ratio}%</div><div class="stat-label">Smaller</div></div>
+  `;
+  $('encode-result').style.display='';
+  $('decode-result').style.display='none';
+  $('result-card').style.display='';
+}
+
+function decodeHex(){
+  const raw=$('hex-input').value.trim().replace(/[\s\n\r,0x]/g,'');
+  if(!raw)return;
+  try {
+    if(!/^[0-9a-fA-F]+$/.test(raw)) throw new Error('Invalid hex characters');
+    if(raw.length%2!==0) throw new Error('Hex string must have even length');
+    const bytes=new Uint8Array(raw.match(/.{2}/g).map(h=>parseInt(h,16)));
+    const result=mpDecode(bytes);
+    lastJson=JSON.stringify(result,null,2);
+    $('json-output').textContent=lastJson;
+    $('encode-result').style.display='none';
+    $('decode-result').style.display='';
+    $('result-card').style.display='';
+  } catch(e){
+    alert('Decode error: '+e.message);
+  }
+}
+
+function copyHex(){
+  const hex=Array.from(lastBytes).map(b=>b.toString(16).padStart(2,'0')).join('');
+  navigator.clipboard.writeText(hex);
+  toast();
+}
+
+function copyJson(){
+  navigator.clipboard.writeText(lastJson);
+  toast();
+}
+
+function downloadBin(){
+  if(!lastBytes)return;
+  const blob=new Blob([lastBytes],{type:'application/octet-stream'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='data.msgpack';a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function loadSample(){
+  $('json-input').value=JSON.stringify({
+    name:"MessagePack",
+    version:1,
+    compact:true,
+    schema:0,
+    tags:["binary","fast","small"],
+    nested:{x:1.5,y:-42,z:null},
+    emoji:"Hello 🌍"
+  },null,2);
+}
+
+function toast(){
+  const t=$('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+}
+</script>
+</body>
+</html>

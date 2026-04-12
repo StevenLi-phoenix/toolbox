@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Key Pair Generator - Free Online RSA/ECDSA Key Tool</title>
+<meta name="description" content="Generate RSA and ECDSA cryptographic key pairs in your browser. Export as PEM or JWK. No data leaves your device.">
+<meta name="keywords" content="key pair generator, RSA key, ECDSA key, PEM, JWK, public key, private key, crypto, Web Crypto API">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/keypair.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .algo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  @media (max-width: 768px) { .algo-grid { grid-template-columns: 1fr; } }
+  .algo-btn { padding: 10px 14px; border: 2px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; text-align: left; transition: border-color .15s; }
+  .algo-btn:hover { border-color: var(--border2); }
+  .algo-btn.active { border-color: var(--accent); background: var(--surface2); }
+  .algo-btn h3 { margin: 0 0 2px; font-size: .9rem; }
+  .algo-btn p { margin: 0; font-size: .78rem; color: var(--muted); }
+  .param-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .param-row label { font-size: .85rem; font-weight: 600; }
+  .param-row select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .85rem; background: var(--bg); color: var(--text); }
+  .key-block { margin-bottom: 16px; }
+  .key-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .key-header h3 { margin: 0; font-size: .9rem; }
+  .key-header .btns { display: flex; gap: 6px; }
+  .key-header button { padding: 4px 10px; font-size: .75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; }
+  .key-header button:hover { background: var(--surface2); }
+  .key-output { font-family: var(--mono); font-size: .78rem; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); word-break: break-all; white-space: pre-wrap; max-height: 300px; overflow-y: auto; line-height: 1.5; }
+  .gen-btn { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .spinner { display: none; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .format-tabs { display: flex; gap: 0; margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; width: fit-content; }
+  .format-tab { padding: 6px 14px; font-size: .82rem; border: none; background: var(--surface); color: var(--muted); cursor: pointer; border-right: 1px solid var(--border); }
+  .format-tab:last-child { border-right: none; }
+  .format-tab.active { background: var(--accent); color: #fff; }
+  .info { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Key Pair Generator</h1>
+<p class="subtitle">Generate RSA and ECDSA cryptographic key pairs using Web Crypto API</p>
+
+<div class="card">
+<h2>🔑 Algorithm</h2>
+<div class="algo-grid">
+  <button class="algo-btn active" onclick="selectAlgo('rsa', this)" id="btn-rsa">
+    <h3>RSA (PKCS#1 v1.5)</h3>
+    <p>Widely supported, ideal for JWT signing &amp; TLS</p>
+  </button>
+  <button class="algo-btn" onclick="selectAlgo('rsa-pss', this)" id="btn-rsa-pss">
+    <h3>RSA-PSS</h3>
+    <p>Probabilistic signatures, more secure padding</p>
+  </button>
+  <button class="algo-btn" onclick="selectAlgo('rsa-oaep', this)" id="btn-rsa-oaep">
+    <h3>RSA-OAEP</h3>
+    <p>Asymmetric encryption / key wrapping</p>
+  </button>
+  <button class="algo-btn" onclick="selectAlgo('ecdsa', this)" id="btn-ecdsa">
+    <h3>ECDSA</h3>
+    <p>Compact elliptic-curve signatures (P-256, P-384, P-521)</p>
+  </button>
+</div>
+
+<div id="rsa-params" class="param-row">
+  <label>Key Size:</label>
+  <select id="rsa-bits">
+    <option value="2048">2048 bits</option>
+    <option value="3072">3072 bits</option>
+    <option value="4096" selected>4096 bits</option>
+  </select>
+  <label>Hash:</label>
+  <select id="rsa-hash">
+    <option value="SHA-256" selected>SHA-256</option>
+    <option value="SHA-384">SHA-384</option>
+    <option value="SHA-512">SHA-512</option>
+  </select>
+</div>
+<div id="ec-params" class="param-row" style="display:none">
+  <label>Curve:</label>
+  <select id="ec-curve">
+    <option value="P-256" selected>P-256 (secp256r1)</option>
+    <option value="P-384">P-384 (secp384r1)</option>
+    <option value="P-521">P-521 (secp521r1)</option>
+  </select>
+</div>
+
+<div class="gen-btn">
+  <button class="btn" onclick="generate()">Generate Key Pair</button>
+  <div class="spinner" id="spinner"></div>
+</div>
+</div>
+
+<div class="card" id="output-card" style="display:none">
+<h2>📄 Generated Keys</h2>
+<div class="format-tabs">
+  <button class="format-tab active" onclick="setFormat('pem', this)">PEM</button>
+  <button class="format-tab" onclick="setFormat('jwk', this)">JWK</button>
+</div>
+
+<div class="key-block">
+  <div class="key-header">
+    <h3>🔓 Public Key</h3>
+    <div class="btns">
+      <button onclick="copyKey('pub')">📋 Copy</button>
+      <button onclick="downloadKey('pub')">⬇️ Download</button>
+    </div>
+  </div>
+  <div class="key-output" id="pub-key"></div>
+</div>
+
+<div class="key-block">
+  <div class="key-header">
+    <h3>🔒 Private Key</h3>
+    <div class="btns">
+      <button onclick="copyKey('priv')">📋 Copy</button>
+      <button onclick="downloadKey('priv')">⬇️ Download</button>
+    </div>
+  </div>
+  <div class="key-output" id="priv-key"></div>
+</div>
+
+<p class="info" id="key-info"></p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let algo='rsa', format='pem';
+let keys={pubPem:'',privPem:'',pubJwk:'',privJwk:''};
+
+function selectAlgo(a, btn){
+  algo=a;
+  document.querySelectorAll('.algo-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const isEc=a==='ecdsa';
+  $('rsa-params').style.display=isEc?'none':'flex';
+  $('ec-params').style.display=isEc?'flex':'none';
+}
+
+function setFormat(f, btn){
+  format=f;
+  document.querySelectorAll('.format-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  renderKeys();
+}
+
+function ab2pem(buf, type){
+  const b64=btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const lines=b64.match(/.{1,64}/g).join('\n');
+  return `-----BEGIN ${type}-----\n${lines}\n-----END ${type}-----`;
+}
+
+async function generate(){
+  $('spinner').style.display='block';
+  $('output-card').style.display='none';
+  try {
+    let keyPair, info;
+    if(algo==='ecdsa'){
+      const curve=$('ec-curve').value;
+      keyPair=await crypto.subtle.generateKey(
+        {name:'ECDSA',namedCurve:curve},true,['sign','verify']
+      );
+      info=`ECDSA · ${curve} · Sign/Verify`;
+    } else if(algo==='rsa-oaep'){
+      const bits=+$('rsa-bits').value, hash=$('rsa-hash').value;
+      keyPair=await crypto.subtle.generateKey(
+        {name:'RSA-OAEP',modulusLength:bits,publicExponent:new Uint8Array([1,0,1]),hash},
+        true,['encrypt','decrypt']
+      );
+      info=`RSA-OAEP · ${bits} bits · ${hash} · Encrypt/Decrypt`;
+    } else if(algo==='rsa-pss'){
+      const bits=+$('rsa-bits').value, hash=$('rsa-hash').value;
+      keyPair=await crypto.subtle.generateKey(
+        {name:'RSA-PSS',modulusLength:bits,publicExponent:new Uint8Array([1,0,1]),hash},
+        true,['sign','verify']
+      );
+      info=`RSA-PSS · ${bits} bits · ${hash} · Sign/Verify`;
+    } else {
+      const bits=+$('rsa-bits').value, hash=$('rsa-hash').value;
+      keyPair=await crypto.subtle.generateKey(
+        {name:'RSASSA-PKCS1-v1_5',modulusLength:bits,publicExponent:new Uint8Array([1,0,1]),hash},
+        true,['sign','verify']
+      );
+      info=`RSASSA-PKCS1-v1_5 · ${bits} bits · ${hash} · Sign/Verify`;
+    }
+    const [spki,pkcs8,pubJwk,privJwk]=await Promise.all([
+      crypto.subtle.exportKey('spki',keyPair.publicKey),
+      crypto.subtle.exportKey('pkcs8',keyPair.privateKey),
+      crypto.subtle.exportKey('jwk',keyPair.publicKey),
+      crypto.subtle.exportKey('jwk',keyPair.privateKey),
+    ]);
+    keys.pubPem=ab2pem(spki,'PUBLIC KEY');
+    keys.privPem=ab2pem(pkcs8,'PRIVATE KEY');
+    keys.pubJwk=JSON.stringify(pubJwk,null,2);
+    keys.privJwk=JSON.stringify(privJwk,null,2);
+    $('key-info').textContent=info;
+    $('output-card').style.display='';
+    renderKeys();
+  } catch(e){
+    alert('Generation failed: '+e.message);
+  }
+  $('spinner').style.display='none';
+}
+
+function renderKeys(){
+  if(format==='pem'){
+    $('pub-key').textContent=keys.pubPem;
+    $('priv-key').textContent=keys.privPem;
+  } else {
+    $('pub-key').textContent=keys.pubJwk;
+    $('priv-key').textContent=keys.privJwk;
+  }
+}
+
+function copyKey(which){
+  const text=which==='pub'
+    ?(format==='pem'?keys.pubPem:keys.pubJwk)
+    :(format==='pem'?keys.privPem:keys.privJwk);
+  navigator.clipboard.writeText(text);
+  const t=$('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+}
+
+function downloadKey(which){
+  const text=which==='pub'
+    ?(format==='pem'?keys.pubPem:keys.pubJwk)
+    :(format==='pem'?keys.privPem:keys.privJwk);
+  const ext=format==='pem'?'.pem':'.jwk.json';
+  const name=which==='pub'?'public_key'+ext:'private_key'+ext;
+  const blob=new Blob([text],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=name;a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
