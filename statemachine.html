@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>State Machine Designer - Free Online FSM Builder</title>
+<meta name="description" content="Free online state machine designer. Build finite state machines visually with states, transitions, and export to JSON or Mermaid syntax. No data sent to any server.">
+<meta name="keywords" content="state machine, finite state machine, FSM builder, state diagram, state chart, mermaid diagram">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/statemachine.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .sm-layout { display: grid; grid-template-columns: 300px 1fr; gap: 1rem; }
+  .canvas-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); position: relative; min-height: 500px; overflow: hidden; cursor: crosshair; }
+  .canvas-wrap svg { width: 100%; height: 100%; }
+  .state-circle { cursor: grab; }
+  .state-circle:hover circle { stroke-width: 3; }
+  .state-circle.initial circle { stroke-dasharray: none; }
+  .state-circle.final circle { stroke-width: 3; }
+  .state-list { list-style: none; padding: 0; margin: 0; }
+  .state-list li { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: .85rem; cursor: pointer; }
+  .state-list li:hover { background: var(--surface2); }
+  .state-list li.active { background: var(--surface2); font-weight: 600; }
+  .trans-list { list-style: none; padding: 0; margin: 0; }
+  .trans-list li { padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: .82rem; display: flex; justify-content: space-between; align-items: center; }
+  .trans-list li:hover { background: var(--surface2); }
+  .add-form { display: flex; gap: 4px; margin-top: 8px; }
+  .add-form input, .add-form select { flex: 1; font-size: .82rem; }
+  .badge { font-size: .7rem; padding: 1px 6px; border-radius: 10px; background: var(--border); color: var(--muted); }
+  .badge.initial { background: #bbdefb; color: #1565c0; }
+  .badge.final { background: #c8e6c9; color: #2e7d32; }
+  .output-area { font-family: var(--mono); font-size: .8rem; min-height: 120px; resize: vertical; background: var(--surface2); }
+  .sm-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .del-btn { color: var(--error); cursor: pointer; border: none; background: none; font-size: .85rem; padding: 2px 4px; }
+  .del-btn:hover { background: var(--surface2); border-radius: var(--radius); }
+  @media (max-width: 768px) {
+    .sm-layout { grid-template-columns: 1fr; }
+    .canvas-wrap { min-height: 350px; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>⚙️ State Machine Designer</h1>
+<p class="subtitle">Build finite state machines visually. Add states and transitions, then export to JSON or Mermaid.</p>
+
+<div class="container">
+  <div class="sm-layout">
+    <div>
+      <div class="card">
+        <h2>📍 States</h2>
+        <ul class="state-list" id="state-list"></ul>
+        <div class="add-form">
+          <input type="text" id="new-state" placeholder="State name..." maxlength="20">
+          <button class="btn" onclick="addState()">Add</button>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn-secondary" onclick="setInitial()" title="Set selected as initial">🟢 Initial</button>
+          <button class="btn-secondary" onclick="toggleFinal()" title="Toggle final state">🔴 Final</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>➡️ Transitions</h2>
+        <ul class="trans-list" id="trans-list"></ul>
+        <div class="add-form">
+          <select id="trans-from"></select>
+          <input type="text" id="trans-label" placeholder="Event" style="width:60px" maxlength="15">
+          <select id="trans-to"></select>
+          <button class="btn" onclick="addTransition()">Add</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📋 Presets</h2>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn-secondary" onclick="loadPreset('traffic')">🚦 Traffic Light</button>
+          <button class="btn-secondary" onclick="loadPreset('door')">🚪 Door Lock</button>
+          <button class="btn-secondary" onclick="loadPreset('order')">📦 Order Flow</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>🎨 Diagram</h2>
+        <div class="sm-toolbar">
+          <button class="btn-icon" onclick="exportJSON()">📋 JSON</button>
+          <button class="btn-icon" onclick="exportMermaid()">🧜 Mermaid</button>
+          <button class="btn-icon" onclick="exportDOT()">📊 DOT</button>
+          <button class="btn-icon" onclick="clearAll()">🗑️ Clear</button>
+        </div>
+        <div class="canvas-wrap" id="canvas"></div>
+      </div>
+
+      <div class="card">
+        <h2>📤 Export</h2>
+        <textarea id="output" class="output-area" readonly placeholder="Export output will appear here..."></textarea>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="btn-icon" onclick="copyOutput()">📋 Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div>Built with ☕ by Steven Li · No data leaves your browser</div>
+  <div><a href="index.html">← Back to Toolbox</a> · <a href="https://buymeacoffee.com/stevenli.phoenix">☕ Buy Me a Coffee</a></div>
+</footer>
+
+<script>
+let states = [];
+let transitions = [];
+let selectedState = null;
+let dragState = null;
+let dragOffset = { x: 0, y: 0 };
+
+const canvas = document.getElementById('canvas');
+const stateList = document.getElementById('state-list');
+const transList = document.getElementById('trans-list');
+const output = document.getElementById('output');
+
+function addState(name, x, y) {
+  const n = name || document.getElementById('new-state').value.trim();
+  if (!n) return;
+  if (states.find(s => s.name === n)) { showToast('State already exists'); return; }
+  const rect = canvas.getBoundingClientRect();
+  states.push({
+    name: n,
+    x: x ?? (60 + Math.random() * (rect.width - 120)),
+    y: y ?? (60 + Math.random() * (rect.height - 120)),
+    initial: states.length === 0,
+    final: false
+  });
+  document.getElementById('new-state').value = '';
+  refresh();
+}
+
+function removeState(name) {
+  states = states.filter(s => s.name !== name);
+  transitions = transitions.filter(t => t.from !== name && t.to !== name);
+  if (selectedState === name) selectedState = null;
+  refresh();
+}
+
+function setInitial() {
+  if (!selectedState) { showToast('Select a state first'); return; }
+  states.forEach(s => s.initial = (s.name === selectedState));
+  refresh();
+}
+
+function toggleFinal() {
+  if (!selectedState) { showToast('Select a state first'); return; }
+  const s = states.find(s => s.name === selectedState);
+  if (s) s.final = !s.final;
+  refresh();
+}
+
+function addTransition() {
+  const from = document.getElementById('trans-from').value;
+  const to = document.getElementById('trans-to').value;
+  const label = document.getElementById('trans-label').value.trim() || 'event';
+  if (!from || !to) { showToast('Select from and to states'); return; }
+  if (transitions.find(t => t.from === from && t.to === to && t.label === label)) {
+    showToast('Transition already exists'); return;
+  }
+  transitions.push({ from, to, label });
+  document.getElementById('trans-label').value = '';
+  refresh();
+}
+
+function removeTransition(idx) {
+  transitions.splice(idx, 1);
+  refresh();
+}
+
+function refresh() {
+  renderStateList();
+  renderTransList();
+  updateSelects();
+  renderDiagram();
+}
+
+function renderStateList() {
+  stateList.innerHTML = states.map(s => {
+    const badges = [];
+    if (s.initial) badges.push('<span class="badge initial">initial</span>');
+    if (s.final) badges.push('<span class="badge final">final</span>');
+    const cls = s.name === selectedState ? 'active' : '';
+    return `<li class="${cls}" onclick="selectState('${esc(s.name)}')">
+      <span>${esc(s.name)} ${badges.join(' ')}</span>
+      <button class="del-btn" onclick="event.stopPropagation();removeState('${esc(s.name)}')" title="Delete">✕</button>
+    </li>`;
+  }).join('');
+}
+
+function renderTransList() {
+  transList.innerHTML = transitions.map((t, i) =>
+    `<li>${esc(t.from)} → <strong>${esc(t.label)}</strong> → ${esc(t.to)}
+      <button class="del-btn" onclick="removeTransition(${i})" title="Delete">✕</button>
+    </li>`
+  ).join('');
+}
+
+function updateSelects() {
+  const opts = states.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+  document.getElementById('trans-from').innerHTML = opts;
+  document.getElementById('trans-to').innerHTML = opts;
+}
+
+function selectState(name) {
+  selectedState = name;
+  renderStateList();
+}
+
+function renderDiagram() {
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width || 600;
+  const h = rect.height || 500;
+  const r = 30;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">`;
+  svg += `<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#555"/></marker></defs>`;
+
+  // Draw transitions
+  transitions.forEach(t => {
+    const fromS = states.find(s => s.name === t.from);
+    const toS = states.find(s => s.name === t.to);
+    if (!fromS || !toS) return;
+
+    if (t.from === t.to) {
+      // Self-loop
+      const cx = fromS.x, cy = fromS.y - r;
+      svg += `<path d="M ${cx - 12} ${cy - 15} C ${cx - 40} ${cy - 60}, ${cx + 40} ${cy - 60}, ${cx + 12} ${cy - 15}" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrowhead)"/>`;
+      svg += `<text x="${cx}" y="${cy - 50}" text-anchor="middle" font-size="11" fill="#333" font-family="system-ui">${esc(t.label)}</text>`;
+    } else {
+      const dx = toS.x - fromS.x;
+      const dy = toS.y - fromS.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const ux = dx / dist, uy = dy / dist;
+      const x1 = fromS.x + ux * r, y1 = fromS.y + uy * r;
+      const x2 = toS.x - ux * (r + 8), y2 = toS.y - uy * (r + 8);
+
+      // Check for parallel transitions (A→B and B→A)
+      const hasReverse = transitions.some(t2 => t2.from === t.to && t2.to === t.from);
+      if (hasReverse) {
+        const nx = -uy * 15, ny = ux * 15;
+        const mx = (x1 + x2) / 2 + nx, my = (y1 + y2) / 2 + ny;
+        svg += `<path d="M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrowhead)"/>`;
+        svg += `<text x="${mx}" y="${my - 6}" text-anchor="middle" font-size="11" fill="#333" font-family="system-ui">${esc(t.label)}</text>`;
+      } else {
+        svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#555" stroke-width="1.5" marker-end="url(#arrowhead)"/>`;
+        const lx = (x1 + x2) / 2 - uy * 12, ly = (y1 + y2) / 2 + ux * 12;
+        svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="11" fill="#333" font-family="system-ui">${esc(t.label)}</text>`;
+      }
+    }
+  });
+
+  // Draw initial arrow
+  const initState = states.find(s => s.initial);
+  if (initState) {
+    svg += `<line x1="${initState.x - r - 30}" y1="${initState.y}" x2="${initState.x - r - 2}" y2="${initState.y}" stroke="#555" stroke-width="2" marker-end="url(#arrowhead)"/>`;
+  }
+
+  // Draw states
+  states.forEach(s => {
+    const sel = s.name === selectedState;
+    const strokeColor = sel ? '#1976d2' : '#333';
+    const strokeW = sel ? 2.5 : 1.5;
+    const fill = s.initial ? '#e3f2fd' : '#fff';
+
+    svg += `<g class="state-circle${s.initial ? ' initial' : ''}${s.final ? ' final' : ''}" data-name="${esc(s.name)}" onmousedown="startDrag(event, '${esc(s.name)}')">`;
+    svg += `<circle cx="${s.x}" cy="${s.y}" r="${r}" fill="${fill}" stroke="${strokeColor}" stroke-width="${strokeW}"/>`;
+    if (s.final) {
+      svg += `<circle cx="${s.x}" cy="${s.y}" r="${r - 5}" fill="none" stroke="${strokeColor}" stroke-width="1"/>`;
+    }
+    svg += `<text x="${s.x}" y="${s.y + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="#333" font-family="system-ui" style="pointer-events:none">${esc(s.name)}</text>`;
+    svg += `</g>`;
+  });
+
+  svg += '</svg>';
+  canvas.innerHTML = svg;
+}
+
+function startDrag(event, name) {
+  event.preventDefault();
+  const s = states.find(st => st.name === name);
+  if (!s) return;
+  dragState = name;
+  selectedState = name;
+  const rect = canvas.getBoundingClientRect();
+  dragOffset.x = event.clientX - rect.left - s.x;
+  dragOffset.y = event.clientY - rect.top - s.y;
+  renderStateList();
+
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', stopDrag);
+}
+
+function onDrag(event) {
+  if (!dragState) return;
+  const s = states.find(st => st.name === dragState);
+  if (!s) return;
+  const rect = canvas.getBoundingClientRect();
+  s.x = Math.max(35, Math.min(rect.width - 35, event.clientX - rect.left - dragOffset.x));
+  s.y = Math.max(35, Math.min(rect.height - 35, event.clientY - rect.top - dragOffset.y));
+  renderDiagram();
+}
+
+function stopDrag() {
+  dragState = null;
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', stopDrag);
+}
+
+function exportJSON() {
+  const data = {
+    states: states.map(s => ({ name: s.name, initial: s.initial, final: s.final })),
+    transitions: transitions.map(t => ({ from: t.from, event: t.label, to: t.to }))
+  };
+  output.value = JSON.stringify(data, null, 2);
+}
+
+function exportMermaid() {
+  let lines = ['stateDiagram-v2'];
+  const initS = states.find(s => s.initial);
+  if (initS) lines.push(`  [*] --> ${initS.name}`);
+  transitions.forEach(t => {
+    lines.push(`  ${t.from} --> ${t.to} : ${t.label}`);
+  });
+  states.filter(s => s.final).forEach(s => {
+    lines.push(`  ${s.name} --> [*]`);
+  });
+  output.value = lines.join('\n');
+}
+
+function exportDOT() {
+  let lines = ['digraph FSM {', '  rankdir=LR;', '  node [shape=circle, fontname="sans-serif"];'];
+  states.filter(s => s.final).forEach(s => {
+    lines.push(`  "${s.name}" [shape=doublecircle];`);
+  });
+  const initS = states.find(s => s.initial);
+  if (initS) {
+    lines.push(`  __start__ [shape=point, width=0.2];`);
+    lines.push(`  __start__ -> "${initS.name}";`);
+  }
+  transitions.forEach(t => {
+    lines.push(`  "${t.from}" -> "${t.to}" [label="${t.label}"];`);
+  });
+  lines.push('}');
+  output.value = lines.join('\n');
+}
+
+function clearAll() {
+  states = [];
+  transitions = [];
+  selectedState = null;
+  output.value = '';
+  refresh();
+}
+
+function copyOutput() {
+  if (!output.value) return;
+  navigator.clipboard.writeText(output.value).then(() => showToast('Copied!'));
+}
+
+const presets = {
+  traffic: {
+    states: [
+      { name: 'Green', x: 80, y: 250, initial: true, final: false },
+      { name: 'Yellow', x: 300, y: 120, initial: false, final: false },
+      { name: 'Red', x: 520, y: 250, initial: false, final: false }
+    ],
+    transitions: [
+      { from: 'Green', to: 'Yellow', label: 'timer' },
+      { from: 'Yellow', to: 'Red', label: 'timer' },
+      { from: 'Red', to: 'Green', label: 'timer' }
+    ]
+  },
+  door: {
+    states: [
+      { name: 'Locked', x: 100, y: 200, initial: true, final: false },
+      { name: 'Unlocked', x: 300, y: 200, initial: false, final: false },
+      { name: 'Open', x: 500, y: 200, initial: false, final: false }
+    ],
+    transitions: [
+      { from: 'Locked', to: 'Unlocked', label: 'unlock' },
+      { from: 'Unlocked', to: 'Locked', label: 'lock' },
+      { from: 'Unlocked', to: 'Open', label: 'push' },
+      { from: 'Open', to: 'Unlocked', label: 'close' }
+    ]
+  },
+  order: {
+    states: [
+      { name: 'New', x: 80, y: 250, initial: true, final: false },
+      { name: 'Paid', x: 230, y: 130, initial: false, final: false },
+      { name: 'Shipped', x: 420, y: 130, initial: false, final: false },
+      { name: 'Delivered', x: 540, y: 250, initial: false, final: true },
+      { name: 'Cancelled', x: 230, y: 370, initial: false, final: true }
+    ],
+    transitions: [
+      { from: 'New', to: 'Paid', label: 'pay' },
+      { from: 'Paid', to: 'Shipped', label: 'ship' },
+      { from: 'Shipped', to: 'Delivered', label: 'deliver' },
+      { from: 'New', to: 'Cancelled', label: 'cancel' },
+      { from: 'Paid', to: 'Cancelled', label: 'cancel' }
+    ]
+  }
+};
+
+function loadPreset(name) {
+  const p = presets[name];
+  if (!p) return;
+  states = JSON.parse(JSON.stringify(p.states));
+  transitions = JSON.parse(JSON.stringify(p.transitions));
+  selectedState = null;
+  output.value = '';
+  refresh();
+}
+
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 1800);
+}
+
+document.getElementById('new-state').addEventListener('keydown', e => { if (e.key === 'Enter') addState(); });
+document.getElementById('trans-label').addEventListener('keydown', e => { if (e.key === 'Enter') addTransition(); });
+
+// Load traffic light preset by default
+loadPreset('traffic');
+</script>
+</body>
+</html>

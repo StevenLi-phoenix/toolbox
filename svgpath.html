@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVG Path Editor - Free Online SVG Path Command Tool</title>
+<meta name="description" content="Free online SVG path editor. Build, edit, and preview SVG path commands visually. Copy optimized path data. No data sent to any server.">
+<meta name="keywords" content="svg path editor, svg path commands, svg d attribute, path builder, bezier curve, svg tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/svgpath.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .editor-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .preview-svg { width: 100%; aspect-ratio: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); position: relative; overflow: hidden; }
+  .preview-svg svg { width: 100%; height: 100%; }
+  .path-input { font-family: var(--mono); font-size: .85rem; min-height: 80px; resize: vertical; }
+  .commands { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+  .commands button { min-width: 40px; font-family: var(--mono); font-size: .8rem; font-weight: 600; }
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 10px; }
+  .info-item { background: var(--surface2); border-radius: var(--radius); padding: 8px 10px; font-size: .82rem; }
+  .info-item .label { color: var(--muted); font-size: .75rem; margin-bottom: 2px; }
+  .info-item .value { font-family: var(--mono); font-weight: 600; }
+  .error-msg { color: var(--error); font-size: .82rem; margin-top: 4px; }
+  .grid-toggle { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+  .cmd-ref { font-size: .78rem; line-height: 1.5; }
+  .cmd-ref dt { font-family: var(--mono); font-weight: 600; display: inline; }
+  .cmd-ref dd { display: inline; margin: 0 0 0 4px; color: var(--muted); }
+  .cmd-ref dd::after { content: ''; display: block; margin-bottom: 4px; }
+  .toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .color-pick { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; padding: 0; }
+  .size-info { font-size: .78rem; color: var(--muted); font-family: var(--mono); }
+  @media (max-width: 768px) {
+    .editor-layout { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>✏️ SVG Path Editor</h1>
+<p class="subtitle">Build and preview SVG path commands visually. Edit the d attribute and see results in real-time.</p>
+
+<div class="container">
+  <div class="editor-layout">
+    <div>
+      <div class="card">
+        <h2>📝 Path Data (d attribute)</h2>
+        <textarea id="path-input" class="path-input" placeholder="Enter SVG path data... e.g. M 10 10 L 90 90">M 20 80 C 20 20, 50 10, 80 20 S 140 60, 140 80 Q 140 120, 100 120 T 20 80 Z</textarea>
+        <div id="error-msg" class="error-msg"></div>
+        <div class="commands">
+          <button class="btn-secondary" onclick="insertCmd('M 0 0')" title="Move to">M</button>
+          <button class="btn-secondary" onclick="insertCmd('L 0 0')" title="Line to">L</button>
+          <button class="btn-secondary" onclick="insertCmd('H 0')" title="Horizontal line">H</button>
+          <button class="btn-secondary" onclick="insertCmd('V 0')" title="Vertical line">V</button>
+          <button class="btn-secondary" onclick="insertCmd('C 0 0, 0 0, 0 0')" title="Cubic bezier">C</button>
+          <button class="btn-secondary" onclick="insertCmd('S 0 0, 0 0')" title="Smooth cubic">S</button>
+          <button class="btn-secondary" onclick="insertCmd('Q 0 0, 0 0')" title="Quadratic bezier">Q</button>
+          <button class="btn-secondary" onclick="insertCmd('T 0 0')" title="Smooth quadratic">T</button>
+          <button class="btn-secondary" onclick="insertCmd('A 25 25 0 0 1 50 50')" title="Arc">A</button>
+          <button class="btn-secondary" onclick="insertCmd('Z')" title="Close path">Z</button>
+        </div>
+        <div class="toolbar">
+          <label class="grid-toggle"><input type="checkbox" id="show-grid" checked onchange="render()"> Grid</label>
+          <label class="grid-toggle"><input type="checkbox" id="show-points" checked onchange="render()"> Points</label>
+          <label class="grid-toggle"><input type="checkbox" id="show-handles" checked onchange="render()"> Handles</label>
+          <label class="grid-toggle">Stroke: <input type="color" id="stroke-color" value="#111111" class="color-pick" onchange="render()"></label>
+          <label class="grid-toggle">Fill: <input type="color" id="fill-color" value="#e0e0e0" class="color-pick" onchange="render()"></label>
+          <label class="grid-toggle"><input type="checkbox" id="fill-none" onchange="render()"> No fill</label>
+        </div>
+        <div class="btn-row">
+          <button class="btn-icon" onclick="copyPath()" title="Copy path data">📋 Copy d</button>
+          <button class="btn-icon" onclick="copySVG()" title="Copy full SVG">📄 Copy SVG</button>
+          <button class="btn-icon" onclick="optimizePath()" title="Normalize path">🔧 Optimize</button>
+          <button class="btn-icon" onclick="clearPath()" title="Clear">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Path Info</h2>
+        <div class="info-grid" id="info-grid"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>👁️ Preview</h2>
+        <div id="size-info" class="size-info"></div>
+        <div class="preview-svg" id="preview"></div>
+      </div>
+
+      <div class="card">
+        <h2>📖 Command Reference</h2>
+        <dl class="cmd-ref">
+          <dt>M x y</dt><dd>Move to point</dd>
+          <dt>L x y</dt><dd>Line to point</dd>
+          <dt>H x</dt><dd>Horizontal line to x</dd>
+          <dt>V y</dt><dd>Vertical line to y</dd>
+          <dt>C x1 y1, x2 y2, x y</dt><dd>Cubic Bézier curve</dd>
+          <dt>S x2 y2, x y</dt><dd>Smooth cubic Bézier</dd>
+          <dt>Q x1 y1, x y</dt><dd>Quadratic Bézier curve</dd>
+          <dt>T x y</dt><dd>Smooth quadratic Bézier</dd>
+          <dt>A rx ry rot large sweep x y</dt><dd>Elliptical arc</dd>
+          <dt>Z</dt><dd>Close path</dd>
+        </dl>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:6px">Lowercase commands use relative coordinates.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div>Built with ☕ by Steven Li · No data leaves your browser</div>
+  <div><a href="index.html">← Back to Toolbox</a> · <a href="https://buymeacoffee.com/stevenli.phoenix">☕ Buy Me a Coffee</a></div>
+</footer>
+
+<script>
+const input = document.getElementById('path-input');
+const preview = document.getElementById('preview');
+const errorMsg = document.getElementById('error-msg');
+const infoGrid = document.getElementById('info-grid');
+const sizeInfo = document.getElementById('size-info');
+
+function render() {
+  const d = input.value.trim();
+  const showGrid = document.getElementById('show-grid').checked;
+  const showPoints = document.getElementById('show-points').checked;
+  const showHandles = document.getElementById('show-handles').checked;
+  const strokeColor = document.getElementById('stroke-color').value;
+  const fillColor = document.getElementById('fill-none').checked ? 'none' : document.getElementById('fill-color').value;
+
+  errorMsg.textContent = '';
+
+  // Parse path to find bounding box
+  const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  tempSvg.setAttribute('width', '0');
+  tempSvg.setAttribute('height', '0');
+  tempSvg.style.position = 'absolute';
+  tempSvg.style.visibility = 'hidden';
+  const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  tempPath.setAttribute('d', d || 'M0 0');
+  tempSvg.appendChild(tempPath);
+  document.body.appendChild(tempSvg);
+
+  let bbox;
+  try {
+    bbox = tempPath.getBBox();
+    const totalLen = tempPath.getTotalLength();
+    document.body.removeChild(tempSvg);
+
+    if (d && (bbox.width > 0 || bbox.height > 0)) {
+      updateInfo(bbox, d, totalLen);
+    } else if (!d) {
+      infoGrid.innerHTML = '<div class="info-item"><div class="label">Status</div><div class="value">Enter path data above</div></div>';
+    }
+  } catch (e) {
+    document.body.removeChild(tempSvg);
+    errorMsg.textContent = 'Invalid path data: ' + e.message;
+    infoGrid.innerHTML = '';
+    preview.innerHTML = '<svg viewBox="0 0 200 200"></svg>';
+    return;
+  }
+
+  // Calculate viewBox with padding
+  const pad = 20;
+  const vx = (bbox.x || 0) - pad;
+  const vy = (bbox.y || 0) - pad;
+  const vw = Math.max((bbox.width || 0) + pad * 2, 50);
+  const vh = Math.max((bbox.height || 0) + pad * 2, 50);
+
+  sizeInfo.textContent = `viewBox: ${Math.round(vx)} ${Math.round(vy)} ${Math.round(vw)} ${Math.round(vh)}`;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}">`;
+
+  // Grid
+  if (showGrid) {
+    const step = Math.max(10, Math.round(Math.max(vw, vh) / 20) * 10);
+    const startX = Math.floor(vx / step) * step;
+    const startY = Math.floor(vy / step) * step;
+    svg += `<defs><pattern id="grid" width="${step}" height="${step}" patternUnits="userSpaceOnUse">`;
+    svg += `<path d="M ${step} 0 L 0 0 0 ${step}" fill="none" stroke="#ddd" stroke-width="${Math.max(vw, vh) * 0.002}"/>`;
+    svg += `</pattern></defs>`;
+    svg += `<rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="url(#grid)"/>`;
+    // Axes
+    svg += `<line x1="${vx}" y1="0" x2="${vx + vw}" y2="0" stroke="#bbb" stroke-width="${Math.max(vw, vh) * 0.003}"/>`;
+    svg += `<line x1="0" y1="${vy}" x2="0" y2="${vy + vh}" stroke="#bbb" stroke-width="${Math.max(vw, vh) * 0.003}"/>`;
+  }
+
+  // Main path
+  if (d) {
+    svg += `<path d="${escHtml(d)}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${Math.max(vw, vh) * 0.01}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+
+  // Control points and handles
+  if (d && (showPoints || showHandles)) {
+    const parsed = parsePathCommands(d);
+    const ptSize = Math.max(vw, vh) * 0.015;
+    const lineWidth = Math.max(vw, vh) * 0.004;
+
+    parsed.forEach(seg => {
+      if (showHandles && seg.handles) {
+        seg.handles.forEach(h => {
+          svg += `<line x1="${h.from.x}" y1="${h.from.y}" x2="${h.to.x}" y2="${h.to.y}" stroke="#2196F3" stroke-width="${lineWidth}" stroke-dasharray="${ptSize}"/>`;
+          svg += `<circle cx="${h.to.x}" cy="${h.to.y}" r="${ptSize * 0.7}" fill="#2196F3" opacity="0.7"/>`;
+        });
+      }
+      if (showPoints && seg.end) {
+        svg += `<circle cx="${seg.end.x}" cy="${seg.end.y}" r="${ptSize}" fill="#e53935" opacity="0.8"/>`;
+      }
+    });
+  }
+
+  svg += '</svg>';
+  preview.innerHTML = svg;
+}
+
+function parsePathCommands(d) {
+  const segments = [];
+  const re = /([MmLlHhVvCcSsQqTtAaZz])([^MmLlHhVvCcSsQqTtAaZz]*)/g;
+  let match;
+  let cx = 0, cy = 0, sx = 0, sy = 0;
+
+  while ((match = re.exec(d)) !== null) {
+    const cmd = match[1];
+    const nums = (match[2].match(/-?\d*\.?\d+/g) || []).map(Number);
+    const abs = cmd === cmd.toUpperCase();
+    const seg = { cmd, handles: [] };
+
+    switch (cmd.toUpperCase()) {
+      case 'M':
+        cx = abs ? nums[0] : cx + (nums[0] || 0);
+        cy = abs ? nums[1] : cy + (nums[1] || 0);
+        sx = cx; sy = cy;
+        seg.end = { x: cx, y: cy };
+        break;
+      case 'L':
+        cx = abs ? nums[0] : cx + (nums[0] || 0);
+        cy = abs ? nums[1] : cy + (nums[1] || 0);
+        seg.end = { x: cx, y: cy };
+        break;
+      case 'H':
+        cx = abs ? nums[0] : cx + (nums[0] || 0);
+        seg.end = { x: cx, y: cy };
+        break;
+      case 'V':
+        cy = abs ? nums[0] : cy + (nums[0] || 0);
+        seg.end = { x: cx, y: cy };
+        break;
+      case 'C': {
+        const x1 = abs ? nums[0] : cx + (nums[0] || 0);
+        const y1 = abs ? nums[1] : cy + (nums[1] || 0);
+        const x2 = abs ? nums[2] : cx + (nums[2] || 0);
+        const y2 = abs ? nums[3] : cy + (nums[3] || 0);
+        const x = abs ? nums[4] : cx + (nums[4] || 0);
+        const y = abs ? nums[5] : cy + (nums[5] || 0);
+        seg.handles.push({ from: { x: cx, y: cy }, to: { x: x1, y: y1 } });
+        seg.handles.push({ from: { x, y }, to: { x: x2, y: y2 } });
+        cx = x; cy = y;
+        seg.end = { x: cx, y: cy };
+        break;
+      }
+      case 'S': {
+        const x2 = abs ? nums[0] : cx + (nums[0] || 0);
+        const y2 = abs ? nums[1] : cy + (nums[1] || 0);
+        const x = abs ? nums[2] : cx + (nums[2] || 0);
+        const y = abs ? nums[3] : cy + (nums[3] || 0);
+        seg.handles.push({ from: { x, y }, to: { x: x2, y: y2 } });
+        cx = x; cy = y;
+        seg.end = { x: cx, y: cy };
+        break;
+      }
+      case 'Q': {
+        const x1 = abs ? nums[0] : cx + (nums[0] || 0);
+        const y1 = abs ? nums[1] : cy + (nums[1] || 0);
+        const x = abs ? nums[2] : cx + (nums[2] || 0);
+        const y = abs ? nums[3] : cy + (nums[3] || 0);
+        seg.handles.push({ from: { x: cx, y: cy }, to: { x: x1, y: y1 } });
+        cx = x; cy = y;
+        seg.end = { x: cx, y: cy };
+        break;
+      }
+      case 'T':
+        cx = abs ? nums[0] : cx + (nums[0] || 0);
+        cy = abs ? nums[1] : cy + (nums[1] || 0);
+        seg.end = { x: cx, y: cy };
+        break;
+      case 'A':
+        cx = abs ? nums[5] : cx + (nums[5] || 0);
+        cy = abs ? nums[6] : cy + (nums[6] || 0);
+        seg.end = { x: cx, y: cy };
+        break;
+      case 'Z':
+        cx = sx; cy = sy;
+        seg.end = { x: cx, y: cy };
+        break;
+    }
+    segments.push(seg);
+  }
+  return segments;
+}
+
+function updateInfo(bbox, d, totalLen) {
+  const cmdCount = (d.match(/[MmLlHhVvCcSsQqTtAaZz]/g) || []).length;
+  const bytes = new Blob([d]).size;
+  infoGrid.innerHTML = `
+    <div class="info-item"><div class="label">Bounding Box</div><div class="value">${r(bbox.x)}, ${r(bbox.y)} → ${r(bbox.x + bbox.width)}, ${r(bbox.y + bbox.height)}</div></div>
+    <div class="info-item"><div class="label">Size</div><div class="value">${r(bbox.width)} × ${r(bbox.height)}</div></div>
+    <div class="info-item"><div class="label">Total Length</div><div class="value">${r(totalLen)} units</div></div>
+    <div class="info-item"><div class="label">Commands</div><div class="value">${cmdCount}</div></div>
+    <div class="info-item"><div class="label">Data Size</div><div class="value">${bytes} bytes</div></div>
+  `;
+}
+
+function r(n) { return Math.round(n * 100) / 100; }
+function escHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+function insertCmd(cmd) {
+  const el = input;
+  const pos = el.selectionStart;
+  const before = el.value.slice(0, pos);
+  const after = el.value.slice(pos);
+  const space = before && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : '';
+  el.value = before + space + cmd + after;
+  el.selectionStart = el.selectionEnd = pos + space.length + cmd.length;
+  el.focus();
+  render();
+}
+
+function copyPath() {
+  navigator.clipboard.writeText(input.value.trim()).then(() => showToast('Path data copied!'));
+}
+
+function copySVG() {
+  const svgEl = preview.querySelector('svg');
+  if (!svgEl) return;
+  const d = input.value.trim();
+  const strokeColor = document.getElementById('stroke-color').value;
+  const fillColor = document.getElementById('fill-none').checked ? 'none' : document.getElementById('fill-color').value;
+  const vb = svgEl.getAttribute('viewBox');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}"><path d="${escHtml(d)}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  navigator.clipboard.writeText(svg).then(() => showToast('SVG copied!'));
+}
+
+function optimizePath() {
+  let d = input.value.trim();
+  // Basic optimization: collapse whitespace, trim
+  d = d.replace(/\s+/g, ' ').replace(/\s*,\s*/g, ',').replace(/ ?([MmLlHhVvCcSsQqTtAaZz]) ?/g, '$1').replace(/([MmLlHhVvCcSsQqTtAaZz])/g, ' $1').trim();
+  input.value = d;
+  render();
+  showToast('Path optimized!');
+}
+
+function clearPath() {
+  input.value = '';
+  render();
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 1800);
+}
+
+input.addEventListener('input', render);
+render();
+</script>
+</body>
+</html>
