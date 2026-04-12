@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML Sanitizer - Clean Untrusted HTML & Test XSS Prevention</title>
+<meta name="description" content="Sanitize untrusted HTML by stripping dangerous tags, attributes, and scripts. Configure allow/deny lists. Preview safe output. 100% client-side.">
+<meta name="keywords" content="html sanitizer, xss prevention, html cleaner, sanitize html, strip scripts, html purifier, xss tester">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/htmlsanitize.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+  .panel-label {
+    font-weight: 600;
+    font-size: .85rem;
+    margin-bottom: .5rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+  }
+  .output-area {
+    width: 100%;
+    min-height: 200px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: .85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface2);
+    color: var(--text);
+    resize: vertical;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: auto;
+  }
+  .config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  @media (max-width: 768px) {
+    .config-grid { grid-template-columns: 1fr; }
+  }
+  .tag-list {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px 10px;
+    font-family: var(--mono);
+    font-size: .8rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    resize: vertical;
+  }
+  .stats-bar {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: .75rem;
+    font-size: .82rem;
+  }
+  .stat-item {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+  }
+  .stat-num {
+    font-family: var(--mono);
+    font-weight: 700;
+  }
+  .stat-num.danger { color: var(--error); }
+  .stat-num.safe { color: var(--success); }
+  .preview-frame {
+    width: 100%;
+    min-height: 120px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #fff;
+    padding: 12px;
+  }
+  .stripped-list {
+    margin-top: .5rem;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .stripped-item {
+    padding: 4px 8px;
+    font-family: var(--mono);
+    font-size: .78rem;
+    color: var(--error);
+    border-bottom: 1px solid var(--border);
+  }
+  .stripped-item:last-child { border-bottom: none; }
+  .preset-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: .75rem;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🛡️ HTML Sanitizer</h1>
+<p class="subtitle">Clean untrusted HTML by removing dangerous tags, attributes, and scripts. Configure allowed elements and preview safe output.</p>
+
+<div class="card">
+  <h2>⚙️ Configuration</h2>
+  <div class="preset-row">
+    <button class="btn btn-secondary" onclick="applyPreset('strict')">Strict (text only)</button>
+    <button class="btn btn-secondary" onclick="applyPreset('basic')">Basic formatting</button>
+    <button class="btn btn-secondary" onclick="applyPreset('rich')">Rich content</button>
+    <button class="btn btn-secondary" onclick="applyPreset('blog')">Blog / CMS</button>
+  </div>
+  <div class="config-grid">
+    <div>
+      <div class="panel-label">Allowed Tags</div>
+      <textarea class="tag-list" id="allowed-tags" spellcheck="false">p, b, i, em, strong, a, ul, ol, li, br, h1, h2, h3, h4, h5, h6, blockquote, code, pre, span, div, table, thead, tbody, tr, th, td, img, hr</textarea>
+    </div>
+    <div>
+      <div class="panel-label">Allowed Attributes</div>
+      <textarea class="tag-list" id="allowed-attrs" spellcheck="false">href, src, alt, title, class, id, width, height, target, rel</textarea>
+    </div>
+  </div>
+  <div style="margin-top:.75rem">
+    <label style="font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="strip-styles" checked> Strip inline style attributes
+    </label>
+    <label style="font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
+      <input type="checkbox" id="strip-data" checked> Strip data-* attributes
+    </label>
+    <label style="font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
+      <input type="checkbox" id="strip-events"> Strip on* event handlers (always on)
+    </label>
+  </div>
+</div>
+
+<div class="card">
+  <h2>📝 Input HTML</h2>
+  <textarea id="input" placeholder="Paste untrusted HTML here..." style="min-height:180px"></textarea>
+  <div class="preset-row" style="margin-top:.5rem">
+    <button class="btn btn-secondary" onclick="loadExample('xss')">XSS Example</button>
+    <button class="btn btn-secondary" onclick="loadExample('mixed')">Mixed Content</button>
+    <button class="btn btn-secondary" onclick="loadExample('email')">Email HTML</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>📊 Results</h2>
+  <div class="stats-bar" id="stats"></div>
+  <div class="panels" style="margin-top:1rem">
+    <div>
+      <div class="panel-label">🧹 Sanitized HTML</div>
+      <div class="output-area" id="output"></div>
+      <button class="btn" style="margin-top:.5rem" onclick="copyOutput()">Copy Sanitized HTML</button>
+    </div>
+    <div>
+      <div class="panel-label">👁 Safe Preview</div>
+      <div class="preview-frame" id="preview"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>🚫 Stripped Elements</h2>
+  <div class="stripped-list" id="stripped">
+    <div class="empty">Stripped tags and attributes will appear here</div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const PRESETS = {
+  strict: {
+    tags: '',
+    attrs: '',
+    desc: 'Plain text only — all tags removed'
+  },
+  basic: {
+    tags: 'p, b, i, em, strong, br, ul, ol, li, a',
+    attrs: 'href, target, rel',
+    desc: 'Basic formatting only'
+  },
+  rich: {
+    tags: 'p, b, i, em, strong, a, ul, ol, li, br, h1, h2, h3, h4, h5, h6, blockquote, code, pre, span, div, table, thead, tbody, tr, th, td, img, hr',
+    attrs: 'href, src, alt, title, class, id, width, height, target, rel',
+    desc: 'Rich content with images and tables'
+  },
+  blog: {
+    tags: 'p, b, i, em, strong, a, ul, ol, li, br, h1, h2, h3, h4, h5, h6, blockquote, code, pre, span, div, table, thead, tbody, tr, th, td, img, hr, figure, figcaption, picture, source, video, audio, details, summary, mark, sub, sup, abbr, dl, dt, dd',
+    attrs: 'href, src, alt, title, class, id, width, height, target, rel, loading, decoding, type, controls, autoplay, muted, loop, open, datetime, cite',
+    desc: 'Blog / CMS — rich content with media'
+  }
+};
+
+const EXAMPLES = {
+  xss: `<h1>Welcome!</h1>
+<p>This looks safe, but...</p>
+<script>alert('XSS attack!')<\/script>
+<img src="x" onerror="alert('gotcha')">
+<a href="javascript:alert('click')">Click me</a>
+<div onmouseover="alert('hover!')">Hover me</div>
+<iframe src="https://evil.com"></iframe>
+<object data="evil.swf"></object>
+<svg onload="alert('svg')"><circle r="50"/></svg>
+<style>body{display:none}</style>
+<input onfocus="alert('focus')" autofocus>
+<marquee>Old school danger</marquee>`,
+  mixed: `<h2>Product Review</h2>
+<p>This is a <strong>great</strong> product with <em>amazing</em> features.</p>
+<ul>
+  <li>Fast performance</li>
+  <li>Beautiful design</li>
+  <li>Easy to use</li>
+</ul>
+<img src="https://example.com/photo.jpg" alt="Product photo" width="400">
+<p>Visit <a href="https://example.com" target="_blank">our website</a> for more.</p>
+<table>
+  <tr><th>Feature</th><th>Rating</th></tr>
+  <tr><td>Speed</td><td>⭐⭐⭐⭐⭐</td></tr>
+  <tr><td>Design</td><td>⭐⭐⭐⭐</td></tr>
+</table>
+<script>trackPageView()<\/script>`,
+  email: `<div style="font-family: Arial, sans-serif; max-width: 600px;">
+  <h1 style="color: #333;">Order Confirmation</h1>
+  <p>Hi <b>John</b>,</p>
+  <p>Your order <strong>#12345</strong> has been confirmed.</p>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr style="background:#f5f5f5;"><td style="padding:8px;">Widget</td><td>$29.99</td></tr>
+    <tr><td style="padding:8px;">Shipping</td><td>$5.00</td></tr>
+  </table>
+  <p><a href="https://example.com/track" style="color:blue;">Track your order</a></p>
+  <img src="https://example.com/pixel.gif" width="1" height="1" style="display:none">
+</div>`
+};
+
+function applyPreset(name) {
+  const p = PRESETS[name];
+  $('allowed-tags').value = p.tags;
+  $('allowed-attrs').value = p.attrs;
+  sanitize();
+}
+
+function loadExample(name) {
+  $('input').value = EXAMPLES[name];
+  sanitize();
+}
+
+function parseList(str) {
+  return str.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function sanitize() {
+  const html = $('input').value;
+  if (!html.trim()) {
+    $('output').textContent = '';
+    $('preview').innerHTML = '';
+    $('stats').innerHTML = '';
+    $('stripped').innerHTML = '<div class="empty">Stripped tags and attributes will appear here</div>';
+    return;
+  }
+
+  const allowedTags = new Set(parseList($('allowed-tags').value));
+  const allowedAttrs = new Set(parseList($('allowed-attrs').value));
+  const stripStyles = $('strip-styles').checked;
+  const stripData = $('strip-data').checked;
+  const strippedItems = [];
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  function sanitizeNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return document.createTextNode(node.textContent);
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return null;
+    }
+
+    const tagName = node.tagName.toLowerCase();
+
+    // Always strip script, style, iframe, object, embed, form, input, select, textarea, link, meta, base, noscript, template, svg (with onload)
+    const dangerousTags = new Set(['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'select', 'textarea', 'link', 'meta', 'base', 'noscript', 'template', 'applet']);
+    if (dangerousTags.has(tagName)) {
+      strippedItems.push({ type: 'tag', tag: tagName, reason: 'Dangerous tag always blocked' });
+      return null;
+    }
+
+    if (!allowedTags.has(tagName)) {
+      strippedItems.push({ type: 'tag', tag: tagName, reason: 'Not in allowed tags list' });
+      // Still process children (unwrap)
+      const fragment = document.createDocumentFragment();
+      for (const child of node.childNodes) {
+        const sanitized = sanitizeNode(child);
+        if (sanitized) fragment.appendChild(sanitized);
+      }
+      return fragment;
+    }
+
+    const el = document.createElement(tagName);
+
+    for (const attr of Array.from(node.attributes)) {
+      const attrName = attr.name.toLowerCase();
+
+      // Always strip event handlers
+      if (attrName.startsWith('on')) {
+        strippedItems.push({ type: 'attr', tag: tagName, attr: attrName, reason: 'Event handler removed' });
+        continue;
+      }
+
+      // Strip style if configured
+      if (stripStyles && attrName === 'style') {
+        strippedItems.push({ type: 'attr', tag: tagName, attr: 'style', reason: 'Inline style removed' });
+        continue;
+      }
+
+      // Strip data-* if configured
+      if (stripData && attrName.startsWith('data-')) {
+        strippedItems.push({ type: 'attr', tag: tagName, attr: attrName, reason: 'data-* attribute removed' });
+        continue;
+      }
+
+      // Check javascript: URLs
+      if ((attrName === 'href' || attrName === 'src' || attrName === 'action') && /^\s*javascript:/i.test(attr.value)) {
+        strippedItems.push({ type: 'attr', tag: tagName, attr: attrName, reason: 'javascript: URL blocked' });
+        continue;
+      }
+
+      if (!allowedAttrs.has(attrName)) {
+        strippedItems.push({ type: 'attr', tag: tagName, attr: attrName, reason: 'Not in allowed attributes list' });
+        continue;
+      }
+
+      el.setAttribute(attr.name, attr.value);
+    }
+
+    for (const child of node.childNodes) {
+      const sanitized = sanitizeNode(child);
+      if (sanitized) el.appendChild(sanitized);
+    }
+
+    return el;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const child of doc.body.childNodes) {
+    const sanitized = sanitizeNode(child);
+    if (sanitized) fragment.appendChild(sanitized);
+  }
+
+  const container = document.createElement('div');
+  container.appendChild(fragment);
+  const cleanHtml = container.innerHTML;
+
+  $('output').textContent = cleanHtml;
+
+  // Safe preview in sandboxed context
+  $('preview').innerHTML = '';
+  const previewDiv = document.createElement('div');
+  previewDiv.innerHTML = cleanHtml;
+  $('preview').appendChild(previewDiv);
+
+  // Stats
+  const tagsStripped = strippedItems.filter(i => i.type === 'tag').length;
+  const attrsStripped = strippedItems.filter(i => i.type === 'attr').length;
+  const totalStripped = tagsStripped + attrsStripped;
+
+  $('stats').innerHTML = `
+    <div class="stat-item"><span class="stat-num ${totalStripped > 0 ? 'danger' : 'safe'}">${totalStripped}</span> items stripped</div>
+    <div class="stat-item"><span class="stat-num danger">${tagsStripped}</span> tags removed</div>
+    <div class="stat-item"><span class="stat-num danger">${attrsStripped}</span> attributes removed</div>
+    <div class="stat-item"><span class="stat-num">${html.length}</span> → <span class="stat-num safe">${cleanHtml.length}</span> chars</div>
+  `;
+
+  // Stripped list
+  if (strippedItems.length === 0) {
+    $('stripped').innerHTML = '<div class="empty" style="padding:.75rem;font-size:.85rem;color:var(--success)">✓ Nothing was stripped — input appears safe</div>';
+  } else {
+    $('stripped').innerHTML = strippedItems.map(item => {
+      if (item.type === 'tag') {
+        return `<div class="stripped-item">🚫 &lt;${escapeHtml(item.tag)}&gt; — ${escapeHtml(item.reason)}</div>`;
+      } else {
+        return `<div class="stripped-item">⚠ &lt;${escapeHtml(item.tag)} <b>${escapeHtml(item.attr)}</b>&gt; — ${escapeHtml(item.reason)}</div>`;
+      }
+    }).join('');
+  }
+}
+
+function copyOutput() {
+  const text = $('output').textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = $('toast');
+    t.textContent = 'Copied!';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+
+// Live sanitize on input changes
+$('input').addEventListener('input', sanitize);
+$('allowed-tags').addEventListener('input', sanitize);
+$('allowed-attrs').addEventListener('input', sanitize);
+$('strip-styles').addEventListener('change', sanitize);
+$('strip-data').addEventListener('change', sanitize);
+
+// Disable the "strip events" checkbox since it's always on
+$('strip-events').checked = true;
+$('strip-events').disabled = true;
+</script>
+</body>
+</html>
