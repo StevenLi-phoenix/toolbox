@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPS Coordinate Converter — Free Online Tool</title>
+<meta name="description" content="Convert GPS coordinates between Decimal Degrees (DD), Degrees Minutes Seconds (DMS), Degrees Decimal Minutes (DDM), UTM, and more. 100% client-side.">
+<meta name="keywords" content="GPS coordinates, lat long converter, DD DMS DDM, UTM, decimal degrees, map coordinates">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/latlong.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+  .input-row label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; display: block; margin-bottom: 4px; }
+  .input-row input { width: 100%; padding: 10px 12px; font-family: var(--mono); font-size: .9rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .formats { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 16px; }
+  .fmt { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .fmt-label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .fmt-value { font-family: var(--mono); font-size: .9rem; color: var(--text); word-break: break-all; flex: 1; }
+  .fmt-copy { padding: 4px 10px; font-size: .75rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--text); font-family: var(--sans); }
+  .fmt-copy:hover { background: var(--border); }
+  .parse-section { margin-top: 18px; padding: 14px 16px; background: var(--surface2); border-radius: var(--radius); border: 1px solid var(--border); }
+  .parse-section h3 { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; font-weight: 600; }
+  .parse-section input { width: 100%; padding: 10px 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .parse-msg { font-size: .8rem; margin-top: 6px; color: var(--muted); }
+  .parse-msg.ok { color: var(--success, #16a34a); }
+  .parse-msg.err { color: var(--error, #dc2626); }
+  .samples { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .samples button { padding: 6px 10px; font-size: .75rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--text); font-family: var(--sans); }
+  .samples button:hover { background: var(--border); }
+  @media (max-width: 768px) { .input-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🌐 GPS Coordinate Converter</h1>
+<p class="subtitle">Convert latitude/longitude between Decimal Degrees (DD), Degrees Minutes Seconds (DMS), Degrees Decimal Minutes (DDM), and UTM zones.</p>
+
+<div class="input-row">
+  <div>
+    <label>Latitude (decimal)</label>
+    <input type="number" id="lat" step="any" value="40.7128">
+  </div>
+  <div>
+    <label>Longitude (decimal)</label>
+    <input type="number" id="lon" step="any" value="-74.0060">
+  </div>
+</div>
+
+<div class="samples">
+  <strong style="font-size:.75rem;color:var(--muted);align-self:center;margin-right:4px">SAMPLES:</strong>
+  <button data-lat="40.7128" data-lon="-74.0060">New York</button>
+  <button data-lat="48.8566" data-lon="2.3522">Paris</button>
+  <button data-lat="-33.8688" data-lon="151.2093">Sydney</button>
+  <button data-lat="35.6762" data-lon="139.6503">Tokyo</button>
+  <button data-lat="-22.9068" data-lon="-43.1729">Rio</button>
+  <button data-lat="0" data-lon="0">Null Island</button>
+</div>
+
+<div class="formats" id="formats"></div>
+
+<div class="parse-section">
+  <h3>Parse coordinate string</h3>
+  <input type="text" id="parse" placeholder='e.g. "40°42′46″N 74°00′21″W" or "40.7128, -74.0060"'>
+  <div class="parse-msg" id="parseMsg">Try pasting a coordinate in any format.</div>
+</div>
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const latEl = document.getElementById('lat');
+const lonEl = document.getElementById('lon');
+const formats = document.getElementById('formats');
+const parseEl = document.getElementById('parse');
+const parseMsg = document.getElementById('parseMsg');
+const toast = document.getElementById('toast');
+
+function toDMS(deg, pos, neg) {
+  const abs = Math.abs(deg);
+  const d = Math.floor(abs);
+  const mFloat = (abs - d) * 60;
+  const m = Math.floor(mFloat);
+  const s = (mFloat - m) * 60;
+  const hemi = deg >= 0 ? pos : neg;
+  return `${d}°${String(m).padStart(2,'0')}′${s.toFixed(2).padStart(5,'0')}″${hemi}`;
+}
+function toDDM(deg, pos, neg) {
+  const abs = Math.abs(deg);
+  const d = Math.floor(abs);
+  const m = (abs - d) * 60;
+  const hemi = deg >= 0 ? pos : neg;
+  return `${d}°${m.toFixed(4)}′${hemi}`;
+}
+
+// UTM conversion (WGS84)
+function toUTM(lat, lon) {
+  if (lat < -80 || lat > 84) return 'out of UTM range';
+  const a = 6378137, f = 1/298.257223563;
+  const k0 = 0.9996;
+  const e = Math.sqrt(f*(2-f));
+  const e2 = e*e;
+  const n = f/(2-f);
+  const n2 = n*n, n3 = n2*n, n4 = n3*n, n5 = n4*n, n6 = n5*n;
+  const zone = Math.floor((lon + 180) / 6) + 1;
+  const lon0 = ((zone - 1) * 6 - 180 + 3) * Math.PI/180;
+  const latR = lat * Math.PI/180;
+  const lonR = lon * Math.PI/180;
+  const dL = lonR - lon0;
+  const A = a/(1+n) * (1 + n2/4 + n4/64 + n6/256);
+  const a1 = n/2 - 2*n2/3 + 5*n3/16;
+  const a2 = 13*n2/48 - 3*n3/5;
+  const a3 = 61*n3/240;
+  const t = Math.sinh(Math.atanh(Math.sin(latR)) - (e * Math.atanh(e * Math.sin(latR))));
+  const xi = Math.atan(t / Math.cos(dL));
+  const eta = Math.atanh(Math.sin(dL) / Math.sqrt(1 + t*t));
+  const xiP = xi + a1*Math.sin(2*xi)*Math.cosh(2*eta) + a2*Math.sin(4*xi)*Math.cosh(4*eta) + a3*Math.sin(6*xi)*Math.cosh(6*eta);
+  const etaP = eta + a1*Math.cos(2*xi)*Math.sinh(2*eta) + a2*Math.cos(4*xi)*Math.sinh(4*eta) + a3*Math.cos(6*xi)*Math.sinh(6*eta);
+  let E = k0 * A * etaP + 500000;
+  let N = k0 * A * xiP;
+  if (lat < 0) N += 10000000;
+  const bands = 'CDEFGHJKLMNPQRSTUVWX';
+  const band = bands[Math.floor((lat + 80)/8)];
+  return `${zone}${band} ${Math.round(E)}E ${Math.round(N)}N`;
+}
+
+function render() {
+  const lat = parseFloat(latEl.value);
+  const lon = parseFloat(lonEl.value);
+  if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    formats.innerHTML = '<div class="fmt"><span class="fmt-value">Invalid coordinates</span></div>';
+    return;
+  }
+  const rows = [
+    ['Decimal Degrees (DD)', `${lat.toFixed(6)}, ${lon.toFixed(6)}`],
+    ['DMS (Degrees Minutes Seconds)', `${toDMS(lat,'N','S')} ${toDMS(lon,'E','W')}`],
+    ['DDM (Degrees Decimal Minutes)', `${toDDM(lat,'N','S')} ${toDDM(lon,'E','W')}`],
+    ['UTM (WGS84)', toUTM(lat, lon)],
+    ['Google Maps URL', `https://maps.google.com/?q=${lat},${lon}`],
+    ['OpenStreetMap URL', `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=12/${lat}/${lon}`],
+    ['Geo URI', `geo:${lat},${lon}`],
+    ['Signed decimal', `${lat >= 0 ? '+' : ''}${lat.toFixed(6)}${lon >= 0 ? '+' : ''}${lon.toFixed(6)}`],
+  ];
+  formats.innerHTML = rows.map(([label, val]) =>
+    `<div class="fmt"><div><div class="fmt-label">${label}</div><div class="fmt-value">${val}</div></div><button class="fmt-copy" data-copy="${val.replace(/"/g,'&quot;')}">Copy</button></div>`
+  ).join('');
+}
+
+function parseInput(str) {
+  str = str.trim();
+  if (!str) return null;
+  // DD: "40.7128, -74.0060" or "40.7128 -74.0060"
+  let m = str.match(/^(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)$/);
+  if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+  // DMS: 40°42'46"N 74°00'21"W (various symbols)
+  const d = '[°d]';
+  const mn = "[′'m]";
+  const sc = '[″"s]';
+  const re = new RegExp(
+    `(\\d+)\\s*${d}\\s*(\\d+(?:\\.\\d+)?)\\s*(?:${mn}\\s*(\\d+(?:\\.\\d+)?)\\s*${sc})?\\s*${mn}?\\s*([NSns])` +
+    `[\\s,]+` +
+    `(\\d+)\\s*${d}\\s*(\\d+(?:\\.\\d+)?)\\s*(?:${mn}\\s*(\\d+(?:\\.\\d+)?)\\s*${sc})?\\s*${mn}?\\s*([EWew])`
+  );
+  m = str.match(re);
+  if (m) {
+    const toDec = (d, mi, s, hemi) => {
+      let v = parseFloat(d) + parseFloat(mi)/60 + (s ? parseFloat(s)/3600 : 0);
+      if (/[SWsw]/.test(hemi)) v = -v;
+      return v;
+    };
+    return { lat: toDec(m[1], m[2], m[3], m[4]), lon: toDec(m[5], m[6], m[7], m[8]) };
+  }
+  // geo URI
+  m = str.match(/^geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i);
+  if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+  return null;
+}
+
+latEl.addEventListener('input', render);
+lonEl.addEventListener('input', render);
+
+parseEl.addEventListener('input', () => {
+  const result = parseInput(parseEl.value);
+  if (!result) {
+    parseMsg.textContent = parseEl.value ? 'Could not parse — try another format.' : 'Try pasting a coordinate in any format.';
+    parseMsg.className = 'parse-msg' + (parseEl.value ? ' err' : '');
+    return;
+  }
+  latEl.value = result.lat;
+  lonEl.value = result.lon;
+  parseMsg.textContent = `Parsed: ${result.lat.toFixed(6)}, ${result.lon.toFixed(6)}`;
+  parseMsg.className = 'parse-msg ok';
+  render();
+});
+
+document.querySelectorAll('.samples button').forEach(b => {
+  b.addEventListener('click', () => {
+    latEl.value = b.dataset.lat;
+    lonEl.value = b.dataset.lon;
+    render();
+  });
+});
+
+formats.addEventListener('click', (e) => {
+  if (e.target.classList.contains('fmt-copy')) {
+    navigator.clipboard.writeText(e.target.dataset.copy);
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1200);
+  }
+});
+
+render();
+</script>
+</body>
+</html>

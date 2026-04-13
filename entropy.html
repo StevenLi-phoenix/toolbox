@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shannon Entropy Calculator — Free Online Tool</title>
+<meta name="description" content="Calculate Shannon entropy of text or bytes, measure randomness for passwords, compressibility estimates, and character frequency. 100% client-side.">
+<meta name="keywords" content="shannon entropy, entropy calculator, password strength, randomness, information theory, compressibility">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/entropy.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 200px; padding: 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; background: var(--bg); color: var(--text); }
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; margin: 14px 0; align-items: center; }
+  .controls label { font-size: .85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .controls select { padding: 6px 10px; font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--sans); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 16px 0; }
+  .stat { padding: 12px 14px; background: var(--surface2); border-radius: var(--radius); border: 1px solid var(--border); }
+  .stat span { display: block; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .stat strong { font-family: var(--mono); font-size: 1.05rem; color: var(--text); }
+  .meter { height: 10px; border-radius: 99px; background: var(--surface2); overflow: hidden; margin-top: 6px; border: 1px solid var(--border); }
+  .meter-fill { height: 100%; background: var(--accent); transition: width .3s; }
+  .strength-label { font-size: .8rem; margin-top: 6px; color: var(--muted); }
+  .freq-table { width: 100%; border-collapse: collapse; font-size: .8rem; font-family: var(--mono); margin-top: 10px; }
+  .freq-table th, .freq-table td { padding: 4px 8px; text-align: left; border-bottom: 1px dashed var(--border); }
+  .freq-table th { font-family: var(--sans); color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .7rem; letter-spacing: .04em; }
+  .freq-bar { height: 6px; background: var(--accent); border-radius: 99px; }
+  .section-title { font-size: .85rem; font-weight: 600; color: var(--text); margin: 18px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .empty-msg { color: var(--muted); font-size: .9rem; padding: 40px 16px; text-align: center; }
+  @media (max-width: 768px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🎲 Shannon Entropy Calculator</h1>
+<p class="subtitle">Measure randomness in text or passwords. Compute Shannon entropy (bits/symbol), total entropy, and compressibility estimates.</p>
+
+<textarea id="input" placeholder="Paste text, password, or any string here..."></textarea>
+
+<div class="controls">
+  <label>Unit
+    <select id="unit">
+      <option value="char">Characters</option>
+      <option value="byte">Bytes (UTF-8)</option>
+    </select>
+  </label>
+  <button class="btn btn-secondary" id="sample">Load sample</button>
+  <button class="btn btn-secondary" id="clear">Clear</button>
+</div>
+
+<div id="results" class="results">
+  <div class="empty-msg">Type or paste some text to see entropy statistics.</div>
+</div>
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const input = document.getElementById('input');
+const unit = document.getElementById('unit');
+const results = document.getElementById('results');
+
+function calcEntropy(symbols) {
+  if (!symbols.length) return { H: 0, counts: new Map() };
+  const counts = new Map();
+  for (const s of symbols) counts.set(s, (counts.get(s) || 0) + 1);
+  let H = 0;
+  const N = symbols.length;
+  for (const c of counts.values()) {
+    const p = c / N;
+    H -= p * Math.log2(p);
+  }
+  return { H, counts };
+}
+
+function strengthLabel(bits) {
+  if (bits < 28) return ['Very weak', '#dc2626'];
+  if (bits < 36) return ['Weak', '#ea580c'];
+  if (bits < 60) return ['Reasonable', '#ca8a04'];
+  if (bits < 128) return ['Strong', '#16a34a'];
+  return ['Very strong', '#059669'];
+}
+
+function render() {
+  const text = input.value;
+  if (!text.length) {
+    results.innerHTML = '<div class="empty-msg">Type or paste some text to see entropy statistics.</div>';
+    return;
+  }
+  let symbols;
+  if (unit.value === 'byte') {
+    symbols = Array.from(new TextEncoder().encode(text));
+  } else {
+    symbols = Array.from(text);
+  }
+  const { H, counts } = calcEntropy(symbols);
+  const N = symbols.length;
+  const total = H * N;
+  const unique = counts.size;
+  const maxH = unique > 1 ? Math.log2(unique) : 0;
+  const ratio = maxH > 0 ? (H / maxH) : 0;
+  const [label, color] = strengthLabel(total);
+
+  let charset = 0;
+  const text2 = text;
+  if (/[a-z]/.test(text2)) charset += 26;
+  if (/[A-Z]/.test(text2)) charset += 26;
+  if (/[0-9]/.test(text2)) charset += 10;
+  if (/[^a-zA-Z0-9]/.test(text2)) charset += 32;
+  const passEntropy = charset > 0 ? Math.log2(charset) * text.length : 0;
+
+  const sorted = [...counts.entries()].sort((a,b) => b[1]-a[1]);
+  const topMax = sorted.length ? sorted[0][1] : 1;
+  const top = sorted.slice(0, 20);
+
+  const fmt = (s) => {
+    if (unit.value === 'byte') return '0x' + s.toString(16).padStart(2, '0');
+    if (s === ' ') return '·␣';
+    if (s === '\n') return '↵';
+    if (s === '\t') return '→';
+    return s;
+  };
+
+  results.innerHTML = `
+    <div class="stats">
+      <div class="stat"><span>Shannon entropy</span><strong>${H.toFixed(4)} bits/sym</strong></div>
+      <div class="stat"><span>Total entropy</span><strong>${total.toFixed(2)} bits</strong></div>
+      <div class="stat"><span>Length</span><strong>${N} ${unit.value === 'byte' ? 'bytes' : 'chars'}</strong></div>
+      <div class="stat"><span>Unique symbols</span><strong>${unique}</strong></div>
+      <div class="stat"><span>Max possible H</span><strong>${maxH.toFixed(4)} bits/sym</strong></div>
+      <div class="stat"><span>Normalized (0–1)</span><strong>${ratio.toFixed(4)}</strong></div>
+      <div class="stat"><span>Est. charset pool</span><strong>${charset}</strong></div>
+      <div class="stat"><span>Brute-force entropy</span><strong>${passEntropy.toFixed(2)} bits</strong></div>
+    </div>
+    <div class="meter"><div class="meter-fill" style="width:${Math.min(100, total/1.28)}%;background:${color}"></div></div>
+    <div class="strength-label">Strength: <strong style="color:${color}">${label}</strong> (${total.toFixed(1)} bits)</div>
+
+    <div class="section-title">Top symbols (${Math.min(20, unique)} of ${unique})</div>
+    <table class="freq-table">
+      <thead><tr><th>Symbol</th><th>Count</th><th>Freq</th><th style="width:40%">Distribution</th></tr></thead>
+      <tbody>
+      ${top.map(([s,c]) => {
+        const pct = (c/N*100).toFixed(2);
+        const bar = (c/topMax*100).toFixed(1);
+        return `<tr><td>${fmt(s).replace(/</g,'&lt;')}</td><td>${c}</td><td>${pct}%</td><td><div class="freq-bar" style="width:${bar}%"></div></td></tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+input.addEventListener('input', render);
+unit.addEventListener('change', render);
+document.getElementById('sample').addEventListener('click', () => {
+  input.value = 'correct horse battery staple';
+  render();
+});
+document.getElementById('clear').addEventListener('click', () => {
+  input.value = '';
+  render();
+});
+</script>
+</body>
+</html>
