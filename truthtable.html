@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Truth Table Generator</title>
+<meta name="description" content="Generate truth tables for boolean expressions. Supports AND, OR, NOT, XOR, NAND, NOR, XNOR, implication, and equivalence. 100% client-side.">
+<meta name="keywords" content="truth table, boolean expression, logic gate, AND, OR, NOT, XOR, NAND, propositional logic">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/truthtable.html">
+<meta property="og:title" content="Truth Table Generator">
+<meta property="og:description" content="Generate truth tables for any boolean expression in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/truthtable.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .exprs { display: flex; flex-direction: column; gap: 6px; }
+  .exprs input { padding: 8px 10px; font-family: var(--mono); font-size: .9rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .exprs .row { display: flex; gap: 6px; align-items: center; }
+  .exprs .row input { flex: 1; }
+  .exprs .row button { padding: 4px 10px; font-size: .75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; }
+  table.tt { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .85rem; margin-top: 12px; }
+  table.tt th, table.tt td { padding: 6px 10px; border: 1px solid var(--border); text-align: center; }
+  table.tt th { background: var(--surface2); font-weight: 600; }
+  table.tt th.expr { color: var(--accent, #4ea1ff); }
+  table.tt td.t { color: var(--success); }
+  table.tt td.f { color: var(--error); }
+  table.tt tr:hover td { background: var(--surface2); }
+  .legend { font-size: .78rem; color: var(--muted); line-height: 1.6; }
+  .legend code { padding: 1px 5px; border-radius: 3px; background: var(--surface2); font-family: var(--mono); }
+  .summary { font-size: .82rem; margin-top: 8px; color: var(--muted); }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: .7rem; margin-left: 6px; }
+  .tag.taut { background: rgba(40, 180, 99, .15); color: var(--success); }
+  .tag.contr { background: rgba(231, 76, 60, .15); color: var(--error); }
+  .tag.cont { background: var(--surface2); color: var(--muted); }
+  @media (max-width: 768px) { table.tt { font-size: .75rem; } table.tt th, table.tt td { padding: 4px 6px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Truth Table Generator</h1>
+  <p class="subtitle">Enter boolean expressions using variables <code>A..Z</code> and operators like <code>AND</code>, <code>OR</code>, <code>NOT</code>, <code>XOR</code>, <code>-&gt;</code>, <code>&lt;-&gt;</code>. Generates a full truth table and flags tautologies and contradictions.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <label>Expressions (one per line or use the list below)</label>
+    <div class="exprs" id="exprs"></div>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-primary" onclick="addExpr()">+ Add expression</button>
+      <button class="btn btn-secondary" onclick="generate()">Generate</button>
+      <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+    <div class="opts" style="margin-top:10px;">
+      <label><input type="checkbox" id="show01"> Show 0/1 instead of T/F</label>
+      <label><input type="checkbox" id="showSub"> Show sub-expressions</label>
+    </div>
+    <div id="status" class="status"></div>
+    <div id="result"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Operators</h2>
+    <p class="legend">
+      <code>NOT a</code> · <code>!a</code> · <code>~a</code> · <code>¬a</code> — negation<br>
+      <code>a AND b</code> · <code>a &amp;&amp; b</code> · <code>a &amp; b</code> · <code>a · b</code> — conjunction<br>
+      <code>a OR b</code> · <code>a || b</code> · <code>a | b</code> · <code>a + b</code> — disjunction<br>
+      <code>a XOR b</code> · <code>a ^ b</code> · <code>a ⊕ b</code> — exclusive or<br>
+      <code>a NAND b</code> · <code>a NOR b</code> · <code>a XNOR b</code> — negated gates<br>
+      <code>a -&gt; b</code> · <code>a ⇒ b</code> — implication<br>
+      <code>a &lt;-&gt; b</code> · <code>a ⇔ b</code> — equivalence<br>
+      Use parentheses for grouping. Variable names are single letters A-Z (case-insensitive).
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const exprsEl = document.getElementById('exprs');
+const statusEl = document.getElementById('status');
+const resultEl = document.getElementById('result');
+
+function setStatus(msg, type) {
+  statusEl.className = 'status show ' + (type || '');
+  statusEl.textContent = msg;
+}
+function clearStatus() { statusEl.className = 'status'; statusEl.textContent = ''; }
+
+function addExpr(val) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<input type="text" value="${(val||'').replace(/"/g,'&quot;')}" placeholder="e.g. A AND (B OR C)"><button onclick="this.parentNode.remove()">×</button>`;
+  row.querySelector('input').addEventListener('input', () => { clearStatus(); });
+  exprsEl.appendChild(row);
+}
+
+function getExpressions() {
+  return [...exprsEl.querySelectorAll('input')].map(i => i.value.trim()).filter(Boolean);
+}
+
+// Tokenizer
+function tokenize(src) {
+  // Normalize unicode/word operators to symbols
+  let s = ' ' + src + ' ';
+  s = s.replace(/¬/g, '!').replace(/⊕/g, '^').replace(/·/g, '&').replace(/⇒/g, '->').replace(/⇔/g, '<->');
+  s = s.replace(/\bNAND\b/gi, ' _NAND_ ')
+       .replace(/\bNOR\b/gi, ' _NOR_ ')
+       .replace(/\bXNOR\b/gi, ' _XNOR_ ')
+       .replace(/\bXOR\b/gi, ' _XOR_ ')
+       .replace(/\bAND\b/gi, ' & ')
+       .replace(/\bOR\b/gi, ' | ')
+       .replace(/\bNOT\b/gi, ' ! ');
+  const tokens = [];
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === '<' && s.substr(i,3) === '<->') { tokens.push({t:'op', v:'<->'}); i+=3; continue; }
+    if (c === '-' && s[i+1] === '>') { tokens.push({t:'op', v:'->'}); i+=2; continue; }
+    if (c === '&' && s[i+1] === '&') { tokens.push({t:'op', v:'&'}); i+=2; continue; }
+    if (c === '|' && s[i+1] === '|') { tokens.push({t:'op', v:'|'}); i+=2; continue; }
+    if (c === '_') {
+      const m = s.substr(i).match(/^_(NAND|NOR|XNOR|XOR)_/);
+      if (m) { tokens.push({t:'op', v:m[1].toLowerCase()}); i += m[0].length; continue; }
+    }
+    if ('&|^+!~()'.includes(c)) {
+      const map = { '+': '|', '~': '!' };
+      tokens.push({t: c==='('?'lp':c===')'?'rp':'op', v: map[c]||c}); i++; continue;
+    }
+    if (/[a-zA-Z]/.test(c)) {
+      // Single-letter var
+      if (/[a-zA-Z]/.test(s[i+1])) throw new Error('Variable names must be single letters. Unexpected: ' + c + s[i+1]);
+      tokens.push({t:'var', v: c.toUpperCase()}); i++; continue;
+    }
+    if (c === '0' || c === '1') { tokens.push({t:'lit', v: c==='1'}); i++; continue; }
+    throw new Error('Unexpected character: ' + c);
+  }
+  return tokens;
+}
+
+// Pratt-style parser. Precedence: ! > & > ^/xor/nand/nor/xnor > | > -> > <->
+const PREC = { '!': 6, '&': 5, '^': 4, 'xor': 4, 'nand': 4, 'nor': 4, 'xnor': 4, '|': 3, '->': 2, '<->': 1 };
+const RIGHT_ASSOC = { '->': true };
+
+function parse(tokens) {
+  let pos = 0;
+  function peek() { return tokens[pos]; }
+  function eat() { return tokens[pos++]; }
+
+  function parsePrimary() {
+    const tk = eat();
+    if (!tk) throw new Error('Unexpected end of expression');
+    if (tk.t === 'lp') {
+      const node = parseExpr(0);
+      const close = eat();
+      if (!close || close.t !== 'rp') throw new Error('Missing closing parenthesis');
+      return node;
+    }
+    if (tk.t === 'op' && tk.v === '!') {
+      return { type: 'not', arg: parsePrimary() };
+    }
+    if (tk.t === 'var') return { type: 'var', name: tk.v };
+    if (tk.t === 'lit') return { type: 'lit', val: tk.v };
+    throw new Error('Unexpected token: ' + (tk.v||tk.t));
+  }
+
+  function parseExpr(minPrec) {
+    let left = parsePrimary();
+    while (true) {
+      const tk = peek();
+      if (!tk || tk.t !== 'op') break;
+      const p = PREC[tk.v];
+      if (p === undefined || p < minPrec) break;
+      eat();
+      const nextMin = RIGHT_ASSOC[tk.v] ? p : p + 1;
+      const right = parseExpr(nextMin);
+      left = { type: 'bin', op: tk.v, l: left, r: right };
+    }
+    return left;
+  }
+
+  const node = parseExpr(0);
+  if (pos !== tokens.length) throw new Error('Unexpected token after expression: ' + (tokens[pos].v||''));
+  return node;
+}
+
+function collectVars(node, set) {
+  if (node.type === 'var') set.add(node.name);
+  else if (node.type === 'not') collectVars(node.arg, set);
+  else if (node.type === 'bin') { collectVars(node.l, set); collectVars(node.r, set); }
+}
+
+function evalNode(node, env) {
+  switch (node.type) {
+    case 'lit': return node.val;
+    case 'var': return env[node.name];
+    case 'not': return !evalNode(node.arg, env);
+    case 'bin': {
+      const a = evalNode(node.l, env);
+      const b = evalNode(node.r, env);
+      switch (node.op) {
+        case '&': return a && b;
+        case '|': return a || b;
+        case '^': case 'xor': return a !== b;
+        case 'nand': return !(a && b);
+        case 'nor': return !(a || b);
+        case 'xnor': return a === b;
+        case '->': return !a || b;
+        case '<->': return a === b;
+      }
+    }
+  }
+}
+
+function prettyPrint(node) {
+  switch (node.type) {
+    case 'lit': return node.val ? '1' : '0';
+    case 'var': return node.name;
+    case 'not': return '¬' + prettyPrint(node.arg);
+    case 'bin': {
+      const sym = { '&':'∧', '|':'∨', '^':'⊕', 'xor':'⊕', 'nand':'⊼', 'nor':'⊽', 'xnor':'⇔', '->':'→', '<->':'↔' }[node.op] || node.op;
+      return '(' + prettyPrint(node.l) + ' ' + sym + ' ' + prettyPrint(node.r) + ')';
+    }
+  }
+}
+
+function collectSubs(node, acc) {
+  if (!acc) acc = [];
+  if (node.type === 'bin') {
+    collectSubs(node.l, acc);
+    collectSubs(node.r, acc);
+    acc.push(node);
+  } else if (node.type === 'not') {
+    collectSubs(node.arg, acc);
+    acc.push(node);
+  }
+  return acc;
+}
+
+function generate() {
+  clearStatus();
+  resultEl.innerHTML = '';
+  const raw = getExpressions();
+  if (!raw.length) { setStatus('Add at least one expression.', 'error'); return; }
+  let trees;
+  try {
+    trees = raw.map(s => ({ src: s, node: parse(tokenize(s)) }));
+  } catch (e) {
+    setStatus(e.message, 'error');
+    return;
+  }
+  const vars = new Set();
+  trees.forEach(t => collectVars(t.node, vars));
+  const varList = [...vars].sort();
+  if (varList.length > 10) { setStatus('Too many variables (max 10 = 1024 rows).', 'error'); return; }
+  if (varList.length === 0) { setStatus('Expression has no variables.', 'error'); return; }
+
+  const show01 = document.getElementById('show01').checked;
+  const showSub = document.getElementById('showSub').checked;
+  const T = show01 ? '1' : 'T';
+  const F = show01 ? '0' : 'F';
+
+  // Collect columns: vars, optional subexpressions, final exprs
+  let subCols = [];
+  if (showSub) {
+    const seen = new Set();
+    trees.forEach(t => {
+      collectSubs(t.node).forEach(n => {
+        const k = prettyPrint(n);
+        if (!seen.has(k)) { seen.add(k); subCols.push({ label: k, node: n }); }
+      });
+    });
+  }
+
+  const rows = [];
+  const n = varList.length;
+  const rowCount = 1 << n;
+  const finalStats = trees.map(() => ({ t: 0, f: 0 }));
+  for (let mask = 0; mask < rowCount; mask++) {
+    const env = {};
+    varList.forEach((v, i) => { env[v] = !!((mask >> (n - 1 - i)) & 1); });
+    const row = varList.map(v => env[v]);
+    const subVals = subCols.map(c => evalNode(c.node, env));
+    const finalVals = trees.map((t, i) => {
+      const v = evalNode(t.node, env);
+      if (v) finalStats[i].t++; else finalStats[i].f++;
+      return v;
+    });
+    rows.push({ vars: row, subs: subVals, finals: finalVals });
+  }
+
+  // Render table
+  let html = '<table class="tt"><thead><tr>';
+  varList.forEach(v => html += `<th>${v}</th>`);
+  subCols.forEach(c => html += `<th>${escapeHtml(c.label)}</th>`);
+  trees.forEach(t => html += `<th class="expr">${escapeHtml(t.src)}</th>`);
+  html += '</tr></thead><tbody>';
+  rows.forEach(r => {
+    html += '<tr>';
+    r.vars.forEach(v => html += `<td class="${v?'t':'f'}">${v?T:F}</td>`);
+    r.subs.forEach(v => html += `<td class="${v?'t':'f'}">${v?T:F}</td>`);
+    r.finals.forEach(v => html += `<td class="${v?'t':'f'}"><strong>${v?T:F}</strong></td>`);
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  // Summary
+  const summary = trees.map((t, i) => {
+    const s = finalStats[i];
+    let tag = '';
+    if (s.f === 0) tag = '<span class="tag taut">tautology</span>';
+    else if (s.t === 0) tag = '<span class="tag contr">contradiction</span>';
+    else tag = '<span class="tag cont">contingent</span>';
+    return `<div><code>${escapeHtml(t.src)}</code>${tag} — T: ${s.t}, F: ${s.f}</div>`;
+  }).join('');
+  html += '<div class="summary">' + summary + '</div>';
+  html += '<div class="btn-row" style="margin-top:10px;"><button class="btn btn-secondary" onclick="copyTSV()">Copy as TSV</button><button class="btn btn-secondary" onclick="copyMD()">Copy as Markdown</button></div>';
+
+  resultEl.innerHTML = html;
+  window._lastTable = { varList, subCols, trees, rows, T, F };
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function tableToRows() {
+  const d = window._lastTable;
+  if (!d) return null;
+  const header = [...d.varList, ...d.subCols.map(c => c.label), ...d.trees.map(t => t.src)];
+  const rows = [header];
+  d.rows.forEach(r => {
+    const row = [];
+    r.vars.forEach(v => row.push(v ? d.T : d.F));
+    r.subs.forEach(v => row.push(v ? d.T : d.F));
+    r.finals.forEach(v => row.push(v ? d.T : d.F));
+    rows.push(row);
+  });
+  return rows;
+}
+
+function copyTSV() {
+  const rows = tableToRows();
+  if (!rows) return;
+  navigator.clipboard.writeText(rows.map(r => r.join('\t')).join('\n')).then(toast);
+}
+function copyMD() {
+  const rows = tableToRows();
+  if (!rows) return;
+  const md = [
+    '| ' + rows[0].join(' | ') + ' |',
+    '|' + rows[0].map(() => '---').join('|') + '|',
+    ...rows.slice(1).map(r => '| ' + r.join(' | ') + ' |')
+  ].join('\n');
+  navigator.clipboard.writeText(md).then(toast);
+}
+function toast() {
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+function loadSample() {
+  exprsEl.innerHTML = '';
+  addExpr('A AND B');
+  addExpr('A OR B');
+  addExpr('A XOR B');
+  addExpr('A -> B');
+  addExpr('(A AND B) OR (NOT A AND NOT B)');
+  generate();
+}
+function clearAll() {
+  exprsEl.innerHTML = '';
+  addExpr('');
+  resultEl.innerHTML = '';
+  clearStatus();
+}
+
+addExpr('');
+</script>
+</body>
+</html>

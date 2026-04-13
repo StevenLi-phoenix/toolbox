@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wi-Fi QR Code Generator</title>
+<meta name="description" content="Generate a Wi-Fi QR code so guests can join your network by scanning with their camera. Supports WPA/WPA2, WEP, and open networks. 100% client-side.">
+<meta name="keywords" content="wifi qr code, wifi share, WPA, WEP, guest network, QR code generator">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/wifiqr.html">
+<meta property="og:title" content="Wi-Fi QR Code Generator">
+<meta property="og:description" content="Generate a Wi-Fi QR code so guests can join your network by scanning.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/wifiqr.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form { display: grid; gap: 10px; }
+  .form label { font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .form input, .form select { padding: 8px 10px; font-family: var(--sans); font-size: .95rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .form .field { display: flex; flex-direction: column; gap: 4px; }
+  .form .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form .inline { display: flex; gap: 18px; flex-wrap: wrap; font-size: .85rem; align-items: center; }
+  .form .inline label { text-transform: none; font-weight: 400; color: var(--text); display: flex; gap: 6px; align-items: center; }
+  .qr-out { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 8px; }
+  .qr-out canvas, .qr-out img { max-width: 100%; height: auto; background: #fff; padding: 10px; border-radius: var(--radius); }
+  #qr { display: inline-block; }
+  .payload { font-family: var(--mono); font-size: .78rem; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); word-break: break-all; }
+  .pwd-wrap { position: relative; }
+  .pwd-wrap input { width: 100%; box-sizing: border-box; padding-right: 60px; }
+  .pwd-wrap button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); padding: 4px 10px; font-size: .72rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); cursor: pointer; }
+  @media (max-width: 600px) { .form .row2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Wi-Fi QR Code Generator</h1>
+  <p class="subtitle">Build a Wi-Fi QR code that most modern phones can scan from the camera app to join your network — no typing passwords for guests. Everything is generated locally.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="form">
+      <div class="field">
+        <label for="ssid">Network name (SSID)</label>
+        <input id="ssid" type="text" placeholder="MyWiFi" autocomplete="off">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="auth">Security</label>
+          <select id="auth">
+            <option value="WPA">WPA / WPA2 / WPA3</option>
+            <option value="WEP">WEP</option>
+            <option value="nopass">None (open network)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="pwd">Password</label>
+          <div class="pwd-wrap">
+            <input id="pwd" type="password" placeholder="Password" autocomplete="off">
+            <button type="button" id="show">Show</button>
+          </div>
+        </div>
+      </div>
+      <div class="inline">
+        <label><input type="checkbox" id="hidden"> Hidden network</label>
+        <label>Size
+          <select id="size">
+            <option value="192">192 px</option>
+            <option value="256" selected>256 px</option>
+            <option value="384">384 px</option>
+            <option value="512">512 px</option>
+          </select>
+        </label>
+        <label>Error correction
+          <select id="ecl">
+            <option value="L">L (7%)</option>
+            <option value="M" selected>M (15%)</option>
+            <option value="Q">Q (25%)</option>
+            <option value="H">H (30%)</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="generate()">Generate</button>
+      <button class="btn btn-secondary" onclick="downloadPng()">Download PNG</button>
+      <button class="btn btn-secondary" onclick="copyPayload()">Copy payload</button>
+    </div>
+
+    <div id="status" class="status"></div>
+    <div class="qr-out">
+      <div id="qr"></div>
+      <div class="payload" id="payload"></div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      The QR payload follows the informal Wi-Fi Network Config format used by Android, iOS, and most scanners:
+      <code>WIFI:T:&lt;auth&gt;;S:&lt;ssid&gt;;P:&lt;password&gt;;H:&lt;hidden&gt;;;</code>. Special characters
+      (<code>\ ; , : "</code>) in the SSID or password are escaped with a backslash. iOS 11+ and Android 10+
+      can scan Wi-Fi QR codes directly from the camera app.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+const ssidEl = document.getElementById('ssid');
+const authEl = document.getElementById('auth');
+const pwdEl = document.getElementById('pwd');
+const hiddenEl = document.getElementById('hidden');
+const sizeEl = document.getElementById('size');
+const eclEl = document.getElementById('ecl');
+const qrEl = document.getElementById('qr');
+const payloadEl = document.getElementById('payload');
+const statusEl = document.getElementById('status');
+const showBtn = document.getElementById('show');
+
+let qr = null;
+let lastPayload = '';
+
+function escapeWifi(s) {
+  return s.replace(/([\\;,":])/g, '\\$1');
+}
+
+function buildPayload() {
+  const ssid = ssidEl.value;
+  const auth = authEl.value;
+  const pwd = pwdEl.value;
+  const hidden = hiddenEl.checked;
+  if (!ssid) return '';
+  let p = 'WIFI:';
+  p += 'T:' + (auth === 'nopass' ? 'nopass' : auth) + ';';
+  p += 'S:' + escapeWifi(ssid) + ';';
+  if (auth !== 'nopass') p += 'P:' + escapeWifi(pwd) + ';';
+  if (hidden) p += 'H:true;';
+  p += ';';
+  return p;
+}
+
+function setStatus(msg, type) {
+  statusEl.className = 'status show ' + (type || '');
+  statusEl.textContent = msg;
+}
+function clearStatus() { statusEl.className = 'status'; statusEl.textContent = ''; }
+
+const ECL_MAP = () => ({ L: QRCode.CorrectLevel.L, M: QRCode.CorrectLevel.M, Q: QRCode.CorrectLevel.Q, H: QRCode.CorrectLevel.H });
+
+function generate() {
+  clearStatus();
+  const payload = buildPayload();
+  if (!payload) {
+    setStatus('Enter a network name (SSID) to generate.', 'error');
+    qrEl.innerHTML = '';
+    payloadEl.textContent = '';
+    return;
+  }
+  if (authEl.value !== 'nopass' && !pwdEl.value) {
+    setStatus('Warning: password is empty for a secured network.', 'error');
+  }
+  lastPayload = payload;
+  payloadEl.textContent = payload;
+  qrEl.innerHTML = '';
+  const size = parseInt(sizeEl.value, 10);
+  qr = new QRCode(qrEl, {
+    text: payload,
+    width: size,
+    height: size,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: ECL_MAP()[eclEl.value],
+  });
+}
+
+function downloadPng() {
+  if (!qr) { setStatus('Generate a QR code first.', 'error'); return; }
+  const img = qrEl.querySelector('img') || qrEl.querySelector('canvas');
+  if (!img) return;
+  let dataUrl;
+  if (img.tagName === 'CANVAS') {
+    dataUrl = img.toDataURL('image/png');
+  } else {
+    dataUrl = img.src;
+  }
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = 'wifi-' + (ssidEl.value.replace(/[^a-z0-9_-]/gi, '_') || 'qr') + '.png';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function copyPayload() {
+  if (!lastPayload) return;
+  navigator.clipboard.writeText(lastPayload).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+showBtn.addEventListener('click', () => {
+  const showing = pwdEl.type === 'text';
+  pwdEl.type = showing ? 'password' : 'text';
+  showBtn.textContent = showing ? 'Show' : 'Hide';
+});
+
+authEl.addEventListener('change', () => {
+  pwdEl.disabled = authEl.value === 'nopass';
+  if (authEl.value === 'nopass') pwdEl.value = '';
+});
+
+[ssidEl, pwdEl, authEl, hiddenEl, sizeEl, eclEl].forEach(el => {
+  el.addEventListener('input', () => { if (ssidEl.value) generate(); });
+  el.addEventListener('change', () => { if (ssidEl.value) generate(); });
+});
+</script>
+</body>
+</html>
