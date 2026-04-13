@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TLS Cipher Suite Explainer — Free Online Tool</title>
+<meta name="description" content="Break down TLS/SSL cipher suite names into key exchange, authentication, bulk cipher, and MAC components with security notes. 100% client-side.">
+<meta name="keywords" content="TLS cipher suite, cipher explainer, SSL cipher, TLS_ECDHE, AES-GCM, ChaCha20, security tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tlscipher.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 110px; font-family: var(--mono); font-size: .88rem; padding: 10px; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); resize: vertical; }
+  .suite-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; background: var(--surface2); }
+  .suite-name { font-family: var(--mono); font-weight: 600; font-size: .95rem; word-break: break-all; margin-bottom: 8px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: .72rem; font-weight: 600; margin-left: 6px; font-family: var(--sans); vertical-align: middle; }
+  .badge.strong { background: #bbf7d0; color: #065f46; }
+  .badge.weak { background: #fecaca; color: #991b1b; }
+  .badge.medium { background: #fde68a; color: #92400e; }
+  .badge.modern { background: #c7d2fe; color: #312e81; }
+  .parts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: .85rem; }
+  .parts dt { color: var(--muted); font-family: var(--mono); }
+  .parts dd { margin: 0; }
+  .notes { margin-top: 10px; font-size: .82rem; color: var(--muted); line-height: 1.5; border-top: 1px dashed var(--border); padding-top: 8px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+  .footer-note { text-align: center; margin-top: 2rem; color: var(--muted); font-size: .82rem; }
+  @media (max-width: 768px) { .parts { grid-template-columns: 1fr; gap: 0 0; } .parts dt { margin-top: 6px; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔐 TLS Cipher Suite Explainer</h1>
+<p class="subtitle">Paste TLS/SSL cipher suite names and get a breakdown of key exchange, authentication, bulk encryption, MAC, and security notes. 100% client-side.</p>
+
+<div class="card">
+  <label for="input" style="font-weight:600;font-size:.9rem">Cipher suites (one per line)</label>
+  <textarea id="input" spellcheck="false" placeholder="TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+TLS_AES_256_GCM_SHA384
+TLS_RSA_WITH_3DES_EDE_CBC_SHA"></textarea>
+  <div class="presets">
+    <button class="btn btn-secondary" onclick="loadPreset('modern')">Modern (TLS 1.3)</button>
+    <button class="btn btn-secondary" onclick="loadPreset('intermediate')">Intermediate</button>
+    <button class="btn btn-secondary" onclick="loadPreset('legacy')">Legacy / Weak</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('input').value='';render()">Clear</button>
+  </div>
+</div>
+
+<div id="output"></div>
+
+<p class="footer-note">Built with ☕ by Steven Li · No data leaves your browser</p>
+</div>
+
+<script>
+const KX = {
+  ECDHE: { name: 'ECDHE', desc: 'Elliptic Curve Diffie-Hellman Ephemeral — forward secrecy', pfs: true },
+  DHE:   { name: 'DHE',   desc: 'Diffie-Hellman Ephemeral — forward secrecy', pfs: true },
+  ECDH:  { name: 'ECDH',  desc: 'Static Elliptic Curve DH — no forward secrecy', pfs: false },
+  DH:    { name: 'DH',    desc: 'Static Diffie-Hellman — no forward secrecy', pfs: false },
+  RSA:   { name: 'RSA',   desc: 'RSA key transport — no forward secrecy', pfs: false },
+  PSK:   { name: 'PSK',   desc: 'Pre-Shared Key', pfs: false },
+  KRB5:  { name: 'KRB5',  desc: 'Kerberos 5', pfs: false },
+  SRP:   { name: 'SRP',   desc: 'Secure Remote Password', pfs: false },
+};
+const AUTH = {
+  RSA:   'RSA signatures',
+  ECDSA: 'ECDSA signatures',
+  DSS:   'DSA signatures',
+  PSK:   'Pre-Shared Key',
+  anon:  'Anonymous (no authentication)',
+};
+const CIPHERS = {
+  'AES_256_GCM': { alg: 'AES-256-GCM', bits: 256, aead: true, strength: 'strong' },
+  'AES_128_GCM': { alg: 'AES-128-GCM', bits: 128, aead: true, strength: 'strong' },
+  'AES_256_CCM': { alg: 'AES-256-CCM', bits: 256, aead: true, strength: 'strong' },
+  'AES_128_CCM': { alg: 'AES-128-CCM', bits: 128, aead: true, strength: 'strong' },
+  'AES_256_CCM_8': { alg: 'AES-256-CCM-8', bits: 256, aead: true, strength: 'strong' },
+  'AES_128_CCM_8': { alg: 'AES-128-CCM-8', bits: 128, aead: true, strength: 'strong' },
+  'CHACHA20_POLY1305': { alg: 'ChaCha20-Poly1305', bits: 256, aead: true, strength: 'strong' },
+  'AES_256_CBC': { alg: 'AES-256-CBC', bits: 256, aead: false, strength: 'medium' },
+  'AES_128_CBC': { alg: 'AES-128-CBC', bits: 128, aead: false, strength: 'medium' },
+  'CAMELLIA_256_GCM': { alg: 'Camellia-256-GCM', bits: 256, aead: true, strength: 'strong' },
+  'CAMELLIA_128_GCM': { alg: 'Camellia-128-GCM', bits: 128, aead: true, strength: 'strong' },
+  'CAMELLIA_256_CBC': { alg: 'Camellia-256-CBC', bits: 256, aead: false, strength: 'medium' },
+  'CAMELLIA_128_CBC': { alg: 'Camellia-128-CBC', bits: 128, aead: false, strength: 'medium' },
+  '3DES_EDE_CBC':     { alg: '3DES-EDE-CBC',     bits: 112, aead: false, strength: 'weak' },
+  'DES_CBC':          { alg: 'DES-CBC',          bits: 56,  aead: false, strength: 'weak' },
+  'RC4_128':          { alg: 'RC4-128',          bits: 128, aead: false, strength: 'weak' },
+  'RC4_40':           { alg: 'RC4-40',           bits: 40,  aead: false, strength: 'weak' },
+  'NULL':             { alg: 'NULL (no encryption)', bits: 0, aead: false, strength: 'weak' },
+  'IDEA_CBC':         { alg: 'IDEA-CBC',         bits: 128, aead: false, strength: 'medium' },
+  'SEED_CBC':         { alg: 'SEED-CBC',         bits: 128, aead: false, strength: 'medium' },
+  'ARIA_256_GCM':     { alg: 'ARIA-256-GCM',     bits: 256, aead: true,  strength: 'strong' },
+  'ARIA_128_GCM':     { alg: 'ARIA-128-GCM',     bits: 128, aead: true,  strength: 'strong' },
+};
+const MACS = {
+  'SHA384': 'HMAC-SHA384',
+  'SHA256': 'HMAC-SHA256',
+  'SHA':    'HMAC-SHA1 (legacy)',
+  'MD5':    'HMAC-MD5 (broken)',
+  'POLY1305': 'Poly1305 (built into AEAD)',
+  'NULL':   'None',
+};
+
+function parseSuite(raw) {
+  const name = raw.trim();
+  if (!name) return null;
+  const res = { name, kx: null, auth: null, cipher: null, mac: null, tls13: false, notes: [], overall: 'medium' };
+
+  let body = name.replace(/^(TLS|SSL)_/, '');
+
+  // TLS 1.3 suites: TLS_<cipher>_<mac>
+  if (!body.includes('_WITH_')) {
+    res.tls13 = true;
+    const m = body.match(/^(AES_\d+_GCM|AES_\d+_CCM(?:_8)?|CHACHA20_POLY1305)_?(SHA\d*)?$/);
+    if (m) {
+      res.cipher = CIPHERS[m[1]] || null;
+      res.mac = MACS[m[2]] || (res.cipher && res.cipher.aead ? 'AEAD built-in' : null);
+    }
+    res.kx = { name: 'ECDHE/PSK (TLS 1.3)', desc: 'TLS 1.3 negotiates key exchange separately; always forward-secret.', pfs: true };
+    res.auth = 'Negotiated separately (TLS 1.3)';
+    res.notes.push('TLS 1.3 cipher suite — only defines symmetric cipher + hash. Key exchange and signatures are negotiated independently.');
+    res.overall = res.cipher && res.cipher.strength === 'strong' ? 'modern' : 'medium';
+    return res;
+  }
+
+  const [kxAuth, rest] = body.split('_WITH_');
+  if (!rest) return res;
+
+  // Key exchange + auth
+  let kxName, authName;
+  if (kxAuth === 'RSA') { kxName = 'RSA'; authName = 'RSA'; }
+  else if (kxAuth === 'DH_anon' || kxAuth === 'ECDH_anon') { kxName = kxAuth.replace('_anon',''); authName = 'anon'; }
+  else {
+    const parts = kxAuth.split('_');
+    kxName = parts[0];
+    authName = parts[1] || parts[0];
+  }
+  res.kx = KX[kxName] || { name: kxName, desc: 'Unknown key exchange', pfs: false };
+  res.auth = AUTH[authName] || authName;
+
+  // Bulk cipher + MAC: try longest match
+  let matched = null, macKey = null;
+  const keys = Object.keys(CIPHERS).sort((a,b)=>b.length-a.length);
+  for (const k of keys) {
+    if (rest.startsWith(k + '_') || rest === k) {
+      matched = k;
+      macKey = rest.slice(k.length).replace(/^_/, '');
+      break;
+    }
+  }
+  if (matched) res.cipher = CIPHERS[matched];
+  if (macKey) res.mac = MACS[macKey] || macKey;
+  else if (res.cipher && res.cipher.aead) res.mac = 'AEAD built-in';
+
+  // Overall rating
+  const c = res.cipher;
+  if (!c || c.strength === 'weak' || authName === 'anon' || kxName === 'RSA' && !res.kx.pfs && c.bits < 128) {
+    res.overall = 'weak';
+  } else if (c.strength === 'strong' && res.kx.pfs && c.aead) {
+    res.overall = 'strong';
+  } else {
+    res.overall = 'medium';
+  }
+
+  if (!res.kx.pfs) res.notes.push('No forward secrecy — a future private-key compromise decrypts past traffic.');
+  if (c && !c.aead) res.notes.push('Non-AEAD cipher — vulnerable to padding-oracle and downgrade attacks when misused.');
+  if (c && c.strength === 'weak') res.notes.push('Weak cipher — disable in production.');
+  if (macKey === 'MD5') res.notes.push('HMAC-MD5 is considered broken.');
+  if (macKey === 'SHA') res.notes.push('HMAC-SHA1 is legacy; prefer SHA-256 or newer.');
+  if (kxName === 'RSA') res.notes.push('RSA key transport is deprecated in TLS 1.3.');
+  if (matched === '3DES_EDE_CBC') res.notes.push('3DES is vulnerable to SWEET32 — disable.');
+  if (matched === 'RC4_128' || matched === 'RC4_40') res.notes.push('RC4 has known biases — removed from modern TLS.');
+  if (matched === 'NULL') res.notes.push('NULL cipher provides no confidentiality.');
+  return res;
+}
+
+function esc(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function render() {
+  const lines = document.getElementById('input').value.split(/\r?\n/).filter(l => l.trim());
+  const out = document.getElementById('output');
+  if (!lines.length) { out.innerHTML = '<div class="empty">Paste cipher suite names above (one per line).</div>'; return; }
+  out.innerHTML = lines.map(l => {
+    const r = parseSuite(l);
+    if (!r) return '';
+    const badge = `<span class="badge ${r.overall}">${r.overall === 'modern' ? 'Modern' : r.overall.charAt(0).toUpperCase()+r.overall.slice(1)}</span>`;
+    const cipher = r.cipher ? `${esc(r.cipher.alg)} (${r.cipher.bits}-bit${r.cipher.aead ? ', AEAD' : ''})` : '<em>unknown</em>';
+    return `<div class="suite-block">
+      <div class="suite-name">${esc(r.name)} ${badge}</div>
+      <dl class="parts">
+        <dt>Key Exchange</dt><dd>${esc(r.kx.name)} — ${esc(r.kx.desc)}</dd>
+        <dt>Authentication</dt><dd>${esc(r.auth || '—')}</dd>
+        <dt>Bulk Cipher</dt><dd>${cipher}</dd>
+        <dt>MAC / PRF</dt><dd>${esc(r.mac || '—')}</dd>
+        <dt>Forward Secrecy</dt><dd>${r.kx.pfs ? '✅ Yes' : '❌ No'}</dd>
+      </dl>
+      ${r.notes.length ? `<div class="notes">⚠ ${r.notes.map(esc).join('<br>')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function loadPreset(type) {
+  const p = {
+    modern: 'TLS_AES_256_GCM_SHA384\nTLS_CHACHA20_POLY1305_SHA256\nTLS_AES_128_GCM_SHA256',
+    intermediate: 'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384\nTLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256\nTLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
+    legacy: 'TLS_RSA_WITH_AES_128_CBC_SHA\nTLS_RSA_WITH_3DES_EDE_CBC_SHA\nTLS_RSA_WITH_RC4_128_MD5\nTLS_DH_anon_WITH_AES_128_CBC_SHA'
+  };
+  document.getElementById('input').value = p[type];
+  render();
+}
+
+document.getElementById('input').addEventListener('input', render);
+render();
+</script>
+</body>
+</html>

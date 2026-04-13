@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MQTT Topic Matcher — Free Online Tool</title>
+<meta name="description" content="Test MQTT topic filters with wildcards (+ and #) against sample topics. Validate subscription filters, spot invalid patterns, and debug routing. 100% client-side.">
+<meta name="keywords" content="MQTT, topic matcher, MQTT wildcards, subscription filter, MQTT tester, + wildcard, # wildcard">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mqtt.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row-split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 768px) { .row-split { grid-template-columns: 1fr; } }
+  label { font-weight: 600; font-size: .88rem; display: block; margin-bottom: 6px; }
+  input.filter, textarea { width: 100%; box-sizing: border-box; padding: 10px; font-family: var(--mono); font-size: .9rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); }
+  textarea { min-height: 170px; resize: vertical; }
+  .status { margin-top: 8px; font-size: .85rem; }
+  .status.ok { color: var(--success); }
+  .status.err { color: var(--error); }
+  .result-list { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .result-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: .88rem; }
+  .result-item:last-child { border-bottom: none; }
+  .result-item.match { background: rgba(34,197,94,.10); }
+  .result-item.nomatch { background: rgba(239,68,68,.06); }
+  .result-mark { font-size: 1rem; width: 1.3rem; text-align: center; }
+  .result-topic { flex: 1; word-break: break-all; }
+  .summary { font-size: .85rem; color: var(--muted); margin-top: 10px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .rules { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; font-size: .83rem; line-height: 1.55; color: var(--muted); }
+  .rules code { background: var(--bg); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); color: var(--text); }
+  .footer-note { text-align: center; margin-top: 2rem; color: var(--muted); font-size: .82rem; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📡 MQTT Topic Matcher</h1>
+<p class="subtitle">Test MQTT subscription filters against sample topics. Supports <code>+</code> (single-level) and <code>#</code> (multi-level) wildcards per MQTT 3.1.1 / 5.0. 100% client-side.</p>
+
+<div class="card">
+  <div class="row-split">
+    <div>
+      <label for="filter">Topic filter (subscription)</label>
+      <input class="filter" id="filter" type="text" spellcheck="false" placeholder="sensors/+/temperature" value="sensors/+/temperature">
+      <div class="status" id="filter-status"></div>
+    </div>
+    <div>
+      <label for="topics">Topics to test (one per line)</label>
+      <textarea id="topics" spellcheck="false">sensors/kitchen/temperature
+sensors/bedroom/temperature
+sensors/garage/humidity
+sensors/kitchen/temperature/min
+$SYS/broker/uptime</textarea>
+    </div>
+  </div>
+  <div class="presets">
+    <button class="btn btn-secondary" onclick="preset('sensors/+/temperature')">sensors/+/temperature</button>
+    <button class="btn btn-secondary" onclick="preset('home/#')">home/#</button>
+    <button class="btn btn-secondary" onclick="preset('+/+/status')">+/+/status</button>
+    <button class="btn btn-secondary" onclick="preset('$SYS/#')">$SYS/#</button>
+    <button class="btn btn-secondary" onclick="preset('#')">#</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;font-size:1rem">Matches</h2>
+  <div id="results"></div>
+  <div class="summary" id="summary"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;font-size:1rem">Rules</h2>
+  <div class="rules">
+    • <code>+</code> matches exactly one topic level (e.g. <code>a/+/c</code> matches <code>a/b/c</code> but not <code>a/b/d/c</code>).<br>
+    • <code>#</code> matches zero or more levels but must be the last character (e.g. <code>a/#</code> matches <code>a</code>, <code>a/b</code>, <code>a/b/c</code>).<br>
+    • Topics starting with <code>$</code> (like <code>$SYS/...</code>) must not match <code>#</code> or <code>+</code> at the first level per MQTT spec.<br>
+    • Filter cannot be empty, contain <code>+</code>/<code>#</code> within a level, or place <code>#</code> anywhere but the last level.
+  </div>
+</div>
+
+<p class="footer-note">Built with ☕ by Steven Li · No data leaves your browser</p>
+</div>
+
+<script>
+function validateFilter(f) {
+  if (f === '') return 'Filter cannot be empty';
+  if (f.length > 65535) return 'Filter too long';
+  const levels = f.split('/');
+  for (let i = 0; i < levels.length; i++) {
+    const lv = levels[i];
+    if (lv.includes('+') && lv !== '+') return `Level ${i+1}: '+' must occupy an entire level`;
+    if (lv.includes('#')) {
+      if (lv !== '#') return `Level ${i+1}: '#' must occupy an entire level`;
+      if (i !== levels.length - 1) return `'#' must be the last level`;
+    }
+  }
+  return null;
+}
+
+function validateTopic(t) {
+  if (t === '') return 'empty';
+  if (t.includes('+') || t.includes('#')) return 'wildcards not allowed in topic';
+  return null;
+}
+
+function matchFilter(filter, topic) {
+  const fLv = filter.split('/');
+  const tLv = topic.split('/');
+  const dollarSys = topic.startsWith('$');
+  if (dollarSys && (fLv[0] === '+' || fLv[0] === '#')) return false;
+
+  let i = 0;
+  for (; i < fLv.length; i++) {
+    const f = fLv[i], t = tLv[i];
+    if (f === '#') return true;
+    if (t === undefined) {
+      // Special: a/b matches filter a/b/# since # matches zero levels
+      if (fLv[i] === '#' || (i === fLv.length - 1 && false)) return true;
+      // allow a/b matching a/b/# only if remaining is just '#'
+      if (i === fLv.length - 1 && fLv[i] === '#') return true;
+      return false;
+    }
+    if (f === '+') continue;
+    if (f !== t) return false;
+  }
+  return i === tLv.length;
+}
+
+function esc(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function run() {
+  const filter = document.getElementById('filter').value;
+  const statusEl = document.getElementById('filter-status');
+  const resultsEl = document.getElementById('results');
+  const summaryEl = document.getElementById('summary');
+
+  const err = validateFilter(filter);
+  if (err) {
+    statusEl.className = 'status err';
+    statusEl.textContent = '✗ ' + err;
+    resultsEl.innerHTML = '<div class="empty">Fix the filter to test topics.</div>';
+    summaryEl.textContent = '';
+    return;
+  }
+  statusEl.className = 'status ok';
+  statusEl.textContent = '✓ Valid filter';
+
+  const topics = document.getElementById('topics').value.split(/\r?\n/).map(t => t.trim()).filter(Boolean);
+  if (!topics.length) {
+    resultsEl.innerHTML = '<div class="empty">Add topics to test.</div>';
+    summaryEl.textContent = '';
+    return;
+  }
+
+  let matches = 0;
+  resultsEl.innerHTML = '<div class="result-list">' + topics.map(t => {
+    const tErr = validateTopic(t);
+    if (tErr) return `<div class="result-item nomatch"><span class="result-mark">⚠</span><span class="result-topic">${esc(t)} <span style="color:var(--error);font-family:var(--sans);font-size:.78rem">(${tErr})</span></span></div>`;
+    const m = matchFilter(filter, t);
+    if (m) matches++;
+    return `<div class="result-item ${m?'match':'nomatch'}"><span class="result-mark">${m?'✓':'✗'}</span><span class="result-topic">${esc(t)}</span></div>`;
+  }).join('') + '</div>';
+
+  summaryEl.textContent = `${matches} / ${topics.length} topics match filter ${filter}`;
+}
+
+function preset(f){ document.getElementById('filter').value = f; run(); }
+
+document.getElementById('filter').addEventListener('input', run);
+document.getElementById('topics').addEventListener('input', run);
+run();
+</script>
+</body>
+</html>
