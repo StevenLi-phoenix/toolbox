@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UTM Link Builder — Campaign URL Builder</title>
+<meta name="description" content="Build UTM-tagged campaign URLs for Google Analytics, Adobe Analytics, and more. Live preview with validation, presets, and copy-to-clipboard.">
+<meta name="keywords" content="utm builder, campaign url builder, utm parameters, google analytics, tracking link">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/utmbuilder.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .field { margin-bottom: 14px; }
+  .required label::after { content: ' *'; color: var(--error); }
+  .preview {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: .85rem;
+    word-break: break-all;
+    min-height: 60px;
+    line-height: 1.5;
+  }
+  .preview .base { color: var(--text); }
+  .preview .key { color: var(--muted); }
+  .preview .val { color: var(--success); }
+  .preview .sep { color: var(--muted); }
+  .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .err { color: var(--error); font-size: .8rem; margin-top: 6px; }
+  .warn { color: var(--warning); font-size: .8rem; margin-top: 6px; }
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 6px;
+    font-family: var(--mono);
+    font-size: .78rem;
+  }
+  .history-item .url { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-item button { padding: 4px 10px; font-size: .75rem; }
+  .stat-row { display: flex; gap: 12px; margin-top: 10px; font-size: .8rem; color: var(--muted); }
+  @media (max-width: 768px) {
+    .field-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>UTM Link Builder</h1>
+<p class="subtitle">Tag campaign URLs with UTM parameters for analytics tracking. Works with Google Analytics, Adobe, Matomo, Plausible, etc.</p>
+
+<div class="card">
+<h2>🔗 Build URL</h2>
+<div class="preset-row">
+  <button class="btn-secondary" onclick="preset('google')">Google Ads</button>
+  <button class="btn-secondary" onclick="preset('facebook')">Facebook</button>
+  <button class="btn-secondary" onclick="preset('twitter')">Twitter/X</button>
+  <button class="btn-secondary" onclick="preset('linkedin')">LinkedIn</button>
+  <button class="btn-secondary" onclick="preset('email')">Email</button>
+  <button class="btn-secondary" onclick="preset('newsletter')">Newsletter</button>
+  <button class="btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+
+<div class="field required">
+  <label for="url">Website URL</label>
+  <input type="url" id="url" placeholder="https://example.com/landing-page" oninput="build()">
+  <div id="urlErr"></div>
+</div>
+
+<div class="field-grid">
+  <div class="field col-6 required">
+    <label for="source">Campaign Source <span class="hint">utm_source</span></label>
+    <input type="text" id="source" placeholder="google, facebook, newsletter" oninput="build()">
+  </div>
+  <div class="field col-6 required">
+    <label for="medium">Campaign Medium <span class="hint">utm_medium</span></label>
+    <input type="text" id="medium" placeholder="cpc, email, social" oninput="build()">
+  </div>
+  <div class="field col-6 required">
+    <label for="campaign">Campaign Name <span class="hint">utm_campaign</span></label>
+    <input type="text" id="campaign" placeholder="spring_sale, launch_2024" oninput="build()">
+  </div>
+  <div class="field col-6">
+    <label for="term">Campaign Term <span class="hint">utm_term — paid keywords</span></label>
+    <input type="text" id="term" placeholder="running+shoes" oninput="build()">
+  </div>
+  <div class="field col-6">
+    <label for="content">Campaign Content <span class="hint">utm_content — A/B test, ad variant</span></label>
+    <input type="text" id="content" placeholder="logolink, headerimage" oninput="build()">
+  </div>
+  <div class="field col-6">
+    <label for="cid">Campaign ID <span class="hint">utm_id (optional)</span></label>
+    <input type="text" id="cid" placeholder="abc.123" oninput="build()">
+  </div>
+</div>
+
+<div class="toggle-row">
+  <input type="checkbox" id="lowercase" checked onchange="build()">
+  <label for="lowercase">Lowercase parameter values (recommended for consistency)</label>
+</div>
+<div class="toggle-row">
+  <input type="checkbox" id="underscore" onchange="build()">
+  <label for="underscore">Replace spaces with underscores (not +)</label>
+</div>
+</div>
+
+<div class="card">
+<h2>📋 Generated URL</h2>
+<div class="preview" id="preview"><span class="empty">Fill in the fields above to generate your tracking URL…</span></div>
+<div id="warnings"></div>
+<div class="stat-row" id="stats"></div>
+<div class="btn-row">
+  <button class="btn-primary" onclick="copy()">Copy URL</button>
+  <button onclick="copyShort()">Short (TinyURL preview)</button>
+  <button onclick="saveHistory()">Save to History</button>
+  <button onclick="openUrl()">Open in New Tab</button>
+</div>
+</div>
+
+<div class="card">
+<h2>📚 History</h2>
+<div id="history"><div class="empty">No saved URLs yet. Click "Save to History" to keep track.</div></div>
+</div>
+
+<div class="card">
+<h2>💡 Parameter Reference</h2>
+<table style="width:100%; font-size:.85rem; border-collapse:collapse">
+  <tr style="border-bottom:1px solid var(--border)"><th style="text-align:left; padding:6px 8px">Parameter</th><th style="text-align:left; padding:6px 8px">Description</th><th style="text-align:left; padding:6px 8px">Example</th></tr>
+  <tr><td style="padding:6px 8px"><code>utm_source</code></td><td style="padding:6px 8px">Where the traffic came from</td><td style="padding:6px 8px"><code>google, newsletter</code></td></tr>
+  <tr><td style="padding:6px 8px"><code>utm_medium</code></td><td style="padding:6px 8px">Marketing medium / channel</td><td style="padding:6px 8px"><code>cpc, email, social</code></td></tr>
+  <tr><td style="padding:6px 8px"><code>utm_campaign</code></td><td style="padding:6px 8px">Product, promo, or strategic code</td><td style="padding:6px 8px"><code>spring_sale</code></td></tr>
+  <tr><td style="padding:6px 8px"><code>utm_term</code></td><td style="padding:6px 8px">Paid search keywords</td><td style="padding:6px 8px"><code>running+shoes</code></td></tr>
+  <tr><td style="padding:6px 8px"><code>utm_content</code></td><td style="padding:6px 8px">Distinguish ad creatives or links</td><td style="padding:6px 8px"><code>logolink</code></td></tr>
+  <tr><td style="padding:6px 8px"><code>utm_id</code></td><td style="padding:6px 8px">Unique campaign ID (GA4)</td><td style="padding:6px 8px"><code>promo_123</code></td></tr>
+</table>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const FIELDS = ['url','source','medium','campaign','term','content','cid'];
+let history = [];
+
+try {
+  history = JSON.parse(localStorage.getItem('utm-history') || '[]');
+} catch(e) { history = []; }
+
+function clean(v) {
+  v = (v || '').trim();
+  if ($('lowercase').checked) v = v.toLowerCase();
+  if ($('underscore').checked) v = v.replace(/\s+/g, '_');
+  return v;
+}
+
+function build() {
+  const raw = $('url').value.trim();
+  const urlErr = $('urlErr');
+  const preview = $('preview');
+  const warnings = $('warnings');
+  const stats = $('stats');
+  urlErr.innerHTML = '';
+  warnings.innerHTML = '';
+  stats.innerHTML = '';
+
+  if (!raw) {
+    preview.innerHTML = '<span class="empty">Fill in the fields above to generate your tracking URL…</span>';
+    return;
+  }
+
+  let parsed;
+  try { parsed = new URL(raw); }
+  catch(e) {
+    urlErr.innerHTML = '<div class="err">✕ Invalid URL — include protocol (https://)</div>';
+    preview.innerHTML = '<span class="empty">Invalid URL</span>';
+    return;
+  }
+
+  const params = {
+    utm_source: clean($('source').value),
+    utm_medium: clean($('medium').value),
+    utm_campaign: clean($('campaign').value),
+    utm_term: clean($('term').value),
+    utm_content: clean($('content').value),
+    utm_id: clean($('cid').value),
+  };
+
+  // Preserve existing query params, replace utm_* ones
+  const existing = parsed.searchParams;
+  Object.keys(params).forEach(k => {
+    if (params[k]) existing.set(k, params[k]);
+    else existing.delete(k);
+  });
+
+  parsed.search = existing.toString();
+  const final = parsed.toString();
+
+  // Render with coloring
+  const base = parsed.origin + parsed.pathname;
+  const qs = parsed.search ? parsed.search.slice(1) : '';
+  const parts = qs ? qs.split('&').map(kv => {
+    const [k,v] = kv.split('=');
+    return `<span class="key">${k}</span><span class="sep">=</span><span class="val">${v || ''}</span>`;
+  }).join('<span class="sep">&</span>') : '';
+  const hash = parsed.hash || '';
+  preview.innerHTML = `<span class="base">${base}</span>${qs?'<span class="sep">?</span>'+parts:''}${hash}`;
+
+  // Validation warnings
+  const warns = [];
+  if (!params.utm_source) warns.push('Missing utm_source — GA requires this to attribute traffic.');
+  if (!params.utm_medium) warns.push('Missing utm_medium — GA requires this to attribute traffic.');
+  if (!params.utm_campaign) warns.push('Missing utm_campaign — recommended for reporting.');
+  if (params.utm_source && /\s/.test(params.utm_source)) warns.push('utm_source contains whitespace — will be URL-encoded.');
+  if (parsed.protocol === 'http:') warns.push('URL uses http:// — some ad platforms require https.');
+  if (final.length > 2000) warns.push('URL exceeds 2000 chars — some browsers and trackers may truncate.');
+  warnings.innerHTML = warns.map(w => `<div class="warn">⚠ ${w}</div>`).join('');
+
+  stats.innerHTML = `<span>${final.length} chars</span><span>${Object.values(params).filter(Boolean).length} UTM params set</span>`;
+}
+
+function preset(type) {
+  const presets = {
+    google:    { source: 'google',    medium: 'cpc' },
+    facebook:  { source: 'facebook',  medium: 'social' },
+    twitter:   { source: 'twitter',   medium: 'social' },
+    linkedin:  { source: 'linkedin',  medium: 'social' },
+    email:     { source: 'email',     medium: 'email' },
+    newsletter:{ source: 'newsletter',medium: 'email' },
+  };
+  const p = presets[type]; if (!p) return;
+  $('source').value = p.source;
+  $('medium').value = p.medium;
+  build();
+}
+
+function clearAll() {
+  FIELDS.forEach(f => $(f).value = '');
+  build();
+}
+
+function getCurrent() {
+  const raw = $('preview').textContent;
+  return raw && !raw.startsWith('Fill') && !raw.startsWith('Invalid') ? raw : '';
+}
+
+function copy() {
+  const url = getCurrent(); if (!url) return;
+  navigator.clipboard.writeText(url).then(() => toast('✓ Copied!'));
+}
+
+function copyShort() {
+  const url = getCurrent(); if (!url) return;
+  const t = `https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`;
+  navigator.clipboard.writeText(t).then(() => toast('✓ TinyURL request copied'));
+}
+
+function openUrl() {
+  const url = getCurrent(); if (!url) return;
+  window.open(url, '_blank', 'noopener');
+}
+
+function saveHistory() {
+  const url = getCurrent(); if (!url) return;
+  const campaign = $('campaign').value.trim() || 'unnamed';
+  history.unshift({ url, campaign, ts: Date.now() });
+  history = history.slice(0, 20);
+  localStorage.setItem('utm-history', JSON.stringify(history));
+  renderHistory();
+  toast('✓ Saved to history');
+}
+
+function removeHistory(i) {
+  history.splice(i, 1);
+  localStorage.setItem('utm-history', JSON.stringify(history));
+  renderHistory();
+}
+
+function loadHistory(i) {
+  try {
+    const item = history[i];
+    const u = new URL(item.url);
+    $('url').value = u.origin + u.pathname + (u.hash || '');
+    $('source').value = u.searchParams.get('utm_source') || '';
+    $('medium').value = u.searchParams.get('utm_medium') || '';
+    $('campaign').value = u.searchParams.get('utm_campaign') || '';
+    $('term').value = u.searchParams.get('utm_term') || '';
+    $('content').value = u.searchParams.get('utm_content') || '';
+    $('cid').value = u.searchParams.get('utm_id') || '';
+    build();
+    window.scrollTo({top:0, behavior:'smooth'});
+  } catch(e) {}
+}
+
+function renderHistory() {
+  const el = $('history');
+  if (!history.length) {
+    el.innerHTML = '<div class="empty">No saved URLs yet. Click "Save to History" to keep track.</div>';
+    return;
+  }
+  el.innerHTML = history.map((h,i) =>
+    `<div class="history-item">
+      <div class="url" title="${escapeHtml(h.url)}">${escapeHtml(h.campaign)} — ${escapeHtml(h.url)}</div>
+      <button onclick="loadHistory(${i})">Load</button>
+      <button onclick="removeHistory(${i})">✕</button>
+    </div>`
+  ).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1500);
+}
+
+renderHistory();
+</script>
+</body>
+</html>
