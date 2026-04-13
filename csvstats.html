@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV Column Statistics — Free Online Tool</title>
+<meta name="description" content="Compute per-column statistics for CSV data: count, min, max, mean, median, stddev, unique values, and type detection. 100% client-side.">
+<meta name="keywords" content="CSV statistics, CSV column analyzer, CSV summary, mean median stddev, data profiler">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/csvstats.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 220px; padding: 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; background: var(--bg); color: var(--text); }
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; margin: 14px 0; align-items: center; }
+  .controls label { font-size: .85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .controls select, .controls input { padding: 6px 10px; font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--sans); }
+  .results { margin-top: 18px; }
+  .col-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; background: var(--surface); }
+  .col-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; flex-wrap: wrap; }
+  .col-name { font-family: var(--mono); font-weight: 700; font-size: .95rem; }
+  .type-badge { font-size: .7rem; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--border); text-transform: uppercase; letter-spacing: .04em; }
+  .type-number { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+  .type-string { background: #fef3c7; color: #b45309; border-color: #fcd34d; }
+  .type-boolean { background: #dcfce7; color: #15803d; border-color: #86efac; }
+  .type-date { background: #f3e8ff; color: #7e22ce; border-color: #c4b5fd; }
+  .type-mixed { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .stat-cell { padding: 8px 10px; background: var(--surface2); border-radius: var(--radius); }
+  .stat-cell span { display: block; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+  .stat-cell strong { font-family: var(--mono); font-size: .9rem; word-break: break-all; }
+  .top-values { margin-top: 10px; font-size: .8rem; }
+  .top-values .tv-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .top-values .tv-row:last-child { border-bottom: 0; }
+  .top-values .tv-key { font-family: var(--mono); color: var(--text); }
+  .top-values .tv-val { color: var(--muted); }
+  .histogram { display: flex; align-items: flex-end; gap: 2px; height: 50px; margin-top: 8px; }
+  .histogram .bar { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; }
+  .empty-msg { color: var(--muted); font-size: .9rem; padding: 40px 16px; text-align: center; }
+  .summary-bar { display: flex; gap: 16px; flex-wrap: wrap; padding: 12px 14px; background: var(--surface2); border-radius: var(--radius); margin-bottom: 16px; font-size: .85rem; }
+  .summary-bar strong { color: var(--text); }
+  @media (max-width: 768px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📊 CSV Column Statistics</h1>
+<p class="subtitle">Profile your CSV data — count, min, max, mean, median, stddev, type detection, and top values per column.</p>
+
+<textarea id="input" placeholder="Paste CSV data here, e.g.:&#10;name,age,salary,active&#10;Alice,30,55000,true&#10;Bob,42,72000,true&#10;Carol,28,48000,false"></textarea>
+
+<div class="controls">
+  <label>Delimiter
+    <select id="delim">
+      <option value=",">Comma (,)</option>
+      <option value="\t">Tab</option>
+      <option value=";">Semicolon (;)</option>
+      <option value="|">Pipe (|)</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="headers" checked> First row is header</label>
+  <button class="btn" id="analyze">Analyze</button>
+  <button class="btn btn-secondary" id="sample">Load sample</button>
+  <button class="btn btn-secondary" id="clear">Clear</button>
+</div>
+
+<div class="results" id="results">
+  <div class="empty-msg">Paste CSV data and click <strong>Analyze</strong> to see column statistics.</div>
+</div>
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Done!</div>
+
+<script>
+function parseCSV(text, delim) {
+  const rows = [];
+  let row = [], field = '', q = false, i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') {
+        if (text[i+1] === '"') { field += '"'; i += 2; continue; }
+        q = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if (c === '"') { q = true; i++; continue; }
+    if (c === delim) { row.push(field); field = ''; i++; continue; }
+    if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i+1] === '\n') i++;
+      row.push(field); rows.push(row); row = []; field = ''; i++; continue;
+    }
+    field += c; i++;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.length > 1 || (r.length === 1 && r[0] !== ''));
+}
+
+function detectType(values) {
+  let nNum = 0, nBool = 0, nDate = 0, nEmpty = 0;
+  for (const v of values) {
+    if (v === '' || v == null) { nEmpty++; continue; }
+    const t = v.toLowerCase().trim();
+    if (t === 'true' || t === 'false') { nBool++; continue; }
+    if (!isNaN(Number(v)) && v.trim() !== '') { nNum++; continue; }
+    if (!isNaN(Date.parse(v)) && /\d/.test(v) && /[-/:]/.test(v)) { nDate++; continue; }
+  }
+  const total = values.length - nEmpty;
+  if (total === 0) return 'string';
+  if (nNum / total > 0.9) return 'number';
+  if (nBool / total > 0.9) return 'boolean';
+  if (nDate / total > 0.9) return 'date';
+  if ((nNum + nBool + nDate) / total > 0.5) return 'mixed';
+  return 'string';
+}
+
+function computeStats(values, type) {
+  const nonEmpty = values.filter(v => v !== '' && v != null);
+  const stats = {
+    count: values.length,
+    nonEmpty: nonEmpty.length,
+    nullCount: values.length - nonEmpty.length,
+    unique: new Set(nonEmpty).size,
+  };
+  if (type === 'number') {
+    const nums = nonEmpty.map(Number).filter(n => !isNaN(n)).sort((a,b) => a-b);
+    if (nums.length) {
+      const sum = nums.reduce((a,b) => a+b, 0);
+      const mean = sum / nums.length;
+      const variance = nums.reduce((a,b) => a + (b-mean)**2, 0) / nums.length;
+      stats.min = nums[0];
+      stats.max = nums[nums.length-1];
+      stats.sum = sum;
+      stats.mean = mean;
+      stats.median = nums.length % 2 ? nums[(nums.length-1)/2] : (nums[nums.length/2-1] + nums[nums.length/2]) / 2;
+      stats.stddev = Math.sqrt(variance);
+      stats._nums = nums;
+    }
+  } else {
+    const lens = nonEmpty.map(v => String(v).length);
+    if (lens.length) {
+      stats.minLen = Math.min(...lens);
+      stats.maxLen = Math.max(...lens);
+      stats.avgLen = (lens.reduce((a,b) => a+b, 0) / lens.length).toFixed(1);
+    }
+  }
+  const counts = new Map();
+  nonEmpty.forEach(v => counts.set(v, (counts.get(v)||0) + 1));
+  stats.top = [...counts.entries()].sort((a,b) => b[1]-a[1]).slice(0, 5);
+  return stats;
+}
+
+function fmt(n) {
+  if (typeof n !== 'number') return String(n);
+  if (Number.isInteger(n)) return n.toLocaleString();
+  return Number(n.toFixed(4)).toLocaleString();
+}
+
+function histogram(nums, bins = 12) {
+  if (!nums || nums.length === 0) return '';
+  const min = nums[0], max = nums[nums.length-1];
+  if (min === max) return `<div class="histogram"><div class="bar" style="height:100%"></div></div>`;
+  const w = (max - min) / bins;
+  const counts = new Array(bins).fill(0);
+  nums.forEach(n => {
+    let idx = Math.floor((n - min) / w);
+    if (idx >= bins) idx = bins - 1;
+    counts[idx]++;
+  });
+  const peak = Math.max(...counts);
+  return `<div class="histogram">${counts.map(c => `<div class="bar" style="height:${(c/peak*100).toFixed(0)}%" title="${c}"></div>`).join('')}</div>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function analyze() {
+  const text = document.getElementById('input').value;
+  const delim = document.getElementById('delim').value === '\\t' ? '\t' : document.getElementById('delim').value;
+  const useHeaders = document.getElementById('headers').checked;
+  const results = document.getElementById('results');
+  if (!text.trim()) {
+    results.innerHTML = '<div class="empty-msg">No data to analyze.</div>';
+    return;
+  }
+  const rows = parseCSV(text, delim);
+  if (!rows.length) {
+    results.innerHTML = '<div class="empty-msg">Could not parse CSV.</div>';
+    return;
+  }
+  const headers = useHeaders ? rows[0] : rows[0].map((_,i) => `column_${i+1}`);
+  const data = useHeaders ? rows.slice(1) : rows;
+  const cols = headers.map((h, i) => ({ name: h, values: data.map(r => r[i] ?? '') }));
+
+  let html = `<div class="summary-bar">
+    <span><strong>${data.length.toLocaleString()}</strong> rows</span>
+    <span><strong>${cols.length}</strong> columns</span>
+    <span><strong>${(text.length/1024).toFixed(1)}</strong> KB</span>
+  </div>`;
+
+  cols.forEach(col => {
+    const type = detectType(col.values);
+    const stats = computeStats(col.values, type);
+    html += `<div class="col-card">
+      <div class="col-head">
+        <span class="col-name">${escapeHtml(col.name)}</span>
+        <span class="type-badge type-${type}">${type}</span>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-cell"><span>Count</span><strong>${fmt(stats.count)}</strong></div>
+        <div class="stat-cell"><span>Non-empty</span><strong>${fmt(stats.nonEmpty)}</strong></div>
+        <div class="stat-cell"><span>Null/empty</span><strong>${fmt(stats.nullCount)}</strong></div>
+        <div class="stat-cell"><span>Unique</span><strong>${fmt(stats.unique)}</strong></div>
+        ${type === 'number' && stats.min !== undefined ? `
+          <div class="stat-cell"><span>Min</span><strong>${fmt(stats.min)}</strong></div>
+          <div class="stat-cell"><span>Max</span><strong>${fmt(stats.max)}</strong></div>
+          <div class="stat-cell"><span>Mean</span><strong>${fmt(stats.mean)}</strong></div>
+          <div class="stat-cell"><span>Median</span><strong>${fmt(stats.median)}</strong></div>
+          <div class="stat-cell"><span>Stddev</span><strong>${fmt(stats.stddev)}</strong></div>
+          <div class="stat-cell"><span>Sum</span><strong>${fmt(stats.sum)}</strong></div>
+        ` : ''}
+        ${type !== 'number' && stats.minLen !== undefined ? `
+          <div class="stat-cell"><span>Min length</span><strong>${stats.minLen}</strong></div>
+          <div class="stat-cell"><span>Max length</span><strong>${stats.maxLen}</strong></div>
+          <div class="stat-cell"><span>Avg length</span><strong>${stats.avgLen}</strong></div>
+        ` : ''}
+      </div>
+      ${type === 'number' && stats._nums ? histogram(stats._nums) : ''}
+      ${stats.top.length ? `<div class="top-values">
+        <div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Top values</div>
+        ${stats.top.map(([k,v]) => `<div class="tv-row"><span class="tv-key">${escapeHtml(k)}</span><span class="tv-val">${v} (${(v/stats.nonEmpty*100).toFixed(1)}%)</span></div>`).join('')}
+      </div>` : ''}
+    </div>`;
+  });
+
+  results.innerHTML = html;
+}
+
+const sample = `name,age,salary,department,active,joined
+Alice,30,55000,Engineering,true,2020-03-15
+Bob,42,72000,Sales,true,2018-07-01
+Carol,28,48000,Engineering,false,2021-11-23
+Dan,55,98000,Management,true,2010-01-12
+Eve,33,61000,Marketing,true,2019-06-30
+Frank,29,52000,Engineering,true,2022-02-14
+Gina,47,85000,Sales,false,2015-09-08
+Henry,38,67000,Marketing,true,2017-04-25
+Iris,26,45000,Engineering,true,2023-01-09
+Jack,51,91000,Management,true,2012-05-17`;
+
+document.getElementById('analyze').onclick = analyze;
+document.getElementById('clear').onclick = () => {
+  document.getElementById('input').value = '';
+  document.getElementById('results').innerHTML = '<div class="empty-msg">Paste CSV data and click <strong>Analyze</strong> to see column statistics.</div>';
+};
+document.getElementById('sample').onclick = () => {
+  document.getElementById('input').value = sample;
+  analyze();
+};
+</script>
+</body>
+</html>

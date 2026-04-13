@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tailwind → CSS Converter — Free Online Tool</title>
+<meta name="description" content="Convert Tailwind utility classes to plain CSS. Paste your class names and get the equivalent CSS rules instantly. 100% client-side.">
+<meta name="keywords" content="tailwind to css, tailwind converter, utility classes, css converter, tailwind css">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tailwindcss.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+  textarea { width: 100%; min-height: 280px; padding: 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; background: var(--bg); color: var(--text); }
+  .panel-label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; align-items: center; }
+  .controls label { font-size: .85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .controls input[type=text] { padding: 7px 10px; font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .copy-btn { font-size: .75rem; padding: 3px 10px; cursor: pointer; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--sans); }
+  .copy-btn:hover { background: var(--surface2); }
+  .preview { margin-top: 14px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .preview-label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 10px; }
+  .preview-box { display: flex; align-items: center; justify-content: center; min-height: 100px; padding: 16px; background: white; border: 1px dashed var(--border); border-radius: var(--radius); }
+  .unknown { color: var(--error); font-size: .8rem; margin-top: 8px; }
+  .badge { display: inline-block; font-size: .7rem; padding: 2px 8px; border-radius: 99px; background: var(--surface2); color: var(--muted); margin-right: 6px; font-family: var(--mono); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🎨 Tailwind → CSS Converter</h1>
+<p class="subtitle">Convert Tailwind utility classes to plain CSS rules. Supports spacing, colors, typography, flex, grid, borders, shadows, and responsive variants.</p>
+
+<div class="controls">
+  <label>Selector <input type="text" id="selector" value=".my-element" placeholder=".my-class"></label>
+  <label><input type="checkbox" id="merge" checked> Merge into one rule</label>
+  <button class="btn btn-secondary" id="clear">Clear</button>
+</div>
+
+<div class="panels">
+  <div>
+    <div class="panel-label">Tailwind classes</div>
+    <textarea id="input" placeholder="flex items-center justify-between p-4 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600">flex items-center justify-between p-4 bg-blue-500 text-white rounded-lg shadow-md</textarea>
+    <div class="unknown" id="unknown"></div>
+  </div>
+  <div>
+    <div class="panel-label">CSS output <button class="copy-btn" onclick="copyCSS()">Copy</button></div>
+    <textarea id="output" readonly></textarea>
+  </div>
+</div>
+
+<div class="preview">
+  <div class="preview-label">Live preview</div>
+  <div class="preview-box"><div id="preview-el">Preview Element</div></div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+// Tailwind v3 default scale
+const SPACING = { '0':'0px','px':'1px','0.5':'0.125rem','1':'0.25rem','1.5':'0.375rem','2':'0.5rem','2.5':'0.625rem','3':'0.75rem','3.5':'0.875rem','4':'1rem','5':'1.25rem','6':'1.5rem','7':'1.75rem','8':'2rem','9':'2.25rem','10':'2.5rem','11':'2.75rem','12':'3rem','14':'3.5rem','16':'4rem','20':'5rem','24':'6rem','28':'7rem','32':'8rem','36':'9rem','40':'10rem','44':'11rem','48':'12rem','52':'13rem','56':'14rem','60':'15rem','64':'16rem','72':'18rem','80':'20rem','96':'24rem','auto':'auto','full':'100%','screen':'100vh','min':'min-content','max':'max-content','fit':'fit-content','1/2':'50%','1/3':'33.333333%','2/3':'66.666667%','1/4':'25%','3/4':'75%' };
+
+const COLORS = {
+  slate: ['#f8fafc','#f1f5f9','#e2e8f0','#cbd5e1','#94a3b8','#64748b','#475569','#334155','#1e293b','#0f172a'],
+  gray: ['#f9fafb','#f3f4f6','#e5e7eb','#d1d5db','#9ca3af','#6b7280','#4b5563','#374151','#1f2937','#111827'],
+  zinc: ['#fafafa','#f4f4f5','#e4e4e7','#d4d4d8','#a1a1aa','#71717a','#52525b','#3f3f46','#27272a','#18181b'],
+  red: ['#fef2f2','#fee2e2','#fecaca','#fca5a5','#f87171','#ef4444','#dc2626','#b91c1c','#991b1b','#7f1d1d'],
+  orange: ['#fff7ed','#ffedd5','#fed7aa','#fdba74','#fb923c','#f97316','#ea580c','#c2410c','#9a3412','#7c2d12'],
+  amber: ['#fffbeb','#fef3c7','#fde68a','#fcd34d','#fbbf24','#f59e0b','#d97706','#b45309','#92400e','#78350f'],
+  yellow: ['#fefce8','#fef9c3','#fef08a','#fde047','#facc15','#eab308','#ca8a04','#a16207','#854d0e','#713f12'],
+  lime: ['#f7fee7','#ecfccb','#d9f99d','#bef264','#a3e635','#84cc16','#65a30d','#4d7c0f','#3f6212','#365314'],
+  green: ['#f0fdf4','#dcfce7','#bbf7d0','#86efac','#4ade80','#22c55e','#16a34a','#15803d','#166534','#14532d'],
+  emerald: ['#ecfdf5','#d1fae5','#a7f3d0','#6ee7b7','#34d399','#10b981','#059669','#047857','#065f46','#064e3b'],
+  teal: ['#f0fdfa','#ccfbf1','#99f6e4','#5eead4','#2dd4bf','#14b8a6','#0d9488','#0f766e','#115e59','#134e4a'],
+  cyan: ['#ecfeff','#cffafe','#a5f3fc','#67e8f9','#22d3ee','#06b6d4','#0891b2','#0e7490','#155e75','#164e63'],
+  sky: ['#f0f9ff','#e0f2fe','#bae6fd','#7dd3fc','#38bdf8','#0ea5e9','#0284c7','#0369a1','#075985','#0c4a6e'],
+  blue: ['#eff6ff','#dbeafe','#bfdbfe','#93c5fd','#60a5fa','#3b82f6','#2563eb','#1d4ed8','#1e40af','#1e3a8a'],
+  indigo: ['#eef2ff','#e0e7ff','#c7d2fe','#a5b4fc','#818cf8','#6366f1','#4f46e5','#4338ca','#3730a3','#312e81'],
+  violet: ['#f5f3ff','#ede9fe','#ddd6fe','#c4b5fd','#a78bfa','#8b5cf6','#7c3aed','#6d28d9','#5b21b6','#4c1d95'],
+  purple: ['#faf5ff','#f3e8ff','#e9d5ff','#d8b4fe','#c084fc','#a855f7','#9333ea','#7e22ce','#6b21a8','#581c87'],
+  fuchsia: ['#fdf4ff','#fae8ff','#f5d0fe','#f0abfc','#e879f9','#d946ef','#c026d3','#a21caf','#86198f','#701a75'],
+  pink: ['#fdf2f8','#fce7f3','#fbcfe8','#f9a8d4','#f472b6','#ec4899','#db2777','#be185d','#9d174d','#831843'],
+  rose: ['#fff1f2','#ffe4e6','#fecdd3','#fda4af','#fb7185','#f43f5e','#e11d48','#be123c','#9f1239','#881337'],
+};
+const SHADE_INDEX = { '50':0,'100':1,'200':2,'300':3,'400':4,'500':5,'600':6,'700':7,'800':8,'900':9 };
+
+function colorOf(name, shade) {
+  if (name === 'white') return '#ffffff';
+  if (name === 'black') return '#000000';
+  if (name === 'transparent') return 'transparent';
+  if (name === 'current') return 'currentColor';
+  if (COLORS[name] && SHADE_INDEX[shade] !== undefined) return COLORS[name][SHADE_INDEX[shade]];
+  return null;
+}
+
+const FONT_SIZE = { xs:['0.75rem','1rem'], sm:['0.875rem','1.25rem'], base:['1rem','1.5rem'], lg:['1.125rem','1.75rem'], xl:['1.25rem','1.75rem'], '2xl':['1.5rem','2rem'], '3xl':['1.875rem','2.25rem'], '4xl':['2.25rem','2.5rem'], '5xl':['3rem','1'], '6xl':['3.75rem','1'], '7xl':['4.5rem','1'], '8xl':['6rem','1'], '9xl':['8rem','1'] };
+const FONT_WEIGHT = { thin:'100', extralight:'200', light:'300', normal:'400', medium:'500', semibold:'600', bold:'700', extrabold:'800', black:'900' };
+const RADIUS = { 'none':'0px','sm':'0.125rem','':'0.25rem','md':'0.375rem','lg':'0.5rem','xl':'0.75rem','2xl':'1rem','3xl':'1.5rem','full':'9999px' };
+const SHADOW = {
+  'sm':'0 1px 2px 0 rgb(0 0 0 / 0.05)',
+  '':'0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
+  'md':'0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+  'lg':'0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+  'xl':'0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
+  '2xl':'0 25px 50px -12px rgb(0 0 0 / 0.25)',
+  'inner':'inset 0 2px 4px 0 rgb(0 0 0 / 0.05)',
+  'none':'0 0 #0000'
+};
+
+function parseColorValue(parts) {
+  // parts e.g. ['blue','500'] or ['white']
+  const last = parts[parts.length-1];
+  if (SHADE_INDEX[last] !== undefined) {
+    return colorOf(parts.slice(0,-1).join('-'), last);
+  }
+  return colorOf(parts.join('-'), null);
+}
+
+function convert(cls) {
+  // returns array of [prop, value] tuples or null
+  const r = [];
+  // Strip variant prefix (hover:, md:, etc.)
+  let main = cls;
+  let variant = null;
+  if (cls.includes(':')) {
+    const idx = cls.lastIndexOf(':');
+    variant = cls.slice(0, idx);
+    main = cls.slice(idx+1);
+  }
+
+  const m = main;
+  // Display
+  const display = { 'block':'block','inline-block':'inline-block','inline':'inline','flex':'flex','inline-flex':'inline-flex','grid':'grid','inline-grid':'inline-grid','hidden':'none','table':'table','contents':'contents' };
+  if (display[m]) return wrap(variant, [['display', display[m]]]);
+
+  // Position
+  const pos = ['static','fixed','absolute','relative','sticky'];
+  if (pos.includes(m)) return wrap(variant, [['position', m]]);
+
+  // Spacing: m, p, mx, my, ml, mr, mt, mb, px, py, pl, pr, pt, pb
+  const spaceMatch = m.match(/^(-?)([mp])([trblxy]?)-(.+)$/);
+  if (spaceMatch) {
+    const [_, neg, mp, side, val] = spaceMatch;
+    const v = SPACING[val];
+    if (v) {
+      const prop = mp === 'm' ? 'margin' : 'padding';
+      const value = neg ? `-${v}` : v;
+      const sides = { '':[''], 't':['-top'], 'b':['-bottom'], 'l':['-left'], 'r':['-right'], 'x':['-left','-right'], 'y':['-top','-bottom'] }[side];
+      return wrap(variant, sides.map(s => [prop+s, value]));
+    }
+  }
+
+  // Width/Height
+  const sizeMatch = m.match(/^(w|h|min-w|min-h|max-w|max-h)-(.+)$/);
+  if (sizeMatch) {
+    const [_, k, val] = sizeMatch;
+    const v = SPACING[val];
+    if (v) {
+      const propMap = { 'w':'width','h':'height','min-w':'min-width','min-h':'min-height','max-w':'max-width','max-h':'max-height' };
+      return wrap(variant, [[propMap[k], v]]);
+    }
+  }
+
+  // Background color: bg-blue-500
+  if (m.startsWith('bg-')) {
+    const c = parseColorValue(m.slice(3).split('-'));
+    if (c) return wrap(variant, [['background-color', c]]);
+  }
+  // Text color
+  if (m.startsWith('text-')) {
+    const rest = m.slice(5);
+    if (FONT_SIZE[rest]) return wrap(variant, [['font-size', FONT_SIZE[rest][0]], ['line-height', FONT_SIZE[rest][1]]]);
+    if (rest === 'left' || rest === 'right' || rest === 'center' || rest === 'justify') return wrap(variant, [['text-align', rest]]);
+    const c = parseColorValue(rest.split('-'));
+    if (c) return wrap(variant, [['color', c]]);
+  }
+  // Border color: border-blue-500
+  if (m.startsWith('border-')) {
+    const rest = m.slice(7);
+    if (SPACING[rest] !== undefined) return wrap(variant, [['border-width', SPACING[rest]]]);
+    const c = parseColorValue(rest.split('-'));
+    if (c) return wrap(variant, [['border-color', c]]);
+  }
+  if (m === 'border') return wrap(variant, [['border-width', '1px']]);
+
+  // Rounded
+  if (m === 'rounded') return wrap(variant, [['border-radius', RADIUS['']]]);
+  if (m.startsWith('rounded-')) {
+    const rest = m.slice(8);
+    if (RADIUS[rest] !== undefined) return wrap(variant, [['border-radius', RADIUS[rest]]]);
+  }
+  // Shadow
+  if (m === 'shadow') return wrap(variant, [['box-shadow', SHADOW['']]]);
+  if (m.startsWith('shadow-')) {
+    const rest = m.slice(7);
+    if (SHADOW[rest] !== undefined) return wrap(variant, [['box-shadow', SHADOW[rest]]]);
+  }
+  // Font weight
+  if (m.startsWith('font-')) {
+    const rest = m.slice(5);
+    if (FONT_WEIGHT[rest]) return wrap(variant, [['font-weight', FONT_WEIGHT[rest]]]);
+    if (rest === 'sans') return wrap(variant, [['font-family', 'ui-sans-serif, system-ui, sans-serif']]);
+    if (rest === 'serif') return wrap(variant, [['font-family', 'ui-serif, Georgia, serif']]);
+    if (rest === 'mono') return wrap(variant, [['font-family', 'ui-monospace, SFMono-Regular, monospace']]);
+  }
+  // Italic / underline
+  if (m === 'italic') return wrap(variant, [['font-style', 'italic']]);
+  if (m === 'not-italic') return wrap(variant, [['font-style', 'normal']]);
+  if (m === 'underline') return wrap(variant, [['text-decoration-line', 'underline']]);
+  if (m === 'line-through') return wrap(variant, [['text-decoration-line', 'line-through']]);
+  if (m === 'no-underline') return wrap(variant, [['text-decoration-line', 'none']]);
+  if (m === 'uppercase') return wrap(variant, [['text-transform', 'uppercase']]);
+  if (m === 'lowercase') return wrap(variant, [['text-transform', 'lowercase']]);
+  if (m === 'capitalize') return wrap(variant, [['text-transform', 'capitalize']]);
+
+  // Flex/grid
+  const flexMap = {
+    'flex-row':['flex-direction','row'],'flex-col':['flex-direction','column'],'flex-row-reverse':['flex-direction','row-reverse'],'flex-col-reverse':['flex-direction','column-reverse'],
+    'flex-wrap':['flex-wrap','wrap'],'flex-nowrap':['flex-wrap','nowrap'],'flex-wrap-reverse':['flex-wrap','wrap-reverse'],
+    'flex-1':['flex','1 1 0%'],'flex-auto':['flex','1 1 auto'],'flex-initial':['flex','0 1 auto'],'flex-none':['flex','none'],
+    'items-start':['align-items','flex-start'],'items-end':['align-items','flex-end'],'items-center':['align-items','center'],'items-baseline':['align-items','baseline'],'items-stretch':['align-items','stretch'],
+    'justify-start':['justify-content','flex-start'],'justify-end':['justify-content','flex-end'],'justify-center':['justify-content','center'],'justify-between':['justify-content','space-between'],'justify-around':['justify-content','space-around'],'justify-evenly':['justify-content','space-evenly'],
+    'self-start':['align-self','flex-start'],'self-end':['align-self','flex-end'],'self-center':['align-self','center'],'self-stretch':['align-self','stretch'],
+  };
+  if (flexMap[m]) return wrap(variant, [flexMap[m]]);
+
+  // Gap
+  const gapMatch = m.match(/^gap(-(x|y))?-(.+)$/);
+  if (gapMatch) {
+    const [_, __, axis, val] = gapMatch;
+    const v = SPACING[val];
+    if (v) {
+      if (axis === 'x') return wrap(variant, [['column-gap', v]]);
+      if (axis === 'y') return wrap(variant, [['row-gap', v]]);
+      return wrap(variant, [['gap', v]]);
+    }
+  }
+
+  // Grid columns
+  const gridColMatch = m.match(/^grid-cols-(\d+)$/);
+  if (gridColMatch) return wrap(variant, [['grid-template-columns', `repeat(${gridColMatch[1]}, minmax(0, 1fr))`]]);
+  const gridRowMatch = m.match(/^grid-rows-(\d+)$/);
+  if (gridRowMatch) return wrap(variant, [['grid-template-rows', `repeat(${gridRowMatch[1]}, minmax(0, 1fr))`]]);
+
+  // Opacity
+  const opMatch = m.match(/^opacity-(\d+)$/);
+  if (opMatch) return wrap(variant, [['opacity', (+opMatch[1]/100).toString()]]);
+
+  // Cursor
+  if (m.startsWith('cursor-')) return wrap(variant, [['cursor', m.slice(7)]]);
+
+  // Overflow
+  if (m === 'overflow-hidden') return wrap(variant, [['overflow', 'hidden']]);
+  if (m === 'overflow-auto') return wrap(variant, [['overflow', 'auto']]);
+  if (m === 'overflow-scroll') return wrap(variant, [['overflow', 'scroll']]);
+  if (m === 'overflow-visible') return wrap(variant, [['overflow', 'visible']]);
+
+  // z-index
+  const zMatch = m.match(/^z-(\d+|auto)$/);
+  if (zMatch) return wrap(variant, [['z-index', zMatch[1]]]);
+
+  return null;
+}
+
+function wrap(variant, decls) {
+  return { variant, decls };
+}
+
+const VARIANTS = {
+  'sm':'@media (min-width: 640px)',
+  'md':'@media (min-width: 768px)',
+  'lg':'@media (min-width: 1024px)',
+  'xl':'@media (min-width: 1280px)',
+  '2xl':'@media (min-width: 1536px)',
+  'hover':':hover',
+  'focus':':focus',
+  'active':':active',
+  'disabled':':disabled',
+  'first':':first-child',
+  'last':':last-child',
+  'dark':'@media (prefers-color-scheme: dark)',
+};
+
+function process() {
+  const input = document.getElementById('input').value;
+  const selector = document.getElementById('selector').value || '.element';
+  const merge = document.getElementById('merge').checked;
+  const classes = input.split(/\s+/).filter(Boolean);
+
+  const groups = new Map(); // variant -> array of [prop, value]
+  const unknown = [];
+  classes.forEach(cls => {
+    const result = convert(cls);
+    if (!result) { unknown.push(cls); return; }
+    const key = result.variant || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(...result.decls);
+  });
+
+  let css = '';
+  // Base rules first
+  if (groups.has('')) {
+    css += renderRule(selector, groups.get(''), merge);
+    groups.delete('');
+  }
+  // Then variants
+  for (const [variant, decls] of groups) {
+    const v = VARIANTS[variant];
+    if (!v) continue;
+    if (v.startsWith('@media')) {
+      css += `${v} {\n` + indent(renderRule(selector, decls, merge)) + '}\n';
+    } else {
+      css += renderRule(selector + v, decls, merge);
+    }
+  }
+
+  document.getElementById('output').value = css.trim();
+  document.getElementById('unknown').innerHTML = unknown.length ? `Unknown / unsupported: ${unknown.map(u => `<span class="badge">${escapeHtml(u)}</span>`).join('')}` : '';
+  // Update preview
+  const el = document.getElementById('preview-el');
+  el.removeAttribute('style');
+  // Apply inline styles for visible preview
+  const baseDecls = groups.has('') ? groups.get('') : [];
+  // groups was modified above, recompute base separately
+  const inline = [];
+  classes.forEach(cls => {
+    const r = convert(cls);
+    if (r && !r.variant) r.decls.forEach(d => inline.push(d));
+  });
+  el.style.cssText = inline.map(([p,v]) => `${p}:${v}`).join(';');
+  el.textContent = 'Preview Element';
+}
+
+function renderRule(selector, decls, merge) {
+  if (!decls.length) return '';
+  if (merge) {
+    return `${selector} {\n${decls.map(([p,v]) => `  ${p}: ${v};`).join('\n')}\n}\n\n`;
+  }
+  return decls.map(([p,v]) => `${selector} { ${p}: ${v}; }\n`).join('');
+}
+
+function indent(s) {
+  return s.split('\n').map(l => l ? '  ' + l : l).join('\n');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function copyCSS() {
+  const t = document.getElementById('output').value;
+  if (!t) return;
+  navigator.clipboard.writeText(t);
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1500);
+}
+
+document.getElementById('input').addEventListener('input', process);
+document.getElementById('selector').addEventListener('input', process);
+document.getElementById('merge').addEventListener('change', process);
+document.getElementById('clear').onclick = () => { document.getElementById('input').value = ''; process(); };
+
+process();
+</script>
+</body>
+</html>
