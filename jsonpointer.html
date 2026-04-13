@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Pointer Evaluator — Free Online RFC 6901 Tool</title>
+<meta name="description" content="Free JSON Pointer (RFC 6901) evaluator. Navigate JSON documents with slash-delimited pointer strings, convert to JSONPath, and discover every pointer in a document.">
+<meta name="keywords" content="JSON Pointer, RFC 6901, JSON Path, JSON navigation, JSON tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonpointer.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .pane-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .pane h2 { font-size: .9rem; margin: 0 0 8px; }
+  textarea.json-input {
+    width: 100%; min-height: 320px; padding: 12px; font-family: var(--mono); font-size: .85rem;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text);
+    resize: vertical; line-height: 1.5;
+  }
+  textarea.json-input:focus { outline: none; border-color: var(--accent); }
+  .pointer-input {
+    width: 100%; padding: 10px 12px; font-family: var(--mono); font-size: .95rem;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text);
+  }
+  .pointer-input:focus { outline: none; border-color: var(--accent); }
+  .result-box {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; font-family: var(--mono); font-size: .85rem; white-space: pre-wrap; word-break: break-word;
+    min-height: 60px; max-height: 360px; overflow: auto; line-height: 1.5;
+  }
+  .result-box.ok { border-left: 3px solid var(--success); }
+  .result-box.err { border-left: 3px solid var(--error); color: var(--error); }
+  .pointer-list { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .pointer-item {
+    padding: 7px 12px; font-family: var(--mono); font-size: .8rem; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; gap: 8px; cursor: pointer; align-items: baseline;
+  }
+  .pointer-item:last-child { border-bottom: none; }
+  .pointer-item:hover { background: var(--surface2); }
+  .pointer-item .ptr { color: #7c3aed; overflow-wrap: anywhere; }
+  .pointer-item .val { color: var(--muted); font-size: .73rem; max-width: 35%; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin: 16px 0 12px; }
+  .tab { padding: 8px 14px; cursor: pointer; font-size: .85rem; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-content { display: none; } .tab-content.active { display: block; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .ex-btn {
+    font-size: .75rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--muted); cursor: pointer; font-family: var(--mono);
+  }
+  .ex-btn:hover { color: var(--text); border-color: var(--accent); }
+  .meta { font-size: .78rem; color: var(--muted); margin-top: 6px; }
+  .meta strong { color: var(--text); font-family: var(--mono); }
+  .conv-grid { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; font-size: .82rem; align-items: center; }
+  .conv-grid span:first-child { color: var(--muted); }
+  .conv-grid code { background: var(--surface2); padding: 2px 8px; border-radius: 4px; font-family: var(--mono); word-break: break-all; }
+  @media (max-width: 768px) {
+    .pane-grid { grid-template-columns: 1fr; }
+    .conv-grid { grid-template-columns: 1fr; gap: 2px; }
+    .conv-grid span:first-child { font-weight: 600; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>⟡ JSON Pointer Evaluator</h1>
+<p class="subtitle">Navigate JSON documents with RFC 6901 pointer strings. Evaluate, convert, and list every pointer in a document.</p>
+
+<div class="pane-grid">
+  <div class="pane">
+    <h2>JSON Document</h2>
+    <textarea class="json-input" id="json-input" spellcheck="false"></textarea>
+    <div class="meta" id="json-meta">—</div>
+  </div>
+  <div class="pane">
+    <h2>Pointer Expression</h2>
+    <input class="pointer-input" id="pointer" placeholder='e.g. /users/0/name' value="/users/0/name">
+    <div class="examples" id="examples"></div>
+    <div class="tabs">
+      <div class="tab active" data-tab="result">Result</div>
+      <div class="tab" data-tab="all">All Pointers</div>
+      <div class="tab" data-tab="convert">Convert</div>
+    </div>
+    <div class="tab-content active" id="tab-result">
+      <div class="result-box" id="result">—</div>
+    </div>
+    <div class="tab-content" id="tab-all">
+      <div class="pointer-list" id="pointer-list"></div>
+      <div class="meta" style="margin-top:6px">Click any pointer to select it. <strong id="pcount">0</strong> pointers total.</div>
+    </div>
+    <div class="tab-content" id="tab-convert">
+      <div class="conv-grid" id="conv-grid"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px">
+  <h2 style="font-size:.9rem">About JSON Pointer (RFC 6901)</h2>
+  <p style="font-size:.82rem;color:var(--muted);line-height:1.6">
+    A JSON Pointer is a slash-delimited path into a JSON document. The empty pointer <code>""</code> refers to the root.
+    Each reference token is separated by <code>/</code>. Array indices are plain integers. Special characters
+    must be escaped: <code>~</code> becomes <code>~0</code> and <code>/</code> becomes <code>~1</code>.
+    A pointer that ends with <code>/-</code> refers to the element after the last in an array (used by JSON Patch).
+  </p>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const SAMPLE = {
+  "users": [
+    { "id": 1, "name": "Alice", "roles": ["admin", "user"], "profile": { "email": "alice@example.com", "age": 30 } },
+    { "id": 2, "name": "Bob",   "roles": ["user"],          "profile": { "email": "bob@example.com",   "age": 24 } }
+  ],
+  "meta": { "total": 2, "version": "1.0", "tags": ["prod", "v2"] },
+  "a/b": "slash-in-key",
+  "m~n": "tilde-in-key"
+};
+
+const EXAMPLES = [
+  '',
+  '/users',
+  '/users/0',
+  '/users/0/name',
+  '/users/1/profile/email',
+  '/users/0/roles/1',
+  '/meta/tags/0',
+  '/a~1b',
+  '/m~0n'
+];
+
+document.getElementById('json-input').value = JSON.stringify(SAMPLE, null, 2);
+
+function unescapeToken(t) {
+  return t.replace(/~1/g, '/').replace(/~0/g, '~');
+}
+function escapeToken(t) {
+  return String(t).replace(/~/g, '~0').replace(/\//g, '~1');
+}
+
+// RFC 6901 evaluator
+function evalPointer(doc, pointer) {
+  if (pointer === '') return { ok: true, value: doc };
+  if (pointer[0] !== '/') return { ok: false, error: 'Pointer must start with "/" (or be empty).' };
+  const tokens = pointer.slice(1).split('/').map(unescapeToken);
+  let cur = doc;
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (cur === null || typeof cur !== 'object') {
+      return { ok: false, error: `Cannot descend into primitive at token ${i} ("${tok}")` };
+    }
+    if (Array.isArray(cur)) {
+      if (tok === '-') return { ok: false, error: '"-" refers to non-existent "end" element (used in JSON Patch add).' };
+      if (!/^(0|[1-9]\d*)$/.test(tok)) return { ok: false, error: `Invalid array index "${tok}"` };
+      const idx = +tok;
+      if (idx >= cur.length) return { ok: false, error: `Array index ${idx} out of bounds (length ${cur.length})` };
+      cur = cur[idx];
+    } else {
+      if (!Object.prototype.hasOwnProperty.call(cur, tok)) {
+        return { ok: false, error: `Key "${tok}" not found in object` };
+      }
+      cur = cur[tok];
+    }
+  }
+  return { ok: true, value: cur };
+}
+
+function collectPointers(doc) {
+  const out = [];
+  function walk(obj, base) {
+    out.push([base, obj]);
+    if (obj && typeof obj === 'object') {
+      if (Array.isArray(obj)) {
+        obj.forEach((v, i) => walk(v, base + '/' + i));
+      } else {
+        Object.keys(obj).forEach(k => walk(obj[k], base + '/' + escapeToken(k)));
+      }
+    }
+  }
+  walk(doc, '');
+  return out;
+}
+
+function formatValue(v) {
+  if (v === undefined) return 'undefined';
+  try { return JSON.stringify(v, null, 2); } catch (e) { return String(v); }
+}
+
+function shortValue(v) {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return `[${v.length}]`;
+  if (typeof v === 'object') return `{${Object.keys(v).length}}`;
+  const s = JSON.stringify(v);
+  return s && s.length > 28 ? s.slice(0, 25) + '…' : s;
+}
+
+function pointerToJSONPath(pointer) {
+  if (pointer === '') return '$';
+  const tokens = pointer.slice(1).split('/').map(unescapeToken);
+  return '$' + tokens.map(t => {
+    if (/^(0|[1-9]\d*)$/.test(t)) return `[${t}]`;
+    if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(t)) return '.' + t;
+    return `[${JSON.stringify(t)}]`;
+  }).join('');
+}
+
+function pointerToURIFragment(pointer) {
+  return '#' + pointer.split('').map(c => {
+    if (/[A-Za-z0-9\-._~!$&'()*+,;=:@\/?]/.test(c)) return c;
+    return '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
+  }).join('');
+}
+
+function pointerTokensArray(pointer) {
+  if (pointer === '') return [];
+  return pointer.slice(1).split('/').map(unescapeToken);
+}
+
+let parsedDoc = null;
+let parseError = null;
+
+function parseDoc() {
+  const raw = document.getElementById('json-input').value;
+  const meta = document.getElementById('json-meta');
+  try {
+    parsedDoc = JSON.parse(raw);
+    parseError = null;
+    const ptrs = collectPointers(parsedDoc);
+    meta.innerHTML = `✓ Valid JSON · <strong>${ptrs.length}</strong> reachable pointers`;
+    meta.style.color = 'var(--success)';
+  } catch (e) {
+    parsedDoc = null;
+    parseError = e.message;
+    meta.textContent = '✗ JSON error: ' + e.message;
+    meta.style.color = 'var(--error)';
+  }
+}
+
+function evaluate() {
+  const result = document.getElementById('result');
+  const pointer = document.getElementById('pointer').value;
+  if (parseError) {
+    result.className = 'result-box err';
+    result.textContent = 'JSON parse error — fix your document first.';
+    return;
+  }
+  const r = evalPointer(parsedDoc, pointer);
+  if (r.ok) {
+    result.className = 'result-box ok';
+    result.textContent = formatValue(r.value);
+  } else {
+    result.className = 'result-box err';
+    result.textContent = 'Error: ' + r.error;
+  }
+  // Update conversions
+  const grid = document.getElementById('conv-grid');
+  const tokens = pointerTokensArray(pointer);
+  grid.innerHTML = `
+    <span>RFC 6901:</span><code>${pointer || '""'}</code>
+    <span>URI fragment:</span><code>${pointerToURIFragment(pointer)}</code>
+    <span>JSONPath:</span><code>${pointerToJSONPath(pointer)}</code>
+    <span>Tokens:</span><code>${JSON.stringify(tokens)}</code>
+    <span>Depth:</span><code>${tokens.length}</code>
+  `;
+}
+
+function renderPointerList() {
+  const box = document.getElementById('pointer-list');
+  const count = document.getElementById('pcount');
+  if (parseError) {
+    box.innerHTML = '<div class="pointer-item">JSON parse error</div>';
+    count.textContent = '0';
+    return;
+  }
+  const ptrs = collectPointers(parsedDoc);
+  count.textContent = ptrs.length;
+  box.innerHTML = ptrs.map(([p, v]) =>
+    `<div class="pointer-item" data-p="${p.replace(/"/g, '&quot;')}">
+       <span class="ptr">${p === '' ? '(root)' : p}</span>
+       <span class="val">${shortValue(v).replace(/</g, '&lt;')}</span>
+     </div>`
+  ).join('');
+  box.querySelectorAll('.pointer-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const p = el.dataset.p === '(root)' ? '' : el.dataset.p;
+      document.getElementById('pointer').value = p;
+      evaluate();
+      // Switch to result tab
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'result'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-result'));
+    });
+  });
+}
+
+function renderExamples() {
+  document.getElementById('examples').innerHTML = EXAMPLES.map(e =>
+    `<button class="ex-btn" data-ex="${e}">${e === '' ? '(root)' : e}</button>`
+  ).join('');
+  document.querySelectorAll('.ex-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.getElementById('pointer').value = b.dataset.ex;
+      evaluate();
+    });
+  });
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'all') renderPointerList();
+  });
+});
+
+document.getElementById('json-input').addEventListener('input', () => { parseDoc(); evaluate(); });
+document.getElementById('pointer').addEventListener('input', evaluate);
+
+parseDoc();
+renderExamples();
+evaluate();
+</script>
+</body>
+</html>

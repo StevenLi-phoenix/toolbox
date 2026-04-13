@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS ARN Parser & Builder — Free Online Tool</title>
+<meta name="description" content="Free AWS ARN parser and builder. Decode Amazon Resource Names into partition, service, region, account, and resource segments, and build ARNs from common service templates.">
+<meta name="keywords" content="AWS ARN, Amazon Resource Name, ARN parser, ARN builder, AWS tool, IAM ARN">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/arn.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .pane-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .pane h2 { font-size: .9rem; margin: 0 0 8px; }
+  .arn-input {
+    width: 100%; padding: 10px 12px; font-family: var(--mono); font-size: .9rem;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text);
+  }
+  .arn-input:focus { outline: none; border-color: var(--accent); }
+  .breakdown {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; font-family: var(--mono); font-size: .85rem; line-height: 1.9;
+    word-break: break-all; margin-top: 10px;
+  }
+  .seg { padding: 2px 6px; border-radius: 4px; border: 1px solid transparent; cursor: help; display: inline-block; }
+  .seg-literal { color: var(--muted); }
+  .seg-partition { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+  .seg-service   { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+  .seg-region    { background: #fef3c7; color: #b45309; border-color: #fde68a; }
+  .seg-account   { background: #e0e7ff; color: #4338ca; border-color: #c7d2fe; }
+  .seg-resource  { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+  .seg-sep { color: var(--muted); margin: 0 2px; }
+  .parts-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 10px; }
+  .parts-table td { padding: 6px 10px; border: 1px solid var(--border); vertical-align: top; }
+  .parts-table td:first-child { color: var(--muted); width: 120px; font-weight: 500; }
+  .parts-table td:nth-child(2) { font-family: var(--mono); }
+  .status-line { font-size: .82rem; margin-top: 8px; }
+  .status-line.ok { color: var(--success); }
+  .status-line.err { color: var(--error); }
+  .row-grid { display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px; align-items: center; }
+  .row-grid label { font-size: .82rem; color: var(--muted); }
+  .row-grid input, .row-grid select {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem;
+  }
+  .row-grid input:focus, .row-grid select:focus { outline: none; border-color: var(--accent); }
+  .tmpl-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .tmpl-btn {
+    font-size: .75rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--muted); cursor: pointer;
+  }
+  .tmpl-btn:hover { color: var(--text); border-color: var(--accent); }
+  .built-arn {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; font-family: var(--mono); font-size: .85rem; word-break: break-all; margin-top: 10px;
+  }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .tab { padding: 8px 14px; cursor: pointer; font-size: .85rem; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-content { display: none; } .tab-content.active { display: block; }
+  @media (max-width: 768px) {
+    .pane-grid { grid-template-columns: 1fr; }
+    .row-grid { grid-template-columns: 1fr; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔖 AWS ARN Parser &amp; Builder</h1>
+<p class="subtitle">Parse Amazon Resource Names into structured segments — or build them from scratch with common service templates.</p>
+
+<div class="tabs">
+  <div class="tab active" data-tab="parse">Parse ARN</div>
+  <div class="tab" data-tab="build">Build ARN</div>
+  <div class="tab" data-tab="ref">Format Reference</div>
+</div>
+
+<div class="tab-content active" id="tab-parse">
+  <div class="card">
+    <h2 style="font-size:.9rem;margin:0 0 8px">Paste an ARN to decode</h2>
+    <input class="arn-input" id="arn" value="arn:aws:iam::123456789012:role/MyRole" spellcheck="false">
+    <div class="status-line" id="status">—</div>
+    <div class="breakdown" id="breakdown">—</div>
+    <table class="parts-table" id="parts"></table>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-build">
+  <div class="card">
+    <h2 style="font-size:.9rem;margin:0 0 10px">Service Templates</h2>
+    <div class="tmpl-list" id="tmpl-list"></div>
+    <div class="row-grid">
+      <label for="b-partition">Partition</label>
+      <select id="b-partition">
+        <option value="aws">aws (commercial)</option>
+        <option value="aws-cn">aws-cn (China)</option>
+        <option value="aws-us-gov">aws-us-gov (GovCloud)</option>
+      </select>
+      <label for="b-service">Service</label>
+      <input id="b-service" value="iam">
+      <label for="b-region">Region</label>
+      <input id="b-region" placeholder="us-east-1 or empty for global">
+      <label for="b-account">Account ID</label>
+      <input id="b-account" placeholder="123456789012" pattern="\d{12}">
+      <label for="b-resource">Resource</label>
+      <input id="b-resource" value="role/MyRole">
+    </div>
+    <div class="built-arn" id="built-arn">—</div>
+    <div class="actions">
+      <button class="btn" id="copy-built">Copy</button>
+      <button class="btn btn-secondary" id="send-to-parse">Send to Parser →</button>
+    </div>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-ref">
+  <div class="card">
+    <h2 style="font-size:.9rem">ARN Format</h2>
+    <p style="font-family:var(--mono);font-size:.85rem;background:var(--surface2);padding:12px;border-radius:var(--radius);border:1px solid var(--border);overflow-x:auto">
+      arn:<span class="seg seg-partition">partition</span>:<span class="seg seg-service">service</span>:<span class="seg seg-region">region</span>:<span class="seg seg-account">account-id</span>:<span class="seg seg-resource">resource-id</span>
+    </p>
+    <p style="font-family:var(--mono);font-size:.85rem;background:var(--surface2);padding:12px;border-radius:var(--radius);border:1px solid var(--border);overflow-x:auto;margin-top:6px">
+      arn:<span class="seg seg-partition">partition</span>:<span class="seg seg-service">service</span>:<span class="seg seg-region">region</span>:<span class="seg seg-account">account-id</span>:<span class="seg seg-resource">resource-type/resource-id</span>
+    </p>
+    <p style="font-family:var(--mono);font-size:.85rem;background:var(--surface2);padding:12px;border-radius:var(--radius);border:1px solid var(--border);overflow-x:auto;margin-top:6px">
+      arn:<span class="seg seg-partition">partition</span>:<span class="seg seg-service">service</span>:<span class="seg seg-region">region</span>:<span class="seg seg-account">account-id</span>:<span class="seg seg-resource">resource-type:resource-id</span>
+    </p>
+    <h2 style="font-size:.9rem;margin-top:16px">Segment Rules</h2>
+    <ul style="font-size:.82rem;line-height:1.7;color:var(--text)">
+      <li><strong>partition</strong> — <code>aws</code>, <code>aws-cn</code> (China), <code>aws-us-gov</code> (GovCloud).</li>
+      <li><strong>service</strong> — AWS service namespace (e.g. <code>s3</code>, <code>iam</code>, <code>lambda</code>, <code>ec2</code>).</li>
+      <li><strong>region</strong> — AWS region like <code>us-east-1</code>. Omitted (empty) for global services like IAM and S3 bucket ARNs.</li>
+      <li><strong>account-id</strong> — 12-digit AWS account number. Omitted for some resources (e.g. public S3).</li>
+      <li><strong>resource-id</strong> — The resource identifier. May include type and ID, separated by <code>/</code> or <code>:</code>, depending on the service.</li>
+    </ul>
+    <h2 style="font-size:.9rem;margin-top:16px">Wildcards in IAM Policies</h2>
+    <p style="font-size:.82rem;color:var(--muted);line-height:1.6">
+      You can use <code>*</code> (zero or more characters) and <code>?</code> (one character) in ARN fields in IAM policies.
+      For example, <code>arn:aws:s3:::my-bucket/*</code> matches every object in <code>my-bucket</code>.
+    </p>
+  </div>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const TEMPLATES = [
+  { label: 'S3 Bucket',          service: 's3',      region: '',          account: '',             resource: 'my-bucket' },
+  { label: 'S3 Object',          service: 's3',      region: '',          account: '',             resource: 'my-bucket/path/to/key' },
+  { label: 'IAM Role',           service: 'iam',     region: '',          account: '123456789012', resource: 'role/MyRole' },
+  { label: 'IAM User',           service: 'iam',     region: '',          account: '123456789012', resource: 'user/alice' },
+  { label: 'IAM Policy',         service: 'iam',     region: '',          account: '123456789012', resource: 'policy/MyPolicy' },
+  { label: 'Lambda Function',    service: 'lambda',  region: 'us-east-1', account: '123456789012', resource: 'function:my-function' },
+  { label: 'DynamoDB Table',     service: 'dynamodb',region: 'us-east-1', account: '123456789012', resource: 'table/MyTable' },
+  { label: 'SNS Topic',          service: 'sns',     region: 'us-east-1', account: '123456789012', resource: 'my-topic' },
+  { label: 'SQS Queue',          service: 'sqs',     region: 'us-east-1', account: '123456789012', resource: 'my-queue' },
+  { label: 'EC2 Instance',       service: 'ec2',     region: 'us-east-1', account: '123456789012', resource: 'instance/i-0abc1234' },
+  { label: 'RDS DB Instance',    service: 'rds',     region: 'us-east-1', account: '123456789012', resource: 'db:my-database' },
+  { label: 'CloudWatch Log Group', service: 'logs',  region: 'us-east-1', account: '123456789012', resource: 'log-group:/aws/lambda/my-fn:*' },
+  { label: 'Secrets Manager',    service: 'secretsmanager', region: 'us-east-1', account: '123456789012', resource: 'secret:my-secret-AbCdEf' },
+  { label: 'KMS Key',            service: 'kms',     region: 'us-east-1', account: '123456789012', resource: 'key/1234abcd-12ab-34cd-56ef-1234567890ab' },
+  { label: 'ECR Repository',     service: 'ecr',     region: 'us-east-1', account: '123456789012', resource: 'repository/my-repo' },
+  { label: 'API Gateway',        service: 'execute-api', region: 'us-east-1', account: '123456789012', resource: 'abcd1234/prod/GET/resource' },
+  { label: 'Step Functions',     service: 'states',  region: 'us-east-1', account: '123456789012', resource: 'stateMachine:MyStateMachine' }
+];
+
+const GLOBAL_SERVICES = ['iam', 'route53', 'cloudfront', 'waf', 'organizations', 'support'];
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function parseARN(arn) {
+  if (!arn) return { ok: false, error: 'ARN is empty.' };
+  const parts = arn.split(':');
+  if (parts.length < 6) return { ok: false, error: `Expected at least 6 colon-separated segments, got ${parts.length}.` };
+  if (parts[0] !== 'arn') return { ok: false, error: `First segment must be "arn", got "${parts[0]}".` };
+  const partition = parts[1];
+  const service = parts[2];
+  const region = parts[3];
+  const account = parts[4];
+  // Resource may contain more colons — rejoin the rest
+  const resource = parts.slice(5).join(':');
+  const warnings = [];
+  if (!/^aws(-cn|-us-gov|-iso-?[a-z]*)?$/.test(partition)) warnings.push(`Unusual partition "${partition}"`);
+  if (!service) warnings.push('Service is empty');
+  if (account && !/^\d{12}$/.test(account) && account !== '*' && account !== 'aws') {
+    warnings.push(`Account ID should be 12 digits (got "${account}")`);
+  }
+  if (region && !/^[a-z]{2,3}-[a-z]+-\d{1,2}$/.test(region) && region !== '*') {
+    warnings.push(`Region format unusual ("${region}")`);
+  }
+  if (GLOBAL_SERVICES.includes(service) && region) {
+    warnings.push(`${service} is typically global — region usually empty.`);
+  }
+  let resourceType = null, resourceId = resource;
+  if (resource.includes('/')) {
+    const i = resource.indexOf('/');
+    resourceType = resource.slice(0, i);
+    resourceId = resource.slice(i + 1);
+  } else if (resource.includes(':')) {
+    const i = resource.indexOf(':');
+    resourceType = resource.slice(0, i);
+    resourceId = resource.slice(i + 1);
+  }
+  return { ok: true, partition, service, region, account, resource, resourceType, resourceId, warnings };
+}
+
+function renderParse() {
+  const arn = document.getElementById('arn').value.trim();
+  const status = document.getElementById('status');
+  const breakdown = document.getElementById('breakdown');
+  const parts = document.getElementById('parts');
+
+  const r = parseARN(arn);
+  if (!r.ok) {
+    status.className = 'status-line err';
+    status.textContent = '✗ ' + r.error;
+    breakdown.textContent = '—';
+    parts.innerHTML = '';
+    return;
+  }
+
+  status.className = 'status-line ok';
+  status.innerHTML = '✓ Valid ARN structure' + (r.warnings.length ? ' · <span style="color:var(--error)">⚠ ' + r.warnings.join('; ') + '</span>' : '');
+
+  breakdown.innerHTML =
+    `<span class="seg-literal">arn</span><span class="seg-sep">:</span>` +
+    `<span class="seg seg-partition" title="Partition">${escapeHtml(r.partition)}</span><span class="seg-sep">:</span>` +
+    `<span class="seg seg-service" title="Service">${escapeHtml(r.service)}</span><span class="seg-sep">:</span>` +
+    `<span class="seg seg-region" title="Region">${r.region ? escapeHtml(r.region) : '<i style="color:var(--muted)">(empty)</i>'}</span><span class="seg-sep">:</span>` +
+    `<span class="seg seg-account" title="Account ID">${r.account ? escapeHtml(r.account) : '<i style="color:var(--muted)">(empty)</i>'}</span><span class="seg-sep">:</span>` +
+    `<span class="seg seg-resource" title="Resource">${escapeHtml(r.resource) || '<i style="color:var(--muted)">(empty)</i>'}</span>`;
+
+  const rows = [
+    ['Partition',     r.partition],
+    ['Service',       r.service],
+    ['Region',        r.region || '(global)'],
+    ['Account ID',    r.account || '(empty)'],
+    ['Resource',      r.resource || '(empty)'],
+  ];
+  if (r.resourceType !== null) {
+    rows.push(['Resource Type', r.resourceType]);
+    rows.push(['Resource ID',   r.resourceId]);
+  }
+  parts.innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${escapeHtml(v)}</td></tr>`).join('');
+}
+
+function buildARN() {
+  const partition = document.getElementById('b-partition').value;
+  const service   = document.getElementById('b-service').value.trim();
+  const region    = document.getElementById('b-region').value.trim();
+  const account   = document.getElementById('b-account').value.trim();
+  const resource  = document.getElementById('b-resource').value.trim();
+  const arn = `arn:${partition}:${service}:${region}:${account}:${resource}`;
+  document.getElementById('built-arn').textContent = arn;
+  window._builtArn = arn;
+}
+
+function renderTemplates() {
+  document.getElementById('tmpl-list').innerHTML = TEMPLATES.map((t, i) =>
+    `<button class="tmpl-btn" data-i="${i}">${t.label}</button>`
+  ).join('');
+  document.querySelectorAll('.tmpl-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const t = TEMPLATES[+b.dataset.i];
+      document.getElementById('b-service').value  = t.service;
+      document.getElementById('b-region').value   = t.region;
+      document.getElementById('b-account').value  = t.account;
+      document.getElementById('b-resource').value = t.resource;
+      buildARN();
+    });
+  });
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+document.getElementById('arn').addEventListener('input', renderParse);
+['b-partition','b-service','b-region','b-account','b-resource'].forEach(id =>
+  document.getElementById(id).addEventListener('input', buildARN)
+);
+document.getElementById('copy-built').addEventListener('click', () => {
+  if (window._builtArn) {
+    navigator.clipboard.writeText(window._builtArn);
+    toast('ARN copied!');
+  }
+});
+document.getElementById('send-to-parse').addEventListener('click', () => {
+  if (window._builtArn) {
+    document.getElementById('arn').value = window._builtArn;
+    document.querySelector('.tab[data-tab="parse"]').click();
+    renderParse();
+  }
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+renderTemplates();
+renderParse();
+buildARN();
+</script>
+</body>
+</html>
