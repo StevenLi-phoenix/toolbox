@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISBN Validator & Converter — ISBN-10 / ISBN-13 Checker</title>
+<meta name="description" content="Validate ISBN-10 and ISBN-13 numbers, verify checksums, convert between formats, extract prefix, registration group, publisher, and title identifiers. 100% client-side.">
+<meta name="keywords" content="ISBN validator, ISBN-10, ISBN-13, ISBN converter, ISBN checksum, EAN-13, book identifier">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/isbn.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .isbn-input {
+    font-family: var(--mono); font-size: 1.25rem; letter-spacing: .1em;
+    text-align: center; padding: 12px 16px; text-transform: uppercase;
+  }
+  .result-banner {
+    margin-top: 12px; padding: 12px 16px; border-radius: var(--radius);
+    font-weight: 600; font-size: .95rem; text-align: center;
+  }
+  .result-banner.valid { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .result-banner.invalid { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .result-banner.neutral { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+  .info-grid {
+    display: grid; grid-template-columns: 180px 1fr; gap: 6px 14px;
+    margin-top: 14px; font-size: .88rem;
+  }
+  .info-grid .lbl { color: var(--muted); font-weight: 500; }
+  .info-grid .val { font-family: var(--mono); word-break: break-all; }
+  .preset-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .preset-btns button { font-size: .78rem; }
+  .formatted-block {
+    font-family: var(--mono); font-size: 1.05rem; letter-spacing: .12em;
+    padding: 10px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); text-align: center; margin-top: 8px;
+  }
+  .conv-row { display: grid; grid-template-columns: 140px 1fr auto; gap: 10px; align-items: center; margin-top: 10px; }
+  .conv-row .conv-label { font-size: .82rem; color: var(--muted); font-weight: 600; }
+  .conv-row .conv-val { font-family: var(--mono); font-size: .95rem; padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  @media (max-width: 768px) {
+    .isbn-input { font-size: 1rem; letter-spacing: .06em; }
+    .info-grid { grid-template-columns: 1fr; gap: 2px 0; }
+    .info-grid .lbl { margin-top: 8px; }
+    .conv-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>ISBN Validator &amp; Converter</h1>
+<p class="subtitle">Validate ISBN-10 and ISBN-13 numbers, verify their checksum, convert between formats, and identify the registration group prefix</p>
+
+<div class="card">
+  <h2>Enter ISBN</h2>
+  <input class="isbn-input" id="isbnInput" type="text" placeholder="978-3-16-148410-0" oninput="validate()" autocomplete="off">
+  <div class="preset-btns">
+    <button class="btn btn-secondary" onclick="setPreset('9783161484100')">ISBN-13 (de)</button>
+    <button class="btn btn-secondary" onclick="setPreset('0306406152')">ISBN-10 (us)</button>
+    <button class="btn btn-secondary" onclick="setPreset('978-0-13-110362-7')">K&amp;R (us)</button>
+    <button class="btn btn-secondary" onclick="setPreset('0-7475-3269-9')">Harry Potter</button>
+    <button class="btn btn-secondary" onclick="setPreset('979-10-90636-07-1')">Prefix 979</button>
+    <button class="btn btn-secondary" onclick="setPreset('020161622X')">X check digit</button>
+  </div>
+  <div id="resultBanner" class="result-banner neutral">Enter an ISBN to validate</div>
+  <div id="formatted"></div>
+  <div id="parts" class="info-grid"></div>
+</div>
+
+<div class="card" id="convCard" style="display:none">
+  <h2>Conversions</h2>
+  <div class="conv-row">
+    <span class="conv-label">ISBN-10</span>
+    <span class="conv-val" id="isbn10Out">—</span>
+    <button class="btn btn-secondary" onclick="copyVal('isbn10Out')">Copy</button>
+  </div>
+  <div class="conv-row">
+    <span class="conv-label">ISBN-13</span>
+    <span class="conv-val" id="isbn13Out">—</span>
+    <button class="btn btn-secondary" onclick="copyVal('isbn13Out')">Copy</button>
+  </div>
+  <div class="conv-row">
+    <span class="conv-label">EAN-13 barcode</span>
+    <span class="conv-val" id="eanOut">—</span>
+    <button class="btn btn-secondary" onclick="copyVal('eanOut')">Copy</button>
+  </div>
+  <div class="conv-row">
+    <span class="conv-label">Worldcat lookup</span>
+    <span class="conv-val"><a id="wcLink" href="#" target="_blank" rel="noopener">open</a></span>
+    <span></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About ISBN</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    The <strong>International Standard Book Number</strong> uniquely identifies books. <strong>ISBN-10</strong> (pre-2007) uses a mod-11 checksum where each of the first 9 digits is multiplied by its position (1–9) and the sum must be divisible by 11; the check digit 10 is written as <code>X</code>. <strong>ISBN-13</strong> is a 13-digit EAN-13 with a mod-10 checksum (digits alternately multiplied by 1 and 3). All ISBN-10 numbers can be converted to ISBN-13 by prepending <code>978</code> and recomputing the check digit. ISBN-13 numbers starting with <code>979</code> have no ISBN-10 equivalent.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+// Registration group prefix detection (simplified ranges from ISBN International)
+const GROUPS_978 = [
+  [0, 5, 'English language'],
+  [7, 7, 'English language'],
+  [80, 80, 'Czech Republic / Slovakia'],
+  [81, 81, 'India (English)'],
+  [82, 82, 'Norway'],
+  [83, 83, 'Poland'],
+  [84, 84, 'Spain'],
+  [85, 85, 'Brazil'],
+  [86, 86, 'Former Yugoslavia'],
+  [87, 87, 'Denmark'],
+  [88, 88, 'Italy'],
+  [89, 89, 'South Korea'],
+  [90, 90, 'Netherlands / Belgium (Dutch)'],
+  [91, 91, 'Sweden'],
+  [92, 92, 'International (Unesco)'],
+  [93, 93, 'India'],
+  [94, 94, 'Netherlands'],
+  [600, 600, 'Iran'],
+  [601, 601, 'Kazakhstan'],
+  [602, 602, 'Indonesia'],
+  [604, 604, 'Vietnam'],
+  [605, 605, 'Turkey'],
+  [606, 606, 'Romania'],
+  [607, 607, 'Mexico'],
+  [608, 608, 'North Macedonia'],
+  [609, 609, 'Lithuania'],
+  [611, 611, 'Thailand'],
+  [612, 612, 'Peru'],
+  [613, 613, 'Mauritius'],
+  [614, 614, 'Lebanon'],
+  [615, 615, 'Hungary'],
+  [616, 616, 'Thailand'],
+  [617, 617, 'Ukraine'],
+  [618, 618, 'Greece'],
+  [619, 619, 'Bulgaria'],
+  [620, 620, 'Mauritius'],
+  [621, 621, 'Philippines'],
+  [622, 622, 'Iran'],
+  [623, 623, 'Indonesia'],
+  [624, 624, 'Sri Lanka'],
+  [950, 950, 'Argentina'],
+  [951, 951, 'Finland'],
+  [952, 952, 'Finland'],
+  [953, 953, 'Croatia'],
+  [954, 954, 'Bulgaria'],
+  [955, 955, 'Sri Lanka'],
+  [956, 956, 'Chile'],
+  [957, 957, 'Taiwan'],
+  [958, 958, 'Colombia'],
+  [959, 959, 'Cuba'],
+  [960, 960, 'Greece'],
+  [961, 961, 'Slovenia'],
+  [962, 962, 'Hong Kong'],
+  [963, 963, 'Hungary'],
+  [964, 964, 'Iran'],
+  [965, 965, 'Israel'],
+  [966, 966, 'Ukraine'],
+  [967, 967, 'Malaysia'],
+  [968, 968, 'Mexico'],
+  [969, 969, 'Pakistan'],
+  [970, 970, 'Mexico'],
+  [971, 971, 'Philippines'],
+  [972, 972, 'Portugal'],
+  [973, 973, 'Romania'],
+  [974, 974, 'Thailand'],
+  [975, 975, 'Turkey'],
+  [976, 976, 'Caribbean'],
+  [977, 977, 'Egypt'],
+  [978, 978, 'Nigeria'],
+  [979, 979, 'Indonesia'],
+  [980, 980, 'Venezuela'],
+  [981, 981, 'Singapore'],
+  [982, 982, 'South Pacific'],
+  [983, 983, 'Malaysia'],
+  [984, 984, 'Bangladesh'],
+  [985, 985, 'Belarus'],
+  [986, 986, 'Taiwan'],
+  [987, 987, 'Argentina'],
+  [988, 988, 'Hong Kong'],
+  [989, 989, 'Portugal'],
+];
+
+function lookupGroup(prefix, rest) {
+  // prefix is '978' or '979'
+  // rest is 10 digit string (for ISBN-13 minus prefix minus check)
+  if (prefix === '979') {
+    // Different registration groups under 979
+    const first3 = rest.substring(0, 3);
+    if (first3 === '10') return 'France';
+    if (first3 === '11') return 'Korea';
+    if (first3 === '12') return 'Italy';
+    if (first3 === '8') return 'United States';
+    return 'Unknown (979 registration group)';
+  }
+  // 978
+  for (let len = 1; len <= 3; len++) {
+    const n = parseInt(rest.substring(0, len));
+    for (const [lo, hi, name] of GROUPS_978) {
+      if (n >= lo && n <= hi && lo.toString().length === len) return name;
+    }
+  }
+  return 'Unknown';
+}
+
+function clean(raw) { return raw.replace(/[\s-]/g, '').toUpperCase(); }
+
+function isbn10Check(isbn9) {
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += (i + 1) * parseInt(isbn9[i]);
+  const c = sum % 11;
+  return c === 10 ? 'X' : String(c);
+}
+
+function isbn13Check(isbn12) {
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += parseInt(isbn12[i]) * (i % 2 === 0 ? 1 : 3);
+  return String((10 - (sum % 10)) % 10);
+}
+
+function validateISBN10(s) {
+  if (!/^\d{9}[\dX]$/.test(s)) return false;
+  return isbn10Check(s.substring(0, 9)) === s[9];
+}
+function validateISBN13(s) {
+  if (!/^\d{13}$/.test(s)) return false;
+  return isbn13Check(s.substring(0, 12)) === s[12];
+}
+
+function convert10to13(s) {
+  const core = '978' + s.substring(0, 9);
+  return core + isbn13Check(core);
+}
+function convert13to10(s) {
+  if (!s.startsWith('978')) return null;
+  const core = s.substring(3, 12);
+  return core + isbn10Check(core);
+}
+
+function setPreset(v) { document.getElementById('isbnInput').value = v; validate(); }
+
+function copyVal(id) {
+  const v = document.getElementById(id).textContent;
+  if (!v || v === '—') return;
+  navigator.clipboard.writeText(v);
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+function validate() {
+  const raw = document.getElementById('isbnInput').value;
+  const banner = document.getElementById('resultBanner');
+  const parts = document.getElementById('parts');
+  const fmt = document.getElementById('formatted');
+  const convCard = document.getElementById('convCard');
+
+  if (!raw.trim()) {
+    banner.className = 'result-banner neutral';
+    banner.textContent = 'Enter an ISBN to validate';
+    parts.innerHTML = '';
+    fmt.innerHTML = '';
+    convCard.style.display = 'none';
+    return;
+  }
+
+  const c = clean(raw);
+  let valid = false, type = '', isbn13 = '', isbn10 = '';
+
+  if (c.length === 10) {
+    type = 'ISBN-10';
+    valid = validateISBN10(c);
+    if (valid) {
+      isbn10 = c;
+      isbn13 = convert10to13(c);
+    }
+  } else if (c.length === 13) {
+    type = 'ISBN-13';
+    valid = validateISBN13(c);
+    if (valid) {
+      isbn13 = c;
+      isbn10 = convert13to10(c);
+    }
+  } else {
+    banner.className = 'result-banner invalid';
+    banner.textContent = '✗ Invalid length — expected 10 or 13 digits (got ' + c.length + ')';
+    parts.innerHTML = '';
+    fmt.innerHTML = '';
+    convCard.style.display = 'none';
+    return;
+  }
+
+  if (!valid) {
+    banner.className = 'result-banner invalid';
+    banner.textContent = '✗ Invalid ' + type + ' — checksum mismatch';
+    parts.innerHTML = '';
+    fmt.innerHTML = '';
+    convCard.style.display = 'none';
+    return;
+  }
+
+  banner.className = 'result-banner valid';
+  banner.textContent = '✓ Valid ' + type;
+
+  const display13 = isbn13.substring(0, 3) + '-' + isbn13.substring(3, 4) + '-' + isbn13.substring(4, 9) + '-' + isbn13.substring(9, 12) + '-' + isbn13.substring(12);
+  fmt.innerHTML = '<div class="formatted-block">' + display13 + '</div>';
+
+  const prefix = isbn13.substring(0, 3);
+  const rest = isbn13.substring(3, 12);
+  const group = lookupGroup(prefix, rest);
+
+  parts.innerHTML = `
+    <div class="lbl">Input type</div><div class="val">${type}</div>
+    <div class="lbl">Prefix (GS1)</div><div class="val">${prefix}</div>
+    <div class="lbl">Registration group</div><div class="val">${group}</div>
+    <div class="lbl">Check digit</div><div class="val">${isbn13[12]} (mod-10)</div>
+  `;
+
+  document.getElementById('isbn13Out').textContent = isbn13;
+  document.getElementById('isbn10Out').textContent = isbn10 || 'N/A (979 prefix)';
+  document.getElementById('eanOut').textContent = isbn13;
+  document.getElementById('wcLink').href = 'https://www.worldcat.org/isbn/' + isbn13;
+  convCard.style.display = 'block';
+}
+</script>
+</body>
+</html>

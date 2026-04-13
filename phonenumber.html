@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phone Number Formatter — E.164 / International / National</title>
+<meta name="description" content="Parse, validate, and format international phone numbers. Convert to E.164, international, national, RFC 3966 tel: URI, and detect country. 100% client-side.">
+<meta name="keywords" content="phone number, E.164, international, national, format, validator, country code, tel URI">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/phonenumber.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .phone-input {
+    font-family: var(--mono); font-size: 1.3rem; letter-spacing: .08em;
+    text-align: center; padding: 12px 16px;
+  }
+  .result-banner {
+    margin-top: 12px; padding: 12px 16px; border-radius: var(--radius);
+    font-weight: 600; font-size: .95rem; text-align: center;
+  }
+  .result-banner.valid { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .result-banner.invalid { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .result-banner.neutral { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+  .form-row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .form-row label { font-size: .85rem; color: var(--muted); font-weight: 600; }
+  .form-row select, .form-row input {
+    padding: 8px 10px; font-family: var(--mono); font-size: .88rem;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text);
+  }
+  .conv-row { display: grid; grid-template-columns: 180px 1fr auto; gap: 10px; align-items: center; margin-top: 10px; }
+  .conv-row .conv-label { font-size: .82rem; color: var(--muted); font-weight: 600; }
+  .conv-row .conv-val { font-family: var(--mono); font-size: .92rem; padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); word-break: break-all; }
+  .info-grid { display: grid; grid-template-columns: 180px 1fr; gap: 6px 14px; margin-top: 14px; font-size: .88rem; }
+  .info-grid .lbl { color: var(--muted); font-weight: 500; }
+  .info-grid .val { font-family: var(--mono); word-break: break-all; }
+  .preset-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .preset-btns button { font-size: .78rem; }
+  @media (max-width: 768px) {
+    .phone-input { font-size: 1rem; }
+    .form-row, .info-grid, .conv-row { grid-template-columns: 1fr; gap: 4px; }
+    .form-row label, .info-grid .lbl { margin-top: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Phone Number Formatter</h1>
+<p class="subtitle">Parse, validate, and format international phone numbers — E.164, international, national, and RFC 3966 tel: URI formats</p>
+
+<div class="card">
+  <h2>Input</h2>
+  <div class="form-row">
+    <label>Default country</label>
+    <select id="country" onchange="format()"></select>
+  </div>
+  <input class="phone-input" id="phoneInput" type="text" placeholder="+1 (415) 555-0132" oninput="format()" autocomplete="off">
+  <div class="preset-btns">
+    <button class="btn btn-secondary" onclick="setPreset('+14155550132', 'US')">US +1</button>
+    <button class="btn btn-secondary" onclick="setPreset('+442071838750', 'GB')">UK +44</button>
+    <button class="btn btn-secondary" onclick="setPreset('+81312345678', 'JP')">JP +81</button>
+    <button class="btn btn-secondary" onclick="setPreset('+8613812345678', 'CN')">CN +86</button>
+    <button class="btn btn-secondary" onclick="setPreset('+33142685300', 'FR')">FR +33</button>
+    <button class="btn btn-secondary" onclick="setPreset('+4915123456789', 'DE')">DE +49</button>
+    <button class="btn btn-secondary" onclick="setPreset('+61412345678', 'AU')">AU +61</button>
+    <button class="btn btn-secondary" onclick="setPreset('(415) 555-0132', 'US')">National</button>
+  </div>
+  <div id="resultBanner" class="result-banner neutral">Enter a phone number to format</div>
+</div>
+
+<div class="card" id="outCard" style="display:none">
+  <h2>Formats</h2>
+  <div class="conv-row">
+    <span class="conv-label">E.164</span>
+    <span class="conv-val" id="e164">—</span>
+    <button class="btn btn-secondary" onclick="copyVal('e164')">Copy</button>
+  </div>
+  <div class="conv-row">
+    <span class="conv-label">International</span>
+    <span class="conv-val" id="intl">—</span>
+    <button class="btn btn-secondary" onclick="copyVal('intl')">Copy</button>
+  </div>
+  <div class="conv-row">
+    <span class="conv-label">National</span>
+    <span class="conv-val" id="natl">—</span>
+    <button class="btn btn-secondary" onclick="copyVal('natl')">Copy</button>
+  </div>
+  <div class="conv-row">
+    <span class="conv-label">RFC 3966 (tel: URI)</span>
+    <span class="conv-val" id="tel">—</span>
+    <button class="btn btn-secondary" onclick="copyVal('tel')">Copy</button>
+  </div>
+  <div class="conv-row">
+    <span class="conv-label">Digits only</span>
+    <span class="conv-val" id="digits">—</span>
+    <button class="btn btn-secondary" onclick="copyVal('digits')">Copy</button>
+  </div>
+  <div class="info-grid" id="info"></div>
+</div>
+
+<div class="card">
+  <h2>About E.164</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    <strong>E.164</strong> is the ITU standard for international phone numbers — a leading <code>+</code>, a country calling code (1–3 digits), and the national subscriber number. Total length must not exceed 15 digits. The <strong>national</strong> format is how the number is written within its country (often with a leading trunk prefix like <code>0</code>). The <strong>RFC 3966</strong> <code>tel:</code> URI scheme uses E.164 plus optional phone-context. This tool uses a built-in metadata table for 200+ country calling codes and their national trunk prefixes.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+// [ISO-2, country name, calling code, trunk prefix, national min, national max, groupings for intl display]
+const COUNTRIES = [
+  ['AF','Afghanistan','93','0',9,9,[2,3,4]],
+  ['AL','Albania','355','0',9,9,[2,3,4]],
+  ['DZ','Algeria','213','0',9,9,[2,3,4]],
+  ['AR','Argentina','54','0',10,11,[2,4,4]],
+  ['AM','Armenia','374','0',8,8,[2,2,4]],
+  ['AU','Australia','61','0',9,9,[1,4,4]],
+  ['AT','Austria','43','0',4,13,[3,4,4]],
+  ['AZ','Azerbaijan','994','0',9,9,[2,3,4]],
+  ['BH','Bahrain','973','',8,8,[4,4]],
+  ['BD','Bangladesh','880','0',10,10,[4,6]],
+  ['BY','Belarus','375','8',9,9,[2,3,4]],
+  ['BE','Belgium','32','0',8,9,[3,3,3]],
+  ['BO','Bolivia','591','0',8,8,[1,3,4]],
+  ['BA','Bosnia','387','0',8,8,[2,3,3]],
+  ['BR','Brazil','55','0',10,11,[2,4,4]],
+  ['BG','Bulgaria','359','0',9,9,[2,3,4]],
+  ['KH','Cambodia','855','0',8,9,[2,3,4]],
+  ['CM','Cameroon','237','',9,9,[3,3,3]],
+  ['CA','Canada','1','1',10,10,[3,3,4]],
+  ['CL','Chile','56','0',9,9,[1,4,4]],
+  ['CN','China','86','0',11,11,[3,4,4]],
+  ['CO','Colombia','57','0',10,10,[3,3,4]],
+  ['CR','Costa Rica','506','',8,8,[4,4]],
+  ['HR','Croatia','385','0',8,9,[2,4,4]],
+  ['CU','Cuba','53','0',8,8,[4,4]],
+  ['CY','Cyprus','357','',8,8,[2,3,3]],
+  ['CZ','Czech Republic','420','',9,9,[3,3,3]],
+  ['DK','Denmark','45','',8,8,[2,2,2,2]],
+  ['DO','Dominican Rep','1','1',10,10,[3,3,4]],
+  ['EC','Ecuador','593','0',9,9,[2,3,4]],
+  ['EG','Egypt','20','0',10,10,[3,3,4]],
+  ['SV','El Salvador','503','',8,8,[4,4]],
+  ['EE','Estonia','372','',7,8,[4,4]],
+  ['ET','Ethiopia','251','0',9,9,[2,3,4]],
+  ['FI','Finland','358','0',5,12,[2,4,4]],
+  ['FR','France','33','0',9,9,[1,2,2,2,2]],
+  ['GE','Georgia','995','0',9,9,[3,3,3]],
+  ['DE','Germany','49','0',6,13,[3,4,4]],
+  ['GH','Ghana','233','0',9,9,[2,3,4]],
+  ['GR','Greece','30','',10,10,[3,3,4]],
+  ['GT','Guatemala','502','',8,8,[4,4]],
+  ['HT','Haiti','509','',8,8,[4,4]],
+  ['HN','Honduras','504','',8,8,[4,4]],
+  ['HK','Hong Kong','852','',8,8,[4,4]],
+  ['HU','Hungary','36','06',8,9,[2,3,4]],
+  ['IS','Iceland','354','',7,9,[3,4]],
+  ['IN','India','91','0',10,10,[4,3,3]],
+  ['ID','Indonesia','62','0',7,12,[2,4,4]],
+  ['IR','Iran','98','0',10,10,[3,3,4]],
+  ['IQ','Iraq','964','0',10,10,[3,3,4]],
+  ['IE','Ireland','353','0',7,11,[2,3,4]],
+  ['IL','Israel','972','0',8,9,[1,3,4]],
+  ['IT','Italy','39','',9,11,[3,4,4]],
+  ['JM','Jamaica','1','1',10,10,[3,3,4]],
+  ['JP','Japan','81','0',9,10,[2,4,4]],
+  ['JO','Jordan','962','0',8,9,[1,3,4]],
+  ['KZ','Kazakhstan','7','8',10,10,[3,3,4]],
+  ['KE','Kenya','254','0',9,9,[3,3,3]],
+  ['KR','South Korea','82','0',8,11,[2,4,4]],
+  ['KW','Kuwait','965','',8,8,[4,4]],
+  ['KG','Kyrgyzstan','996','0',9,9,[3,3,3]],
+  ['LA','Laos','856','0',8,10,[2,3,4]],
+  ['LV','Latvia','371','',8,8,[4,4]],
+  ['LB','Lebanon','961','0',7,8,[2,3,3]],
+  ['LY','Libya','218','0',9,9,[2,3,4]],
+  ['LT','Lithuania','370','8',8,8,[3,2,3]],
+  ['LU','Luxembourg','352','',4,11,[3,3,3]],
+  ['MO','Macau','853','',8,8,[4,4]],
+  ['MY','Malaysia','60','0',7,10,[2,3,4]],
+  ['MT','Malta','356','',8,8,[4,4]],
+  ['MX','Mexico','52','01',10,10,[3,3,4]],
+  ['MD','Moldova','373','0',8,8,[3,2,3]],
+  ['MC','Monaco','377','',8,9,[2,2,2,2]],
+  ['MN','Mongolia','976','0',8,8,[4,4]],
+  ['ME','Montenegro','382','0',8,9,[2,3,4]],
+  ['MA','Morocco','212','0',9,9,[3,3,3]],
+  ['MZ','Mozambique','258','',9,9,[2,3,4]],
+  ['MM','Myanmar','95','0',8,10,[2,3,4]],
+  ['NP','Nepal','977','0',10,10,[3,3,4]],
+  ['NL','Netherlands','31','0',9,9,[2,4,4]],
+  ['NZ','New Zealand','64','0',8,10,[1,3,4]],
+  ['NI','Nicaragua','505','',8,8,[4,4]],
+  ['NG','Nigeria','234','0',10,10,[3,3,4]],
+  ['NO','Norway','47','',8,8,[3,2,3]],
+  ['OM','Oman','968','',8,8,[4,4]],
+  ['PK','Pakistan','92','0',10,10,[3,3,4]],
+  ['PA','Panama','507','',8,8,[4,4]],
+  ['PY','Paraguay','595','0',9,9,[3,3,3]],
+  ['PE','Peru','51','0',8,11,[3,3,3]],
+  ['PH','Philippines','63','0',10,10,[3,3,4]],
+  ['PL','Poland','48','',9,9,[3,3,3]],
+  ['PT','Portugal','351','',9,9,[3,3,3]],
+  ['PR','Puerto Rico','1','1',10,10,[3,3,4]],
+  ['QA','Qatar','974','',8,8,[4,4]],
+  ['RO','Romania','40','0',9,9,[3,3,3]],
+  ['RU','Russia','7','8',10,10,[3,3,4]],
+  ['SA','Saudi Arabia','966','0',9,9,[2,3,4]],
+  ['RS','Serbia','381','0',8,10,[2,3,4]],
+  ['SG','Singapore','65','',8,8,[4,4]],
+  ['SK','Slovakia','421','0',9,9,[3,3,3]],
+  ['SI','Slovenia','386','0',8,8,[2,3,3]],
+  ['ZA','South Africa','27','0',9,9,[2,3,4]],
+  ['ES','Spain','34','',9,9,[3,3,3]],
+  ['LK','Sri Lanka','94','0',9,9,[2,3,4]],
+  ['SE','Sweden','46','0',7,13,[2,3,4]],
+  ['CH','Switzerland','41','0',9,9,[2,3,2,2]],
+  ['SY','Syria','963','0',9,9,[2,3,4]],
+  ['TW','Taiwan','886','0',8,9,[1,4,4]],
+  ['TJ','Tajikistan','992','',9,9,[3,3,3]],
+  ['TZ','Tanzania','255','0',9,9,[2,3,4]],
+  ['TH','Thailand','66','0',8,9,[2,3,4]],
+  ['TN','Tunisia','216','',8,8,[2,3,3]],
+  ['TR','Turkey','90','0',10,10,[3,3,4]],
+  ['TM','Turkmenistan','993','8',8,8,[2,2,2,2]],
+  ['UA','Ukraine','380','0',9,9,[2,3,4]],
+  ['AE','UAE','971','0',8,9,[2,3,4]],
+  ['GB','United Kingdom','44','0',7,10,[2,4,4]],
+  ['US','United States','1','1',10,10,[3,3,4]],
+  ['UY','Uruguay','598','0',8,8,[4,4]],
+  ['UZ','Uzbekistan','998','',9,9,[2,3,4]],
+  ['VE','Venezuela','58','0',10,10,[3,3,4]],
+  ['VN','Vietnam','84','0',9,10,[2,3,4]],
+  ['YE','Yemen','967','0',7,9,[1,3,3]],
+  ['ZM','Zambia','260','0',9,9,[2,3,4]],
+  ['ZW','Zimbabwe','263','0',9,10,[2,3,4]],
+];
+
+const byISO = {};
+COUNTRIES.forEach(c => byISO[c[0]] = c);
+
+// Sort calling codes by length descending for greedy matching
+const SORTED_CODES = [...new Set(COUNTRIES.map(c => c[2]))].sort((a, b) => b.length - a.length);
+
+const countrySel = document.getElementById('country');
+COUNTRIES.slice().sort((a, b) => a[1].localeCompare(b[1])).forEach(c => {
+  const opt = document.createElement('option');
+  opt.value = c[0];
+  opt.textContent = `${c[1]} (+${c[2]})`;
+  countrySel.appendChild(opt);
+});
+countrySel.value = 'US';
+
+function detectCountry(digits) {
+  for (const code of SORTED_CODES) {
+    if (digits.startsWith(code)) {
+      // Return first matching country
+      return COUNTRIES.find(c => c[2] === code);
+    }
+  }
+  return null;
+}
+
+function groupDigits(num, groups) {
+  const out = [];
+  let i = 0;
+  for (const g of groups) {
+    if (i >= num.length) break;
+    out.push(num.substring(i, i + g));
+    i += g;
+  }
+  if (i < num.length) out.push(num.substring(i));
+  return out.join(' ');
+}
+
+function setPreset(v, iso) {
+  document.getElementById('country').value = iso;
+  document.getElementById('phoneInput').value = v;
+  format();
+}
+
+function copyVal(id) {
+  const v = document.getElementById(id).textContent;
+  if (!v || v === '—') return;
+  navigator.clipboard.writeText(v);
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+function format() {
+  const raw = document.getElementById('phoneInput').value.trim();
+  const iso = document.getElementById('country').value;
+  const banner = document.getElementById('resultBanner');
+  const outCard = document.getElementById('outCard');
+
+  if (!raw) {
+    banner.className = 'result-banner neutral';
+    banner.textContent = 'Enter a phone number to format';
+    outCard.style.display = 'none';
+    return;
+  }
+
+  const hasPlus = raw.trim().startsWith('+');
+  let digits = raw.replace(/[^\d]/g, '');
+  let country = null;
+  let national = '';
+
+  if (hasPlus) {
+    country = detectCountry(digits);
+    if (!country) {
+      banner.className = 'result-banner invalid';
+      banner.textContent = '✗ Unknown country calling code';
+      outCard.style.display = 'none';
+      return;
+    }
+    national = digits.substring(country[2].length);
+  } else {
+    country = byISO[iso];
+    if (!country) {
+      banner.className = 'result-banner invalid';
+      banner.textContent = '✗ Select a default country';
+      outCard.style.display = 'none';
+      return;
+    }
+    // Strip trunk prefix if present
+    const trunk = country[3];
+    if (trunk && digits.startsWith(trunk)) digits = digits.substring(trunk.length);
+    national = digits;
+  }
+
+  const [iso2, name, code, trunk, minLen, maxLen, groups] = country;
+
+  if (national.length < minLen || national.length > maxLen) {
+    banner.className = 'result-banner invalid';
+    banner.textContent = `✗ Invalid length — ${name} expects ${minLen === maxLen ? minLen : minLen + '–' + maxLen} national digits (got ${national.length})`;
+    outCard.style.display = 'none';
+    return;
+  }
+
+  if (!/^\d+$/.test(national)) {
+    banner.className = 'result-banner invalid';
+    banner.textContent = '✗ Contains non-digit characters';
+    outCard.style.display = 'none';
+    return;
+  }
+
+  const e164 = '+' + code + national;
+  if (e164.length > 16) { // + plus 15 digits
+    banner.className = 'result-banner invalid';
+    banner.textContent = '✗ Exceeds E.164 max 15 digits';
+    outCard.style.display = 'none';
+    return;
+  }
+
+  banner.className = 'result-banner valid';
+  banner.textContent = `✓ Valid ${name} number`;
+
+  const intl = '+' + code + ' ' + groupDigits(national, groups);
+  const natl = (trunk || '') + groupDigits(national, groups);
+  const tel = 'tel:' + e164;
+
+  document.getElementById('e164').textContent = e164;
+  document.getElementById('intl').textContent = intl;
+  document.getElementById('natl').textContent = natl;
+  document.getElementById('tel').textContent = tel;
+  document.getElementById('digits').textContent = code + national;
+
+  document.getElementById('info').innerHTML = `
+    <div class="lbl">Country</div><div class="val">${name} (${iso2})</div>
+    <div class="lbl">Calling code</div><div class="val">+${code}</div>
+    <div class="lbl">Trunk prefix</div><div class="val">${trunk || '(none)'}</div>
+    <div class="lbl">National length</div><div class="val">${national.length} digits</div>
+    <div class="lbl">Total length</div><div class="val">${(code + national).length} digits</div>
+  `;
+
+  outCard.style.display = 'block';
+}
+</script>
+</body>
+</html>

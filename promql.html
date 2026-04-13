@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PromQL Query Builder — Prometheus Expression Generator</title>
+<meta name="description" content="Build PromQL queries visually — pick metrics, add label matchers, range vectors, aggregations, and rate()/histogram helpers. 100% client-side.">
+<meta name="keywords" content="PromQL, Prometheus, query builder, rate, histogram_quantile, aggregation, label matcher">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/promql.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form-grid { display: grid; gap: 12px; }
+  .form-row { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: center; }
+  .form-row label { font-size: .85rem; color: var(--muted); font-weight: 600; }
+  .form-row input, .form-row select {
+    width: 100%; padding: 8px 10px; font-family: var(--mono); font-size: .88rem;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text);
+  }
+  .matchers { display: grid; gap: 6px; }
+  .matcher {
+    display: grid; grid-template-columns: 1fr 60px 1fr auto; gap: 6px; align-items: center;
+  }
+  .matcher input, .matcher select {
+    padding: 6px 8px; font-family: var(--mono); font-size: .82rem;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text);
+  }
+  .matcher button.del {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    padding: 4px 8px; border-radius: var(--radius); cursor: pointer; font-size: .85rem;
+  }
+  .query-out {
+    font-family: var(--mono); font-size: 1rem; padding: 16px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    word-break: break-all; line-height: 1.5; white-space: pre-wrap;
+  }
+  .hint { font-size: .78rem; color: var(--muted); margin-top: 4px; }
+  .examples { display: grid; gap: 8px; }
+  .example-btn {
+    text-align: left; padding: 10px 12px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
+    font-family: var(--mono); font-size: .82rem; color: var(--text);
+  }
+  .example-btn:hover { background: var(--surface2); border-color: var(--border2); }
+  .example-btn .ex-title { font-family: var(--sans); font-weight: 600; font-size: .85rem; margin-bottom: 4px; color: var(--text); }
+  .btn-add { margin-top: 4px; }
+  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  @media (max-width: 768px) {
+    .form-row { grid-template-columns: 1fr; gap: 4px; }
+    .matcher { grid-template-columns: 1fr 1fr 1fr auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>PromQL Query Builder</h1>
+<p class="subtitle">Visually compose Prometheus queries — pick metrics, label matchers, range vectors, rate functions, aggregations, and histogram quantiles</p>
+
+<div class="card">
+  <h2>Metric</h2>
+  <div class="form-grid">
+    <div class="form-row">
+      <label>Metric name</label>
+      <input type="text" id="metric" placeholder="http_requests_total" oninput="build()">
+    </div>
+    <div class="form-row">
+      <label>Label matchers</label>
+      <div>
+        <div class="matchers" id="matchers"></div>
+        <button class="btn btn-secondary btn-add" onclick="addMatcher()">+ Add matcher</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Function wrapper</h2>
+  <div class="form-grid">
+    <div class="form-row">
+      <label>Range function</label>
+      <select id="rangeFn" onchange="build()">
+        <option value="">none (instant vector)</option>
+        <option value="rate">rate()</option>
+        <option value="irate">irate()</option>
+        <option value="increase">increase()</option>
+        <option value="delta">delta()</option>
+        <option value="idelta">idelta()</option>
+        <option value="avg_over_time">avg_over_time()</option>
+        <option value="sum_over_time">sum_over_time()</option>
+        <option value="min_over_time">min_over_time()</option>
+        <option value="max_over_time">max_over_time()</option>
+        <option value="stddev_over_time">stddev_over_time()</option>
+        <option value="count_over_time">count_over_time()</option>
+        <option value="quantile_over_time">quantile_over_time()</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>Range duration</label>
+      <input type="text" id="range" value="5m" oninput="build()" placeholder="5m, 1h, 30s, 1d">
+    </div>
+    <div class="form-row">
+      <label>Quantile (φ)</label>
+      <input type="text" id="quantile" value="0.95" oninput="build()" placeholder="0.95">
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Aggregation</h2>
+  <div class="form-grid">
+    <div class="form-row">
+      <label>Aggregation operator</label>
+      <select id="aggFn" onchange="build()">
+        <option value="">none</option>
+        <option value="sum">sum</option>
+        <option value="avg">avg</option>
+        <option value="min">min</option>
+        <option value="max">max</option>
+        <option value="count">count</option>
+        <option value="stddev">stddev</option>
+        <option value="stdvar">stdvar</option>
+        <option value="topk">topk</option>
+        <option value="bottomk">bottomk</option>
+        <option value="group">group</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>by / without</label>
+      <select id="aggMod" onchange="build()">
+        <option value="">—</option>
+        <option value="by">by</option>
+        <option value="without">without</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>Grouping labels</label>
+      <input type="text" id="aggLabels" placeholder="instance, job" oninput="build()">
+    </div>
+    <div class="form-row">
+      <label>topk / bottomk k</label>
+      <input type="text" id="topk" value="5" oninput="build()">
+    </div>
+    <div class="form-row">
+      <label>Histogram quantile</label>
+      <select id="histq" onchange="build()">
+        <option value="">no</option>
+        <option value="yes">wrap with histogram_quantile()</option>
+      </select>
+      <div></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Generated PromQL</h2>
+  <div class="query-out" id="out">http_requests_total</div>
+  <div class="row-actions">
+    <button class="btn" onclick="copyOut()">Copy</button>
+    <button class="btn btn-secondary" onclick="reset()">Reset</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Common examples</h2>
+  <div class="examples" id="examples"></div>
+</div>
+
+<div class="card">
+  <h2>PromQL cheatsheet</h2>
+  <div style="font-size:.82rem;color:var(--muted);line-height:1.55">
+    <p><strong>Label matchers:</strong> <code>=</code> equal, <code>!=</code> not equal, <code>=~</code> regex match, <code>!~</code> regex not match.</p>
+    <p><strong>Range vector:</strong> <code>metric[5m]</code> — last 5 minutes of samples. Used with rate-like functions.</p>
+    <p><strong>rate() vs irate():</strong> rate() is a per-second average over the window; irate() uses only the last two points — more reactive, noisier.</p>
+    <p><strong>histogram_quantile:</strong> <code>histogram_quantile(0.95, sum by (le) (rate(my_bucket[5m])))</code> — p95 latency from a histogram.</p>
+    <p><strong>Aggregation:</strong> <code>sum by (job) (...)</code> collapses all labels except the ones listed.</p>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const OPS = ['=', '!=', '=~', '!~'];
+const matchersEl = document.getElementById('matchers');
+
+function createMatcher(label = '', op = '=', value = '') {
+  const row = document.createElement('div');
+  row.className = 'matcher';
+  row.innerHTML = `
+    <input type="text" placeholder="label" value="${label}">
+    <select>${OPS.map(o => `<option ${o === op ? 'selected' : ''}>${o}</option>`).join('')}</select>
+    <input type="text" placeholder="value" value="${value}">
+    <button class="del" title="remove">×</button>
+  `;
+  row.querySelectorAll('input,select').forEach(el => el.addEventListener('input', build));
+  row.querySelectorAll('select').forEach(el => el.addEventListener('change', build));
+  row.querySelector('.del').addEventListener('click', () => { row.remove(); build(); });
+  matchersEl.appendChild(row);
+}
+
+function addMatcher() { createMatcher(); build(); }
+
+function collectMatchers() {
+  const rows = matchersEl.querySelectorAll('.matcher');
+  const out = [];
+  rows.forEach(r => {
+    const [l, op, v] = [r.children[0].value.trim(), r.children[1].value, r.children[2].value];
+    if (l) out.push(`${l}${op}"${v.replace(/"/g, '\\"')}"`);
+  });
+  return out;
+}
+
+function build() {
+  const metric = document.getElementById('metric').value.trim() || 'metric_name';
+  const matchers = collectMatchers();
+  const selector = matchers.length ? `${metric}{${matchers.join(', ')}}` : metric;
+
+  const rangeFn = document.getElementById('rangeFn').value;
+  const range = document.getElementById('range').value.trim() || '5m';
+  const quantile = document.getElementById('quantile').value.trim() || '0.95';
+
+  let expr;
+  if (rangeFn) {
+    const rangeVec = `${selector}[${range}]`;
+    if (rangeFn === 'quantile_over_time') {
+      expr = `quantile_over_time(${quantile}, ${rangeVec})`;
+    } else {
+      expr = `${rangeFn}(${rangeVec})`;
+    }
+  } else {
+    expr = selector;
+  }
+
+  const aggFn = document.getElementById('aggFn').value;
+  const aggMod = document.getElementById('aggMod').value;
+  const aggLabels = document.getElementById('aggLabels').value.trim();
+  const k = document.getElementById('topk').value.trim() || '5';
+  if (aggFn) {
+    const groupClause = aggMod && aggLabels ? ` ${aggMod} (${aggLabels})` : '';
+    if (aggFn === 'topk' || aggFn === 'bottomk') {
+      expr = `${aggFn}(${k}, ${expr})${groupClause}`;
+    } else {
+      expr = `${aggFn}${groupClause}(${expr})`;
+    }
+  }
+
+  if (document.getElementById('histq').value === 'yes') {
+    expr = `histogram_quantile(${quantile}, ${expr})`;
+  }
+
+  document.getElementById('out').textContent = expr;
+}
+
+function copyOut() {
+  navigator.clipboard.writeText(document.getElementById('out').textContent);
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+function reset() {
+  document.getElementById('metric').value = '';
+  matchersEl.innerHTML = '';
+  document.getElementById('rangeFn').value = '';
+  document.getElementById('range').value = '5m';
+  document.getElementById('quantile').value = '0.95';
+  document.getElementById('aggFn').value = '';
+  document.getElementById('aggMod').value = '';
+  document.getElementById('aggLabels').value = '';
+  document.getElementById('topk').value = '5';
+  document.getElementById('histq').value = '';
+  build();
+}
+
+const EXAMPLES = [
+  {
+    title: 'Requests per second by status code',
+    q: 'sum by (status) (rate(http_requests_total[5m]))',
+    state: { metric: 'http_requests_total', rangeFn: 'rate', range: '5m', aggFn: 'sum', aggMod: 'by', aggLabels: 'status' }
+  },
+  {
+    title: 'p95 request latency from histogram',
+    q: 'histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))',
+    state: { metric: 'http_request_duration_seconds_bucket', rangeFn: 'rate', range: '5m', aggFn: 'sum', aggMod: 'by', aggLabels: 'le', histq: 'yes', quantile: '0.95' }
+  },
+  {
+    title: 'Top 5 memory-consuming containers',
+    q: 'topk(5, container_memory_usage_bytes{namespace="prod"})',
+    state: { metric: 'container_memory_usage_bytes', matchers: [['namespace', '=', 'prod']], aggFn: 'topk', topk: '5' }
+  },
+  {
+    title: 'Error rate above 5%',
+    q: 'sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))',
+    state: { metric: 'http_requests_total', matchers: [['status', '=~', '5..']], rangeFn: 'rate', range: '5m', aggFn: 'sum' }
+  },
+  {
+    title: 'Average CPU usage per node',
+    q: 'avg by (instance) (rate(node_cpu_seconds_total{mode!="idle"}[5m]))',
+    state: { metric: 'node_cpu_seconds_total', matchers: [['mode', '!=', 'idle']], rangeFn: 'rate', range: '5m', aggFn: 'avg', aggMod: 'by', aggLabels: 'instance' }
+  }
+];
+
+const exEl = document.getElementById('examples');
+EXAMPLES.forEach(ex => {
+  const btn = document.createElement('button');
+  btn.className = 'example-btn';
+  btn.innerHTML = `<div class="ex-title">${ex.title}</div>${ex.q}`;
+  btn.addEventListener('click', () => {
+    reset();
+    const s = ex.state;
+    if (s.metric) document.getElementById('metric').value = s.metric;
+    if (s.matchers) s.matchers.forEach(m => createMatcher(m[0], m[1], m[2]));
+    if (s.rangeFn) document.getElementById('rangeFn').value = s.rangeFn;
+    if (s.range) document.getElementById('range').value = s.range;
+    if (s.quantile) document.getElementById('quantile').value = s.quantile;
+    if (s.aggFn) document.getElementById('aggFn').value = s.aggFn;
+    if (s.aggMod) document.getElementById('aggMod').value = s.aggMod;
+    if (s.aggLabels) document.getElementById('aggLabels').value = s.aggLabels;
+    if (s.topk) document.getElementById('topk').value = s.topk;
+    if (s.histq) document.getElementById('histq').value = s.histq;
+    build();
+  });
+  exEl.appendChild(btn);
+});
+
+// Initialize
+createMatcher('job', '=', 'api');
+createMatcher('status', '=~', '2..');
+document.getElementById('metric').value = 'http_requests_total';
+document.getElementById('rangeFn').value = 'rate';
+document.getElementById('aggFn').value = 'sum';
+document.getElementById('aggMod').value = 'by';
+document.getElementById('aggLabels').value = 'status';
+build();
+</script>
+</body>
+</html>
