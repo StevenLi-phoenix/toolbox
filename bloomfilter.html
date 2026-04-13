@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bloom Filter Calculator — Size, Hash &amp; FPR | DevToolbox</title>
+<meta name="description" content="Calculate optimal Bloom filter parameters: bit array size, hash function count, false-positive rate, and memory cost from your expected item count.">
+<meta name="keywords" content="bloom filter, calculator, false positive rate, hash functions, bit array, probabilistic, data structure">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="Bloom Filter Calculator">
+<meta property="og:description" content="Tune Bloom filter size, hash count, and false-positive rate from any two parameters.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/bloomfilter.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bloomfilter.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.mode-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; max-width: 560px; }
+.mode-btn { flex: 1; padding: 10px; border: none; background: var(--surface); color: var(--muted); font-weight: 600; font-size: .82rem; cursor: pointer; }
+.mode-btn.active { background: var(--accent); color: #fff; }
+.inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 16px; }
+.field label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+.field .hint { font-size: .72rem; color: var(--muted); margin-top: 4px; line-height: 1.3; }
+.field input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; box-sizing: border-box; }
+.field input:disabled { opacity: .55; cursor: not-allowed; }
+.results { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.result { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.result .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.result .value { font-family: var(--mono); font-weight: 700; font-size: 1.15rem; color: var(--text); word-break: break-all; }
+.result .sub { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+.result.highlight { border-color: var(--accent); background: rgba(99, 102, 241, .06); }
+.curve { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 24px; }
+.curve h3 { margin: 0 0 12px; font-size: .9rem; }
+canvas { width: 100%; max-width: 100%; height: 240px; display: block; }
+.formulas { padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-size: .82rem; line-height: 1.6; }
+.formulas h3 { margin: 0 0 8px; font-size: .9rem; }
+.formulas code { font-family: var(--mono); background: var(--bg); padding: 1px 6px; border-radius: 4px; font-size: .82rem; }
+.formulas ul { margin: 6px 0 0 18px; padding: 0; }
+@media (max-width: 768px) {
+  .inputs { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<header>
+<h1>🌸 Bloom Filter Calculator</h1>
+<p class="subtitle">Size a Bloom filter for your workload — pick any two parameters and the rest are derived from the optimal formulas.</p>
+</header>
+
+<div class="mode-toggle" id="modeToggle">
+<button class="mode-btn active" data-mode="np">Items + FPR → Size</button>
+<button class="mode-btn" data-mode="nm">Items + Bits → FPR</button>
+<button class="mode-btn" data-mode="mp">Bits + FPR → Items</button>
+</div>
+
+<div class="inputs">
+<div class="field">
+<label for="n">Expected Items (n)</label>
+<input type="number" id="n" value="1000000" min="1">
+<div class="hint">How many distinct elements you plan to insert.</div>
+</div>
+<div class="field">
+<label for="p">False Positive Rate (p)</label>
+<input type="number" id="p" value="0.01" min="0.0000000001" max="0.999" step="0.001">
+<div class="hint">As a decimal, e.g. 0.01 = 1% false positives.</div>
+</div>
+<div class="field">
+<label for="m">Bit Array Size (m)</label>
+<input type="number" id="m" min="1">
+<div class="hint">Total bits in the bit array. Computed when disabled.</div>
+</div>
+</div>
+
+<div class="results">
+<div class="result highlight"><div class="label">Bit Array Size (m)</div><div class="value" id="rM">—</div><div class="sub" id="rMb">—</div></div>
+<div class="result highlight"><div class="label">Hash Functions (k)</div><div class="value" id="rK">—</div><div class="sub">optimal: ⌈(m/n)·ln 2⌉</div></div>
+<div class="result"><div class="label">Items (n)</div><div class="value" id="rN">—</div></div>
+<div class="result"><div class="label">False Positive Rate</div><div class="value" id="rP">—</div><div class="sub" id="rPp">—</div></div>
+<div class="result"><div class="label">Bits per Item</div><div class="value" id="rBpi">—</div><div class="sub">m / n</div></div>
+<div class="result"><div class="label">Memory</div><div class="value" id="rMem">—</div><div class="sub">m / 8 bytes</div></div>
+</div>
+
+<div class="curve">
+<h3>False Positive Rate vs. Items Inserted</h3>
+<canvas id="curve"></canvas>
+</div>
+
+<div class="formulas">
+<h3>Formulas</h3>
+<ul>
+<li>Optimal bits: <code>m = -n · ln(p) / (ln 2)²</code></li>
+<li>Optimal hashes: <code>k = (m/n) · ln 2</code></li>
+<li>FPR for inserted i items: <code>p ≈ (1 - e^(-k·i/m))^k</code></li>
+<li>Max items for target p: <code>n = m · (ln 2)² / -ln(p)</code></li>
+</ul>
+</div>
+
+<footer style="margin-top:32px; text-align:center; font-size:.82rem; color:var(--muted);">
+Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const ln2 = Math.log(2);
+const ln2sq = ln2 * ln2;
+
+let mode = 'np';
+
+function fmtBytes(bytes) {
+  if (bytes < 1024) return bytes.toFixed(0) + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+  return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+
+function fmtNum(x) {
+  if (!isFinite(x)) return '∞';
+  if (x >= 1e9) return (x / 1e9).toFixed(2) + 'B';
+  if (x >= 1e6) return (x / 1e6).toFixed(2) + 'M';
+  if (x >= 1e3) return (x / 1e3).toFixed(2) + 'K';
+  return Math.round(x).toLocaleString();
+}
+
+function fmtPct(p) {
+  if (!isFinite(p) || p <= 0) return '0%';
+  if (p >= 0.01) return (p * 100).toFixed(3) + '%';
+  if (p >= 1e-6) return (p * 100).toExponential(2) + '%';
+  return p.toExponential(2);
+}
+
+function setMode(newMode) {
+  mode = newMode;
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  $('n').disabled = mode === 'mp';
+  $('p').disabled = mode === 'nm';
+  $('m').disabled = mode === 'np';
+  compute();
+}
+
+function compute() {
+  const n = parseFloat($('n').value);
+  const p = parseFloat($('p').value);
+  const mIn = parseFloat($('m').value);
+  let resN = n, resP = p, resM = mIn;
+
+  if (mode === 'np') {
+    if (!(n > 0) || !(p > 0 && p < 1)) return;
+    resM = Math.ceil(-n * Math.log(p) / ln2sq);
+    $('m').value = resM;
+  } else if (mode === 'nm') {
+    if (!(n > 0) || !(mIn > 0)) return;
+    const k = Math.max(1, Math.round((mIn / n) * ln2));
+    resP = Math.pow(1 - Math.exp(-k * n / mIn), k);
+    $('p').value = resP.toExponential(4);
+  } else if (mode === 'mp') {
+    if (!(mIn > 0) || !(p > 0 && p < 1)) return;
+    resN = Math.floor(mIn * ln2sq / -Math.log(p));
+    $('n').value = resN;
+  }
+
+  const k = Math.max(1, Math.round((resM / resN) * ln2));
+
+  $('rM').textContent = fmtNum(resM) + ' bits';
+  $('rMb').textContent = resM.toLocaleString() + ' bits';
+  $('rK').textContent = k;
+  $('rN').textContent = fmtNum(resN);
+  $('rP').textContent = fmtPct(resP);
+  $('rPp').textContent = '1 in ' + Math.round(1 / resP).toLocaleString();
+  $('rBpi').textContent = (resM / resN).toFixed(2);
+  $('rMem').textContent = fmtBytes(resM / 8);
+
+  drawCurve(resN, resM, k);
+}
+
+function drawCurve(n, m, k) {
+  const cv = $('curve');
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = cv.clientWidth, cssH = 240;
+  cv.width = cssW * dpr; cv.height = cssH * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const padL = 56, padR = 16, padT = 12, padB = 32;
+  const w = cssW - padL - padR, h = cssH - padT - padB;
+  const css = getComputedStyle(document.body);
+  const text = css.getPropertyValue('--muted') || '#888';
+  const accent = css.getPropertyValue('--accent') || '#6366f1';
+  const grid = css.getPropertyValue('--border') || '#ddd';
+
+  ctx.strokeStyle = grid; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + h); ctx.lineTo(padL + w, padT + h);
+  ctx.stroke();
+
+  ctx.fillStyle = text; ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (h * i / 4);
+    const v = (1 - i / 4);
+    ctx.fillText((v * 100).toFixed(0) + '%', padL - 6, y);
+    ctx.strokeStyle = grid; ctx.beginPath();
+    ctx.moveTo(padL, y); ctx.lineTo(padL + w, y); ctx.stroke();
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let i = 0; i <= 5; i++) {
+    const x = padL + (w * i / 5);
+    const items = (n * 1.5) * (i / 5);
+    ctx.fillText(fmtNum(items), x, padT + h + 6);
+  }
+
+  ctx.strokeStyle = accent; ctx.lineWidth = 2;
+  ctx.beginPath();
+  const maxI = n * 1.5;
+  for (let px = 0; px <= w; px++) {
+    const i = (px / w) * maxI;
+    const p = Math.pow(1 - Math.exp(-k * i / m), k);
+    const x = padL + px;
+    const y = padT + h - p * h;
+    if (px === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // marker for n
+  const xn = padL + (n / maxI) * w;
+  const pn = Math.pow(1 - Math.exp(-k * n / m), k);
+  const yn = padT + h - pn * h;
+  ctx.fillStyle = accent;
+  ctx.beginPath(); ctx.arc(xn, yn, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = accent; ctx.setLineDash([2, 3]);
+  ctx.beginPath(); ctx.moveTo(xn, padT); ctx.lineTo(xn, padT + h); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+document.querySelectorAll('.mode-btn').forEach(b => {
+  b.addEventListener('click', () => setMode(b.dataset.mode));
+});
+['n', 'p', 'm'].forEach(id => $(id).addEventListener('input', compute));
+window.addEventListener('resize', () => compute());
+
+setMode('np');
+</script>
+</body>
+</html>
