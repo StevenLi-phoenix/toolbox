@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vCard Builder — Free Online .vcf Generator</title>
+<meta name="description" content="Build a vCard 3.0 / 4.0 contact file (.vcf) in your browser. Fill in name, phone, email, address, organization, URLs, and download or share via QR code.">
+<meta name="keywords" content="vcard, vcf, contact card, phonebook, rfc 6350, qrcode contact">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/vcard.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .field input, .field select, .field textarea {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--sans); font-size: .88rem;
+  }
+  .field textarea { font-family: var(--mono); min-height: 70px; resize: vertical; }
+  .output { font-family: var(--mono); font-size: .82rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; white-space: pre-wrap; word-break: break-all; min-height: 200px; }
+  .row-btns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  #qr { display: flex; justify-content: center; padding: 14px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); }
+  #qr canvas { max-width: 100%; }
+  .version-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .version-row label { font-size: .82rem; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+  @media (max-width: 768px) {
+    .panels { display: block; }
+    .panels > * { margin-bottom: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>vCard Builder</h1>
+<p class="subtitle">Create a shareable contact card (<code>.vcf</code>) in vCard 3.0 or 4.0 format. Download, copy, or scan the QR code straight into any phone.</p>
+
+<div class="card">
+  <h2>Contact Details</h2>
+  <div class="version-row">
+    <label><input type="radio" name="ver" value="3.0" checked> vCard 3.0 (wide compat)</label>
+    <label><input type="radio" name="ver" value="4.0"> vCard 4.0 (RFC 6350)</label>
+  </div>
+  <div class="form-grid">
+    <div class="field"><label>First name</label><input id="first" placeholder="Ada"></div>
+    <div class="field"><label>Last name</label><input id="last" placeholder="Lovelace"></div>
+    <div class="field"><label>Middle</label><input id="middle" placeholder=""></div>
+    <div class="field"><label>Prefix</label><input id="prefix" placeholder="Dr."></div>
+    <div class="field"><label>Suffix</label><input id="suffix" placeholder=""></div>
+    <div class="field"><label>Nickname</label><input id="nick" placeholder=""></div>
+    <div class="field"><label>Organization</label><input id="org" placeholder="Analytical Engine Co."></div>
+    <div class="field"><label>Title</label><input id="title" placeholder="Mathematician"></div>
+    <div class="field"><label>Mobile phone</label><input id="phoneCell" placeholder="+1 555 123 4567"></div>
+    <div class="field"><label>Work phone</label><input id="phoneWork" placeholder=""></div>
+    <div class="field"><label>Home phone</label><input id="phoneHome" placeholder=""></div>
+    <div class="field"><label>Email (personal)</label><input id="emailHome" placeholder="ada@example.com"></div>
+    <div class="field"><label>Email (work)</label><input id="emailWork" placeholder=""></div>
+    <div class="field"><label>Website</label><input id="url" placeholder="https://example.com"></div>
+    <div class="field"><label>Birthday (YYYY-MM-DD)</label><input id="bday" type="text" placeholder="1815-12-10"></div>
+    <div class="field"><label>Street</label><input id="street" placeholder="10 Downing St."></div>
+    <div class="field"><label>City</label><input id="city" placeholder="London"></div>
+    <div class="field"><label>Region / State</label><input id="region" placeholder=""></div>
+    <div class="field"><label>Postal code</label><input id="postal" placeholder="SW1A 2AA"></div>
+    <div class="field"><label>Country</label><input id="country" placeholder="UK"></div>
+  </div>
+  <div class="field" style="margin-top:12px"><label>Notes</label><textarea id="note" placeholder="Any free-form note…"></textarea></div>
+</div>
+
+<div class="panels">
+<div class="card">
+  <h2>vCard Output</h2>
+  <div class="output" id="out"></div>
+  <div class="row-btns">
+    <button class="btn" id="copy">Copy</button>
+    <button class="btn btn-secondary" id="download">Download .vcf</button>
+  </div>
+</div>
+<div class="card">
+  <h2>QR Code</h2>
+  <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Scan with a phone camera to instantly import this contact.</p>
+  <div id="qr"><canvas id="qrCanvas"></canvas></div>
+</div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+
+// vCard text escape per RFC 6350: backslash, semicolon, comma, newline
+function esc(s) {
+  return String(s || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\n/g, '\\n')
+    .replace(/,/g, '\\,')
+    .replace(/;/g, '\\;');
+}
+// Simpler: escape for N and ADR which use structured values
+function escField(s) { return esc(s); }
+
+function foldLine(line) {
+  // RFC 6350: lines SHOULD be folded at 75 octets
+  if (line.length <= 75) return line;
+  let out = line.slice(0, 75);
+  let rest = line.slice(75);
+  while (rest.length) {
+    out += '\r\n ' + rest.slice(0, 74);
+    rest = rest.slice(74);
+  }
+  return out;
+}
+
+function build() {
+  const v = document.querySelector('input[name="ver"]:checked').value;
+  const first = $('first').value.trim();
+  const last = $('last').value.trim();
+  const middle = $('middle').value.trim();
+  const prefix = $('prefix').value.trim();
+  const suffix = $('suffix').value.trim();
+  const fn = [prefix, first, middle, last, suffix].filter(Boolean).join(' ');
+  const n = [last, first, middle, prefix, suffix].map(escField).join(';');
+
+  const lines = ['BEGIN:VCARD', 'VERSION:' + v];
+  lines.push('N:' + n);
+  if (fn) lines.push('FN:' + esc(fn));
+  if ($('nick').value.trim()) lines.push('NICKNAME:' + esc($('nick').value.trim()));
+  if ($('org').value.trim()) lines.push('ORG:' + esc($('org').value.trim()));
+  if ($('title').value.trim()) lines.push('TITLE:' + esc($('title').value.trim()));
+
+  const addTel = (val, type) => {
+    if (!val.trim()) return;
+    if (v === '4.0') {
+      lines.push('TEL;TYPE=' + type + ';VALUE=uri:tel:' + val.trim().replace(/\s+/g, ''));
+    } else {
+      lines.push('TEL;TYPE=' + type + ':' + esc(val.trim()));
+    }
+  };
+  addTel($('phoneCell').value, 'CELL');
+  addTel($('phoneWork').value, 'WORK');
+  addTel($('phoneHome').value, 'HOME');
+
+  const addEmail = (val, type) => {
+    if (!val.trim()) return;
+    if (v === '4.0') lines.push('EMAIL;TYPE=' + type + ':' + esc(val.trim()));
+    else lines.push('EMAIL;TYPE=INTERNET,' + type + ':' + esc(val.trim()));
+  };
+  addEmail($('emailHome').value, 'HOME');
+  addEmail($('emailWork').value, 'WORK');
+
+  if ($('url').value.trim()) lines.push('URL:' + esc($('url').value.trim()));
+  if ($('bday').value.trim()) {
+    const b = $('bday').value.trim();
+    lines.push('BDAY:' + (v === '4.0' ? b.replace(/-/g, '') : b));
+  }
+
+  const street = $('street').value.trim();
+  const city = $('city').value.trim();
+  const region = $('region').value.trim();
+  const postal = $('postal').value.trim();
+  const country = $('country').value.trim();
+  if (street || city || region || postal || country) {
+    // ADR = po-box;ext-address;street;locality;region;postal-code;country
+    const fields = ['', '', street, city, region, postal, country].map(escField).join(';');
+    lines.push('ADR;TYPE=HOME:' + fields);
+  }
+  if ($('note').value.trim()) lines.push('NOTE:' + esc($('note').value.trim()));
+  lines.push('REV:' + new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, ''));
+  lines.push('END:VCARD');
+
+  return lines.map(foldLine).join('\r\n');
+}
+
+let qrTimer;
+async function render() {
+  const text = build();
+  $('out').textContent = text;
+  clearTimeout(qrTimer);
+  qrTimer = setTimeout(() => {
+    if (window.QRCode) {
+      QRCode.toCanvas($('qrCanvas'), text, { width: 260, margin: 1 }, err => {});
+    }
+  }, 120);
+}
+
+document.querySelectorAll('input, textarea, select').forEach(el => el.addEventListener('input', render));
+document.querySelectorAll('input[name="ver"]').forEach(el => el.addEventListener('change', render));
+
+$('copy').addEventListener('click', async () => {
+  await navigator.clipboard.writeText($('out').textContent);
+  const b = $('copy'); const old = b.textContent; b.textContent = 'Copied!';
+  setTimeout(() => b.textContent = old, 1200);
+});
+
+$('download').addEventListener('click', () => {
+  const name = ($('first').value.trim() + '_' + $('last').value.trim()).replace(/[^a-z0-9_-]/gi, '_') || 'contact';
+  const blob = new Blob([$('out').textContent], { type: 'text/vcard' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name + '.vcf';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// Seed with example
+$('first').value = 'Ada';
+$('last').value = 'Lovelace';
+$('org').value = 'Analytical Engine Co.';
+$('title').value = 'Mathematician';
+$('phoneCell').value = '+1 555 123 4567';
+$('emailHome').value = 'ada@example.com';
+$('url').value = 'https://example.com';
+render();
+</script>
+</body>
+</html>

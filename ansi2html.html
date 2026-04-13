@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ANSI → HTML Converter — Terminal Output to HTML</title>
+<meta name="description" content="Convert terminal output with ANSI escape codes into styled HTML. Supports SGR colors (3/4-bit, 8-bit, 24-bit), bold, italic, underline, and strike-through.">
+<meta name="keywords" content="ansi, terminal, colors, sgr, escape codes, html, convert, 256 color, truecolor">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ansi2html.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 200px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; background: var(--bg); color: var(--text); resize: vertical; }
+  .preview, .code-out {
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 14px;
+    font-family: var(--mono); font-size: .85rem; white-space: pre-wrap; word-break: break-word;
+    min-height: 200px; overflow-x: auto;
+  }
+  .preview.dark { background: #1e1e1e; color: #d4d4d4; }
+  .preview.light { background: #fafafa; color: #222; }
+  .code-out { background: var(--surface2); color: var(--text); white-space: pre; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .toolbar label { font-size: .82rem; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-size: .75rem; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); color: var(--text); cursor: pointer; font-family: var(--sans); }
+  .chip:hover { border-color: var(--text); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .tab { padding: 6px 14px; cursor: pointer; border: 1px solid transparent; border-bottom: none; border-radius: var(--radius) var(--radius) 0 0; font-size: .82rem; color: var(--muted); background: transparent; }
+  .tab.active { background: var(--surface2); border-color: var(--border); color: var(--text); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>ANSI → HTML Converter</h1>
+<p class="subtitle">Paste terminal output with ANSI escape sequences (<code>\x1b[…m</code>) and get a styled preview plus exportable HTML. Handles 16-color, 256-color, and 24-bit true color.</p>
+
+<div class="card">
+  <h2>ANSI Input</h2>
+  <textarea id="input" spellcheck="false">
+[38;5;214m╭─ Build Summary ──────────────╮[0m
+[32m✓[0m compiled [1msrc/main.js[0m in [33m42ms[0m
+[32m✓[0m bundled [1mstyles.css[0m in [33m18ms[0m
+[31m✗[0m 2 warnings, [33m1 hint[0m
+[38;2;100;200;255m[truecolor RGB(100,200,255)][0m
+[4munderlined[0m · [1;95mbold bright magenta[0m · [7minverse[0m · [9mstrike[0m
+[38;5;46mGreen 46[0m [38;5;196mRed 196[0m [48;5;235m[38;5;252mgrey bg[0m</textarea>
+  <p style="font-size:.78rem;color:var(--muted);margin-top:6px">Tip: you can paste raw output containing actual <code>ESC</code> (0x1B) characters, or literal <code>\e</code>, <code>\033</code>, <code>\x1b</code>, or <code>^[</code> prefixes &mdash; they all work.</p>
+  <div class="examples">
+    <button type="button" class="chip" data-ex="git">git log</button>
+    <button type="button" class="chip" data-ex="npm">npm output</button>
+    <button type="button" class="chip" data-ex="test">test runner</button>
+    <button type="button" class="chip" data-ex="256">256 palette</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Preview</h2>
+  <div class="toolbar">
+    <label>Theme:
+      <select id="theme">
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="inline" checked> Inline styles (portable HTML)</label>
+  </div>
+  <div id="preview" class="preview dark"></div>
+</div>
+
+<div class="card">
+  <h2>Output</h2>
+  <div class="tabs">
+    <button class="tab active" data-tab="html">HTML</button>
+    <button class="tab" data-tab="css">CSS (class mode)</button>
+  </div>
+  <div id="htmlTab">
+    <div class="code-out" id="htmlOut"></div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="copyHtml">Copy HTML</button></div>
+  </div>
+  <div id="cssTab" class="hidden">
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:6px">Use these classes when "Inline styles" is disabled.</p>
+    <div class="code-out" id="cssOut"></div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="copyCss">Copy CSS</button></div>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// xterm-256 palette
+const ANSI16_DARK = ['#000000','#cd3131','#0dbc79','#e5e510','#2472c8','#bc3fbc','#11a8cd','#e5e5e5'];
+const ANSI16_BRIGHT = ['#666666','#f14c4c','#23d18b','#f5f543','#3b8eea','#d670d6','#29b8db','#ffffff'];
+
+function xterm256(n) {
+  if (n < 16) return n < 8 ? ANSI16_DARK[n] : ANSI16_BRIGHT[n - 8];
+  if (n >= 232) {
+    const v = 8 + (n - 232) * 10;
+    return `rgb(${v},${v},${v})`;
+  }
+  n -= 16;
+  const r = Math.floor(n / 36), g = Math.floor((n % 36) / 6), b = n % 6;
+  const to = x => x === 0 ? 0 : 55 + x * 40;
+  return `rgb(${to(r)},${to(g)},${to(b)})`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Normalize different escape representations to real ESC (0x1B)
+function normalize(text) {
+  return text
+    .replace(/\^\[/g, '\x1b')
+    .replace(/\\e/g, '\x1b')
+    .replace(/\\033/g, '\x1b')
+    .replace(/\\x1[bB]/g, '\x1b')
+    .replace(/\\u001[bB]/g, '\x1b');
+}
+
+function parseSGR(codes, state) {
+  let i = 0;
+  while (i < codes.length) {
+    const c = codes[i];
+    if (c === 0) { state.bold = state.dim = state.italic = state.underline = state.inverse = state.strike = false; state.fg = null; state.bg = null; }
+    else if (c === 1) state.bold = true;
+    else if (c === 2) state.dim = true;
+    else if (c === 3) state.italic = true;
+    else if (c === 4) state.underline = true;
+    else if (c === 7) state.inverse = true;
+    else if (c === 9) state.strike = true;
+    else if (c === 22) { state.bold = false; state.dim = false; }
+    else if (c === 23) state.italic = false;
+    else if (c === 24) state.underline = false;
+    else if (c === 27) state.inverse = false;
+    else if (c === 29) state.strike = false;
+    else if (c >= 30 && c <= 37) state.fg = ANSI16_DARK[c - 30];
+    else if (c >= 90 && c <= 97) state.fg = ANSI16_BRIGHT[c - 90];
+    else if (c >= 40 && c <= 47) state.bg = ANSI16_DARK[c - 40];
+    else if (c >= 100 && c <= 107) state.bg = ANSI16_BRIGHT[c - 100];
+    else if (c === 39) state.fg = null;
+    else if (c === 49) state.bg = null;
+    else if (c === 38 || c === 48) {
+      const slot = c === 38 ? 'fg' : 'bg';
+      const mode = codes[i + 1];
+      if (mode === 5) {
+        state[slot] = xterm256(codes[i + 2] || 0);
+        i += 2;
+      } else if (mode === 2) {
+        state[slot] = `rgb(${codes[i+2]||0},${codes[i+3]||0},${codes[i+4]||0})`;
+        i += 4;
+      }
+    }
+    i++;
+  }
+}
+
+function stateToStyle(s) {
+  const parts = [];
+  let fg = s.fg, bg = s.bg;
+  if (s.inverse) { [fg, bg] = [bg || '#000', fg || '#fff']; }
+  if (fg) parts.push('color:' + fg);
+  if (bg) parts.push('background:' + bg);
+  if (s.bold) parts.push('font-weight:bold');
+  if (s.dim) parts.push('opacity:.65');
+  if (s.italic) parts.push('font-style:italic');
+  const deco = [];
+  if (s.underline) deco.push('underline');
+  if (s.strike) deco.push('line-through');
+  if (deco.length) parts.push('text-decoration:' + deco.join(' '));
+  return parts.join(';');
+}
+
+function convert(text, inline) {
+  const src = normalize(text);
+  const re = /\x1b\[([\d;]*)m/g;
+  let out = '';
+  let last = 0;
+  const state = { bold:false, dim:false, italic:false, underline:false, inverse:false, strike:false, fg:null, bg:null };
+  let openTag = false;
+
+  function flush(upto) {
+    const chunk = src.slice(last, upto);
+    if (!chunk) return;
+    const style = stateToStyle(state);
+    if (style) {
+      if (inline) out += `<span style="${style}">${escapeHtml(chunk)}</span>`;
+      else {
+        const cls = styleToClass(style);
+        out += `<span class="${cls}">${escapeHtml(chunk)}</span>`;
+      }
+    } else {
+      out += escapeHtml(chunk);
+    }
+  }
+
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    flush(m.index);
+    const codes = m[1].split(';').filter(Boolean).map(Number);
+    if (codes.length === 0) codes.push(0);
+    parseSGR(codes, state);
+    last = m.index + m[0].length;
+  }
+  flush(src.length);
+  return out;
+}
+
+// class mode
+const classMap = new Map();
+let classCounter = 0;
+function styleToClass(style) {
+  if (classMap.has(style)) return classMap.get(style);
+  const name = 'a' + (classCounter++);
+  classMap.set(style, name);
+  return name;
+}
+function buildCss() {
+  let out = '';
+  classMap.forEach((cls, style) => { out += `.${cls}{${style}}\n`; });
+  return out;
+}
+
+const EXAMPLES = {
+  git: "\x1b[33mcommit 3a2f4e1\x1b[m (\x1b[1;36mHEAD -> main\x1b[m, \x1b[1;31morigin/main\x1b[m)\nAuthor: Ada <ada@example.com>\nDate:   Tue Apr 13 10:24:00 2026\n\n    \x1b[32mAdd vCard builder tool\x1b[m",
+  npm: "\x1b[36m> toolbox@1.0.0 build\x1b[m\n\x1b[32m✓\x1b[m compiled \x1b[1msrc/main.js\x1b[m in \x1b[33m42ms\x1b[m\n\x1b[31merror\x1b[m Cannot resolve \x1b[1m'./missing'\x1b[m\n\x1b[33mwarn\x1b[m  deprecated API used",
+  test: "\x1b[1mPASS\x1b[m \x1b[2msrc/__tests__/\x1b[mparser.test.js\n  \x1b[32m✓\x1b[m parses empty string (2 ms)\n  \x1b[32m✓\x1b[m handles utf-8 (1 ms)\n  \x1b[31m✗\x1b[m fails on malformed input\n\nTests: \x1b[32m2 passed\x1b[m, \x1b[31m1 failed\x1b[m, 3 total",
+  256: Array.from({length: 16}, (_, row) =>
+    Array.from({length: 16}, (_, col) => {
+      const n = row * 16 + col;
+      return `\x1b[48;5;${n}m ${String(n).padStart(3,' ')} \x1b[m`;
+    }).join('')
+  ).join('\n')
+};
+
+function render() {
+  classMap.clear(); classCounter = 0;
+  const inline = $('inline').checked;
+  const html = convert($('input').value, inline);
+  const preview = $('preview');
+  preview.className = 'preview ' + $('theme').value;
+  preview.innerHTML = convert($('input').value, true); // always inline in preview
+  $('htmlOut').textContent = html;
+  $('cssOut').textContent = inline ? '/* Disable "Inline styles" to generate classes. */' : buildCss() || '/* no styles */';
+}
+
+$('input').addEventListener('input', render);
+$('theme').addEventListener('change', render);
+$('inline').addEventListener('change', render);
+document.querySelectorAll('.chip').forEach(c => {
+  c.addEventListener('click', () => { $('input').value = EXAMPLES[c.dataset.ex]; render(); });
+});
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $('htmlTab').classList.toggle('hidden', t.dataset.tab !== 'html');
+    $('cssTab').classList.toggle('hidden', t.dataset.tab !== 'css');
+  });
+});
+$('copyHtml').addEventListener('click', async () => {
+  await navigator.clipboard.writeText($('htmlOut').textContent);
+  const b = $('copyHtml'); const old = b.textContent; b.textContent = 'Copied!';
+  setTimeout(() => b.textContent = old, 1200);
+});
+$('copyCss').addEventListener('click', async () => {
+  await navigator.clipboard.writeText($('cssOut').textContent);
+  const b = $('copyCss'); const old = b.textContent; b.textContent = 'Copied!';
+  setTimeout(() => b.textContent = old, 1200);
+});
+
+render();
+</script>
+</body>
+</html>

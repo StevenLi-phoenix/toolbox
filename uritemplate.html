@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URI Template Expander — RFC 6570 Tool</title>
+<meta name="description" content="Expand URI templates per RFC 6570 with live variable substitution. Supports all levels (1-4) including reserved, fragment, label, path, query and form expansion.">
+<meta name="keywords" content="uri template, rfc 6570, url template, uritemplate, expand, hypermedia, api">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/uritemplate.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea, input[type="text"] { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .88rem; background: var(--bg); color: var(--text); resize: vertical; }
+  textarea { min-height: 110px; }
+  .var-grid { display: grid; grid-template-columns: 160px 1fr auto; gap: 8px; align-items: start; margin-bottom: 8px; }
+  .var-grid input[type="text"] { font-size: .82rem; }
+  .var-name { font-family: var(--mono); font-weight: 600; }
+  .var-type { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: .78rem; }
+  .result { font-family: var(--mono); font-size: .95rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; word-break: break-all; min-height: 2.2em; }
+  .error { color: var(--error); font-size: .8rem; margin-top: 6px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-family: var(--mono); font-size: .75rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); color: var(--text); cursor: pointer; }
+  .chip:hover { border-color: var(--text); }
+  .legend { font-size: .78rem; color: var(--muted); line-height: 1.55; }
+  .legend code { font-family: var(--mono); background: var(--surface2); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); }
+  .legend table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: .78rem; }
+  .legend th, .legend td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .legend th { color: var(--muted); font-weight: 600; }
+  @media (max-width: 768px) {
+    .var-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>URI Template Expander</h1>
+<p class="subtitle">Expand a URI template per <strong>RFC 6570</strong> (Level 1&ndash;4) with your own variables. Works fully in your browser &mdash; paste a template, fill in values, copy the expanded URI.</p>
+
+<div class="card">
+  <h2>Template</h2>
+  <textarea id="tpl" spellcheck="false">https://api.example.com/users/{user_id}/repos{?type,sort,page}</textarea>
+  <div class="examples">
+    <button type="button" class="chip" data-ex="https://api.example.com/users/{user_id}/repos{?type,sort,page}">users/{id}/repos{?…}</button>
+    <button type="button" class="chip" data-ex="https://example.com/~{username}/">~{username}/</button>
+    <button type="button" class="chip" data-ex="https://example.com/search{?q,page}">search{?q,page}</button>
+    <button type="button" class="chip" data-ex="http://example.com/{/path*}">{/path*}</button>
+    <button type="button" class="chip" data-ex="https://example.com/map?{x,y}{#section}">fragment{#section}</button>
+    <button type="button" class="chip" data-ex="http://example.com/find{?tags*,limit}">find{?tags*}</button>
+    <button type="button" class="chip" data-ex="http://example.com/{+path}{#section}">reserved{+path}</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Variables</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Detected from the template. For lists use comma-separated (e.g. <code>a,b,c</code>); for key-value pairs use <code>k1=v1,k2=v2</code>.</p>
+  <div id="vars"></div>
+</div>
+
+<div class="card">
+  <h2>Expanded URI</h2>
+  <div class="result" id="result">&mdash;</div>
+  <div class="error" id="err"></div>
+  <div class="row" style="margin-top:10px">
+    <button class="btn" id="copy">Copy</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Operator Reference</h2>
+  <div class="legend">
+    <table>
+      <thead><tr><th>Op</th><th>Expansion</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><code>{var}</code></td><td>Simple string (percent-encoded)</td><td><code>{foo}</code> &rarr; <code>hello%20world</code></td></tr>
+        <tr><td><code>{+var}</code></td><td>Reserved expansion (keeps <code>/?:#</code>)</td><td><code>{+path}</code> &rarr; <code>/foo/bar</code></td></tr>
+        <tr><td><code>{#var}</code></td><td>Fragment, prefixed with <code>#</code></td><td><code>{#frag}</code> &rarr; <code>#section</code></td></tr>
+        <tr><td><code>{.var}</code></td><td>Label, prefixed with <code>.</code></td><td><code>{.ext}</code> &rarr; <code>.json</code></td></tr>
+        <tr><td><code>{/var}</code></td><td>Path segment, prefixed with <code>/</code></td><td><code>{/a,b}</code> &rarr; <code>/a/b</code></td></tr>
+        <tr><td><code>{;var}</code></td><td>Path-style (<code>;name=value</code>)</td><td><code>{;x,y}</code> &rarr; <code>;x=1;y=2</code></td></tr>
+        <tr><td><code>{?var}</code></td><td>Query, prefixed with <code>?</code></td><td><code>{?q,p}</code> &rarr; <code>?q=a&amp;p=1</code></td></tr>
+        <tr><td><code>{&amp;var}</code></td><td>Query continuation (<code>&amp;</code>)</td><td><code>{&amp;n}</code> &rarr; <code>&amp;n=1</code></td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:10px"><strong>Modifiers:</strong> <code>{var:3}</code> truncates to 3 characters. <code>{var*}</code> explodes lists/maps into separate keys.</p>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+// RFC 6570 URI Template expander
+const OPS = {
+  ''  : { first: '',  sep: ',', named: false, ifEmpty: '',  allow: 'U'  },
+  '+' : { first: '',  sep: ',', named: false, ifEmpty: '',  allow: 'U+R' },
+  '#' : { first: '#', sep: ',', named: false, ifEmpty: '',  allow: 'U+R' },
+  '.' : { first: '.', sep: '.', named: false, ifEmpty: '',  allow: 'U'  },
+  '/' : { first: '/', sep: '/', named: false, ifEmpty: '',  allow: 'U'  },
+  ';' : { first: ';', sep: ';', named: true,  ifEmpty: '',  allow: 'U'  },
+  '?' : { first: '?', sep: '&', named: true,  ifEmpty: '=', allow: 'U'  },
+  '&' : { first: '&', sep: '&', named: true,  ifEmpty: '=', allow: 'U'  }
+};
+
+function pctEncode(str, allowReserved) {
+  // Always encode unreserved set preserved, optionally keep reserved.
+  const unreserved = /[A-Za-z0-9\-._~]/;
+  const reserved = /[:\/?#\[\]@!$&'()*+,;=]/;
+  let out = '';
+  for (const ch of String(str)) {
+    if (unreserved.test(ch)) { out += ch; continue; }
+    if (allowReserved && reserved.test(ch)) { out += ch; continue; }
+    // percent-encode the UTF-8 bytes
+    const bytes = new TextEncoder().encode(ch);
+    for (const b of bytes) out += '%' + b.toString(16).toUpperCase().padStart(2, '0');
+  }
+  return out;
+}
+
+function parseValue(raw) {
+  if (raw == null) return undefined;
+  const s = String(raw);
+  if (s === '') return '';
+  // key=val,key=val → object (associative)
+  if (/^[^=,]+=[^,]*(,[^=,]+=[^,]*)*$/.test(s) && s.includes('=')) {
+    const obj = {};
+    s.split(',').forEach(p => {
+      const i = p.indexOf('=');
+      obj[p.slice(0, i)] = p.slice(i + 1);
+    });
+    return obj;
+  }
+  if (s.includes(',')) return s.split(',');
+  return s;
+}
+
+function isDefined(v) {
+  if (v === undefined || v === null) return false;
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === 'object') return Object.keys(v).length > 0;
+  return true;
+}
+
+function expandVar(spec, value, op) {
+  const allowReserved = op.allow === 'U+R';
+  const enc = s => pctEncode(s, allowReserved);
+  const isEmptyStr = (typeof value === 'string' && value === '');
+
+  if (!Array.isArray(value) && typeof value !== 'object') {
+    // scalar
+    let v = String(value);
+    if (spec.prefix != null) v = v.substring(0, spec.prefix);
+    if (op.named) {
+      if (v === '') return enc(spec.name) + op.ifEmpty;
+      return enc(spec.name) + '=' + enc(v);
+    }
+    return enc(v);
+  }
+
+  // composite
+  if (Array.isArray(value)) {
+    if (spec.explode) {
+      const parts = value.map(v => op.named ? enc(spec.name) + (v === '' ? op.ifEmpty : '=' + enc(v)) : enc(v));
+      return parts.join(op.sep);
+    } else {
+      const joined = value.map(v => enc(v)).join(',');
+      if (op.named) {
+        if (joined === '') return enc(spec.name) + op.ifEmpty;
+        return enc(spec.name) + '=' + joined;
+      }
+      return joined;
+    }
+  }
+
+  // object
+  const entries = Object.entries(value);
+  if (spec.explode) {
+    const parts = entries.map(([k, v]) => enc(k) + '=' + enc(v));
+    return parts.join(op.sep);
+  } else {
+    const flat = entries.flatMap(([k, v]) => [enc(k), enc(v)]).join(',');
+    if (op.named) {
+      if (flat === '') return enc(spec.name) + op.ifEmpty;
+      return enc(spec.name) + '=' + flat;
+    }
+    return flat;
+  }
+}
+
+function expand(tpl, vars) {
+  return tpl.replace(/\{([^}]+)\}/g, (_, expr) => {
+    let opChar = '';
+    if ('+#./;?&'.includes(expr[0])) { opChar = expr[0]; expr = expr.slice(1); }
+    const op = OPS[opChar];
+    const specs = expr.split(',').map(s => {
+      let explode = false, prefix = null;
+      if (s.endsWith('*')) { explode = true; s = s.slice(0, -1); }
+      else {
+        const m = s.match(/^([^:]+):(\d+)$/);
+        if (m) { s = m[1]; prefix = parseInt(m[2], 10); }
+      }
+      return { name: s, explode, prefix };
+    });
+    const parts = [];
+    for (const spec of specs) {
+      const val = vars[spec.name];
+      if (!isDefined(val) && val !== '') continue;
+      parts.push(expandVar(spec, val === '' ? '' : val, op));
+    }
+    if (!parts.length) return '';
+    return op.first + parts.join(op.sep);
+  });
+}
+
+function extractVarNames(tpl) {
+  const names = [];
+  const seen = new Set();
+  const re = /\{([^}]+)\}/g;
+  let m;
+  while ((m = re.exec(tpl)) !== null) {
+    let expr = m[1];
+    if ('+#./;?&'.includes(expr[0])) expr = expr.slice(1);
+    expr.split(',').forEach(s => {
+      s = s.replace(/\*$/, '').replace(/:\d+$/, '');
+      if (!seen.has(s)) { seen.add(s); names.push(s); }
+    });
+  }
+  return names;
+}
+
+const $ = id => document.getElementById(id);
+const varsBox = $('vars');
+const savedValues = {};
+
+function renderVars() {
+  const tpl = $('tpl').value;
+  const names = extractVarNames(tpl);
+  varsBox.innerHTML = '';
+  if (!names.length) {
+    varsBox.innerHTML = '<div class="empty">No variables detected in template.</div>';
+    return;
+  }
+  names.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'var-grid';
+    const label = document.createElement('div');
+    label.className = 'var-name';
+    label.textContent = name;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'value…';
+    input.dataset.name = name;
+    input.value = savedValues[name] || defaultFor(name);
+    savedValues[name] = input.value;
+    input.addEventListener('input', () => { savedValues[name] = input.value; run(); });
+    const hint = document.createElement('span');
+    hint.style.fontSize = '.7rem';
+    hint.style.color = 'var(--muted)';
+    hint.textContent = '';
+    row.appendChild(label);
+    row.appendChild(input);
+    row.appendChild(hint);
+    varsBox.appendChild(row);
+  });
+}
+
+function defaultFor(name) {
+  const defaults = {
+    user_id: 'octocat', username: 'alice', path: '/foo/bar', section: 'intro',
+    type: 'public', sort: 'updated', page: '2', q: 'hello world',
+    tags: 'red,green,blue', limit: '10', x: '1024', y: '768', ext: 'json'
+  };
+  return defaults[name] || '';
+}
+
+function collectVars() {
+  const out = {};
+  document.querySelectorAll('#vars input').forEach(i => {
+    const raw = i.value;
+    if (raw === '') { out[i.dataset.name] = undefined; return; }
+    out[i.dataset.name] = parseValue(raw);
+  });
+  return out;
+}
+
+function run() {
+  try {
+    const tpl = $('tpl').value;
+    const vars = collectVars();
+    const result = expand(tpl, vars);
+    $('result').textContent = result || '—';
+    $('err').textContent = '';
+  } catch (e) {
+    $('err').textContent = e.message;
+  }
+}
+
+$('tpl').addEventListener('input', () => { renderVars(); run(); });
+document.querySelectorAll('.chip').forEach(c => {
+  c.addEventListener('click', () => {
+    $('tpl').value = c.dataset.ex;
+    renderVars();
+    run();
+  });
+});
+$('copy').addEventListener('click', async () => {
+  await navigator.clipboard.writeText($('result').textContent);
+  const b = $('copy'); const old = b.textContent; b.textContent = 'Copied!';
+  setTimeout(() => b.textContent = old, 1200);
+});
+
+renderVars();
+run();
+</script>
+</body>
+</html>
