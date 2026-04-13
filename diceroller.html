@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dice Roller — Tabletop RPG Dice Notation Parser</title>
+<meta name="description" content="Roll dice using tabletop RPG notation (3d6+2, 4d6kh3, 2d20kl1). Cryptographically secure, shows each die, totals, min/max, and rolling history.">
+<meta name="keywords" content="dice roller, rpg, d20, 3d6, keep highest, drop lowest, tabletop, dice notation">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/diceroller.html">
+<meta property="og:title" content="Dice Roller — RPG Dice Notation">
+<meta property="og:description" content="Parse and roll tabletop RPG dice notation (3d6+2, 4d6kh3). Shows individual dice, modifiers, and history.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/diceroller.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .roll-row { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+  #expr { flex: 1; min-width: 220px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: 1.05rem; background: var(--bg); color: var(--text); }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .preset { font-size: .78rem; padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; color: var(--muted); font-family: var(--mono); }
+  .preset:hover { background: var(--surface2); color: var(--text); }
+  .total { font-size: 2.8rem; font-weight: 700; text-align: center; margin: 18px 0 6px; letter-spacing: -0.02em; font-family: var(--mono); }
+  .breakdown { font-family: var(--mono); font-size: .88rem; color: var(--muted); text-align: center; word-break: break-word; }
+  .dice-grid { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 14px; }
+  .die { min-width: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .95rem; text-align: center; background: var(--surface2); }
+  .die.kept { background: var(--surface); border-color: var(--text); font-weight: 700; }
+  .die.dropped { opacity: .35; text-decoration: line-through; }
+  .die.crit { border-color: var(--success); color: var(--success); }
+  .die.fumble { border-color: var(--error); color: var(--error); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 14px; }
+  .stat-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; }
+  .stat-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 2px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat-tile strong { font-family: var(--mono); font-size: 1.05rem; }
+  .history { max-height: 260px; overflow: auto; font-family: var(--mono); font-size: .82rem; }
+  .history-row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .history-row:last-child { border-bottom: none; }
+  .history-row .h-expr { color: var(--muted); }
+  .history-row .h-total { font-weight: 700; }
+  .ref { font-size: .82rem; color: var(--muted); line-height: 1.7; }
+  .ref code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); color: var(--text); }
+  @media (max-width: 768px) {
+    .total { font-size: 2.2rem; }
+    .die { min-width: 32px; padding: 6px 8px; font-size: .85rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Dice Roller</h1>
+  <p class="subtitle">Roll tabletop RPG dice using standard notation. Supports keep-highest, drop-lowest, exploding dice, and modifiers — all via cryptographically secure randomness.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="roll-row">
+      <input id="expr" type="text" value="3d6+2" placeholder="e.g. 3d6+2, 4d6kh3, 2d20kl1, 1d20+5">
+      <button class="btn btn-primary" onclick="rollNow()">Roll</button>
+    </div>
+    <div class="preset-row">
+      <button class="preset" data-expr="1d20">d20</button>
+      <button class="preset" data-expr="1d20+5">d20+5</button>
+      <button class="preset" data-expr="2d20kh1">Advantage</button>
+      <button class="preset" data-expr="2d20kl1">Disadvantage</button>
+      <button class="preset" data-expr="4d6kh3">4d6 keep 3</button>
+      <button class="preset" data-expr="3d6">3d6</button>
+      <button class="preset" data-expr="1d100">d100</button>
+      <button class="preset" data-expr="8d6">Fireball</button>
+      <button class="preset" data-expr="1d12+1d8+4">Polearm combo</button>
+    </div>
+
+    <div class="total" id="total">—</div>
+    <div class="breakdown" id="breakdown"></div>
+    <div class="dice-grid" id="dice"></div>
+    <div class="stats" id="stats"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">History</h2>
+    <div class="history" id="history"><p class="empty" style="color:var(--muted);font-size:.85rem;">No rolls yet.</p></div>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-secondary" onclick="clearHistory()">Clear history</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Notation reference</h2>
+    <p class="ref">
+      <code>NdS</code> roll N dice with S sides · <code>+M</code> / <code>-M</code> flat modifier ·
+      <code>khX</code> keep highest X · <code>klX</code> keep lowest X ·
+      <code>dhX</code> drop highest X · <code>dlX</code> drop lowest X ·
+      <code>!</code> or <code>x</code> exploding (reroll max, add result) ·
+      chain with <code>+</code>/<code>-</code>: <code>1d8+1d6+3</code>.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function secureRand(max) {
+  // unbiased rejection sampling; max inclusive upper bound (1..max)
+  const range = max;
+  const buf = new Uint32Array(1);
+  const limit = Math.floor(0xFFFFFFFF / range) * range;
+  while (true) {
+    crypto.getRandomValues(buf);
+    if (buf[0] < limit) return (buf[0] % range) + 1;
+  }
+}
+
+// Parse one term like "3d6kh2!" or "2d20kl1" or "+5" or "-2"
+function parseTerms(input) {
+  const s = input.replace(/\s+/g, '').toLowerCase();
+  if (!s) throw new Error('Empty expression');
+  // Split into additive terms while keeping sign
+  const terms = [];
+  const re = /([+-]?)(\d*d\d+(?:(?:kh|kl|dh|dl)\d+)?[!x]?|\d+)/g;
+  let m, consumed = 0;
+  while ((m = re.exec(s)) !== null) {
+    if (m.index !== consumed) throw new Error('Unexpected "' + s.slice(consumed, m.index) + '"');
+    const sign = m[1] === '-' ? -1 : 1;
+    const body = m[2];
+    if (body.includes('d')) {
+      const mm = /^(\d*)d(\d+)((?:kh|kl|dh|dl)\d+)?([!x])?$/.exec(body);
+      if (!mm) throw new Error('Bad dice: ' + body);
+      const n = mm[1] === '' ? 1 : parseInt(mm[1], 10);
+      const sides = parseInt(mm[2], 10);
+      if (n < 1 || n > 1000) throw new Error('N must be 1–1000');
+      if (sides < 2 || sides > 1000000) throw new Error('Sides must be 2–1,000,000');
+      let mod = null;
+      if (mm[3]) {
+        const t = mm[3].slice(0,2), v = parseInt(mm[3].slice(2), 10);
+        if (v < 1 || v >= n) throw new Error(t + v + ' invalid for ' + n + ' dice');
+        mod = { type: t, value: v };
+      }
+      terms.push({ kind: 'dice', sign, n, sides, mod, explode: !!mm[4] });
+    } else {
+      terms.push({ kind: 'const', sign, value: parseInt(body, 10) });
+    }
+    consumed = m.index + m[0].length;
+  }
+  if (consumed !== s.length) throw new Error('Unexpected "' + s.slice(consumed) + '"');
+  if (terms.length === 0) throw new Error('No terms parsed');
+  return terms;
+}
+
+function rollTerm(t) {
+  if (t.kind === 'const') return { total: t.sign * t.value, dice: [], label: (t.sign < 0 ? '-' : '+') + t.value };
+  const rolls = [];
+  for (let i = 0; i < t.n; i++) {
+    let r = secureRand(t.sides);
+    rolls.push({ value: r, kept: true, exploded: false });
+    if (t.explode) {
+      let safety = 0;
+      while (r === t.sides && safety++ < 50) {
+        r = secureRand(t.sides);
+        rolls.push({ value: r, kept: true, exploded: true });
+      }
+    }
+  }
+  if (t.mod) {
+    const sorted = rolls.map((r, i) => ({ r, i })).sort((a,b) => a.r.value - b.r.value);
+    let dropIdxs = new Set();
+    if (t.mod.type === 'kh') { // drop lowest (n - value)
+      const drop = rolls.length - t.mod.value;
+      for (let i = 0; i < drop; i++) dropIdxs.add(sorted[i].i);
+    } else if (t.mod.type === 'kl') {
+      const drop = rolls.length - t.mod.value;
+      for (let i = 0; i < drop; i++) dropIdxs.add(sorted[sorted.length - 1 - i].i);
+    } else if (t.mod.type === 'dl') {
+      for (let i = 0; i < t.mod.value; i++) dropIdxs.add(sorted[i].i);
+    } else if (t.mod.type === 'dh') {
+      for (let i = 0; i < t.mod.value; i++) dropIdxs.add(sorted[sorted.length - 1 - i].i);
+    }
+    rolls.forEach((r, i) => { if (dropIdxs.has(i)) r.kept = false; });
+  }
+  const sum = rolls.filter(r => r.kept).reduce((a, b) => a + b.value, 0);
+  const total = t.sign * sum;
+  const label = (t.sign < 0 ? '-' : '+') + t.n + 'd' + t.sides +
+                (t.mod ? t.mod.type + t.mod.value : '') + (t.explode ? '!' : '');
+  return { total, dice: rolls.map(r => ({ ...r, sides: t.sides })), label };
+}
+
+function rollExpression(input) {
+  const terms = parseTerms(input);
+  let total = 0;
+  const allDice = [];
+  const parts = [];
+  terms.forEach((t, idx) => {
+    const res = rollTerm(t);
+    total += res.total;
+    if (t.kind === 'dice') {
+      const kept = res.dice.filter(d => d.kept).map(d => d.value).join('+');
+      parts.push((idx === 0 && t.sign > 0 ? '' : (t.sign < 0 ? '−' : '+')) + '(' + kept + ')');
+      allDice.push(...res.dice);
+    } else {
+      parts.push((idx === 0 && t.sign > 0 ? '' : (t.sign < 0 ? '−' : '+')) + Math.abs(t.value));
+    }
+  });
+  return { total, dice: allDice, breakdown: parts.join(' ') };
+}
+
+const history = [];
+function rollNow() {
+  const input = document.getElementById('expr').value.trim();
+  const status = document.getElementById('status');
+  status.className = 'status'; status.textContent = '';
+  try {
+    const r = rollExpression(input);
+    document.getElementById('total').textContent = r.total.toLocaleString();
+    document.getElementById('breakdown').textContent = r.breakdown;
+    const grid = document.getElementById('dice');
+    grid.innerHTML = r.dice.map(d => {
+      let cls = 'die';
+      if (!d.kept) cls += ' dropped';
+      else cls += ' kept';
+      if (d.kept && d.value === d.sides) cls += ' crit';
+      if (d.kept && d.value === 1 && d.sides > 1) cls += ' fumble';
+      return `<div class="${cls}" title="d${d.sides}${d.exploded ? ' (exploded)' : ''}">${d.value}</div>`;
+    }).join('');
+    // Stats
+    const kept = r.dice.filter(d => d.kept);
+    document.getElementById('stats').innerHTML = kept.length ? `
+      <div class="stat-tile"><span>Dice rolled</span><strong>${r.dice.length}</strong></div>
+      <div class="stat-tile"><span>Kept</span><strong>${kept.length}</strong></div>
+      <div class="stat-tile"><span>Min kept</span><strong>${Math.min(...kept.map(d=>d.value))}</strong></div>
+      <div class="stat-tile"><span>Max kept</span><strong>${Math.max(...kept.map(d=>d.value))}</strong></div>
+    ` : '';
+    history.unshift({ expr: input, total: r.total });
+    if (history.length > 50) history.pop();
+    renderHistory();
+  } catch (e) {
+    status.className = 'status show error';
+    status.textContent = e.message;
+    document.getElementById('total').textContent = '—';
+    document.getElementById('breakdown').textContent = '';
+    document.getElementById('dice').innerHTML = '';
+    document.getElementById('stats').innerHTML = '';
+  }
+}
+
+function renderHistory() {
+  const box = document.getElementById('history');
+  if (history.length === 0) {
+    box.innerHTML = '<p class="empty" style="color:var(--muted);font-size:.85rem;">No rolls yet.</p>';
+    return;
+  }
+  box.innerHTML = history.map(h =>
+    `<div class="history-row"><span class="h-expr">${h.expr}</span><span class="h-total">${h.total}</span></div>`
+  ).join('');
+}
+function clearHistory() { history.length = 0; renderHistory(); }
+
+document.getElementById('expr').addEventListener('keydown', e => {
+  if (e.key === 'Enter') rollNow();
+});
+document.querySelectorAll('.preset').forEach(b => {
+  b.addEventListener('click', () => {
+    document.getElementById('expr').value = b.dataset.expr;
+    rollNow();
+  });
+});
+
+rollNow();
+</script>
+</body>
+</html>
