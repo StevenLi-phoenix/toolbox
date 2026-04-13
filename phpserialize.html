@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PHP Serialize ⇄ JSON Converter — Free Online Tool</title>
+<meta name="description" content="Convert between PHP serialize() format and JSON. Parse PHP serialized strings into readable data, or serialize JSON for PHP unserialize(). 100% client-side.">
+<meta name="keywords" content="PHP serialize, PHP unserialize, JSON to PHP, PHP to JSON, serialize decoder">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/phpserialize.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  .panel { display: flex; flex-direction: column; }
+  .panel h3 { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  textarea { width: 100%; min-height: 320px; padding: 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; background: var(--bg); color: var(--text); }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; align-items: center; }
+  .controls label { font-size: .85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .status { margin-top: 10px; padding: 10px 12px; border-radius: var(--radius); font-size: .85rem; font-family: var(--mono); }
+  .status.ok { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+  .status.err { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); }
+  .info { margin-top: 16px; font-size: .85rem; color: var(--muted); line-height: 1.55; }
+  .info code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); color: var(--text); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🐘 PHP Serialize ⇄ JSON</h1>
+<p class="subtitle">Decode PHP <code>serialize()</code> strings into JSON or re-encode JSON into PHP serialized form. Supports arrays, associative arrays, nested structures, strings, numbers, booleans, and null.</p>
+
+<div class="controls">
+  <label><input type="radio" name="dir" value="php2json" checked> PHP → JSON</label>
+  <label><input type="radio" name="dir" value="json2php"> JSON → PHP</label>
+  <button class="btn btn-secondary" id="sample">Load sample</button>
+  <button class="btn btn-secondary" id="swap">↔ Swap</button>
+  <button class="btn btn-secondary" id="clear">Clear</button>
+  <button class="btn btn-secondary" id="copy">Copy output</button>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h3 id="inLabel">PHP serialized input</h3>
+    <textarea id="input" spellcheck="false" placeholder='a:2:{s:4:"name";s:5:"Alice";s:3:"age";i:30;}'></textarea>
+  </div>
+  <div class="panel">
+    <h3 id="outLabel">JSON output</h3>
+    <textarea id="output" spellcheck="false" readonly></textarea>
+  </div>
+</div>
+
+<div id="status" class="status" style="display:none"></div>
+<div class="toast" id="toast">Copied!</div>
+
+<div class="info">
+<strong>Supported types:</strong> <code>N</code> null, <code>b</code> boolean, <code>i</code> integer, <code>d</code> double, <code>s</code> string (byte-length prefixed), <code>a</code> array (sequential or associative). PHP objects (<code>O:</code>) are parsed into JSON objects with a <code>__class</code> field but cannot round-trip back. JSON numeric arrays serialize as <code>a:N:{i:0;...}</code>; JSON objects serialize as associative arrays.
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+// Byte-accurate PHP serialize parser. PHP counts bytes, so we convert to UTF-8 bytes.
+function strToBytes(s) { return new TextEncoder().encode(s); }
+function bytesToStr(b, start, len) { return new TextDecoder().decode(b.subarray(start, start + len)); }
+
+function parsePhp(input) {
+  const bytes = strToBytes(input);
+  let pos = 0;
+
+  function peek() { return bytes[pos]; }
+  function expect(ch) {
+    const c = bytes[pos];
+    if (String.fromCharCode(c) !== ch) throw new Error(`Expected '${ch}' at byte ${pos}, got '${String.fromCharCode(c)}'`);
+    pos++;
+  }
+  function readUntil(ch) {
+    const start = pos;
+    while (pos < bytes.length && String.fromCharCode(bytes[pos]) !== ch) pos++;
+    if (pos >= bytes.length) throw new Error(`Expected '${ch}' at byte ${pos}`);
+    const s = bytesToStr(bytes, start, pos - start);
+    pos++;
+    return s;
+  }
+
+  function parseValue() {
+    if (pos >= bytes.length) throw new Error('Unexpected end of input');
+    const type = String.fromCharCode(bytes[pos]);
+    pos++;
+    switch (type) {
+      case 'N': expect(';'); return null;
+      case 'b': {
+        expect(':');
+        const v = String.fromCharCode(bytes[pos]); pos++;
+        expect(';');
+        return v === '1';
+      }
+      case 'i': {
+        expect(':');
+        return parseInt(readUntil(';'), 10);
+      }
+      case 'd': {
+        expect(':');
+        const s = readUntil(';');
+        if (s === 'NAN') return NaN;
+        if (s === 'INF') return Infinity;
+        if (s === '-INF') return -Infinity;
+        return parseFloat(s);
+      }
+      case 's': {
+        expect(':');
+        const len = parseInt(readUntil(':'), 10);
+        expect('"');
+        const str = bytesToStr(bytes, pos, len);
+        pos += len;
+        expect('"');
+        expect(';');
+        return str;
+      }
+      case 'a': {
+        expect(':');
+        const count = parseInt(readUntil(':'), 10);
+        expect('{');
+        const entries = [];
+        let sequential = true;
+        for (let i = 0; i < count; i++) {
+          const k = parseValue();
+          const v = parseValue();
+          entries.push([k, v]);
+          if (k !== i) sequential = false;
+        }
+        expect('}');
+        if (sequential) return entries.map(e => e[1]);
+        const obj = {};
+        for (const [k, v] of entries) obj[String(k)] = v;
+        return obj;
+      }
+      case 'O': {
+        expect(':');
+        const nameLen = parseInt(readUntil(':'), 10);
+        expect('"');
+        const className = bytesToStr(bytes, pos, nameLen); pos += nameLen;
+        expect('"');
+        expect(':');
+        const count = parseInt(readUntil(':'), 10);
+        expect('{');
+        const obj = { __class: className };
+        for (let i = 0; i < count; i++) {
+          const k = parseValue();
+          const v = parseValue();
+          obj[String(k)] = v;
+        }
+        expect('}');
+        return obj;
+      }
+      default:
+        throw new Error(`Unknown type '${type}' at byte ${pos - 1}`);
+    }
+  }
+
+  const result = parseValue();
+  return result;
+}
+
+function phpSerialize(v) {
+  if (v === null || v === undefined) return 'N;';
+  if (typeof v === 'boolean') return 'b:' + (v ? '1' : '0') + ';';
+  if (typeof v === 'number') {
+    if (Number.isInteger(v)) return 'i:' + v + ';';
+    return 'd:' + v + ';';
+  }
+  if (typeof v === 'string') {
+    const bytes = strToBytes(v);
+    return 's:' + bytes.length + ':"' + v + '";';
+  }
+  if (Array.isArray(v)) {
+    let out = 'a:' + v.length + ':{';
+    v.forEach((item, i) => { out += 'i:' + i + ';' + phpSerialize(item); });
+    return out + '}';
+  }
+  if (typeof v === 'object') {
+    const keys = Object.keys(v);
+    let out = 'a:' + keys.length + ':{';
+    for (const k of keys) {
+      const nk = /^-?\d+$/.test(k) ? parseInt(k, 10) : null;
+      if (nk !== null && String(nk) === k) out += 'i:' + nk + ';';
+      else out += 's:' + strToBytes(k).length + ':"' + k + '";';
+      out += phpSerialize(v[k]);
+    }
+    return out + '}';
+  }
+  return 'N;';
+}
+
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+const status = document.getElementById('status');
+const inLabel = document.getElementById('inLabel');
+const outLabel = document.getElementById('outLabel');
+
+function setStatus(msg, ok) {
+  if (!msg) { status.style.display = 'none'; return; }
+  status.style.display = 'block';
+  status.className = 'status ' + (ok ? 'ok' : 'err');
+  status.textContent = msg;
+}
+
+function run() {
+  const dir = document.querySelector('input[name="dir"]:checked').value;
+  if (dir === 'php2json') {
+    inLabel.textContent = 'PHP serialized input';
+    outLabel.textContent = 'JSON output';
+    if (!input.value.trim()) { output.value = ''; setStatus(''); return; }
+    try {
+      const parsed = parsePhp(input.value);
+      output.value = JSON.stringify(parsed, (k, v) => {
+        if (typeof v === 'number' && !isFinite(v)) return String(v);
+        return v;
+      }, 2);
+      setStatus('Parsed successfully.', true);
+    } catch(e) {
+      output.value = '';
+      setStatus('Parse error: ' + e.message, false);
+    }
+  } else {
+    inLabel.textContent = 'JSON input';
+    outLabel.textContent = 'PHP serialized output';
+    if (!input.value.trim()) { output.value = ''; setStatus(''); return; }
+    try {
+      const parsed = JSON.parse(input.value);
+      output.value = phpSerialize(parsed);
+      setStatus('Serialized successfully.', true);
+    } catch(e) {
+      output.value = '';
+      setStatus('JSON error: ' + e.message, false);
+    }
+  }
+}
+
+input.addEventListener('input', run);
+document.querySelectorAll('input[name="dir"]').forEach(r => r.addEventListener('change', run));
+
+document.getElementById('sample').addEventListener('click', () => {
+  const dir = document.querySelector('input[name="dir"]:checked').value;
+  if (dir === 'php2json') {
+    input.value = 'a:4:{s:4:"name";s:13:"Alice Johnson";s:3:"age";i:30;s:6:"active";b:1;s:4:"tags";a:3:{i:0;s:5:"admin";i:1;s:6:"editor";i:2;s:6:"viewer";}}';
+  } else {
+    input.value = JSON.stringify({
+      name: "Alice Johnson",
+      age: 30,
+      active: true,
+      tags: ["admin", "editor", "viewer"],
+      meta: { created: "2024-01-01", score: 98.5 }
+    }, null, 2);
+  }
+  run();
+});
+document.getElementById('swap').addEventListener('click', () => {
+  if (!output.value) return;
+  input.value = output.value;
+  const other = document.querySelector('input[name="dir"]:not(:checked)');
+  other.checked = true;
+  run();
+});
+document.getElementById('clear').addEventListener('click', () => {
+  input.value = output.value = ''; setStatus('');
+});
+document.getElementById('copy').addEventListener('click', () => {
+  if (!output.value) return;
+  navigator.clipboard.writeText(output.value).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1500);
+  });
+});
+</script>
+</body>
+</html>

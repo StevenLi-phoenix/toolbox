@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis RESP Protocol Encoder/Decoder — Free Online Tool</title>
+<meta name="description" content="Encode and decode Redis RESP (REdis Serialization Protocol) messages. Build command arrays from text, parse wire format, or convert Redis CLI commands. 100% client-side.">
+<meta name="keywords" content="Redis RESP, RESP protocol, Redis encoder, Redis decoder, Redis serialization, Redis wire format">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/resp.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  .panel { display: flex; flex-direction: column; }
+  .panel h3 { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  textarea { width: 100%; min-height: 300px; padding: 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; background: var(--bg); color: var(--text); white-space: pre; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; align-items: center; }
+  .controls label { font-size: .85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .status { margin-top: 10px; padding: 10px 12px; border-radius: var(--radius); font-size: .85rem; font-family: var(--mono); }
+  .status.ok { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+  .status.err { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); }
+  .info { margin-top: 16px; font-size: .85rem; color: var(--muted); line-height: 1.6; }
+  .info code, .info kbd { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); color: var(--text); }
+  .info table { border-collapse: collapse; margin-top: 8px; font-size: .8rem; }
+  .info th, .info td { border: 1px solid var(--border); padding: 4px 10px; text-align: left; }
+  .info th { background: var(--surface2); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🟥 Redis RESP Protocol</h1>
+<p class="subtitle">Encode Redis commands to the RESP wire format or decode raw RESP bytes back to readable values. Supports RESP2 types: simple strings, errors, integers, bulk strings, arrays, and null.</p>
+
+<div class="controls">
+  <label><input type="radio" name="dir" value="enc" checked> Command → RESP</label>
+  <label><input type="radio" name="dir" value="dec"> RESP → Parsed</label>
+  <button class="btn btn-secondary" id="sample">Load sample</button>
+  <button class="btn btn-secondary" id="clear">Clear</button>
+  <button class="btn btn-secondary" id="copy">Copy output</button>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h3 id="inLabel">Command input (one per line)</h3>
+    <textarea id="input" spellcheck="false" placeholder="SET mykey &quot;hello world&quot;&#10;GET mykey&#10;HSET user:1 name Alice age 30"></textarea>
+  </div>
+  <div class="panel">
+    <h3 id="outLabel">RESP wire format (CRLF shown as ␍␊)</h3>
+    <textarea id="output" spellcheck="false" readonly></textarea>
+  </div>
+</div>
+
+<div id="status" class="status" style="display:none"></div>
+
+<div class="info">
+<strong>RESP2 type prefixes:</strong>
+<table>
+<tr><th>Prefix</th><th>Type</th><th>Example</th></tr>
+<tr><td><code>+</code></td><td>Simple String</td><td><code>+OK\r\n</code></td></tr>
+<tr><td><code>-</code></td><td>Error</td><td><code>-ERR unknown command\r\n</code></td></tr>
+<tr><td><code>:</code></td><td>Integer</td><td><code>:1000\r\n</code></td></tr>
+<tr><td><code>$</code></td><td>Bulk String</td><td><code>$5\r\nhello\r\n</code>&nbsp;&nbsp;(<code>$-1\r\n</code> = null)</td></tr>
+<tr><td><code>*</code></td><td>Array</td><td><code>*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n</code>&nbsp;&nbsp;(<code>*-1\r\n</code> = null)</td></tr>
+</table>
+<p style="margin-top:10px">Commands are always encoded as RESP arrays of bulk strings. In command-input mode, quote arguments with spaces using <code>"..."</code> or <code>'...'</code>. Use <kbd>\n</kbd> for actual newlines inside quoted arguments.</p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function tokenize(line) {
+  const tokens = [];
+  let i = 0, cur = '', inStr = false, quote = '';
+  while (i < line.length) {
+    const c = line[i];
+    if (inStr) {
+      if (c === '\\' && i + 1 < line.length) {
+        const n = line[i+1];
+        if (n === 'n') cur += '\n';
+        else if (n === 'r') cur += '\r';
+        else if (n === 't') cur += '\t';
+        else if (n === '\\') cur += '\\';
+        else if (n === '"') cur += '"';
+        else if (n === "'") cur += "'";
+        else cur += n;
+        i += 2;
+      } else if (c === quote) {
+        inStr = false; i++;
+      } else {
+        cur += c; i++;
+      }
+    } else {
+      if (c === '"' || c === "'") { inStr = true; quote = c; i++; }
+      else if (/\s/.test(c)) {
+        if (cur.length) { tokens.push(cur); cur = ''; }
+        i++;
+      } else { cur += c; i++; }
+    }
+  }
+  if (inStr) throw new Error('Unterminated quoted string');
+  if (cur.length) tokens.push(cur);
+  return tokens;
+}
+
+function encodeCommand(parts) {
+  const enc = new TextEncoder();
+  let out = '*' + parts.length + '\r\n';
+  for (const p of parts) {
+    const len = enc.encode(p).length;
+    out += '$' + len + '\r\n' + p + '\r\n';
+  }
+  return out;
+}
+
+function encodeLines(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  return lines.map(l => encodeCommand(tokenize(l))).join('');
+}
+
+function parseRESP(input) {
+  const bytes = new TextEncoder().encode(input);
+  let pos = 0;
+
+  function readLine() {
+    const start = pos;
+    while (pos < bytes.length - 1) {
+      if (bytes[pos] === 0x0d && bytes[pos+1] === 0x0a) {
+        const line = new TextDecoder().decode(bytes.subarray(start, pos));
+        pos += 2;
+        return line;
+      }
+      pos++;
+    }
+    throw new Error('Expected CRLF at byte ' + start);
+  }
+
+  function parse() {
+    if (pos >= bytes.length) throw new Error('Unexpected end of input');
+    const prefix = String.fromCharCode(bytes[pos]);
+    pos++;
+    switch (prefix) {
+      case '+': return { type: 'simple', value: readLine() };
+      case '-': return { type: 'error', value: readLine() };
+      case ':': return { type: 'integer', value: parseInt(readLine(), 10) };
+      case '$': {
+        const len = parseInt(readLine(), 10);
+        if (len === -1) return { type: 'bulk', value: null };
+        const str = new TextDecoder().decode(bytes.subarray(pos, pos + len));
+        pos += len;
+        if (bytes[pos] !== 0x0d || bytes[pos+1] !== 0x0a) throw new Error('Expected CRLF after bulk string');
+        pos += 2;
+        return { type: 'bulk', value: str };
+      }
+      case '*': {
+        const len = parseInt(readLine(), 10);
+        if (len === -1) return { type: 'array', value: null };
+        const arr = [];
+        for (let i = 0; i < len; i++) arr.push(parse());
+        return { type: 'array', value: arr };
+      }
+      default:
+        throw new Error("Unknown RESP prefix '" + prefix + "' at byte " + (pos - 1));
+    }
+  }
+
+  const results = [];
+  while (pos < bytes.length) {
+    // skip trailing whitespace / newlines between messages
+    while (pos < bytes.length && (bytes[pos] === 0x0a || bytes[pos] === 0x0d || bytes[pos] === 0x20)) pos++;
+    if (pos >= bytes.length) break;
+    results.push(parse());
+  }
+  return results;
+}
+
+function formatParsed(items) {
+  function fmt(node, indent) {
+    const pad = '  '.repeat(indent);
+    switch (node.type) {
+      case 'simple': return pad + '+ ' + JSON.stringify(node.value);
+      case 'error': return pad + '- ' + JSON.stringify(node.value);
+      case 'integer': return pad + ': ' + node.value;
+      case 'bulk':
+        if (node.value === null) return pad + '$ (nil)';
+        return pad + '$ ' + JSON.stringify(node.value);
+      case 'array':
+        if (node.value === null) return pad + '* (nil)';
+        if (node.value.length === 0) return pad + '* (empty array)';
+        return pad + '* [' + node.value.length + ']\n' + node.value.map(c => fmt(c, indent + 1)).join('\n');
+    }
+  }
+  return items.map((m, i) => '# Message ' + (i + 1) + '\n' + fmt(m, 0)).join('\n\n');
+}
+
+function visualizeRESP(raw) {
+  return raw.replace(/\r/g, '␍').replace(/\n/g, '␊\n');
+}
+function unvisualize(s) {
+  // Strip literal textarea newlines (they're only for display) and map markers to real CR/LF.
+  return s.replace(/\r?\n/g, '').replace(/␍/g, '\r').replace(/␊/g, '\n');
+}
+
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+const status = document.getElementById('status');
+const inLabel = document.getElementById('inLabel');
+const outLabel = document.getElementById('outLabel');
+
+function setStatus(msg, ok) {
+  if (!msg) { status.style.display = 'none'; return; }
+  status.style.display = 'block';
+  status.className = 'status ' + (ok ? 'ok' : 'err');
+  status.textContent = msg;
+}
+
+function run() {
+  const dir = document.querySelector('input[name="dir"]:checked').value;
+  if (dir === 'enc') {
+    inLabel.textContent = 'Command input (one per line)';
+    outLabel.textContent = 'RESP wire format (CRLF shown as ␍␊)';
+    if (!input.value.trim()) { output.value = ''; setStatus(''); return; }
+    try {
+      const raw = encodeLines(input.value);
+      output.value = visualizeRESP(raw);
+      const byteLen = new TextEncoder().encode(raw).length;
+      setStatus('Encoded ' + input.value.split(/\r?\n/).filter(l => l.trim()).length + ' command(s), ' + byteLen + ' bytes.', true);
+    } catch(e) {
+      output.value = '';
+      setStatus('Encode error: ' + e.message, false);
+    }
+  } else {
+    inLabel.textContent = 'RESP wire format (paste raw or with ␍␊ markers)';
+    outLabel.textContent = 'Parsed output';
+    if (!input.value.trim()) { output.value = ''; setStatus(''); return; }
+    try {
+      // Accept both ␍␊ markers and literal \r\n
+      let raw = input.value;
+      if (raw.includes('␊') || raw.includes('␍')) raw = unvisualize(raw);
+      // Also allow escaped \r\n literal strings
+      raw = raw.replace(/\\r\\n/g, '\r\n');
+      const parsed = parseRESP(raw);
+      output.value = formatParsed(parsed);
+      setStatus('Parsed ' + parsed.length + ' message(s).', true);
+    } catch(e) {
+      output.value = '';
+      setStatus('Parse error: ' + e.message, false);
+    }
+  }
+}
+
+input.addEventListener('input', run);
+document.querySelectorAll('input[name="dir"]').forEach(r => r.addEventListener('change', run));
+
+document.getElementById('sample').addEventListener('click', () => {
+  const dir = document.querySelector('input[name="dir"]:checked').value;
+  if (dir === 'enc') {
+    input.value = 'SET mykey "hello world"\nGET mykey\nHSET user:1 name Alice age 30\nLPUSH mylist "one" "two" "three"';
+  } else {
+    input.value = '*3␍␊$3␍␊SET␍␊$5␍␊mykey␍␊$11␍␊hello world␍␊\n*2␍␊$3␍␊GET␍␊$5␍␊mykey␍␊\n+OK␍␊\n$11␍␊hello world␍␊\n:42␍␊\n*3␍␊$3␍␊foo␍␊$3␍␊bar␍␊$3␍␊baz␍␊';
+  }
+  run();
+});
+document.getElementById('clear').addEventListener('click', () => {
+  input.value = output.value = ''; setStatus('');
+});
+document.getElementById('copy').addEventListener('click', () => {
+  if (!output.value) return;
+  navigator.clipboard.writeText(output.value).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1500);
+  });
+});
+</script>
+</body>
+</html>
