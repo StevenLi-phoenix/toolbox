@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON to Java Class Converter — Free Online Tool</title>
+    <meta name="description" content="Convert JSON to Java POJOs, Lombok, or Java records instantly. Supports Jackson and Gson annotations. 100% client-side.">
+    <meta name="keywords" content="JSON to Java, Java POJO generator, Lombok, Jackson, Gson, record">
+    <meta name="author" content="Steven Li">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/json2java.html">
+    <meta property="og:title" content="JSON to Java Class Converter">
+    <meta property="og:description" content="Convert JSON to Java POJOs, Lombok, or records with Jackson/Gson annotations.">
+    <meta property="og:type" content="website">
+    <link rel="stylesheet" href="toolbox.css">
+<style>
+  main{max-width:1100px;margin:0 auto;padding:0 20px 20px}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;font-size:.85rem}
+  .controls label{display:flex;align-items:center;gap:4px;cursor:pointer}
+  .controls input[type="text"],.controls select{padding:4px 8px;font-family:var(--sans);font-size:.85rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text)}
+  .controls input[type="text"]{width:150px}
+  .editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .editor-pane{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .pane-header{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:.85rem;font-weight:600;color:var(--muted)}
+  .btn-outline{background:transparent;border:1px solid var(--border)}
+  .editor-pane textarea{flex:1;min-height:360px;resize:vertical;border:none;padding:12px;font-family:var(--mono);font-size:.85rem;line-height:1.5;background:var(--bg);color:var(--text);outline:none}
+  .output-area{flex:1;min-height:360px;padding:12px;font-family:var(--mono);font-size:.85rem;line-height:1.5;background:var(--surface2);white-space:pre;overflow:auto;tab-size:4;-moz-tab-size:4}
+  .output-area .error{color:var(--error)}
+  @media(max-width:768px){.editor-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+    <a href="index.html" class="back">&larr; All Tools</a>
+    <header>
+        <h1>{ } JSON → <span>Java Class</span></h1>
+        <p class="subtitle">Convert JSON into Java POJOs, Lombok classes, or Java records with Jackson/Gson annotations.</p>
+    </header>
+    <main>
+        <div class="controls">
+            <label for="className">
+                Root name:
+                <input type="text" id="className" value="Root" placeholder="ClassName">
+            </label>
+            <label for="kind">
+                Style:
+                <select id="kind">
+                    <option value="pojo" selected>POJO (getters/setters)</option>
+                    <option value="lombok">Lombok @Data</option>
+                    <option value="record">Java 14+ record</option>
+                </select>
+            </label>
+            <label for="annotation">
+                Annotations:
+                <select id="annotation">
+                    <option value="none">None</option>
+                    <option value="jackson" selected>Jackson</option>
+                    <option value="gson">Gson</option>
+                </select>
+            </label>
+            <button class="btn" onclick="convert()">Convert</button>
+            <button class="btn btn-secondary" onclick="loadSample()">Load Sample</button>
+        </div>
+        <div class="editor-grid">
+            <div class="editor-pane">
+                <div class="pane-header">
+                    <span>JSON Input</span>
+                    <button class="btn btn-secondary btn-outline" onclick="clearInput()">Clear</button>
+                </div>
+                <textarea id="jsonInput" placeholder='Paste your JSON here...'></textarea>
+            </div>
+            <div class="editor-pane">
+                <div class="pane-header">
+                    <span>Java Output</span>
+                    <button class="btn btn-secondary btn-outline" onclick="copyOutput()">Copy</button>
+                </div>
+                <div class="output-area" id="javaOutput"></div>
+            </div>
+        </div>
+    </main>
+    <div class="toast" id="toast">Copied!</div>
+    <footer>
+        <p>Built with ☕ by Steven Li · No data leaves your browser</p>
+    </footer>
+    <script>
+    const sampleJSON = `{
+  "id": 1,
+  "name": "Alice Wonderland",
+  "email": "alice@example.com",
+  "age": 30,
+  "is_active": true,
+  "score": 98.5,
+  "tags": ["admin", "editor"],
+  "address": {
+    "street": "123 Main St",
+    "city": "Springfield",
+    "zip_code": "62704"
+  },
+  "orders": [
+    { "order_id": "ORD-001", "amount": 49.99 }
+  ],
+  "metadata": null
+}`;
+
+    function loadSample(){ document.getElementById('jsonInput').value = sampleJSON; convert(); }
+    function clearInput(){ document.getElementById('jsonInput').value=''; document.getElementById('javaOutput').textContent=''; }
+    function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500); }
+    function copyOutput(){
+        const text = document.getElementById('javaOutput').textContent;
+        if(!text) return;
+        navigator.clipboard.writeText(text).then(()=>showToast('Copied!'));
+    }
+
+    function toPascal(s){
+        return s.replace(/(^|[_\-\s]+)(.)/g, (_, __, c) => c.toUpperCase()).replace(/[^A-Za-z0-9]/g,'');
+    }
+    function toCamel(s){
+        const p = toPascal(s);
+        return p.charAt(0).toLowerCase() + p.slice(1);
+    }
+    function singularize(s){
+        if (s.endsWith('ies')) return s.slice(0,-3)+'y';
+        if (s.endsWith('ses')||s.endsWith('xes')||s.endsWith('zes')) return s.slice(0,-2);
+        if (s.endsWith('s')&&!s.endsWith('ss')) return s.slice(0,-1);
+        return s;
+    }
+
+    function javaType(val, key, classes){
+        if (val === null || val === undefined) return 'Object';
+        switch(typeof val){
+            case 'string': return 'String';
+            case 'number': return Number.isInteger(val) ? 'Long' : 'Double';
+            case 'boolean': return 'Boolean';
+            case 'object':
+                if (Array.isArray(val)){
+                    if (val.length === 0) return 'List<Object>';
+                    if (typeof val[0] === 'object' && val[0] !== null && !Array.isArray(val[0])){
+                        const merged = {};
+                        val.forEach(item => {
+                            if (item && typeof item === 'object'){
+                                Object.keys(item).forEach(k => { if (!(k in merged)||merged[k]===null) merged[k]=item[k]; });
+                            }
+                        });
+                        const name = singularize(toPascal(key));
+                        buildClass(name, merged, classes);
+                        return 'List<' + name + '>';
+                    }
+                    return 'List<' + javaType(val[0], key, classes) + '>';
+                }
+                const name = toPascal(key);
+                buildClass(name, val, classes);
+                return name;
+            default: return 'Object';
+        }
+    }
+
+    function buildClass(name, obj, classes){
+        if (classes.has(name)) return;
+        const fields = [];
+        classes.set(name, fields);
+        for (const [key, val] of Object.entries(obj)){
+            const fieldName = toCamel(key);
+            const type = javaType(val, key, classes);
+            fields.push({ fieldName, type, originalKey: key });
+        }
+    }
+
+    function renderClasses(rootName, classes, kind, annotation){
+        const lines = [];
+        lines.push('import java.util.List;');
+        if (annotation === 'jackson'){
+            lines.push('import com.fasterxml.jackson.annotation.JsonProperty;');
+        } else if (annotation === 'gson'){
+            lines.push('import com.google.gson.annotations.SerializedName;');
+        }
+        if (kind === 'lombok'){
+            lines.push('import lombok.Data;');
+            lines.push('import lombok.NoArgsConstructor;');
+            lines.push('import lombok.AllArgsConstructor;');
+        }
+        lines.push('');
+
+        const rendered = new Set();
+        function renderAnnotation(f, indent){
+            if (f.originalKey === f.fieldName) return;
+            if (annotation === 'jackson') lines.push(`${indent}@JsonProperty("${f.originalKey}")`);
+            else if (annotation === 'gson') lines.push(`${indent}@SerializedName("${f.originalKey}")`);
+        }
+        function render(name){
+            if (rendered.has(name)) return;
+            rendered.add(name);
+            const fields = classes.get(name);
+            if (!fields) return;
+            for (const f of fields){
+                const inner = f.type.replace(/List<|>/g,'').trim();
+                if (classes.has(inner) && !rendered.has(inner)) render(inner);
+            }
+
+            if (kind === 'record'){
+                const parts = fields.map(f => {
+                    const ann = annotation === 'jackson' && f.originalKey !== f.fieldName
+                        ? `@JsonProperty("${f.originalKey}") `
+                        : annotation === 'gson' && f.originalKey !== f.fieldName
+                        ? `@SerializedName("${f.originalKey}") `
+                        : '';
+                    return `${ann}${f.type} ${f.fieldName}`;
+                });
+                lines.push(`public record ${name}(`);
+                parts.forEach((p, i) => lines.push(`    ${p}${i < parts.length - 1 ? ',' : ''}`));
+                lines.push(') {}');
+            } else if (kind === 'lombok'){
+                lines.push('@Data');
+                lines.push('@NoArgsConstructor');
+                lines.push('@AllArgsConstructor');
+                lines.push(`public class ${name} {`);
+                fields.forEach(f => {
+                    renderAnnotation(f, '    ');
+                    lines.push(`    private ${f.type} ${f.fieldName};`);
+                });
+                lines.push('}');
+            } else {
+                lines.push(`public class ${name} {`);
+                fields.forEach(f => {
+                    renderAnnotation(f, '    ');
+                    lines.push(`    private ${f.type} ${f.fieldName};`);
+                });
+                lines.push('');
+                fields.forEach(f => {
+                    const cap = f.fieldName.charAt(0).toUpperCase() + f.fieldName.slice(1);
+                    const getterPrefix = f.type === 'Boolean' ? 'is' : 'get';
+                    lines.push(`    public ${f.type} ${getterPrefix}${cap}() { return ${f.fieldName}; }`);
+                    lines.push(`    public void set${cap}(${f.type} ${f.fieldName}) { this.${f.fieldName} = ${f.fieldName}; }`);
+                });
+                lines.push('}');
+            }
+            lines.push('');
+        }
+        render(rootName);
+        for (const [n] of classes) if (!rendered.has(n)) render(n);
+        return lines.join('\n').trimEnd();
+    }
+
+    function convert(){
+        const input = document.getElementById('jsonInput').value.trim();
+        const output = document.getElementById('javaOutput');
+        if (!input){ output.textContent=''; return; }
+        let parsed;
+        try { parsed = JSON.parse(input); }
+        catch(e){ output.innerHTML = `<span class="error">// JSON Parse Error: ${e.message}</span>`; return; }
+        if (typeof parsed !== 'object' || parsed === null){
+            output.innerHTML = '<span class="error">// Input must be a JSON object or array of objects</span>'; return;
+        }
+        const annotation = document.getElementById('annotation').value;
+        const kind = document.getElementById('kind').value;
+        const rootName = toPascal(document.getElementById('className').value.trim() || 'Root');
+        const classes = new Map();
+        if (Array.isArray(parsed)){
+            if (parsed.length === 0){ output.textContent='// Empty array'; return; }
+            const merged = {};
+            parsed.forEach(item => {
+                if (item && typeof item === 'object'){
+                    Object.keys(item).forEach(k => { if (!(k in merged)||merged[k]===null) merged[k]=item[k]; });
+                }
+            });
+            buildClass(rootName, merged, classes);
+        } else {
+            buildClass(rootName, parsed, classes);
+        }
+        output.textContent = renderClasses(rootName, classes, kind, annotation);
+    }
+
+    let timer;
+    document.getElementById('jsonInput').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(convert, 300); });
+    document.querySelectorAll('#className, #annotation, #kind').forEach(el => {
+        el.addEventListener('change', convert); el.addEventListener('input', convert);
+    });
+    </script>
+</body>
+</html>

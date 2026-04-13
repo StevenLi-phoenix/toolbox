@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON to C# Class Converter — Free Online Tool</title>
+    <meta name="description" content="Convert JSON to C# classes or records instantly. Supports nullable reference types, System.Text.Json and Newtonsoft.Json attributes. 100% client-side.">
+    <meta name="keywords" content="JSON to C#, CSharp class generator, C# record, System.Text.Json, Newtonsoft, dotnet tool">
+    <meta name="author" content="Steven Li">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/json2csharp.html">
+    <meta property="og:title" content="JSON to C# Class Converter">
+    <meta property="og:description" content="Convert JSON to C# classes or records with nullable types and JSON attributes.">
+    <meta property="og:type" content="website">
+    <link rel="stylesheet" href="toolbox.css">
+<style>
+  main{max-width:1100px;margin:0 auto;padding:0 20px 20px}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;font-size:.85rem}
+  .controls label{display:flex;align-items:center;gap:4px;cursor:pointer}
+  .controls input[type="text"],.controls select{padding:4px 8px;font-family:var(--sans);font-size:.85rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text)}
+  .controls input[type="text"]{width:150px}
+  .editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .editor-pane{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .pane-header{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:.85rem;font-weight:600;color:var(--muted)}
+  .btn-outline{background:transparent;border:1px solid var(--border)}
+  .editor-pane textarea{flex:1;min-height:360px;resize:vertical;border:none;padding:12px;font-family:var(--mono);font-size:.85rem;line-height:1.5;background:var(--bg);color:var(--text);outline:none}
+  .output-area{flex:1;min-height:360px;padding:12px;font-family:var(--mono);font-size:.85rem;line-height:1.5;background:var(--surface2);white-space:pre;overflow:auto;tab-size:4;-moz-tab-size:4}
+  .output-area .error{color:var(--error)}
+  @media(max-width:768px){.editor-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+    <a href="index.html" class="back">&larr; All Tools</a>
+    <header>
+        <h1>{ } JSON → <span>C# Class</span></h1>
+        <p class="subtitle">Convert JSON to C# classes or records with optional JSON attributes and nullable reference types.</p>
+    </header>
+    <main>
+        <div class="controls">
+            <label for="className">
+                Root name:
+                <input type="text" id="className" value="Root" placeholder="ClassName">
+            </label>
+            <label for="kind">
+                Type:
+                <select id="kind">
+                    <option value="class" selected>class</option>
+                    <option value="record">record</option>
+                </select>
+            </label>
+            <label for="attribute">
+                Attributes:
+                <select id="attribute">
+                    <option value="none">None</option>
+                    <option value="system" selected>System.Text.Json</option>
+                    <option value="newtonsoft">Newtonsoft.Json</option>
+                </select>
+            </label>
+            <label><input type="checkbox" id="optNullable" checked> Nullable (C# 8+)</label>
+            <button class="btn" onclick="convert()">Convert</button>
+            <button class="btn btn-secondary" onclick="loadSample()">Load Sample</button>
+        </div>
+        <div class="editor-grid">
+            <div class="editor-pane">
+                <div class="pane-header">
+                    <span>JSON Input</span>
+                    <button class="btn btn-secondary btn-outline" onclick="clearInput()">Clear</button>
+                </div>
+                <textarea id="jsonInput" placeholder='Paste your JSON here...'></textarea>
+            </div>
+            <div class="editor-pane">
+                <div class="pane-header">
+                    <span>C# Output</span>
+                    <button class="btn btn-secondary btn-outline" onclick="copyOutput()">Copy</button>
+                </div>
+                <div class="output-area" id="csOutput"></div>
+            </div>
+        </div>
+    </main>
+    <div class="toast" id="toast">Copied!</div>
+    <footer>
+        <p>Built with ☕ by Steven Li · No data leaves your browser</p>
+    </footer>
+    <script>
+    const sampleJSON = `{
+  "id": 1,
+  "name": "Alice Wonderland",
+  "email": "alice@example.com",
+  "age": 30,
+  "is_active": true,
+  "score": 98.5,
+  "tags": ["admin", "editor"],
+  "address": {
+    "street": "123 Main St",
+    "city": "Springfield",
+    "zip_code": "62704"
+  },
+  "orders": [
+    { "order_id": "ORD-001", "amount": 49.99 }
+  ],
+  "metadata": null
+}`;
+
+    function loadSample(){ document.getElementById('jsonInput').value = sampleJSON; convert(); }
+    function clearInput(){ document.getElementById('jsonInput').value=''; document.getElementById('csOutput').textContent=''; }
+    function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500); }
+    function copyOutput(){
+        const text = document.getElementById('csOutput').textContent;
+        if(!text) return;
+        navigator.clipboard.writeText(text).then(()=>showToast('Copied!'));
+    }
+
+    function toPascal(s){
+        return s.replace(/(^|[_\-\s]+)(.)/g, (_, __, c) => c.toUpperCase()).replace(/[^A-Za-z0-9]/g,'');
+    }
+    function singularize(s){
+        if (s.endsWith('ies')) return s.slice(0,-3)+'y';
+        if (s.endsWith('ses')||s.endsWith('xes')||s.endsWith('zes')) return s.slice(0,-2);
+        if (s.endsWith('s')&&!s.endsWith('ss')) return s.slice(0,-1);
+        return s;
+    }
+
+    function csType(val, key, classes, opts){
+        if (val === null || val === undefined){
+            return opts.nullable ? 'object?' : 'object';
+        }
+        switch(typeof val){
+            case 'string': return 'string';
+            case 'number': return Number.isInteger(val) ? 'long' : 'double';
+            case 'boolean': return 'bool';
+            case 'object':
+                if (Array.isArray(val)){
+                    if (val.length === 0) return 'List<object>';
+                    if (typeof val[0] === 'object' && val[0] !== null && !Array.isArray(val[0])){
+                        const merged = {};
+                        val.forEach(item => {
+                            if (item && typeof item === 'object'){
+                                Object.keys(item).forEach(k => { if (!(k in merged)||merged[k]===null) merged[k]=item[k]; });
+                            }
+                        });
+                        const name = singularize(toPascal(key));
+                        buildClass(name, merged, classes, opts);
+                        return 'List<' + name + '>';
+                    }
+                    return 'List<' + csType(val[0], key, classes, opts) + '>';
+                }
+                const name = toPascal(key);
+                buildClass(name, val, classes, opts);
+                return name;
+            default: return 'object';
+        }
+    }
+
+    function buildClass(name, obj, classes, opts){
+        if (classes.has(name)) return;
+        const fields = [];
+        classes.set(name, fields);
+        for (const [key, val] of Object.entries(obj)){
+            const propName = toPascal(key);
+            let t = csType(val, key, classes, opts);
+            const refType = !['long','double','bool','int','float','decimal'].includes(t);
+            if ((val === null || opts.nullable) && refType && !t.endsWith('?')) t += '?';
+            fields.push({ propName, type: t, originalKey: key });
+        }
+    }
+
+    function renderClasses(rootName, classes, attribute, kind){
+        const lines = [];
+        if (attribute === 'system') lines.push('using System.Text.Json.Serialization;');
+        else if (attribute === 'newtonsoft') lines.push('using Newtonsoft.Json;');
+        lines.push('using System.Collections.Generic;');
+        lines.push('');
+
+        const rendered = new Set();
+        function render(name){
+            if (rendered.has(name)) return;
+            rendered.add(name);
+            const fields = classes.get(name);
+            if (!fields) return;
+            for (const f of fields){
+                const inner = f.type.replace(/List<|>|\?/g,'').trim();
+                if (classes.has(inner) && !rendered.has(inner)) render(inner);
+            }
+            if (kind === 'record'){
+                lines.push(`public record ${name}(`);
+                fields.forEach((f, i) => {
+                    const comma = i < fields.length - 1 ? ',' : '';
+                    let prefix = '';
+                    if (f.originalKey !== f.propName){
+                        if (attribute === 'system') prefix = `[property: JsonPropertyName("${f.originalKey}")] `;
+                        else if (attribute === 'newtonsoft') prefix = `[property: JsonProperty("${f.originalKey}")] `;
+                    }
+                    lines.push(`    ${prefix}${f.type} ${f.propName}${comma}`);
+                });
+                lines.push(');');
+            } else {
+                lines.push(`public class ${name}`);
+                lines.push('{');
+                fields.forEach(f => {
+                    if (f.originalKey !== f.propName){
+                        if (attribute === 'system') lines.push(`    [JsonPropertyName("${f.originalKey}")]`);
+                        else if (attribute === 'newtonsoft') lines.push(`    [JsonProperty("${f.originalKey}")]`);
+                    }
+                    lines.push(`    public ${f.type} ${f.propName} { get; set; }`);
+                });
+                lines.push('}');
+            }
+            lines.push('');
+        }
+        render(rootName);
+        for (const [n] of classes) if (!rendered.has(n)) render(n);
+        return lines.join('\n').trimEnd();
+    }
+
+    function convert(){
+        const input = document.getElementById('jsonInput').value.trim();
+        const output = document.getElementById('csOutput');
+        if (!input){ output.textContent=''; return; }
+        let parsed;
+        try { parsed = JSON.parse(input); }
+        catch(e){ output.innerHTML = `<span class="error">// JSON Parse Error: ${e.message}</span>`; return; }
+        if (typeof parsed !== 'object' || parsed === null){
+            output.innerHTML = '<span class="error">// Input must be a JSON object or array of objects</span>'; return;
+        }
+        const opts = { nullable: document.getElementById('optNullable').checked };
+        const attribute = document.getElementById('attribute').value;
+        const kind = document.getElementById('kind').value;
+        const rootName = toPascal(document.getElementById('className').value.trim() || 'Root');
+        const classes = new Map();
+        if (Array.isArray(parsed)){
+            if (parsed.length === 0){ output.textContent = '// Empty array'; return; }
+            const merged = {};
+            parsed.forEach(item => {
+                if (item && typeof item === 'object'){
+                    Object.keys(item).forEach(k => { if (!(k in merged)||merged[k]===null) merged[k]=item[k]; });
+                }
+            });
+            buildClass(rootName, merged, classes, opts);
+        } else {
+            buildClass(rootName, parsed, classes, opts);
+        }
+        output.textContent = renderClasses(rootName, classes, attribute, kind);
+    }
+
+    let timer;
+    document.getElementById('jsonInput').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(convert, 300); });
+    document.querySelectorAll('#className, #attribute, #kind, #optNullable').forEach(el => {
+        el.addEventListener('change', convert); el.addEventListener('input', convert);
+    });
+    </script>
+</body>
+</html>
