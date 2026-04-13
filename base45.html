@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base45 Encoder / Decoder</title>
+<meta name="description" content="Encode and decode Base45 (RFC 9285) strings — the compact alphanumeric encoding used by EU Digital COVID Certificates and QR codes. 100% client-side.">
+<meta name="keywords" content="base45, rfc 9285, encoder, decoder, qr code, eu dcc, alphanumeric">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/base45.html">
+<meta property="og:title" content="Base45 Encoder / Decoder">
+<meta property="og:description" content="Encode and decode Base45 strings for QR codes and EU Digital COVID Certificates.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/base45.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { min-height: 130px; font-family: var(--mono); font-size: .88rem; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .label button { padding: 2px 10px; font-size: .7rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; }
+  .label button:hover { background: var(--surface2); }
+  .opts { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; font-size: .85rem; align-items: center; }
+  .info { padding: 10px 14px; background: var(--surface2); border-radius: var(--radius); font-size: .8rem; color: var(--muted); margin-top: 10px; }
+  .sample { font-family: var(--mono); font-size: .78rem; color: var(--text); background: var(--surface2); padding: 2px 6px; border-radius: 3px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Base45 Encoder / Decoder</h1>
+  <p class="subtitle">Encode and decode Base45 strings (RFC 9285). Base45 is a compact alphanumeric encoding designed for QR codes — it uses only the 45-character subset QR codes can store in alphanumeric mode, giving ~30% smaller QR payloads than Base64. Famously used by EU Digital COVID Certificates.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="opts">
+      <label>Input mode:
+        <select id="mode">
+          <option value="text">UTF-8 text</option>
+          <option value="hex">Hex bytes</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="auto" checked> Live</label>
+      <button class="btn btn-secondary" id="swap">⇅ Swap</button>
+      <button class="btn btn-secondary" id="sample">Sample</button>
+      <button class="btn btn-secondary" id="clear">Clear</button>
+    </div>
+
+    <div class="panels">
+      <div>
+        <div class="label"><span>Decoded</span><button onclick="copyEl('decoded')">Copy</button></div>
+        <textarea id="decoded" placeholder="Type text or hex here…" spellcheck="false"></textarea>
+      </div>
+      <div>
+        <div class="label"><span>Base45</span><button onclick="copyEl('encoded')">Copy</button></div>
+        <textarea id="encoded" placeholder="Type Base45 here to decode…" spellcheck="false"></textarea>
+      </div>
+    </div>
+    <div class="info" id="status">Ready.</div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About Base45 (RFC 9285)</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      Base45 encodes every 2 bytes as 3 characters (and a trailing odd byte as 2 characters) from the alphabet
+      <code>0-9 A-Z space $%*+-./:</code>. These 45 symbols are exactly the characters QR code alphanumeric
+      mode can represent at 5.5 bits each, so a Base45 payload fits ~30% more data per QR than Base64.<br><br>
+      <strong>Reference:</strong> Encoding <span class="sample">"AB"</span> (0x41, 0x42) → <span class="sample">"BB8"</span>. The string
+      <span class="sample">"ietf!"</span> encodes to <span class="sample">"QED8WEX0"</span>.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+const LOOKUP = {};
+for (let i = 0; i < ALPHABET.length; i++) LOOKUP[ALPHABET[i]] = i;
+
+function bytesToBase45(bytes) {
+  let out = '';
+  let i = 0;
+  while (i + 1 < bytes.length) {
+    const x = (bytes[i] << 8) | bytes[i + 1];
+    const e = Math.floor(x / (45 * 45));
+    const rem = x % (45 * 45);
+    const d = Math.floor(rem / 45);
+    const c = rem % 45;
+    out += ALPHABET[c] + ALPHABET[d] + ALPHABET[e];
+    i += 2;
+  }
+  if (i < bytes.length) {
+    const x = bytes[i];
+    const d = Math.floor(x / 45);
+    const c = x % 45;
+    out += ALPHABET[c] + ALPHABET[d];
+  }
+  return out;
+}
+
+function base45ToBytes(str) {
+  const s = str.toUpperCase();
+  // Validate characters.
+  for (const ch of s) if (!(ch in LOOKUP)) throw new Error('Invalid Base45 character: ' + JSON.stringify(ch));
+  const out = [];
+  let i = 0;
+  while (i + 2 < s.length) {
+    const c = LOOKUP[s[i]], d = LOOKUP[s[i + 1]], e = LOOKUP[s[i + 2]];
+    const n = c + d * 45 + e * 45 * 45;
+    if (n > 0xffff) throw new Error('Base45 triplet out of range at position ' + i);
+    out.push((n >> 8) & 0xff, n & 0xff);
+    i += 3;
+  }
+  const left = s.length - i;
+  if (left === 2) {
+    const c = LOOKUP[s[i]], d = LOOKUP[s[i + 1]];
+    const n = c + d * 45;
+    if (n > 0xff) throw new Error('Base45 pair out of range at end');
+    out.push(n);
+  } else if (left === 1) {
+    throw new Error('Base45 string length mod 3 must not be 1');
+  }
+  return new Uint8Array(out);
+}
+
+function hexToBytes(hex) {
+  hex = hex.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (hex.length % 2 !== 0) throw new Error('Hex string must have even length');
+  if (!/^[0-9a-fA-F]*$/.test(hex)) throw new Error('Invalid hex characters');
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+
+function bytesToHex(b) {
+  return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+}
+
+const decodedEl = document.getElementById('decoded');
+const encodedEl = document.getElementById('encoded');
+const modeEl = document.getElementById('mode');
+const autoEl = document.getElementById('auto');
+const statusEl = document.getElementById('status');
+
+function setStatus(msg, type) {
+  statusEl.textContent = msg;
+  statusEl.style.color = type === 'error' ? 'var(--error)' : type === 'success' ? 'var(--success)' : 'var(--muted)';
+}
+
+function fromDecoded() {
+  const val = decodedEl.value;
+  if (!val) { encodedEl.value = ''; setStatus('Ready.'); return; }
+  try {
+    const mode = modeEl.value;
+    const bytes = mode === 'hex' ? hexToBytes(val.trim()) : new TextEncoder().encode(val);
+    encodedEl.value = bytesToBase45(bytes);
+    setStatus(`Encoded ${bytes.length} byte${bytes.length === 1 ? '' : 's'} → ${encodedEl.value.length} chars`, 'success');
+  } catch (e) {
+    encodedEl.value = '';
+    setStatus(e.message, 'error');
+  }
+}
+
+function fromEncoded() {
+  const val = encodedEl.value.trim();
+  if (!val) { decodedEl.value = ''; setStatus('Ready.'); return; }
+  try {
+    const bytes = base45ToBytes(val);
+    const mode = modeEl.value;
+    if (mode === 'hex') {
+      decodedEl.value = bytesToHex(bytes);
+    } else {
+      try {
+        decodedEl.value = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch {
+        decodedEl.value = bytesToHex(bytes);
+        setStatus(`Decoded ${bytes.length} bytes — not valid UTF-8, showing hex`, 'success');
+        return;
+      }
+    }
+    setStatus(`Decoded ${val.length} chars → ${bytes.length} byte${bytes.length === 1 ? '' : 's'}`, 'success');
+  } catch (e) {
+    decodedEl.value = '';
+    setStatus(e.message, 'error');
+  }
+}
+
+decodedEl.addEventListener('input', () => { if (autoEl.checked) fromDecoded(); });
+encodedEl.addEventListener('input', () => { if (autoEl.checked) fromEncoded(); });
+modeEl.addEventListener('change', () => { if (decodedEl.value) fromDecoded(); });
+
+document.getElementById('swap').addEventListener('click', () => {
+  const tmp = decodedEl.value;
+  decodedEl.value = encodedEl.value;
+  encodedEl.value = tmp;
+  fromEncoded();
+});
+
+document.getElementById('sample').addEventListener('click', () => {
+  modeEl.value = 'text';
+  decodedEl.value = 'ietf!';
+  fromDecoded();
+});
+
+document.getElementById('clear').addEventListener('click', () => {
+  decodedEl.value = '';
+  encodedEl.value = '';
+  setStatus('Ready.');
+});
+
+function copyEl(id) {
+  const el = document.getElementById(id);
+  if (!el.value) return;
+  navigator.clipboard.writeText(el.value).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+</script>
+</body>
+</html>

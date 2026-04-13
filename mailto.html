@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mailto: Link Builder</title>
+<meta name="description" content="Build mailto: links with recipients, CC, BCC, subject, body, and attachments headers. Preview, open, and copy properly encoded RFC 6068 URIs. 100% client-side.">
+<meta name="keywords" content="mailto, email link, rfc 6068, html, cc, bcc, subject, body">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mailto.html">
+<meta property="og:title" content="mailto: Link Builder">
+<meta property="og:description" content="Build properly encoded mailto: links with CC, BCC, subject, and body.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/mailto.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form { display: grid; gap: 12px; }
+  .form label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  .form input, .form textarea { font-size: .9rem; font-family: var(--sans); }
+  .form textarea { min-height: 120px; font-family: var(--mono); font-size: .85rem; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .out-wrap { position: relative; margin-top: 8px; }
+  pre.out { background: var(--surface2); padding: 12px 14px; border-radius: var(--radius); font-family: var(--mono); font-size: .82rem; color: var(--text); white-space: pre-wrap; word-break: break-all; margin: 0; }
+  .out-wrap button { position: absolute; top: 8px; right: 8px; padding: 4px 10px; font-size: .72rem; }
+  .row-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .section-title { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; margin: 18px 0 8px; }
+  .html-preview { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+  .html-preview a { color: var(--accent); }
+  .char-count { font-size: .72rem; color: var(--muted); text-align: right; margin-top: 2px; }
+  .warn { font-size: .78rem; color: var(--error); margin-top: 4px; }
+  @media (max-width: 768px) { .two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>mailto: Link Builder</h1>
+  <p class="subtitle">Compose fully-encoded <code>mailto:</code> links per RFC 6068 — add recipients, CC/BCC, subject, body, and even custom headers like <code>In-Reply-To</code>. Preview the rendered HTML link, copy the URI, or open it directly in your mail client.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="form">
+      <label>To
+        <input id="to" type="text" placeholder="alice@example.com, bob@example.com">
+      </label>
+      <div class="two">
+        <label>CC
+          <input id="cc" type="text" placeholder="cc@example.com">
+        </label>
+        <label>BCC
+          <input id="bcc" type="text" placeholder="bcc@example.com">
+        </label>
+      </div>
+      <label>Subject
+        <input id="subject" type="text" placeholder="Quick question about the project">
+      </label>
+      <label>Body
+        <textarea id="body" placeholder="Hi,&#10;&#10;Wanted to follow up on..."></textarea>
+        <div class="char-count" id="char-count">0 characters</div>
+      </label>
+      <label>Custom headers (optional, key: value per line)
+        <textarea id="headers" style="min-height:60px;" placeholder="In-Reply-To: &lt;msgid@example.com&gt;&#10;Reply-To: me@example.com"></textarea>
+      </label>
+    </div>
+
+    <div class="row-buttons">
+      <button class="btn btn-secondary" id="sample">Sample</button>
+      <button class="btn btn-secondary" id="clear">Clear</button>
+      <button class="btn btn-primary" id="open">Open in mail app</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="section-title">Encoded URI</div>
+    <div class="out-wrap">
+      <pre class="out" id="uri"></pre>
+      <button class="btn btn-secondary" onclick="copy('uri')">Copy</button>
+    </div>
+    <div id="warn" class="warn"></div>
+
+    <div class="section-title">HTML link</div>
+    <div class="out-wrap">
+      <pre class="out" id="html"></pre>
+      <button class="btn btn-secondary" onclick="copy('html')">Copy</button>
+    </div>
+
+    <div class="section-title">Preview</div>
+    <div class="html-preview" id="preview">—</div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">RFC 6068 rules</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      Multiple recipients are comma-separated. The first recipient goes in the path; headers (<code>cc</code>,
+      <code>bcc</code>, <code>subject</code>, <code>body</code>) go in the query string and must be <code>%xx</code>-encoded.
+      Newlines in the body become <code>%0D%0A</code>. Not every mail client honors <code>bcc</code> — Gmail web ignores it.
+      Mobile mail apps usually handle the link well; desktop clients depend on OS default.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const fields = ['to', 'cc', 'bcc', 'subject', 'body', 'headers'];
+
+// RFC 3986 encode, but keep the characters RFC 6068 allows to stay literal.
+function enc(s) {
+  return encodeURIComponent(s).replace(/%20/g, '%20');
+}
+
+function splitEmails(s) {
+  return s.split(/[,;\n]/).map(x => x.trim()).filter(Boolean);
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function build() {
+  const to = splitEmails($('to').value);
+  const cc = splitEmails($('cc').value);
+  const bcc = splitEmails($('bcc').value);
+  const subject = $('subject').value;
+  const body = $('body').value;
+  const extraHeaders = $('headers').value;
+
+  const parts = [];
+  if (cc.length) parts.push('cc=' + cc.map(encodeURIComponent).join(','));
+  if (bcc.length) parts.push('bcc=' + bcc.map(encodeURIComponent).join(','));
+  if (subject) parts.push('subject=' + encodeURIComponent(subject));
+  if (body) parts.push('body=' + encodeURIComponent(body));
+  if (extraHeaders.trim()) {
+    for (const line of extraHeaders.split(/\n/)) {
+      const m = line.match(/^\s*([^:]+)\s*:\s*(.*?)\s*$/);
+      if (m) parts.push(encodeURIComponent(m[1].trim()) + '=' + encodeURIComponent(m[2]));
+    }
+  }
+
+  const path = to.map(encodeURIComponent).join(',');
+  const query = parts.join('&');
+  const uri = 'mailto:' + path + (query ? '?' + query : '');
+
+  $('uri').textContent = uri || 'mailto:';
+
+  const label = subject || to[0] || 'Email';
+  const html = `<a href="${escapeHtml(uri)}">${escapeHtml(label)}</a>`;
+  $('html').textContent = html;
+  $('preview').innerHTML = uri === 'mailto:' ? '—' : html;
+
+  // Validation warnings.
+  const bad = [...to, ...cc, ...bcc].filter(e => !EMAIL_RE.test(e));
+  $('char-count').textContent = body.length + ' characters';
+  $('warn').textContent = bad.length ? 'Warning: suspicious email format — ' + bad.join(', ') : '';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+fields.forEach(f => $(f).addEventListener('input', build));
+
+$('sample').addEventListener('click', () => {
+  $('to').value = 'alice@example.com';
+  $('cc').value = 'team@example.com';
+  $('bcc').value = '';
+  $('subject').value = 'Coffee chat next week?';
+  $('body').value = "Hi Alice,\n\nWould love to grab coffee sometime next week to catch up.\n\nLet me know what works.\n\nThanks!";
+  $('headers').value = '';
+  build();
+});
+
+$('clear').addEventListener('click', () => {
+  fields.forEach(f => $(f).value = '');
+  build();
+});
+
+$('open').addEventListener('click', () => {
+  const uri = $('uri').textContent;
+  if (uri && uri !== 'mailto:') window.location.href = uri;
+});
+
+function copy(id) {
+  const text = $(id).textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = $('toast'); t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+build();
+</script>
+</body>
+</html>

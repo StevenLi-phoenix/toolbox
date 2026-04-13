@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>srcset & picture Builder</title>
+<meta name="description" content="Generate responsive image srcset attributes and <picture> elements with art direction, density descriptors (1x/2x), and width descriptors (w). 100% client-side.">
+<meta name="keywords" content="srcset, picture, responsive images, sizes, art direction, html">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/srcset.html">
+<meta property="og:title" content="srcset & picture Builder">
+<meta property="og:description" content="Build responsive image srcset and <picture> markup with art direction.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/srcset.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .opts label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  .opts input, .opts select { font-size: .9rem; font-family: var(--sans); }
+  .source-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .source-row input, .source-row select { font-size: .85rem; }
+  .source-row button { padding: 6px 10px; font-size: .75rem; }
+  pre.out { background: var(--surface2); padding: 12px 14px; border-radius: var(--radius); font-family: var(--mono); font-size: .82rem; color: var(--text); white-space: pre-wrap; word-break: break-all; margin: 0; }
+  .out-wrap { position: relative; }
+  .out-wrap button { position: absolute; top: 8px; right: 8px; padding: 4px 10px; font-size: .72rem; }
+  .section-title { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; margin: 18px 0 8px; }
+  .hint { font-size: .78rem; color: var(--muted); margin-top: 4px; }
+  .tabs { margin-bottom: 16px; }
+  @media (max-width: 768px) {
+    .source-row { grid-template-columns: 1fr 1fr; }
+    .source-row button { grid-column: span 2; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>srcset & &lt;picture&gt; Builder</h1>
+  <p class="subtitle">Build responsive image markup — <code>srcset</code> with width (<code>w</code>) or density (<code>x</code>) descriptors, <code>sizes</code> media queries, and full <code>&lt;picture&gt;</code> elements with art direction and format fallbacks (AVIF → WebP → JPEG).</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="tabs">
+      <button class="tab active" data-tab="srcset">srcset (img)</button>
+      <button class="tab" data-tab="picture">&lt;picture&gt;</button>
+    </div>
+
+    <!-- srcset tab -->
+    <div id="pane-srcset">
+      <div class="opts">
+        <label>Base URL / template
+          <input id="base" type="text" value="https://example.com/img/hero-{w}.jpg" placeholder="/img/hero-{w}.jpg">
+        </label>
+        <label>Descriptor type
+          <select id="desc">
+            <option value="w">Width (w)</option>
+            <option value="x">Density (x)</option>
+          </select>
+        </label>
+        <label>Widths / densities (comma-separated)
+          <input id="values" type="text" value="320, 640, 960, 1280, 1920">
+        </label>
+        <label>alt attribute
+          <input id="alt" type="text" value="Hero image">
+        </label>
+        <label>sizes attribute
+          <input id="sizes" type="text" value="(max-width: 768px) 100vw, 50vw">
+        </label>
+        <label>loading
+          <select id="loading">
+            <option value="lazy">lazy</option>
+            <option value="eager">eager</option>
+            <option value="">(none)</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">Tip: include <code>{w}</code> or <code>{x}</code> in the URL template — it will be replaced with each descriptor value.</p>
+    </div>
+
+    <!-- picture tab -->
+    <div id="pane-picture" style="display:none;">
+      <div class="opts">
+        <label>Fallback &lt;img&gt; src
+          <input id="p-fallback" type="text" value="hero-960.jpg">
+        </label>
+        <label>Fallback alt
+          <input id="p-alt" type="text" value="Hero image">
+        </label>
+      </div>
+      <div class="section-title">Sources</div>
+      <div id="sources"></div>
+      <button class="btn btn-secondary" id="add-source" style="margin-top:6px;">+ Add source</button>
+      <p class="hint">Sources are tried in order. Put modern formats (AVIF, WebP) first, then JPEG/PNG.</p>
+    </div>
+
+    <div class="section-title">Output</div>
+    <div class="out-wrap">
+      <pre class="out" id="output"></pre>
+      <button class="btn btn-secondary" onclick="copyOutput()">Copy</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Descriptor cheat sheet</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      <strong>w descriptor</strong> — tells the browser the actual pixel width of each candidate. Requires a <code>sizes</code>
+      attribute describing the layout width. The browser picks based on viewport and DPR.<br>
+      <strong>x descriptor</strong> — tells the browser each candidate's density multiplier (1x, 2x, 3x). Use when the image
+      always renders at a fixed CSS size.<br>
+      <strong>&lt;picture&gt;</strong> — use for art direction (different crop per breakpoint) or format fallbacks
+      (<code>image/avif</code>, <code>image/webp</code>). The browser picks the first matching source.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const outEl = $('output');
+
+// -- Tabs --
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const t = btn.dataset.tab;
+    $('pane-srcset').style.display = t === 'srcset' ? '' : 'none';
+    $('pane-picture').style.display = t === 'picture' ? '' : 'none';
+    render();
+  });
+});
+
+// -- srcset tab --
+function buildSrcset() {
+  const base = $('base').value.trim();
+  const desc = $('desc').value;
+  const values = $('values').value.split(',').map(s => s.trim()).filter(Boolean);
+  const alt = $('alt').value;
+  const sizes = $('sizes').value.trim();
+  const loading = $('loading').value;
+  if (!base || values.length === 0) return '<!-- fill in the fields above -->';
+
+  const candidates = values.map(v => {
+    const num = parseFloat(v);
+    if (isNaN(num)) return null;
+    const suffix = desc === 'w' ? `${num}w` : `${num}x`;
+    const url = base.replace(/\{w\}/g, num).replace(/\{x\}/g, num);
+    return `${url} ${suffix}`;
+  }).filter(Boolean);
+
+  const srcset = candidates.join(',\n        ');
+  const defaultSrc = base.replace(/\{w\}/g, values[values.length - 1]).replace(/\{x\}/g, '1');
+  const attrs = [`src="${escapeAttr(defaultSrc)}"`];
+  attrs.push(`srcset="${escapeAttr(srcset.replace(/\n\s+/g, ' '))}"`);
+  if (desc === 'w' && sizes) attrs.push(`sizes="${escapeAttr(sizes)}"`);
+  if (alt !== '') attrs.push(`alt="${escapeAttr(alt)}"`);
+  if (loading) attrs.push(`loading="${loading}"`);
+
+  return `<img\n    ${attrs.join('\n    ')}\n>`;
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+// -- picture tab --
+const DEFAULT_SOURCES = [
+  { type: 'image/avif', media: '', template: 'hero-{w}.avif', values: '640,1280,1920', desc: 'w', sizes: '(max-width: 768px) 100vw, 50vw' },
+  { type: 'image/webp', media: '', template: 'hero-{w}.webp', values: '640,1280,1920', desc: 'w', sizes: '(max-width: 768px) 100vw, 50vw' },
+];
+let sources = JSON.parse(JSON.stringify(DEFAULT_SOURCES));
+
+function renderSources() {
+  const wrap = $('sources');
+  wrap.innerHTML = '';
+  sources.forEach((src, i) => {
+    const row = document.createElement('div');
+    row.className = 'source-row';
+    row.innerHTML = `
+      <input placeholder="URL template (use {w})" value="${escapeAttr(src.template)}" data-k="template">
+      <input placeholder="values" value="${escapeAttr(src.values)}" data-k="values">
+      <select data-k="type">
+        <option value="">(no type)</option>
+        <option${src.type === 'image/avif' ? ' selected' : ''}>image/avif</option>
+        <option${src.type === 'image/webp' ? ' selected' : ''}>image/webp</option>
+        <option${src.type === 'image/jpeg' ? ' selected' : ''}>image/jpeg</option>
+        <option${src.type === 'image/png' ? ' selected' : ''}>image/png</option>
+      </select>
+      <button class="btn btn-secondary" data-rm>✕</button>`;
+    row.querySelectorAll('input,select').forEach(inp => {
+      inp.addEventListener('input', () => { src[inp.dataset.k] = inp.value; render(); });
+      inp.addEventListener('change', () => { src[inp.dataset.k] = inp.value; render(); });
+    });
+    row.querySelector('[data-rm]').addEventListener('click', () => {
+      sources.splice(i, 1); renderSources(); render();
+    });
+    wrap.appendChild(row);
+  });
+}
+
+$('add-source').addEventListener('click', () => {
+  sources.push({ type: 'image/jpeg', media: '', template: 'hero-{w}.jpg', values: '640,1280,1920', desc: 'w', sizes: '(max-width: 768px) 100vw, 50vw' });
+  renderSources(); render();
+});
+
+function buildPicture() {
+  const fallback = $('p-fallback').value.trim();
+  const alt = $('p-alt').value;
+  const lines = ['<picture>'];
+  for (const src of sources) {
+    const values = src.values.split(',').map(s => s.trim()).filter(Boolean);
+    if (values.length === 0) continue;
+    const srcset = values.map(v => `${src.template.replace(/\{w\}/g, v)} ${v}w`).join(', ');
+    const attrs = [];
+    if (src.type) attrs.push(`type="${src.type}"`);
+    attrs.push(`srcset="${escapeAttr(srcset)}"`);
+    attrs.push(`sizes="(max-width: 768px) 100vw, 50vw"`);
+    lines.push('    <source ' + attrs.join(' ') + '>');
+  }
+  lines.push(`    <img src="${escapeAttr(fallback)}" alt="${escapeAttr(alt)}" loading="lazy">`);
+  lines.push('</picture>');
+  return lines.join('\n');
+}
+
+function render() {
+  const activeTab = document.querySelector('.tab.active').dataset.tab;
+  outEl.textContent = activeTab === 'srcset' ? buildSrcset() : buildPicture();
+}
+
+function copyOutput() {
+  navigator.clipboard.writeText(outEl.textContent).then(() => {
+    const t = $('toast'); t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+document.querySelectorAll('#pane-srcset input, #pane-srcset select').forEach(el => {
+  el.addEventListener('input', render);
+  el.addEventListener('change', render);
+});
+document.querySelectorAll('#pane-picture input, #pane-picture select').forEach(el => {
+  el.addEventListener('input', render);
+  el.addEventListener('change', render);
+});
+
+renderSources();
+render();
+</script>
+</body>
+</html>
