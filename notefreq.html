@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Musical Note ↔ Frequency Converter — Free Online Tool</title>
+<meta name="description" content="Convert musical note names to frequency (Hz), MIDI numbers, and cents offset. Play tones, change reference tuning (A4), and explore octaves. Runs entirely in your browser.">
+<meta name="keywords" content="note frequency, hz to note, midi number, a440, musical note, pitch converter, cents offset">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/notefreq.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+  input[type=number], input[type=text], select {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: 1rem;
+    background: var(--bg); color: var(--text);
+  }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; }
+  .stat { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; text-align: center; }
+  .stat-val { font-family: var(--mono); font-size: 1.4rem; font-weight: 600; color: var(--text); word-break: break-all; }
+  .stat-lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 3px; }
+  .play-row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .keyboard { display: flex; gap: 2px; padding: 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
+  .key-wrap { position: relative; display: inline-block; }
+  .wkey { width: 36px; height: 140px; background: #fff; border: 1px solid #1f2937; border-radius: 0 0 4px 4px; cursor: pointer; font-family: var(--mono); font-size: .7rem; color: #1f2937; padding-bottom: 6px; display: flex; align-items: flex-end; justify-content: center; user-select: none; }
+  .wkey:hover { background: #e0f2fe; }
+  .wkey.hl { background: #fde68a; }
+  .bkey { position: absolute; top: 0; right: -10px; width: 20px; height: 85px; background: #1f2937; border: 1px solid #000; border-radius: 0 0 3px 3px; cursor: pointer; z-index: 2; color: #fff; font-family: var(--mono); font-size: .6rem; padding-bottom: 4px; display: flex; align-items: flex-end; justify-content: center; user-select: none; }
+  .bkey:hover { background: #374151; }
+  .bkey.hl { background: #b45309; }
+  .freq-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .85rem; }
+  .freq-table th, .freq-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: center; }
+  .freq-table th { background: var(--surface2); color: var(--muted); text-transform: uppercase; font-size: .72rem; letter-spacing: .04em; position: sticky; top: 0; }
+  .table-wrap { max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  @media (max-width: 768px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Note ↔ Frequency Converter</h1>
+<p class="subtitle">Convert between musical note names, frequencies (Hz), and MIDI numbers. Tune the reference pitch, detect the closest note from any Hz value, and play each pitch in your browser.</p>
+
+<div class="card">
+  <h2>Inputs</h2>
+  <div class="grid2">
+    <div>
+      <label for="freq">Frequency (Hz)</label>
+      <input type="number" id="freq" step="0.01" value="440">
+    </div>
+    <div>
+      <label for="note">Note name (e.g. A4, C#5, Db3)</label>
+      <input type="text" id="note" value="A4" autocomplete="off" spellcheck="false">
+    </div>
+    <div>
+      <label for="midi">MIDI number (0–127)</label>
+      <input type="number" id="midi" min="0" max="127" step="1" value="69">
+    </div>
+    <div>
+      <label for="a4">A4 reference (Hz)</label>
+      <input type="number" id="a4" step="0.01" value="440">
+    </div>
+  </div>
+  <div class="play-row">
+    <button class="btn" onclick="playCurrent(1)">▶ Play 1s</button>
+    <button class="btn btn-secondary" onclick="playCurrent(3)">▶ Play 3s</button>
+    <label style="margin-bottom:0">Wave:
+      <select id="wave" style="width:auto;display:inline-block">
+        <option value="sine" selected>sine</option>
+        <option value="square">square</option>
+        <option value="sawtooth">sawtooth</option>
+        <option value="triangle">triangle</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Result</h2>
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="outNote">—</div><div class="stat-lbl">Note</div></div>
+    <div class="stat"><div class="stat-val" id="outFreq">—</div><div class="stat-lbl">Frequency</div></div>
+    <div class="stat"><div class="stat-val" id="outMidi">—</div><div class="stat-lbl">MIDI</div></div>
+    <div class="stat"><div class="stat-val" id="outCents">—</div><div class="stat-lbl">Cents Offset</div></div>
+    <div class="stat"><div class="stat-val" id="outPeriod">—</div><div class="stat-lbl">Period (ms)</div></div>
+    <div class="stat"><div class="stat-val" id="outWavelen">—</div><div class="stat-lbl">Wavelength (m)</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Piano (C3 – B5)</h2>
+  <div class="keyboard" id="kb"></div>
+</div>
+
+<div class="card">
+  <h2>Octave Reference (A0 – C8)</h2>
+  <div class="table-wrap">
+    <table class="freq-table">
+      <thead><tr><th>Octave</th><th>C</th><th>C#/Db</th><th>D</th><th>D#/Eb</th><th>E</th><th>F</th><th>F#/Gb</th><th>G</th><th>G#/Ab</th><th>A</th><th>A#/Bb</th><th>B</th></tr></thead>
+      <tbody id="octTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About Equal Temperament</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    In 12-tone equal temperament, every semitone is a fixed ratio of 2<sup>1/12</sup> (≈1.0595). MIDI number 69 is A4, fixed by the international reference at <strong>440&nbsp;Hz</strong>. Frequency from MIDI is <code>f = A4 × 2<sup>(n − 69) / 12</sup></code>. One <strong>cent</strong> is 1/100 of a semitone, so the distance in cents between two frequencies is <code>1200 × log<sub>2</sub>(f2 / f1)</code>. Change the A4 reference above to try baroque (415 Hz), classical (430 Hz), or other tunings.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const PC = {C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};
+const FLATS = { 'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb' };
+const SPEED_OF_SOUND = 343; // m/s at 20°C
+let audioCtx = null;
+
+function getA4() { return parseFloat($('a4').value) || 440; }
+
+function midiToFreq(m) { return getA4() * Math.pow(2, (m - 69) / 12); }
+function freqToMidiFloat(f) { return 69 + 12 * Math.log2(f / getA4()); }
+function midiToName(m) {
+  const n = Math.round(m);
+  const name = NAMES[((n % 12) + 12) % 12];
+  const oct = Math.floor(n / 12) - 1;
+  return name + oct;
+}
+function parseNote(str) {
+  str = str.trim();
+  const m = /^([A-Ga-g])([#b♯♭]?)(-?\d+)$/.exec(str);
+  if (!m) return null;
+  const letter = m[1].toUpperCase();
+  const acc = m[2].replace('♯','#').replace('♭','b');
+  const oct = parseInt(m[3], 10);
+  const base = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 }[letter];
+  let semi = base + (acc === '#' ? 1 : acc === 'b' ? -1 : 0);
+  return (oct + 1) * 12 + semi;
+}
+
+function update(source) {
+  const a4 = getA4();
+  let midi;
+  if (source === 'freq') {
+    const f = parseFloat($('freq').value);
+    if (!f || f <= 0) return;
+    midi = freqToMidiFloat(f);
+  } else if (source === 'note') {
+    const m = parseNote($('note').value);
+    if (m == null) { $('outNote').textContent = 'invalid'; return; }
+    midi = m;
+  } else if (source === 'midi') {
+    const m = parseInt($('midi').value, 10);
+    if (isNaN(m)) return;
+    midi = m;
+  } else {
+    // a4 change — recompute from current note
+    const m = parseNote($('note').value);
+    if (m == null) return;
+    midi = m;
+  }
+
+  const midiRounded = Math.round(midi);
+  const exactFreq = (source === 'freq') ? parseFloat($('freq').value) : midiToFreq(midi);
+  const nearestFreq = midiToFreq(midiRounded);
+  const cents = 1200 * Math.log2(exactFreq / nearestFreq);
+  const name = midiToName(midiRounded);
+  const flatName = (() => {
+    const base = name.replace(/-?\d+$/, '');
+    const oct = name.match(/-?\d+$/)[0];
+    return FLATS[base] ? FLATS[base] + oct : name;
+  })();
+
+  if (source !== 'freq') $('freq').value = exactFreq.toFixed(3);
+  if (source !== 'note') $('note').value = name;
+  if (source !== 'midi') $('midi').value = midiRounded;
+
+  $('outNote').textContent = name + (FLATS[name.replace(/-?\d+$/, '')] ? ' / ' + flatName : '');
+  $('outFreq').textContent = exactFreq.toFixed(3) + ' Hz';
+  $('outMidi').textContent = midiRounded + (Math.abs(midi - midiRounded) > 0.01 ? ' (' + midi.toFixed(2) + ')' : '');
+  $('outCents').textContent = (cents >= 0 ? '+' : '') + cents.toFixed(1) + '¢';
+  $('outPeriod').textContent = (1000 / exactFreq).toFixed(3) + ' ms';
+  $('outWavelen').textContent = (SPEED_OF_SOUND / exactFreq).toFixed(3) + ' m';
+
+  highlightKeyboard(midiRounded);
+}
+
+function playTone(freq, dur) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = $('wave').value;
+  osc.frequency.value = freq;
+  osc.connect(gain).connect(audioCtx.destination);
+  const now = audioCtx.currentTime;
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.2, now + 0.02);
+  gain.gain.setValueAtTime(0.2, now + dur - 0.05);
+  gain.gain.linearRampToValueAtTime(0, now + dur);
+  osc.start(now);
+  osc.stop(now + dur);
+}
+function playCurrent(dur) {
+  const f = parseFloat($('freq').value);
+  if (f > 0) playTone(f, dur);
+}
+
+function buildKeyboard() {
+  const kb = $('kb');
+  kb.innerHTML = '';
+  // C3 (48) to B5 (83)
+  for (let m = 48; m <= 83; m++) {
+    const pc = ((m % 12) + 12) % 12;
+    const isBlack = [1,3,6,8,10].includes(pc);
+    if (isBlack) continue;
+    const wrap = document.createElement('div');
+    wrap.className = 'key-wrap';
+    const w = document.createElement('div');
+    w.className = 'wkey';
+    w.dataset.midi = m;
+    w.textContent = midiToName(m);
+    w.addEventListener('click', () => { $('midi').value = m; update('midi'); playTone(midiToFreq(m), 0.8); });
+    wrap.appendChild(w);
+    // add black key to the right if applicable
+    if ([48,50,53,55,57,60,62,65,67,69,72,74,77,79,81].includes(m)) {
+      const bm = m + 1;
+      if (bm <= 83) {
+        const b = document.createElement('div');
+        b.className = 'bkey';
+        b.dataset.midi = bm;
+        b.textContent = midiToName(bm);
+        b.addEventListener('click', (e) => { e.stopPropagation(); $('midi').value = bm; update('midi'); playTone(midiToFreq(bm), 0.8); });
+        wrap.appendChild(b);
+      }
+    }
+    kb.appendChild(wrap);
+  }
+}
+function highlightKeyboard(midi) {
+  document.querySelectorAll('.wkey, .bkey').forEach(el => {
+    el.classList.toggle('hl', parseInt(el.dataset.midi, 10) === midi);
+  });
+}
+
+function buildOctaveTable() {
+  const body = $('octTable');
+  body.innerHTML = '';
+  for (let oct = 0; oct <= 8; oct++) {
+    const row = document.createElement('tr');
+    row.innerHTML = '<td><strong>' + oct + '</strong></td>' +
+      NAMES.map(n => {
+        const midi = (oct + 1) * 12 + PC[n];
+        if (midi < 0 || midi > 127) return '<td>—</td>';
+        return '<td>' + midiToFreq(midi).toFixed(2) + '</td>';
+      }).join('');
+    body.appendChild(row);
+  }
+}
+
+['freq','note','midi','a4'].forEach(id => {
+  $(id).addEventListener('input', () => update(id === 'a4' ? 'a4' : id));
+});
+$('a4').addEventListener('input', buildOctaveTable);
+
+buildKeyboard();
+buildOctaveTable();
+update('note');
+</script>
+</body>
+</html>

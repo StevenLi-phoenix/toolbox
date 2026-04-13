@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Merkle Tree Builder — Free Online Hash Tree Tool</title>
+<meta name="description" content="Build a Merkle tree from a list of leaves, view every intermediate hash, and generate proofs. Supports SHA-1, SHA-256, SHA-384, and SHA-512 in your browser.">
+<meta name="keywords" content="merkle tree, hash tree, merkle proof, sha256, blockchain, cryptography, integrity">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/merkletree.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 150px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .88rem; background: var(--bg); color: var(--text); resize: vertical; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+  .controls label { font-size: .85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--sans); font-size: .85rem; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; text-align: center; }
+  .stat-val { font-family: var(--mono); font-size: 1.2rem; font-weight: 600; color: var(--text); word-break: break-all; }
+  .stat-lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 3px; }
+  .tree { overflow-x: auto; padding: 14px 2px; }
+  .level { display: flex; justify-content: center; gap: 10px; margin-bottom: 22px; flex-wrap: nowrap; position: relative; }
+  .level-label { position: absolute; left: 0; top: 0; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .node { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; font-family: var(--mono); font-size: .72rem; min-width: 90px; max-width: 160px; text-align: center; cursor: pointer; transition: background .15s, border-color .15s; word-break: break-all; }
+  .node:hover { background: var(--bg); border-color: var(--text); }
+  .node.leaf { background: #ecfdf5; border-color: #86efac; color: #065f46; }
+  .node.root { background: #fef3c7; border-color: #fbbf24; color: #78350f; font-weight: 600; }
+  .node.selected { outline: 2px solid #3b82f6; outline-offset: 2px; }
+  .node.in-proof { background: #dbeafe; border-color: #60a5fa; color: #1e3a8a; }
+  .proof { font-family: var(--mono); font-size: .8rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; white-space: pre-wrap; word-break: break-all; }
+  .proof-row { display: flex; gap: 8px; padding: 4px 0; }
+  .proof-row .pos { color: var(--muted); min-width: 60px; }
+  .empty-note { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px; }
+  @media (max-width: 768px) {
+    .node { min-width: 70px; font-size: .65rem; padding: 5px 7px; }
+    .level { gap: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Merkle Tree Builder</h1>
+<p class="subtitle">Build a Merkle tree from any list of leaves, explore every intermediate hash, and generate inclusion proofs &mdash; useful for blockchain, content integrity, and file verification.</p>
+
+<div class="card">
+  <h2>Leaves</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">One leaf per line. Each leaf is first hashed, then paired up the tree. Odd nodes are duplicated (Bitcoin-style) if enabled.</p>
+  <textarea id="leaves" spellcheck="false">alice
+bob
+carol
+dave
+erin
+frank
+grace</textarea>
+  <div class="controls">
+    <label>Hash:
+      <select id="algo">
+        <option value="SHA-256" selected>SHA-256</option>
+        <option value="SHA-1">SHA-1</option>
+        <option value="SHA-384">SHA-384</option>
+        <option value="SHA-512">SHA-512</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="prehashed"> Leaves are hex hashes (skip initial hash)</label>
+    <label><input type="checkbox" id="dupOdd" checked> Duplicate last node on odd levels</label>
+    <label><input type="checkbox" id="double"> Double hash (H(H(x)) like Bitcoin)</label>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Summary</h2>
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="leafCount">—</div><div class="stat-lbl">Leaves</div></div>
+    <div class="stat"><div class="stat-val" id="depth">—</div><div class="stat-lbl">Depth</div></div>
+    <div class="stat"><div class="stat-val" id="nodes">—</div><div class="stat-lbl">Nodes</div></div>
+  </div>
+  <div style="margin-top:12px">
+    <div class="stat-lbl" style="text-align:left;margin-bottom:4px">Merkle Root</div>
+    <div class="proof" id="root">—</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Tree</h2>
+  <p style="font-size:.82rem;color:var(--muted)">Click any leaf to generate its inclusion proof. Green = leaves, yellow = root, blue = proof siblings.</p>
+  <div class="tree" id="tree"></div>
+</div>
+
+<div class="card">
+  <h2>Inclusion Proof</h2>
+  <div id="proofBox"><div class="empty-note">Click a leaf in the tree to see its proof.</div></div>
+</div>
+
+<div class="card">
+  <h2>About Merkle Trees</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    A <strong>Merkle tree</strong> is a binary tree where every leaf is a hash of a data block and every non-leaf is the hash of the concatenation of its children. The single root hash commits to the entire set of leaves. To prove a leaf is in the tree, you only need the sibling hashes along the path to the root &mdash; a logarithmic proof instead of the full data set. Merkle trees power Git, Bitcoin, IPFS, Certificate Transparency, and many content-addressed systems.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder();
+
+function hexToBytes(hex) {
+  hex = hex.replace(/\s+/g, '');
+  if (hex.length % 2) hex = '0' + hex;
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+function bytesToHex(b) {
+  return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function concat(a, b) {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0); out.set(b, a.length);
+  return out;
+}
+async function digest(algo, data, doubleHash) {
+  let h = new Uint8Array(await crypto.subtle.digest(algo, data));
+  if (doubleHash) h = new Uint8Array(await crypto.subtle.digest(algo, h));
+  return h;
+}
+
+let currentTree = null;
+
+async function build() {
+  const algo = $('algo').value;
+  const doubleHash = $('double').checked;
+  const prehashed = $('prehashed').checked;
+  const dupOdd = $('dupOdd').checked;
+
+  const lines = $('leaves').value.split('\n').map(l => l.trim()).filter(Boolean);
+
+  if (!lines.length) {
+    currentTree = null;
+    $('leafCount').textContent = '0';
+    $('depth').textContent = '0';
+    $('nodes').textContent = '0';
+    $('root').textContent = '—';
+    $('tree').innerHTML = '<div class="empty-note">Add at least one leaf to build a tree.</div>';
+    $('proofBox').innerHTML = '<div class="empty-note">Click a leaf in the tree to see its proof.</div>';
+    return;
+  }
+
+  // Leaf level
+  const leaves = [];
+  for (const line of lines) {
+    let bytes;
+    if (prehashed && /^[0-9a-fA-F\s]+$/.test(line)) {
+      bytes = hexToBytes(line);
+    } else {
+      bytes = await digest(algo, enc.encode(line), doubleHash);
+    }
+    leaves.push({ hash: bytes, hex: bytesToHex(bytes), label: line });
+  }
+
+  const levels = [leaves];
+  while (levels[levels.length - 1].length > 1) {
+    const prev = levels[levels.length - 1];
+    const next = [];
+    for (let i = 0; i < prev.length; i += 2) {
+      const L = prev[i];
+      let R = prev[i + 1];
+      if (!R) {
+        if (dupOdd) {
+          R = L;
+        } else {
+          L.parentIdx = next.length;
+          L.sibling = null;
+          next.push(L);
+          continue;
+        }
+      }
+      const combined = concat(L.hash, R.hash);
+      const h = await digest(algo, combined, doubleHash);
+      const parent = { hash: h, hex: bytesToHex(h), label: '', left: L, right: R };
+      L.parentIdx = next.length;
+      R.parentIdx = next.length;
+      L.sibling = R;
+      R.sibling = L;
+      L.isLeft = true;
+      R.isLeft = false;
+      next.push(parent);
+    }
+    levels.push(next);
+  }
+
+  const total = levels.reduce((s, lv) => s + lv.length, 0);
+  currentTree = { levels, algo };
+
+  $('leafCount').textContent = leaves.length;
+  $('depth').textContent = levels.length - 1;
+  $('nodes').textContent = total;
+  $('root').textContent = levels[levels.length - 1][0].hex;
+
+  renderTree();
+  $('proofBox').innerHTML = '<div class="empty-note">Click a leaf in the tree to see its proof.</div>';
+}
+
+function renderTree(selectedLeafIdx = -1) {
+  if (!currentTree) return;
+  const { levels } = currentTree;
+  const proof = selectedLeafIdx >= 0 ? computeProof(selectedLeafIdx) : null;
+  const proofHashSet = proof ? new Set(proof.siblings.map(s => s.hex)) : new Set();
+
+  const container = $('tree');
+  container.innerHTML = '';
+  // Render top-down (root at top)
+  for (let lv = levels.length - 1; lv >= 0; lv--) {
+    const row = document.createElement('div');
+    row.className = 'level';
+    const label = document.createElement('span');
+    label.className = 'level-label';
+    label.textContent = lv === 0 ? 'Leaves' : lv === levels.length - 1 ? 'Root' : 'L' + lv;
+    row.appendChild(label);
+    levels[lv].forEach((n, idx) => {
+      const el = document.createElement('div');
+      el.className = 'node';
+      if (lv === 0) el.classList.add('leaf');
+      if (lv === levels.length - 1) el.classList.add('root');
+      if (lv === 0 && idx === selectedLeafIdx) el.classList.add('selected');
+      if (proofHashSet.has(n.hex) && !(lv === 0 && idx === selectedLeafIdx)) el.classList.add('in-proof');
+      const preview = n.hex.slice(0, 10) + '…';
+      el.textContent = lv === 0 ? (n.label.length > 12 ? n.label.slice(0, 12) + '…' : n.label) + ' · ' + preview : preview;
+      el.title = n.hex + (lv === 0 ? '\nLeaf: ' + n.label : '');
+      if (lv === 0) el.addEventListener('click', () => { renderTree(idx); showProof(idx); });
+      row.appendChild(el);
+    });
+    container.appendChild(row);
+  }
+}
+
+function computeProof(leafIdx) {
+  const { levels } = currentTree;
+  const siblings = [];
+  let node = levels[0][leafIdx];
+  for (let lv = 0; lv < levels.length - 1; lv++) {
+    if (node.sibling) {
+      siblings.push({ position: node.isLeft ? 'right' : 'left', hex: node.sibling.hex });
+    }
+    node = levels[lv + 1][node.parentIdx];
+  }
+  return { leaf: levels[0][leafIdx], siblings, root: levels[levels.length - 1][0].hex };
+}
+
+function showProof(leafIdx) {
+  const proof = computeProof(leafIdx);
+  const rows = proof.siblings.map((s, i) =>
+    `<div class="proof-row"><span class="pos">${s.position}</span><span>${s.hex}</span></div>`
+  ).join('');
+  $('proofBox').innerHTML =
+    `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px">Leaf: <strong>${escapeHtml(proof.leaf.label)}</strong></div>` +
+    `<div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">Sibling path (bottom &rarr; top):</div>` +
+    `<div class="proof">${rows || '<em>Single-leaf tree &mdash; leaf is the root.</em>'}</div>` +
+    `<div style="font-size:.75rem;color:var(--muted);margin-top:8px">Verifies to root: <code>${proof.root}</code></div>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+let buildTimer;
+function scheduleBuild() { clearTimeout(buildTimer); buildTimer = setTimeout(build, 120); }
+
+['leaves', 'algo', 'prehashed', 'dupOdd', 'double'].forEach(id => {
+  const el = $(id);
+  el.addEventListener('input', scheduleBuild);
+  el.addEventListener('change', scheduleBuild);
+});
+
+build();
+</script>
+</body>
+</html>
