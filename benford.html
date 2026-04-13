@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Benford's Law Analyzer — First-Digit Distribution</title>
+<meta name="description" content="Paste a list of numbers and analyze first-digit distribution against Benford's Law — used for fraud detection, data-quality audits, and natural-dataset validation.">
+<meta name="keywords" content="benford's law, first digit, fraud detection, chi square, data audit, statistics">
+<meta name="author" content="Steven Li">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/benford.html">
+<meta property="og:title" content="Benford's Law Analyzer">
+<meta property="og:description" content="Audit numeric datasets against Benford's Law for fraud detection and anomaly checking.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 320px; padding: 10px; font-family: var(--mono); font-size: .82rem; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; line-height: 1.5; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .chart { display: grid; grid-template-columns: 30px 1fr 60px 60px; gap: 6px 10px; align-items: center; font-size: .8rem; font-family: var(--mono); }
+  .chart .digit { color: var(--muted); text-align: right; }
+  .chart .bar-cell { position: relative; height: 22px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .chart .bar-actual { position: absolute; top: 0; left: 0; bottom: 0; background: var(--accent, #3b82f6); opacity: .7; transition: width .2s; }
+  .chart .bar-expected { position: absolute; top: 0; bottom: 0; width: 2px; background: #ef4444; z-index: 2; }
+  .chart .num { text-align: right; color: var(--text); }
+  .chart .exp { text-align: right; color: var(--muted); }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+  .metric { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .metric .lbl { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .metric .val { font-family: var(--mono); font-size: 1.2rem; font-weight: 600; margin-top: 3px; }
+  .verdict { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius); font-size: .88rem; }
+  .verdict.good { background: rgba(34,197,94,.12); color: var(--success); border: 1px solid rgba(34,197,94,.3); }
+  .verdict.warn { background: rgba(245,158,11,.12); color: #b45309; border: 1px solid rgba(245,158,11,.3); }
+  .verdict.bad { background: rgba(239,68,68,.12); color: var(--error); border: 1px solid rgba(239,68,68,.3); }
+  .header-row { display: grid; grid-template-columns: 30px 1fr 60px 60px; gap: 6px 10px; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .legend { display: flex; gap: 14px; font-size: .75rem; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
+  .legend .sw { display: inline-block; width: 12px; height: 8px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Benford's Law Analyzer</h1>
+<p class="subtitle">Audit numeric data against <strong>Benford's Law</strong> &mdash; the leading digit of naturally-occurring values should follow <code>P(d) = log<sub>10</sub>(1 + 1/d)</code>. Used by auditors, forensic accountants, and election analysts to flag anomalies and fabricated data.</p>
+
+<div class="panels" style="margin-top:16px">
+  <div class="card">
+    <h2>Input data</h2>
+    <div class="toolbar">
+      <button class="btn btn-primary" onclick="analyze()">Analyze</button>
+      <button class="btn btn-secondary" onclick="loadSample('fib')">Fibonacci</button>
+      <button class="btn btn-secondary" onclick="loadSample('pop')">City populations</button>
+      <button class="btn btn-secondary" onclick="loadSample('uniform')">Uniform (fake)</button>
+      <button class="btn btn-secondary" onclick="loadSample('clear')">Clear</button>
+    </div>
+    <textarea id="data" spellcheck="false" placeholder="One number per line, or comma / whitespace separated. Non-numeric tokens are ignored."></textarea>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:6px">Tip: paste a CSV column, currency values, or any numeric log field.</div>
+  </div>
+  <div class="card">
+    <h2>Distribution</h2>
+    <div class="header-row"><span>d</span><span>Chart</span><span class="num" style="text-align:right">Actual %</span><span class="exp" style="text-align:right">Benford %</span></div>
+    <div class="chart" id="chart"></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--accent,#3b82f6);opacity:.7"></span>Observed frequency</span>
+      <span><span class="sw" style="background:#ef4444;width:2px;height:12px"></span>Expected (Benford)</span>
+    </div>
+    <div class="metrics" id="metrics"></div>
+    <div id="verdict"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About Benford's Law</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    Benford's Law predicts that in many naturally-occurring datasets, the digit <strong>1</strong> appears as the leading digit about <strong>30.1%</strong> of the time, while <strong>9</strong> appears only <strong>4.6%</strong>. It applies best to data spanning several orders of magnitude (revenues, populations, stock prices, river lengths) and fails for bounded or synthetic data (heights, phone numbers, dice rolls).
+    <br><br>
+    The <strong>Chi-square</strong> statistic tests goodness-of-fit: with 8 degrees of freedom, χ² &gt; 15.51 rejects the Benford hypothesis at the 95% confidence level. The <strong>MAD</strong> (mean absolute deviation) conformity thresholds from Nigrini (2012) are: &lt;0.006 close, 0.006&ndash;0.012 acceptable, 0.012&ndash;0.015 marginal, &gt;0.015 nonconformity.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const BENFORD = [0, 0.3010, 0.1761, 0.1249, 0.0969, 0.0792, 0.0669, 0.0580, 0.0512, 0.0458];
+
+function leadingDigit(nStr) {
+  // remove sign, leading zeros, decimal point
+  const m = String(nStr).replace(/[^0-9]/g, '').replace(/^0+/, '');
+  return m ? +m[0] : null;
+}
+
+function analyze() {
+  const raw = $('data').value;
+  const tokens = raw.split(/[\s,;]+/).filter(Boolean);
+  const counts = [0,0,0,0,0,0,0,0,0,0];
+  let total = 0, ignored = 0;
+  for (const tok of tokens) {
+    const n = parseFloat(tok.replace(/[^\d.eE+-]/g, ''));
+    if (!isFinite(n) || n === 0) { ignored++; continue; }
+    const d = leadingDigit(Math.abs(n));
+    if (d && d >= 1 && d <= 9) { counts[d]++; total++; }
+    else ignored++;
+  }
+
+  const chart = $('chart');
+  if (total === 0) {
+    chart.innerHTML = '<div style="grid-column:1/-1;color:var(--muted);font-size:.85rem">No valid numbers found.</div>';
+    $('metrics').innerHTML = '';
+    $('verdict').innerHTML = '';
+    return;
+  }
+
+  let chi2 = 0, mad = 0;
+  let rows = '';
+  for (let d = 1; d <= 9; d++) {
+    const obs = counts[d];
+    const obsPct = obs / total;
+    const exp = BENFORD[d];
+    const expCount = exp * total;
+    chi2 += Math.pow(obs - expCount, 2) / expCount;
+    mad += Math.abs(obsPct - exp);
+    const barW = Math.min(100, obsPct * 100 * 3); // scale up
+    const expW = Math.min(100, exp * 100 * 3);
+    rows += `<span class="digit">${d}</span>`
+         + `<div class="bar-cell"><div class="bar-actual" style="width:${barW}%"></div><div class="bar-expected" style="left:${expW}%"></div></div>`
+         + `<span class="num">${(obsPct*100).toFixed(1)}</span>`
+         + `<span class="exp">${(exp*100).toFixed(1)}</span>`;
+  }
+  mad = mad / 9;
+  chart.innerHTML = rows;
+
+  $('metrics').innerHTML =
+    `<div class="metric"><div class="lbl">Samples</div><div class="val">${total}</div></div>`
+    + `<div class="metric"><div class="lbl">Ignored</div><div class="val">${ignored}</div></div>`
+    + `<div class="metric"><div class="lbl">Chi² (8 df)</div><div class="val">${chi2.toFixed(2)}</div></div>`
+    + `<div class="metric"><div class="lbl">MAD</div><div class="val">${mad.toFixed(4)}</div></div>`;
+
+  // Verdict based on MAD (Nigrini thresholds)
+  let v;
+  if (total < 30) {
+    v = `<div class="verdict warn">Sample size is small (n=${total}). Benford's Law needs at least a few hundred values to be meaningful.</div>`;
+  } else if (mad < 0.006) {
+    v = `<div class="verdict good">Close conformity to Benford's Law (MAD ${mad.toFixed(4)}). Distribution looks natural.</div>`;
+  } else if (mad < 0.012) {
+    v = `<div class="verdict good">Acceptable conformity (MAD ${mad.toFixed(4)}).</div>`;
+  } else if (mad < 0.015) {
+    v = `<div class="verdict warn">Marginal conformity (MAD ${mad.toFixed(4)}). Some deviation from expected.</div>`;
+  } else {
+    v = `<div class="verdict bad">Nonconformity (MAD ${mad.toFixed(4)}). Distribution deviates significantly &mdash; investigate for bounded ranges, fabricated data, or non-natural inputs.</div>`;
+  }
+  $('verdict').innerHTML = v;
+}
+
+function loadSample(which) {
+  if (which === 'clear') { $('data').value = ''; analyze(); return; }
+  if (which === 'fib') {
+    let a = 1, b = 1, arr = [];
+    for (let i = 0; i < 500; i++) { arr.push(a); [a, b] = [b, a + b]; if (a > 1e300) break; }
+    $('data').value = arr.join('\n');
+  } else if (which === 'pop') {
+    // Synthetic power-law population-like distribution
+    const arr = [];
+    for (let i = 0; i < 600; i++) {
+      const n = Math.floor(Math.pow(10, 2 + Math.random() * 6));
+      arr.push(n);
+    }
+    $('data').value = arr.join('\n');
+  } else if (which === 'uniform') {
+    const arr = [];
+    for (let i = 0; i < 600; i++) arr.push(Math.floor(1 + Math.random() * 9000));
+    $('data').value = arr.join('\n');
+  }
+  analyze();
+}
+
+loadSample('fib');
+</script>
+</body>
+</html>

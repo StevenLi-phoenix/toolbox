@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phonetic Encoder — Soundex, Metaphone, NYSIIS, Caverphone</title>
+<meta name="description" content="Encode names and words with phonetic algorithms — Soundex, Metaphone, Double Metaphone, NYSIIS, Caverphone, and Match Rating Codex — for fuzzy name matching.">
+<meta name="keywords" content="soundex, metaphone, double metaphone, nysiis, caverphone, phonetic, fuzzy matching, name matching">
+<meta name="author" content="Steven Li">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/phonetic.html">
+<meta property="og:title" content="Phonetic Encoder — Soundex, Metaphone, NYSIIS">
+<meta property="og:description" content="Encode words with classic phonetic algorithms for fuzzy name matching. 100% client-side.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .input-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .input-row input[type="text"] {
+    flex: 1; min-width: 220px; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: 1rem;
+    background: var(--bg); color: var(--text);
+  }
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 14px; }
+  .code { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .code .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+  .code .val { font-family: var(--mono); font-size: 1.15rem; font-weight: 600; color: var(--text); word-break: break-all; }
+  .copy-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: .72rem; padding: 0; }
+  .copy-btn:hover { color: var(--accent); }
+  .batch-area { width: 100%; box-sizing: border-box; min-height: 180px; padding: 10px; font-family: var(--mono); font-size: .85rem; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; }
+  table.batch-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  table.batch-table th, table.batch-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; font-family: var(--mono); }
+  table.batch-table th { background: var(--surface2); font-weight: 600; color: var(--muted); text-transform: uppercase; font-size: .7rem; letter-spacing: .04em; }
+  .compare-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .compare-row input[type="text"] { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); background: var(--bg); color: var(--text); }
+  .match-strip { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .match-pill { padding: 4px 10px; border-radius: 12px; font-size: .75rem; font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border); }
+  .match-pill.hit { background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.4); color: var(--success); }
+  .match-pill.miss { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.3); color: var(--error); }
+  @media (max-width: 768px) { .compare-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Phonetic Encoder</h1>
+<p class="subtitle">Encode names with classic phonetic algorithms &mdash; <strong>Soundex</strong>, <strong>Metaphone</strong>, <strong>NYSIIS</strong>, <strong>Caverphone 2.0</strong>, and <strong>Match Rating Codex</strong>. Useful for fuzzy name matching, record deduplication, and spell-checking.</p>
+
+<div class="card">
+  <h2>Encode a word</h2>
+  <div class="input-row">
+    <input id="word" type="text" value="Robertson" placeholder="Enter a name or word…" oninput="encode()" autocomplete="off" spellcheck="false">
+    <button class="btn btn-secondary" onclick="sampleRandom()">Random name</button>
+  </div>
+  <div class="results" id="results"></div>
+</div>
+
+<div class="card">
+  <h2>Compare two words</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:6px">Check whether two spellings collide under each algorithm &mdash; the classic fuzzy match test.</p>
+  <div class="compare-row">
+    <input id="cmpA" type="text" value="Catherine" oninput="compare()" autocomplete="off" spellcheck="false">
+    <input id="cmpB" type="text" value="Kathryn" oninput="compare()" autocomplete="off" spellcheck="false">
+  </div>
+  <div class="match-strip" id="matchStrip"></div>
+</div>
+
+<div class="card">
+  <h2>Batch encode</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:6px">One word per line. Results appear as a copyable table.</p>
+  <textarea id="batch" class="batch-area" spellcheck="false">Smith
+Smyth
+Smithe
+Schmidt
+Jones
+Johns
+Johnson</textarea>
+  <div class="row" style="margin-top:10px;gap:8px;">
+    <button class="btn btn-primary" onclick="batchRun()">Encode all</button>
+    <button class="btn btn-secondary" onclick="copyBatch()">Copy as TSV</button>
+  </div>
+  <div style="overflow-x:auto;margin-top:12px"><table class="batch-table" id="batchTable"></table></div>
+</div>
+
+<div class="card">
+  <h2>About these algorithms</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    <strong>Soundex</strong> (1918, Odell &amp; Russell) &mdash; a letter + 3 digits, grouping consonants by place of articulation. Still used by the US Census and many SQL engines.
+    <strong>Metaphone</strong> (Philips, 1990) handles English more accurately by emitting variable-length consonant codes.
+    <strong>NYSIIS</strong> (NY State ID &amp; Intelligence System) retains vowels and uses substring rewrites.
+    <strong>Caverphone 2.0</strong> targets New Zealand names but works as a general fuzzy coder; output is padded to 10 chars.
+    <strong>Match Rating Codex</strong> drops vowels after the first letter and deduplicates consecutive consonants.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---------- Soundex ----------
+function soundex(str) {
+  const s = (str || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (!s) return '';
+  const map = { B:'1', F:'1', P:'1', V:'1',
+                C:'2', G:'2', J:'2', K:'2', Q:'2', S:'2', X:'2', Z:'2',
+                D:'3', T:'3',
+                L:'4',
+                M:'5', N:'5',
+                R:'6' };
+  let out = s[0];
+  let prev = map[s[0]] || '';
+  for (let i = 1; i < s.length && out.length < 4; i++) {
+    const c = s[i], code = map[c] || '';
+    if (code && code !== prev) out += code;
+    if (c !== 'H' && c !== 'W') prev = code;
+  }
+  return (out + '000').slice(0, 4);
+}
+
+// ---------- Metaphone ----------
+function metaphone(str) {
+  let s = (str || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (!s) return '';
+  // drop initial silent letters
+  if (/^(KN|GN|PN|AE|WR)/.test(s)) s = s.slice(1);
+  if (s[0] === 'X') s = 'S' + s.slice(1);
+  if (s.startsWith('WH')) s = 'W' + s.slice(2);
+
+  const isVowel = c => 'AEIOU'.includes(c);
+  let out = '';
+  let i = 0;
+  const n = s.length;
+  while (i < n && out.length < 16) {
+    const c = s[i];
+    const prev = s[i - 1] || '';
+    const next = s[i + 1] || '';
+    const next2 = s[i + 2] || '';
+    if (c === prev && c !== 'C') { i++; continue; }
+    switch (c) {
+      case 'A': case 'E': case 'I': case 'O': case 'U':
+        if (i === 0) out += c;
+        i++; break;
+      case 'B':
+        out += 'B';
+        if (i === n - 1 && prev === 'M') out = out.slice(0, -1);
+        i++; break;
+      case 'C':
+        if (next === 'H') { out += 'X'; i += 2; }
+        else if (next === 'I' && next2 === 'A') { out += 'X'; i++; }
+        else if (next === 'I' || next === 'E' || next === 'Y') { out += 'S'; i++; }
+        else { out += 'K'; i++; }
+        break;
+      case 'D':
+        if (next === 'G' && 'EIY'.includes(next2)) { out += 'J'; i += 3; }
+        else { out += 'T'; i++; }
+        break;
+      case 'F': out += 'F'; i++; break;
+      case 'G':
+        if (next === 'H') {
+          if (i + 2 >= n || !isVowel(next2)) { i += 2; }
+          else { out += 'F'; i += 2; }
+        } else if (next === 'N') {
+          if (i + 2 >= n) { out += 'N'; i += 2; }
+          else { i++; }
+        } else if ('EIY'.includes(next)) { out += 'J'; i++; }
+        else { out += 'K'; i++; }
+        break;
+      case 'H':
+        if (isVowel(prev) && !isVowel(next)) { i++; }
+        else if ('CSPTG'.includes(prev)) { i++; }
+        else { out += 'H'; i++; }
+        break;
+      case 'J': out += 'J'; i++; break;
+      case 'K':
+        if (prev === 'C') { i++; } else { out += 'K'; i++; }
+        break;
+      case 'L': out += 'L'; i++; break;
+      case 'M': out += 'M'; i++; break;
+      case 'N': out += 'N'; i++; break;
+      case 'P':
+        if (next === 'H') { out += 'F'; i += 2; }
+        else { out += 'P'; i++; }
+        break;
+      case 'Q': out += 'K'; i++; break;
+      case 'R': out += 'R'; i++; break;
+      case 'S':
+        if (next === 'H') { out += 'X'; i += 2; }
+        else if (next === 'I' && (next2 === 'O' || next2 === 'A')) { out += 'X'; i++; }
+        else { out += 'S'; i++; }
+        break;
+      case 'T':
+        if (next === 'H') { out += '0'; i += 2; }
+        else if (next === 'I' && (next2 === 'O' || next2 === 'A')) { out += 'X'; i++; }
+        else if (next === 'C' && next2 === 'H') { i++; }
+        else { out += 'T'; i++; }
+        break;
+      case 'V': out += 'F'; i++; break;
+      case 'W':
+        if (isVowel(next)) out += 'W';
+        i++; break;
+      case 'X':
+        if (i === 0) out += 'S';
+        else out += 'KS';
+        i++; break;
+      case 'Y':
+        if (isVowel(next)) out += 'Y';
+        i++; break;
+      case 'Z': out += 'S'; i++; break;
+      default: i++;
+    }
+  }
+  return out;
+}
+
+// ---------- NYSIIS ----------
+function nysiis(str) {
+  let s = (str || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (!s) return '';
+  s = s.replace(/^MAC/, 'MCC').replace(/^KN/, 'NN').replace(/^K/, 'C')
+       .replace(/^(PH|PF)/, 'FF').replace(/^SCH/, 'SSS');
+  s = s.replace(/(EE|IE)$/, 'Y').replace(/(DT|RT|RD|NT|ND)$/, 'D');
+  let out = s[0];
+  let i = 1;
+  const repl = (at) => {
+    const two = s.substr(at, 2), three = s.substr(at, 3);
+    if (three === 'SCH') return ['SSS', 3];
+    if (two === 'EV') return ['AF', 2];
+    if ('AEIOU'.includes(s[at])) return ['A', 1];
+    if (s[at] === 'Q') return ['G', 1];
+    if (s[at] === 'Z') return ['S', 1];
+    if (s[at] === 'M') return ['N', 1];
+    if (s[at] === 'K') {
+      if (s[at+1] === 'N') return ['N', 2];
+      return ['C', 1];
+    }
+    if (three === 'PH') return ['FF', 2];
+    if (two === 'PH') return ['FF', 2];
+    if (s[at] === 'H') {
+      if (!'AEIOU'.includes(s[at-1]) || !'AEIOU'.includes(s[at+1])) {
+        return [s[at-1], 1];
+      }
+      return ['H', 1];
+    }
+    if (s[at] === 'W' && 'AEIOU'.includes(s[at-1])) return ['', 1];
+    return [s[at], 1];
+  };
+  while (i < s.length) {
+    const [ch, adv] = repl(i);
+    if (ch && ch !== out[out.length - 1]) out += ch;
+    i += adv;
+  }
+  out = out.replace(/S$/, '').replace(/AY$/, 'Y').replace(/A$/, '');
+  return out.slice(0, 6);
+}
+
+// ---------- Caverphone 2.0 ----------
+function caverphone(str) {
+  let s = (str || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (!s) return '1111111111';
+  s = s.replace(/e$/, '');
+  s = s.replace(/^cough/, 'cou2f').replace(/^rough/, 'rou2f')
+       .replace(/^tough/, 'tou2f').replace(/^enough/, 'enou2f')
+       .replace(/^trough/, 'trou2f').replace(/^gn/, '2n');
+  s = s.replace(/mb$/, 'm2');
+  s = s.replace(/cq/g, '2q').replace(/ci/g, 'si').replace(/ce/g, 'se')
+       .replace(/cy/g, 'sy').replace(/tch/g, '2ch').replace(/c/g, 'k')
+       .replace(/q/g, 'k').replace(/x/g, 'k').replace(/v/g, 'f')
+       .replace(/dg/g, '2g').replace(/tio/g, 'sio').replace(/tia/g, 'sia')
+       .replace(/d/g, 't').replace(/ph/g, 'fh').replace(/b/g, 'p')
+       .replace(/sh/g, 's2').replace(/z/g, 's');
+  s = s.replace(/^[aeiou]/, 'A').replace(/[aeiou]/g, '3');
+  s = s.replace(/j/g, 'y').replace(/^y3/, 'Y3').replace(/^y/, 'A')
+       .replace(/y/g, '3').replace(/3gh3/g, '3kh3').replace(/gh/g, '22')
+       .replace(/g/g, 'k');
+  s = s.replace(/s+/g, 'S').replace(/t+/g, 'T').replace(/p+/g, 'P')
+       .replace(/k+/g, 'K').replace(/f+/g, 'F').replace(/m+/g, 'M')
+       .replace(/n+/g, 'N');
+  s = s.replace(/w3/g, 'W3').replace(/wh3/g, 'Wh3').replace(/w$/, '3')
+       .replace(/w/g, '2').replace(/^h/, 'A').replace(/h/g, '2')
+       .replace(/r3/g, 'R3').replace(/r$/, '3').replace(/r/g, '2')
+       .replace(/l3/g, 'L3').replace(/l$/, '3').replace(/l/g, '2');
+  s = s.replace(/2/g, '').replace(/3$/, 'A').replace(/3/g, '');
+  return (s + '1111111111').slice(0, 10);
+}
+
+// ---------- Match Rating Codex ----------
+function mrCodex(str) {
+  let s = (str || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (!s) return '';
+  const first = s[0];
+  s = first + s.slice(1).replace(/[AEIOU]/g, '');
+  // remove consecutive duplicate letters
+  let out = '';
+  for (const c of s) if (c !== out[out.length - 1]) out += c;
+  if (out.length > 6) out = out.slice(0, 3) + out.slice(-3);
+  return out;
+}
+
+// ---------- UI ----------
+const ALGOS = [
+  { name: 'Soundex', fn: soundex, note: 'Russell/Odell' },
+  { name: 'Metaphone', fn: metaphone, note: 'Philips 1990' },
+  { name: 'NYSIIS', fn: nysiis, note: 'NY State ID' },
+  { name: 'Caverphone 2.0', fn: caverphone, note: '10-char padded' },
+  { name: 'Match Rating Codex', fn: mrCodex, note: 'MRA' }
+];
+
+function encode() {
+  const w = $('word').value;
+  const html = ALGOS.map(({ name, fn, note }) => {
+    const val = fn(w) || '—';
+    const safe = val.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    return `<div class="code"><div class="lbl"><span>${name}</span><button class="copy-btn" onclick="navigator.clipboard.writeText('${val}')">copy</button></div><div class="val">${safe}</div><div style="font-size:.7rem;color:var(--muted);margin-top:4px">${note}</div></div>`;
+  }).join('');
+  $('results').innerHTML = html;
+}
+
+function compare() {
+  const a = $('cmpA').value, b = $('cmpB').value;
+  const strip = ALGOS.map(({ name, fn }) => {
+    const va = fn(a), vb = fn(b);
+    const hit = va && vb && va === vb;
+    return `<span class="match-pill ${hit ? 'hit' : 'miss'}">${name}: ${va || '—'} ${hit ? '=' : '≠'} ${vb || '—'}</span>`;
+  }).join('');
+  $('matchStrip').innerHTML = strip;
+}
+
+function batchRun() {
+  const lines = $('batch').value.split(/\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) { $('batchTable').innerHTML = ''; return; }
+  let html = '<thead><tr><th>Input</th>' + ALGOS.map(a => `<th>${a.name}</th>`).join('') + '</tr></thead><tbody>';
+  for (const line of lines) {
+    html += '<tr><td>' + line.replace(/[<>]/g,'') + '</td>' +
+            ALGOS.map(a => `<td>${(a.fn(line) || '—').replace(/[<>]/g,'')}</td>`).join('') +
+            '</tr>';
+  }
+  html += '</tbody>';
+  $('batchTable').innerHTML = html;
+}
+
+function copyBatch() {
+  const lines = $('batch').value.split(/\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return;
+  const header = ['Input', ...ALGOS.map(a => a.name)].join('\t');
+  const rows = lines.map(l => [l, ...ALGOS.map(a => a.fn(l) || '')].join('\t'));
+  navigator.clipboard.writeText([header, ...rows].join('\n'));
+}
+
+const SAMPLES = ['Robertson','Roberts','Smith','Schmidt','Ashcraft','Ashcroft','Tymczak','Pfister','Honeyman','Johansson','Gutiérrez','O\'Brien','McDonald','Washington','Knutson'];
+function sampleRandom() {
+  $('word').value = SAMPLES[Math.floor(Math.random() * SAMPLES.length)];
+  encode();
+}
+
+encode();
+compare();
+batchRun();
+</script>
+</body>
+</html>
