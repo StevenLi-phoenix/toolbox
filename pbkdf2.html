@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PBKDF2 Key Derivation Tester — SHA-256 / SHA-512</title>
+<meta name="description" content="Derive keys from passwords with PBKDF2-HMAC-SHA1/SHA-256/SHA-384/SHA-512. Control iterations, salt, and output length. 100% client-side.">
+<meta name="keywords" content="pbkdf2, key derivation, kdf, password hashing, hmac, sha256, sha512">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pbkdf2.html">
+<meta property="og:title" content="PBKDF2 Key Derivation Tester">
+<meta property="og:description" content="Derive a PBKDF2 key from a password and salt with configurable iterations and output length.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/pbkdf2.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row { margin-bottom: 10px; }
+  input[type="text"], input[type="number"], select, textarea { width: 100%; }
+  .out { font-family: var(--mono); word-break: break-all; font-size: .88rem; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); min-height: 50px; }
+  .hint { font-size: .78rem; color: var(--muted); margin-top: 4px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tag { display: inline-block; padding: 3px 9px; font-size: .72rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: var(--surface2); cursor: pointer; }
+  .tag:hover { color: var(--text); border-color: var(--border2); }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 12px; }
+  .meta div { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .meta span { display: block; font-size: .7rem; color: var(--muted); }
+  .meta b { font-family: var(--mono); font-size: .85rem; font-weight: 600; }
+  @media (max-width: 768px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>PBKDF2 Key Derivation Tester</h1>
+  <p class="subtitle">Derive cryptographic keys from passwords with PBKDF2-HMAC. Tune iterations, salt, algorithm, and output length to test against your server-side settings or OWASP recommendations. All computation happens in your browser via the Web Crypto API.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="grid2">
+      <div class="row">
+        <label for="password">Password</label>
+        <input type="text" id="password" placeholder="correct horse battery staple">
+      </div>
+      <div class="row">
+        <label for="salt">Salt</label>
+        <input type="text" id="salt" placeholder="salt (text or hex with 0x prefix)">
+        <div class="bar" style="margin-top:6px;">
+          <label style="font-size:.78rem;color:var(--muted);"><input type="checkbox" id="saltHex"> Hex input</label>
+          <button class="tag" type="button" onclick="randomSalt()">Random 16 bytes</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="row">
+        <label for="algo">Hash</label>
+        <select id="algo">
+          <option value="SHA-1">HMAC-SHA1</option>
+          <option value="SHA-256" selected>HMAC-SHA256</option>
+          <option value="SHA-384">HMAC-SHA384</option>
+          <option value="SHA-512">HMAC-SHA512</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="iters">Iterations</label>
+        <input type="number" id="iters" value="600000" min="1" max="10000000">
+        <div class="bar" style="margin-top:6px;">
+          <span class="tag" onclick="setIters(10000)">10k</span>
+          <span class="tag" onclick="setIters(100000)">100k</span>
+          <span class="tag" onclick="setIters(310000)">310k (NIST)</span>
+          <span class="tag" onclick="setIters(600000)">600k (OWASP SHA-256)</span>
+          <span class="tag" onclick="setIters(210000)">210k (OWASP SHA-512)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="row">
+        <label for="dkLen">Key length (bytes)</label>
+        <input type="number" id="dkLen" value="32" min="1" max="512">
+      </div>
+      <div class="row">
+        <label for="outFmt">Output format</label>
+        <select id="outFmt">
+          <option value="hex">Hex</option>
+          <option value="base64">Base64</option>
+          <option value="base64url">Base64url</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:6px;">
+      <button class="btn btn-primary" id="run">Derive Key</button>
+      <button class="btn btn-secondary" onclick="loadTestVector()">RFC 6070 vector</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Derived key</span>
+        <button class="tag" type="button" onclick="copyOut()">Copy</button>
+      </label>
+      <div class="out" id="out">—</div>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Notes</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      PBKDF2 (RFC 2898 / PKCS #5 v2.1) repeats HMAC to stretch a password into a key. Modern guidance from OWASP (2023) recommends
+      at least <strong>600,000</strong> iterations of PBKDF2-HMAC-SHA256 or <strong>210,000</strong> of PBKDF2-HMAC-SHA512.
+      Higher is better if your server tolerates the latency. For new systems, prefer memory-hard KDFs like Argon2id or scrypt.
+      Salts should be at least 16 random bytes and stored alongside the hash. Never reuse a salt across accounts.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+function setStatus(msg, type) {
+  const el = $('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() { $('status').className = 'status'; $('status').textContent = ''; }
+
+function hexToBytes(hex) {
+  hex = hex.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (hex.length % 2 !== 0) throw new Error('Hex must have even length');
+  if (!/^[0-9a-fA-F]*$/.test(hex)) throw new Error('Invalid hex characters');
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function bytesToB64(bytes) {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s);
+}
+function bytesToB64url(bytes) {
+  return bytesToB64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function randomSalt() {
+  const s = crypto.getRandomValues(new Uint8Array(16));
+  $('salt').value = '0x' + bytesToHex(s);
+  $('saltHex').checked = true;
+}
+
+function setIters(n) { $('iters').value = n; }
+
+async function derive() {
+  clearStatus();
+  const pw = $('password').value;
+  const saltStr = $('salt').value;
+  const algo = $('algo').value;
+  const iters = parseInt($('iters').value, 10);
+  const dkLen = parseInt($('dkLen').value, 10);
+  const fmt = $('outFmt').value;
+
+  if (!pw) { setStatus('Enter a password', 'error'); return; }
+  if (!saltStr) { setStatus('Enter a salt', 'error'); return; }
+  if (!iters || iters < 1) { setStatus('Iterations must be >= 1', 'error'); return; }
+  if (!dkLen || dkLen < 1 || dkLen > 512) { setStatus('Key length must be 1–512 bytes', 'error'); return; }
+
+  let saltBytes;
+  try {
+    saltBytes = $('saltHex').checked ? hexToBytes(saltStr) : new TextEncoder().encode(saltStr);
+  } catch (e) { setStatus(e.message, 'error'); return; }
+
+  const pwBytes = new TextEncoder().encode(pw);
+  $('run').disabled = true;
+  $('out').textContent = 'Deriving…';
+  const t0 = performance.now();
+  try {
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw', pwBytes, { name: 'PBKDF2' }, false, ['deriveBits']
+    );
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: saltBytes, iterations: iters, hash: algo },
+      keyMaterial,
+      dkLen * 8
+    );
+    const out = new Uint8Array(bits);
+    const t1 = performance.now();
+    let text;
+    if (fmt === 'hex') text = bytesToHex(out);
+    else if (fmt === 'base64') text = bytesToB64(out);
+    else text = bytesToB64url(out);
+    $('out').textContent = text;
+    renderMeta({
+      algorithm: 'PBKDF2-HMAC-' + algo.replace('SHA-', 'SHA'),
+      iterations: iters.toLocaleString(),
+      saltBytes: saltBytes.length,
+      keyBytes: dkLen,
+      time: (t1 - t0).toFixed(1) + ' ms',
+    });
+    setStatus('Derived ' + dkLen + ' bytes in ' + (t1 - t0).toFixed(0) + ' ms', 'success');
+  } catch (e) {
+    setStatus('Error: ' + e.message, 'error');
+    $('out').textContent = '—';
+  } finally {
+    $('run').disabled = false;
+  }
+}
+
+function renderMeta(m) {
+  const el = $('meta');
+  el.innerHTML = Object.entries(m).map(([k, v]) =>
+    `<div><span>${k}</span><b>${v}</b></div>`
+  ).join('');
+}
+
+function copyOut() {
+  const text = $('out').textContent;
+  if (!text || text === '—' || text === 'Deriving…') return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function clearAll() {
+  $('password').value = '';
+  $('salt').value = '';
+  $('out').textContent = '—';
+  $('meta').innerHTML = '';
+  clearStatus();
+}
+
+function loadTestVector() {
+  // RFC 6070: PBKDF2-HMAC-SHA1, P="password", S="salt", c=4096, dkLen=20
+  // Expected: 4b007901b765489abead49d926f721d065a429c1
+  $('password').value = 'password';
+  $('salt').value = 'salt';
+  $('saltHex').checked = false;
+  $('algo').value = 'SHA-1';
+  $('iters').value = 4096;
+  $('dkLen').value = 20;
+  $('outFmt').value = 'hex';
+  derive().then(() => setStatus('RFC 6070 vector — expected 4b007901b765489abead49d926f721d065a429c1', 'success'));
+}
+
+$('run').addEventListener('click', derive);
+</script>
+</body>
+</html>
