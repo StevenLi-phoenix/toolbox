@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CVSS 3.1 Calculator — Base Severity Score & Vector</title>
+<meta name="description" content="Interactive CVSS 3.1 base score calculator. Pick metric values, get the vector string and severity rating instantly — client-side.">
+<meta name="keywords" content="cvss, cvss 3.1, vulnerability score, base score, severity, vector string">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cvss.html">
+<meta property="og:title" content="CVSS 3.1 Calculator">
+<meta property="og:description" content="Compute CVSS v3.1 base score and vector string from metric selections.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/cvss.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .metric { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; }
+  .metric h3 { font-size: .85rem; font-weight: 600; margin-bottom: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .opt { padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; font-size: .85rem; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  .opt:hover { border-color: var(--border2); }
+  .opt.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .score-card { display: grid; grid-template-columns: 1fr 2fr; gap: 14px; align-items: center; padding: 18px; }
+  .score-big { font-size: 3rem; font-weight: 700; text-align: center; font-family: var(--mono); line-height: 1; }
+  .severity { text-align: center; font-size: .9rem; text-transform: uppercase; letter-spacing: .1em; margin-top: 6px; font-weight: 600; }
+  .sev-none { color: var(--muted); }
+  .sev-low { color: #1a8c3f; }
+  .sev-medium { color: #9a6700; }
+  .sev-high { color: #c46a00; }
+  .sev-critical { color: var(--error); }
+  .vector { font-family: var(--mono); font-size: .88rem; word-break: break-all; padding: 10px 12px; background: var(--surface2); border-radius: var(--radius); border: 1px solid var(--border); }
+  .sub-row { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .sub-stat { flex: 1; min-width: 110px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+  .sub-stat span { display: block; color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
+  .sub-stat strong { font-family: var(--mono); font-size: 1rem; }
+  @media (max-width: 768px) { .score-card { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>CVSS 3.1 Calculator</h1>
+  <p class="subtitle">Compute the CVSS v3.1 base score and canonical vector string from metric selections. Follows the official <code>FIRST.org</code> formula.</p>
+
+  <div class="card score-card" style="margin-top:16px;">
+    <div>
+      <div class="score-big" id="score">0.0</div>
+      <div class="severity sev-none" id="severity">None</div>
+    </div>
+    <div>
+      <div class="vector" id="vector">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N</div>
+      <div class="sub-row">
+        <div class="sub-stat"><span>Impact</span><strong id="impact">0.00</strong></div>
+        <div class="sub-stat"><span>Exploitability</span><strong id="exploit">0.00</strong></div>
+      </div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-secondary" onclick="copyVector()">Copy Vector</button>
+        <button class="btn btn-secondary" onclick="resetAll()">Reset</button>
+        <button class="btn btn-secondary" onclick="parseVector()">Paste Vector…</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="metrics" style="margin-top:16px;"></div>
+
+  <div class="card" style="padding:14px; margin-top:16px;">
+    <h2 style="font-size:.95rem; margin-bottom:8px;">Severity Rating</h2>
+    <table style="width:100%; font-family:var(--mono); font-size:.85rem; border-collapse:collapse;">
+      <tr><td style="padding:4px 8px;">0.0</td><td style="padding:4px 8px;" class="sev-none">None</td></tr>
+      <tr><td style="padding:4px 8px;">0.1 – 3.9</td><td style="padding:4px 8px;" class="sev-low">Low</td></tr>
+      <tr><td style="padding:4px 8px;">4.0 – 6.9</td><td style="padding:4px 8px;" class="sev-medium">Medium</td></tr>
+      <tr><td style="padding:4px 8px;">7.0 – 8.9</td><td style="padding:4px 8px;" class="sev-high">High</td></tr>
+      <tr><td style="padding:4px 8px;">9.0 – 10.0</td><td style="padding:4px 8px;" class="sev-critical">Critical</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+// CVSS v3.1 base metrics definition
+const METRICS = [
+  { id:'AV', name:'Attack Vector', opts:[
+    ['N','Network',0.85],['A','Adjacent',0.62],['L','Local',0.55],['P','Physical',0.2]
+  ]},
+  { id:'AC', name:'Attack Complexity', opts:[
+    ['L','Low',0.77],['H','High',0.44]
+  ]},
+  { id:'PR', name:'Privileges Required', opts:[
+    ['N','None',0.85],['L','Low',0.62],['H','High',0.27]
+  ]},
+  { id:'UI', name:'User Interaction', opts:[
+    ['N','None',0.85],['R','Required',0.62]
+  ]},
+  { id:'S',  name:'Scope', opts:[
+    ['U','Unchanged',0],['C','Changed',1]
+  ]},
+  { id:'C',  name:'Confidentiality', opts:[
+    ['N','None',0],['L','Low',0.22],['H','High',0.56]
+  ]},
+  { id:'I',  name:'Integrity', opts:[
+    ['N','None',0],['L','Low',0.22],['H','High',0.56]
+  ]},
+  { id:'A',  name:'Availability', opts:[
+    ['N','None',0],['L','Low',0.22],['H','High',0.56]
+  ]},
+];
+// PR depends on scope: values when S=C
+const PR_SCOPE_CHANGED = { N:0.85, L:0.68, H:0.5 };
+
+const state = { AV:'N', AC:'L', PR:'N', UI:'N', S:'U', C:'N', I:'N', A:'N' };
+
+function render() {
+  const root = document.getElementById('metrics');
+  root.innerHTML = '';
+  for (const m of METRICS) {
+    const div = document.createElement('div');
+    div.className = 'metric';
+    const h = document.createElement('h3');
+    h.textContent = m.name + ' (' + m.id + ')';
+    div.appendChild(h);
+    const opts = document.createElement('div');
+    opts.className = 'opts';
+    for (const [code, label] of m.opts) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'opt' + (state[m.id] === code ? ' active' : '');
+      b.textContent = label + ' (' + code + ')';
+      b.onclick = () => { state[m.id] = code; render(); compute(); };
+      opts.appendChild(b);
+    }
+    div.appendChild(opts);
+    root.appendChild(div);
+  }
+}
+
+function roundUp(x) {
+  // CVSS v3.1 roundUp: round to nearest 0.1, rounding up
+  const n = Math.round(x * 100000);
+  if (n % 10000 === 0) return n / 100000;
+  return (Math.floor(n / 10000) + 1) / 10;
+}
+
+function metricValue(id, code) {
+  const m = METRICS.find(m => m.id === id);
+  const opt = m.opts.find(o => o[0] === code);
+  return opt ? opt[2] : 0;
+}
+
+function compute() {
+  const AV = metricValue('AV', state.AV);
+  const AC = metricValue('AC', state.AC);
+  const UI = metricValue('UI', state.UI);
+  const scopeChanged = state.S === 'C';
+  const PR = scopeChanged ? PR_SCOPE_CHANGED[state.PR] : metricValue('PR', state.PR);
+  const C = metricValue('C', state.C);
+  const I = metricValue('I', state.I);
+  const A = metricValue('A', state.A);
+
+  const iscBase = 1 - ((1 - C) * (1 - I) * (1 - A));
+  const isc = scopeChanged
+    ? 7.52 * (iscBase - 0.029) - 3.25 * Math.pow(iscBase - 0.02, 15)
+    : 6.42 * iscBase;
+  const exploitability = 8.22 * AV * AC * PR * UI;
+
+  let base;
+  if (isc <= 0) {
+    base = 0;
+  } else if (scopeChanged) {
+    base = roundUp(Math.min(1.08 * (isc + exploitability), 10));
+  } else {
+    base = roundUp(Math.min(isc + exploitability, 10));
+  }
+
+  document.getElementById('score').textContent = base.toFixed(1);
+  const sev = severity(base);
+  const sevEl = document.getElementById('severity');
+  sevEl.textContent = sev.label;
+  sevEl.className = 'severity sev-' + sev.cls;
+  document.getElementById('impact').textContent = isc.toFixed(2);
+  document.getElementById('exploit').textContent = exploitability.toFixed(2);
+  document.getElementById('vector').textContent = vectorString();
+}
+
+function severity(s) {
+  if (s === 0) return { label:'None', cls:'none' };
+  if (s < 4) return { label:'Low', cls:'low' };
+  if (s < 7) return { label:'Medium', cls:'medium' };
+  if (s < 9) return { label:'High', cls:'high' };
+  return { label:'Critical', cls:'critical' };
+}
+
+function vectorString() {
+  return 'CVSS:3.1/' + METRICS.map(m => m.id + ':' + state[m.id]).join('/');
+}
+
+function copyVector() {
+  navigator.clipboard.writeText(vectorString()).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function resetAll() {
+  Object.assign(state, { AV:'N', AC:'L', PR:'N', UI:'N', S:'U', C:'N', I:'N', A:'N' });
+  render(); compute();
+}
+
+function parseVector() {
+  const v = prompt('Paste CVSS v3.1 vector string:', vectorString());
+  if (!v) return;
+  const parts = v.trim().replace(/^CVSS:3\.[01]\//, '').split('/');
+  for (const p of parts) {
+    const [k, val] = p.split(':');
+    if (k in state) {
+      const valid = METRICS.find(m => m.id === k)?.opts.some(o => o[0] === val);
+      if (valid) state[k] = val;
+    }
+  }
+  render(); compute();
+}
+
+// Init from hash if present (e.g., #CVSS:3.1/AV:N/...)
+if (location.hash.length > 1) {
+  const parts = decodeURIComponent(location.hash.slice(1)).replace(/^CVSS:3\.[01]\//, '').split('/');
+  for (const p of parts) {
+    const [k, val] = p.split(':');
+    if (k in state) {
+      const valid = METRICS.find(m => m.id === k)?.opts.some(o => o[0] === val);
+      if (valid) state[k] = val;
+    }
+  }
+}
+
+render();
+compute();
+</script>
+</body>
+</html>

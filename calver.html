@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CalVer Generator — Calendar Versioning for Releases</title>
+<meta name="description" content="Generate Calendar Versioning (CalVer) strings: YYYY.MM.DD, YY.MM.MICRO, UBUNTU, and more. Pick a scheme and get the next version instantly.">
+<meta name="keywords" content="calver, calendar versioning, version string, release version, ubuntu version, pip version">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/calver.html">
+<meta property="og:title" content="CalVer Generator">
+<meta property="og:description" content="Generate Calendar Versioning strings for releases, picking from common schemes.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/calver.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .schemes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .scheme { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; background: var(--bg); transition: border-color .15s; }
+  .scheme:hover { border-color: var(--border2); }
+  .scheme.active { border-color: var(--text); background: var(--surface2); }
+  .scheme h3 { font-size: .9rem; margin-bottom: 4px; font-family: var(--mono); }
+  .scheme p { font-size: .78rem; color: var(--muted); margin: 0; line-height: 1.4; }
+  .result-big { font-family: var(--mono); font-size: 2rem; text-align: center; padding: 24px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); word-break: break-all; }
+  .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .field-row label { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .field-row input, .field-row select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; }
+  .tokens { display: grid; grid-template-columns: 1fr 2fr; gap: 6px 10px; font-size: .82rem; font-family: var(--mono); }
+  .tokens code { background: var(--surface2); padding: 1px 6px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>CalVer Generator</h1>
+  <p class="subtitle">Build <a href="https://calver.org" target="_blank" rel="noopener">Calendar Versioning</a> strings for releases. Pick a common scheme or craft a custom pattern with date tokens.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="result-big" id="result">–</div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-secondary" onclick="copyResult()">Copy</button>
+      <button class="btn btn-secondary" onclick="todayNow()">Use Now</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem; margin-bottom:10px;">Inputs</h2>
+    <div class="field-row">
+      <div><label>Date</label><input id="date" type="date"></div>
+      <div><label>Micro / Patch</label><input id="micro" type="number" min="0" value="0"></div>
+      <div><label>Modifier</label><input id="mod" type="text" placeholder="e.g. rc1, dev0, alpha"></div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem; margin-bottom:10px;">Scheme</h2>
+    <div class="schemes" id="schemes"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem; margin-bottom:10px;">Custom pattern</h2>
+    <input id="custom" type="text" value="YYYY.MM.DD" style="width:100%; padding:10px; border:1px solid var(--border); border-radius:var(--radius); font-family:var(--mono); font-size:1rem; background:var(--bg); color:var(--text);">
+    <div class="tokens" style="margin-top:12px;">
+      <code>YYYY</code><span>4-digit year (2026)</span>
+      <code>YY</code><span>2-digit year, no leading zero (26)</span>
+      <code>0Y</code><span>2-digit year, zero-padded (06)</span>
+      <code>MM</code><span>month, no leading zero (4)</span>
+      <code>0M</code><span>month, zero-padded (04)</span>
+      <code>DD</code><span>day, no leading zero (13)</span>
+      <code>0D</code><span>day, zero-padded (13)</span>
+      <code>WW</code><span>ISO week number (15)</span>
+      <code>MICRO</code><span>patch/micro number</span>
+      <code>MOD</code><span>modifier (rc1, dev0 …)</span>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem; margin-bottom:8px;">Parse an existing version</h2>
+    <input id="parseIn" type="text" placeholder="e.g. 2026.04.13 or 24.10.0rc1" style="width:100%; padding:10px; border:1px solid var(--border); border-radius:var(--radius); font-family:var(--mono); background:var(--bg); color:var(--text);">
+    <div id="parseOut" style="margin-top:10px; font-family:var(--mono); font-size:.85rem; color:var(--muted);"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const SCHEMES = [
+  { id:'YYYY.MM.DD',    label:'YYYY.MM.DD',    desc:'Full date — e.g. Dropbox, Unity LTS (2026.4.13)' },
+  { id:'YYYY.0M.0D',    label:'YYYY.0M.0D',    desc:'Zero-padded — e.g. pip (2026.04.13)' },
+  { id:'YY.0M',         label:'YY.0M',         desc:'Ubuntu short — e.g. 26.04' },
+  { id:'YY.0M.MICRO',   label:'YY.0M.MICRO',   desc:'Ubuntu point release — 26.04.1' },
+  { id:'YYYY.MM.MICRO', label:'YYYY.MM.MICRO', desc:'PyCharm / JetBrains style' },
+  { id:'YYYY.0M.MICRO', label:'YYYY.0M.MICRO', desc:'pip padded month + patch' },
+  { id:'YY.MM',         label:'YY.MM',         desc:'Minimal year-month' },
+  { id:'YYYY.WW',       label:'YYYY.WW',       desc:'ISO week releases' },
+  { id:'YY.MM.MICROMOD', label:'YY.MM.MICRO[MOD]', desc:'Semi-tagged: 24.10.0rc1' },
+];
+
+const state = { scheme: 'YYYY.0M.0D' };
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil((((t - yearStart) / 86400000) + 1) / 7);
+}
+
+function tokenize(pattern, date, micro, mod) {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  // Order matters — longest tokens first
+  return pattern
+    .replace(/YYYY/g, year)
+    .replace(/0Y/g, pad2(year % 100))
+    .replace(/YY/g, String(year % 100))
+    .replace(/0M/g, pad2(month))
+    .replace(/MM/g, String(month))
+    .replace(/0D/g, pad2(day))
+    .replace(/DD/g, String(day))
+    .replace(/WW/g, String(isoWeek(date)))
+    .replace(/MICRO/g, String(micro))
+    .replace(/MOD/g, mod || '');
+}
+
+function currentPattern() {
+  // Custom always wins when scheme is '__custom__'; otherwise we map the selected scheme to a pattern.
+  if (state.scheme === '__custom__') return document.getElementById('custom').value;
+  if (state.scheme === 'YY.MM.MICROMOD') return 'YY.0M.MICROMOD';
+  return state.scheme;
+}
+
+function compute() {
+  const dateStr = document.getElementById('date').value;
+  const micro = document.getElementById('micro').value || '0';
+  const mod = document.getElementById('mod').value || '';
+  const date = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+  const pattern = currentPattern();
+  // Sync custom box when a built-in scheme is chosen
+  if (state.scheme !== '__custom__') {
+    document.getElementById('custom').value = pattern;
+  }
+  const out = tokenize(pattern, date, micro, mod);
+  document.getElementById('result').textContent = out;
+}
+
+function renderSchemes() {
+  const root = document.getElementById('schemes');
+  root.innerHTML = '';
+  for (const s of SCHEMES) {
+    const el = document.createElement('div');
+    el.className = 'scheme' + (state.scheme === s.id ? ' active' : '');
+    el.innerHTML = '<h3>' + s.label + '</h3><p>' + s.desc + '</p>';
+    el.onclick = () => { state.scheme = s.id; renderSchemes(); compute(); };
+    root.appendChild(el);
+  }
+}
+
+function copyResult() {
+  const t = document.getElementById('result').textContent;
+  navigator.clipboard.writeText(t).then(() => {
+    const toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1200);
+  });
+}
+
+function todayNow() {
+  const now = new Date();
+  const iso = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+  document.getElementById('date').value = iso;
+  compute();
+}
+
+function parseVersion() {
+  const v = document.getElementById('parseIn').value.trim();
+  const out = document.getElementById('parseOut');
+  if (!v) { out.textContent = ''; return; }
+  const patterns = [
+    { re:/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/, scheme:'YYYY.MM.DD / YYYY.0M.0D', named:['year','month','day'] },
+    { re:/^(\d{4})\.(\d{1,2})\.(\d+)$/,     scheme:'YYYY.MM.MICRO',           named:['year','month','micro'] },
+    { re:/^(\d{2})\.(\d{2})$/,              scheme:'YY.0M (Ubuntu)',          named:['year','month'] },
+    { re:/^(\d{2})\.(\d{2})\.(\d+)$/,       scheme:'YY.0M.MICRO',             named:['year','month','micro'] },
+    { re:/^(\d{4})\.(\d{1,2})$/,            scheme:'YYYY.WW / YYYY.MM',       named:['year','month-or-week'] },
+    { re:/^(\d{2})\.(\d{1,2})\.(\d+)(.+)$/, scheme:'YY.MM.MICRO+MOD',         named:['year','month','micro','mod'] },
+  ];
+  for (const p of patterns) {
+    const m = v.match(p.re);
+    if (m) {
+      const parts = p.named.map((n, i) => n + '=' + m[i+1]);
+      out.innerHTML = 'Matches <strong>' + p.scheme + '</strong><br>' + parts.join(', ');
+      return;
+    }
+  }
+  out.textContent = 'No known CalVer pattern matches.';
+}
+
+// Wiring
+document.getElementById('date').addEventListener('input', compute);
+document.getElementById('micro').addEventListener('input', compute);
+document.getElementById('mod').addEventListener('input', compute);
+document.getElementById('custom').addEventListener('input', () => {
+  state.scheme = '__custom__';
+  renderSchemes();
+  compute();
+});
+document.getElementById('parseIn').addEventListener('input', parseVersion);
+
+todayNow();
+renderSchemes();
+compute();
+</script>
+</body>
+</html>
