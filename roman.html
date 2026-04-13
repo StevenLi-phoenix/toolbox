@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roman Numeral Converter — Decimal ↔ Roman</title>
+<meta name="description" content="Convert between decimal numbers and Roman numerals (1–3,999,999). Supports vinculum (overlined) notation for large values.">
+<meta name="keywords" content="roman numeral, converter, decimal to roman, roman to decimal, vinculum">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/roman.html">
+<meta property="og:title" content="Roman Numeral Converter">
+<meta property="og:description" content="Convert decimal numbers to Roman numerals and back — up to 3,999,999 with vinculum notation.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/roman.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .convert-grid { display: grid; gap: 14px; }
+  .convert-grid input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: 1.1rem; background: var(--bg); color: var(--text); }
+  .arrow { text-align: center; color: var(--muted); font-size: 1.2rem; }
+  .breakdown { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+  .chip { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; text-align: center; }
+  .chip span { display: block; color: var(--muted); font-size: .7rem; margin-bottom: 2px; }
+  .ref-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .85rem; }
+  .ref-table th, .ref-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  .ref-table th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; }
+  .overline { text-decoration: overline; }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Roman Numeral Converter</h1>
+  <p class="subtitle">Convert decimal numbers to Roman numerals and back. Standard form (1–3999) plus vinculum notation for values up to 3,999,999.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="convert-grid">
+      <div>
+        <label for="dec">Decimal</label>
+        <input id="dec" type="text" inputmode="numeric" placeholder="e.g. 1984">
+      </div>
+      <div class="arrow">⇅</div>
+      <div>
+        <label for="rom">Roman</label>
+        <input id="rom" type="text" placeholder="e.g. MCMLXXXIV">
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+      <button class="btn btn-secondary" onclick="copyRoman()">Copy Roman</button>
+    </div>
+    <div class="breakdown" id="breakdown"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Reference</h2>
+    <table class="ref-table">
+      <thead><tr><th>Symbol</th><th>Value</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>I</td><td>1</td><td></td></tr>
+        <tr><td>V</td><td>5</td><td></td></tr>
+        <tr><td>X</td><td>10</td><td></td></tr>
+        <tr><td>L</td><td>50</td><td></td></tr>
+        <tr><td>C</td><td>100</td><td></td></tr>
+        <tr><td>D</td><td>500</td><td></td></tr>
+        <tr><td>M</td><td>1,000</td><td></td></tr>
+        <tr><td><span class="overline">V</span></td><td>5,000</td><td>vinculum — overlined</td></tr>
+        <tr><td><span class="overline">X</span></td><td>10,000</td><td>vinculum</td></tr>
+        <tr><td><span class="overline">L</span></td><td>50,000</td><td>vinculum</td></tr>
+        <tr><td><span class="overline">C</span></td><td>100,000</td><td>vinculum</td></tr>
+        <tr><td><span class="overline">D</span></td><td>500,000</td><td>vinculum</td></tr>
+        <tr><td><span class="overline">M</span></td><td>1,000,000</td><td>vinculum</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:.82rem;color:var(--muted);line-height:1.6;margin-top:10px;">
+      Subtractive form is used (IV=4, IX=9, XL=40, XC=90, CD=400, CM=900). Vinculum multiplies a symbol by 1,000 — here we use combining overline (U+0305) which renders as <span class="overline">V</span>.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const OVER = '\u0305'; // combining overline
+// Base pairs for 1..3999
+const BASE = [
+  [1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],
+  [100,'C'],[90,'XC'],[50,'L'],[40,'XL'],
+  [10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']
+];
+// Large pairs with vinculum for 4000..3,999,999
+const LARGE = [
+  [1000000,'M'+OVER],
+  [900000, 'C'+OVER+'M'+OVER],
+  [500000, 'D'+OVER],
+  [400000, 'C'+OVER+'D'+OVER],
+  [100000, 'C'+OVER],
+  [90000,  'X'+OVER+'C'+OVER],
+  [50000,  'L'+OVER],
+  [40000,  'X'+OVER+'L'+OVER],
+  [10000,  'X'+OVER],
+  [9000,   'M'+'X'+OVER],
+  [5000,   'V'+OVER],
+  [4000,   'M'+'V'+OVER],
+];
+
+function toRoman(n) {
+  if (!Number.isInteger(n) || n < 1 || n > 3999999) {
+    throw new Error('Enter an integer between 1 and 3,999,999');
+  }
+  let out = '';
+  const pairs = [...LARGE, ...BASE];
+  for (const [v, s] of pairs) {
+    while (n >= v) { out += s; n -= v; }
+  }
+  return out;
+}
+
+function fromRoman(s) {
+  if (!s) throw new Error('Empty input');
+  const str = s.toUpperCase();
+  // Map each (optional overline) symbol to its value
+  const vals = { I:1, V:5, X:10, L:50, C:100, D:500, M:1000 };
+  const tokens = [];
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (c === ' ' || c === '\t') continue;
+    if (!vals[c]) throw new Error('Invalid character "' + c + '"');
+    let mult = 1;
+    // Consume any trailing combining overlines (also accept literal "_" or "~" prefix? keep simple: overline char)
+    while (str[i+1] === OVER) { mult *= 1000; i++; }
+    tokens.push(vals[c] * mult);
+  }
+  if (tokens.length === 0) throw new Error('No valid symbols');
+  let sum = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    if (i + 1 < tokens.length && tokens[i] < tokens[i+1]) sum -= tokens[i];
+    else sum += tokens[i];
+  }
+  if (sum < 1 || sum > 3999999) throw new Error('Out of range');
+  // Round-trip validate to reject malformed (e.g. IIII, VV)
+  const canon = toRoman(sum);
+  if (canon !== str.replace(/\s+/g,'')) {
+    throw new Error('Non-canonical (did you mean ' + canon + '?)');
+  }
+  return sum;
+}
+
+const dec = document.getElementById('dec');
+const rom = document.getElementById('rom');
+const status = document.getElementById('status');
+const breakdown = document.getElementById('breakdown');
+
+function setStatus(msg, type) {
+  status.className = 'status show ' + (type || '');
+  status.textContent = msg;
+}
+function clearStatus() { status.className = 'status'; status.textContent = ''; }
+
+function renderBreakdown(n) {
+  if (!n) { breakdown.innerHTML = ''; return; }
+  const chips = [];
+  const pairs = [...LARGE, ...BASE];
+  let rem = n;
+  for (const [v, s] of pairs) {
+    while (rem >= v) { chips.push(`<div class="chip"><span>${v.toLocaleString()}</span>${s}</div>`); rem -= v; }
+  }
+  breakdown.innerHTML = chips.join('');
+}
+
+let updating = false;
+dec.addEventListener('input', () => {
+  if (updating) return;
+  clearStatus();
+  const v = dec.value.trim().replace(/,/g,'');
+  if (!v) { rom.value = ''; renderBreakdown(0); return; }
+  const n = Number(v);
+  if (!Number.isFinite(n)) { setStatus('Not a number', 'error'); return; }
+  try {
+    const r = toRoman(n);
+    updating = true; rom.value = r; updating = false;
+    renderBreakdown(n);
+  } catch (e) {
+    setStatus(e.message, 'error');
+    rom.value = '';
+    renderBreakdown(0);
+  }
+});
+
+rom.addEventListener('input', () => {
+  if (updating) return;
+  clearStatus();
+  const v = rom.value.trim();
+  if (!v) { dec.value = ''; renderBreakdown(0); return; }
+  try {
+    const n = fromRoman(v);
+    updating = true; dec.value = String(n); updating = false;
+    renderBreakdown(n);
+  } catch (e) {
+    setStatus(e.message, 'error');
+    dec.value = '';
+    renderBreakdown(0);
+  }
+});
+
+function loadSample() { dec.value = '1984'; dec.dispatchEvent(new Event('input')); }
+function clearAll() { dec.value = ''; rom.value = ''; renderBreakdown(0); clearStatus(); }
+function copyRoman() {
+  if (!rom.value) return;
+  navigator.clipboard.writeText(rom.value).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+</script>
+</body>
+</html>

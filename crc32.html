@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRC32 Calculator — Checksum for Text & Files</title>
+<meta name="description" content="Calculate CRC-32 checksums (IEEE, Castagnoli, BZIP2) for text, hex, or files. 100% client-side — your data never leaves your browser.">
+<meta name="keywords" content="crc32, crc-32c, castagnoli, ieee, bzip2, checksum, calculator, file hash">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/crc32.html">
+<meta property="og:title" content="CRC32 Calculator">
+<meta property="og:description" content="Compute CRC-32 checksums (IEEE, Castagnoli, BZIP2) for text or files.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/crc32.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  textarea { min-height: 130px; }
+  .results { display: grid; gap: 10px; margin-top: 12px; }
+  .row { padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .row-head { display: flex; justify-content: space-between; align-items: center; font-size: .78rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .row-head button { padding: 3px 10px; font-size: .72rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; }
+  .row-head button:hover { background: var(--surface2); }
+  .val { font-family: var(--mono); font-size: .9rem; color: var(--text); }
+  .val-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+  .val-grid div span { display: block; font-size: .7rem; color: var(--muted); margin-bottom: 2px; }
+  .file-info { font-size: .82rem; color: var(--muted); margin-top: 6px; }
+  .drop { border: 2px dashed var(--border); border-radius: var(--radius); padding: 16px; text-align: center; color: var(--muted); font-size: .85rem; cursor: pointer; }
+  .drop.over { background: var(--surface2); border-color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>CRC32 Calculator</h1>
+  <p class="subtitle">Compute CRC-32 checksums for text, hex bytes, or files. Supports IEEE 802.3 (zip, gzip, PNG), Castagnoli (CRC-32C used by iSCSI, ext4, Btrfs), and BZIP2 variants.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="tabs">
+      <button class="tab active" data-tab="text">Text / Hex</button>
+      <button class="tab" data-tab="file">File</button>
+    </div>
+
+    <div id="pane-text">
+      <div class="opts">
+        <label>Input mode:
+          <select id="mode">
+            <option value="utf8">UTF-8 text</option>
+            <option value="hex">Hex bytes</option>
+          </select>
+        </label>
+      </div>
+      <label for="input">Input</label>
+      <textarea id="input" placeholder="Enter text or hex bytes (e.g. 48656c6c6f)"></textarea>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-primary" onclick="calcText()">Calculate</button>
+        <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+        <button class="btn btn-secondary" onclick="clearText()">Clear</button>
+      </div>
+    </div>
+
+    <div id="pane-file" style="display:none;">
+      <div class="drop" id="drop">Drop a file here or click to choose</div>
+      <input type="file" id="file" style="display:none;">
+      <div class="file-info" id="fileinfo"></div>
+    </div>
+
+    <div class="results" id="results"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">CRC-32 Variants</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      <strong>IEEE 802.3</strong> (poly <code>0xEDB88320</code> reflected): used by zip, gzip, PNG, Ethernet — the most common "CRC32".
+      <strong>CRC-32C (Castagnoli)</strong> (poly <code>0x82F63B78</code>): iSCSI, SCTP, ext4, Btrfs, SSE4.2 — better error detection for small payloads.
+      <strong>CRC-32/BZIP2</strong> (poly <code>0x04C11DB7</code>, non-reflected): used by bzip2, AAL5, MPEG-2.
+      All three are computed via a precomputed 256-entry table for speed. Results match <code>python -c "import zlib; hex(zlib.crc32(b'...'))"</code> for IEEE.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function makeTable(poly) {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (poly ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+}
+function makeTableFwd(poly) {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i << 24;
+    for (let k = 0; k < 8; k++) c = (c & 0x80000000) ? ((poly ^ (c << 1)) >>> 0) : ((c << 1) >>> 0);
+    t[i] = c >>> 0;
+  }
+  return t;
+}
+
+const T_IEEE = makeTable(0xEDB88320);   // reflected IEEE
+const T_C    = makeTable(0x82F63B78);   // reflected Castagnoli
+const T_BZ   = makeTableFwd(0x04C11DB7); // forward BZIP2
+
+function crcReflected(table, bytes, seed = 0xFFFFFFFF) {
+  let crc = seed;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = (table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8)) >>> 0;
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+function crcForward(table, bytes, seed = 0xFFFFFFFF) {
+  let crc = seed;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = (table[((crc >>> 24) ^ bytes[i]) & 0xff] ^ ((crc << 8) >>> 0)) >>> 0;
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function crc32ieee(bytes) { return crcReflected(T_IEEE, bytes); }
+function crc32c(bytes)    { return crcReflected(T_C, bytes); }
+function crc32bz(bytes)   { return crcForward(T_BZ, bytes); }
+
+function hexToBytes(hex) {
+  hex = hex.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (hex.length % 2 !== 0) throw new Error('Hex string must have even length');
+  if (!/^[0-9a-fA-F]*$/.test(hex)) throw new Error('Invalid hex characters');
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+
+const VARIANTS = [
+  { name: 'CRC-32 (IEEE 802.3)', fn: crc32ieee },
+  { name: 'CRC-32C (Castagnoli)', fn: crc32c },
+  { name: 'CRC-32/BZIP2', fn: crc32bz },
+];
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() { document.getElementById('status').className = 'status'; document.getElementById('status').textContent = ''; }
+
+function toUnsignedDec(n) { return (n >>> 0).toString(10); }
+function toHex(n) { return '0x' + (n >>> 0).toString(16).padStart(8, '0').toUpperCase(); }
+function toBytesLE(n) {
+  return [0,8,16,24].map(s => ((n >>> s) & 0xff).toString(16).padStart(2,'0')).join(' ');
+}
+function toBytesBE(n) {
+  return [24,16,8,0].map(s => ((n >>> s) & 0xff).toString(16).padStart(2,'0')).join(' ');
+}
+
+function render(bytes) {
+  const el = document.getElementById('results');
+  if (!bytes) { el.innerHTML = ''; return; }
+  const parts = VARIANTS.map(v => {
+    const n = v.fn(bytes);
+    return `
+      <div class="row">
+        <div class="row-head"><span>${v.name}</span><button onclick="copyVal('${toHex(n)}')">Copy</button></div>
+        <div class="val-grid">
+          <div><span>Hex</span><span class="val">${toHex(n)}</span></div>
+          <div><span>Decimal</span><span class="val">${toUnsignedDec(n)}</span></div>
+          <div><span>Bytes (LE)</span><span class="val">${toBytesLE(n)}</span></div>
+          <div><span>Bytes (BE)</span><span class="val">${toBytesBE(n)}</span></div>
+        </div>
+      </div>`;
+  });
+  el.innerHTML = parts.join('');
+}
+
+function calcText() {
+  clearStatus();
+  const input = document.getElementById('input').value;
+  if (!input) { render(null); return; }
+  try {
+    const mode = document.getElementById('mode').value;
+    const bytes = mode === 'hex' ? hexToBytes(input.trim()) : new TextEncoder().encode(input);
+    render(bytes);
+  } catch (e) {
+    setStatus(e.message, 'error');
+    render(null);
+  }
+}
+
+function loadSample() {
+  document.getElementById('mode').value = 'utf8';
+  document.getElementById('input').value = '123456789';
+  calcText();
+  setStatus('Standard CRC check vector "123456789" — IEEE should be 0xCBF43926', 'success');
+}
+function clearText() { document.getElementById('input').value = ''; render(null); clearStatus(); }
+
+function copyVal(v) {
+  navigator.clipboard.writeText(v).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+// Tabs
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('pane-text').style.display = tab === 'text' ? '' : 'none';
+    document.getElementById('pane-file').style.display = tab === 'file' ? '' : 'none';
+    render(null);
+    clearStatus();
+  });
+});
+
+// File handling
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+async function handleFile(file) {
+  clearStatus();
+  document.getElementById('fileinfo').textContent = `${file.name} · ${file.size.toLocaleString()} bytes`;
+  try {
+    const buf = await file.arrayBuffer();
+    render(new Uint8Array(buf));
+  } catch (e) {
+    setStatus('File read error: ' + e.message, 'error');
+  }
+}
+</script>
+</body>
+</html>

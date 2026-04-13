@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NanoID Generator — Secure URL-Friendly IDs</title>
+<meta name="description" content="Generate NanoID — compact, cryptographically secure, URL-friendly unique IDs. Customize alphabet and length with live collision probability.">
+<meta name="keywords" content="nanoid, unique id, url-safe id, generator, uuid alternative, crypto.getRandomValues">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/nanoid.html">
+<meta property="og:title" content="NanoID Generator">
+<meta property="og:description" content="Generate NanoIDs with custom alphabet and length. Shows collision probability and entropy.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/nanoid.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .controls label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+  .controls input, .controls select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; }
+  .ids { font-family: var(--mono); font-size: .9rem; white-space: pre-wrap; word-break: break-all; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); min-height: 60px; max-height: 380px; overflow: auto; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 12px; }
+  .meta-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; }
+  .meta-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 2px; }
+  .meta-tile strong { font-family: var(--mono); word-break: break-all; }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .preset { font-size: .72rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; color: var(--muted); font-family: var(--mono); }
+  .preset:hover { background: var(--surface2); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>NanoID Generator</h1>
+  <p class="subtitle">Generate URL-friendly, cryptographically secure unique IDs. Smaller than UUID, collision-resistant, and fully customizable.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="controls">
+      <div>
+        <label for="size">Size</label>
+        <input id="size" type="number" min="2" max="256" value="21">
+      </div>
+      <div>
+        <label for="count">How many</label>
+        <input id="count" type="number" min="1" max="1000" value="10">
+      </div>
+      <div>
+        <label for="alphabet">Alphabet</label>
+        <input id="alphabet" type="text" value="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-">
+      </div>
+    </div>
+    <div class="preset-row">
+      <button class="preset" data-alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-">default (64)</button>
+      <button class="preset" data-alpha="0123456789abcdefghijklmnopqrstuvwxyz">lowercase+digits (36)</button>
+      <button class="preset" data-alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789">uppercase+digits (36)</button>
+      <button class="preset" data-alpha="0123456789ABCDEFGHJKMNPQRSTVWXYZ">Crockford base32</button>
+      <button class="preset" data-alpha="0123456789">digits only</button>
+      <button class="preset" data-alpha="0123456789abcdef">hex</button>
+      <button class="preset" data-alpha="2346789BCDFGHJKMPQRTVWXY">no-lookalike (24)</button>
+    </div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="generate()">Generate</button>
+      <button class="btn btn-secondary" onclick="copyAll()">Copy All</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+    <div class="ids" id="out"></div>
+    <div class="meta-grid" id="meta"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About NanoID</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      NanoID is a unique string ID generator by Andrey Sitnik. It uses <code>crypto.getRandomValues</code> and a carefully masked rejection-sampling loop to produce uniform output across any alphabet size — avoiding the bias introduced by naive <code>random % n</code> schemes. With the default 21-character alphabet of 64 symbols, each ID packs ~126 bits of entropy — more than UUIDv4 (122 bits) — while being 39% shorter.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function customAlphabet(alpha, size) {
+  // Faithful port of Sitnik's nanoid: masked rejection sampling.
+  const mask = (2 << (31 - Math.clz32((alpha.length - 1) | 1))) - 1;
+  const step = Math.ceil((1.6 * mask * size) / alpha.length);
+  return () => {
+    let id = '';
+    while (true) {
+      const bytes = crypto.getRandomValues(new Uint8Array(step));
+      for (let i = 0; i < step; i++) {
+        const b = bytes[i] & mask;
+        if (alpha[b]) {
+          id += alpha[b];
+          if (id.length === size) return id;
+        }
+      }
+    }
+  };
+}
+
+const $ = id => document.getElementById(id);
+
+function setStatus(msg, type) {
+  const el = $('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() { $('status').className = 'status'; $('status').textContent = ''; }
+
+function uniqueAlpha(s) {
+  const seen = new Set(); let out = '';
+  for (const c of s) { if (!seen.has(c)) { seen.add(c); out += c; } }
+  return out;
+}
+
+function collisionYears(bitsPerSec) {
+  // for display of when "50% chance at 1 ID/hour"
+  // unused — simpler: show "years to 1% collision at 1000 IDs/hr"
+  return null;
+}
+
+function renderMeta(alpha, size) {
+  const n = alpha.length;
+  const bits = size * Math.log2(n);
+  // Birthday bound: half-collision at ~sqrt(2 * N^size * ln 2)
+  const halfN = Math.sqrt(2 * Math.pow(n, size) * Math.LN2);
+  const fmt = (x) => {
+    if (!isFinite(x)) return '∞';
+    if (x < 1000) return x.toFixed(0);
+    const units = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+    let i = 0; while (x >= 1000 && i < units.length - 1) { x /= 1000; i++; }
+    return x.toFixed(2) + units[i];
+  };
+  // years until 1% collision chance if generating 1000 IDs/hour
+  const rate = 1000; // per hour
+  const h = 0.02 * halfN / rate; // rough scaling for 1% prob vs 50%
+  const yearsTo1pct = h / (24 * 365);
+  $('meta').innerHTML = `
+    <div class="meta-tile"><span>Alphabet size</span><strong>${n}</strong></div>
+    <div class="meta-tile"><span>Length</span><strong>${size}</strong></div>
+    <div class="meta-tile"><span>Entropy</span><strong>${bits.toFixed(1)} bits</strong></div>
+    <div class="meta-tile"><span>Possible IDs</span><strong>${fmt(Math.pow(n, size))}</strong></div>
+    <div class="meta-tile"><span>~50% collision at</span><strong>${fmt(halfN)} IDs</strong></div>
+    <div class="meta-tile"><span>1% coll. @1000/hr</span><strong>${fmt(yearsTo1pct)} yr</strong></div>
+  `;
+}
+
+function generate() {
+  clearStatus();
+  let alpha = $('alphabet').value;
+  const size = parseInt($('size').value, 10);
+  const count = parseInt($('count').value, 10);
+  if (!alpha || alpha.length < 2) { setStatus('Alphabet must have at least 2 unique characters', 'error'); return; }
+  const deduped = uniqueAlpha(alpha);
+  if (deduped !== alpha) { alpha = deduped; $('alphabet').value = deduped; }
+  if (!Number.isFinite(size) || size < 2 || size > 256) { setStatus('Size must be 2–256', 'error'); return; }
+  if (!Number.isFinite(count) || count < 1 || count > 1000) { setStatus('Count must be 1–1000', 'error'); return; }
+  const gen = customAlphabet(alpha, size);
+  const ids = [];
+  for (let i = 0; i < count; i++) ids.push(gen());
+  $('out').textContent = ids.join('\n');
+  renderMeta(alpha, size);
+}
+
+function copyAll() {
+  const text = $('out').textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function clearAll() {
+  $('out').textContent = '';
+  $('meta').innerHTML = '';
+  clearStatus();
+}
+
+document.querySelectorAll('.preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $('alphabet').value = btn.dataset.alpha;
+    generate();
+  });
+});
+
+['size','count','alphabet'].forEach(id => {
+  $(id).addEventListener('change', generate);
+});
+
+generate();
+</script>
+</body>
+</html>
