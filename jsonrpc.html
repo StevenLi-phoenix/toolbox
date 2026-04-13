@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON-RPC 2.0 Request Builder — Free Online Tool</title>
+<meta name="description" content="Build, validate, and send JSON-RPC 2.0 requests. Supports single calls, batch requests, notifications, named & positional params, and live validation.">
+<meta name="keywords" content="JSON-RPC, JSON-RPC 2.0, RPC, request builder, batch, notification, API, tester">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonrpc.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  textarea { width: 100%; min-height: 220px; padding: 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; background: var(--bg); color: var(--text); }
+  input[type="text"], input[type="url"], select { padding: 8px 10px; font-family: var(--sans); font-size: .88rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .form-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .status { padding: 8px 12px; border-radius: var(--radius); font-size: .85rem; font-family: var(--mono); margin-top: 8px; }
+  .status.ok { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); border: 1px solid var(--success); }
+  .status.err { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); border: 1px solid var(--error); }
+  .panel h3 { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .hint { font-size: .78rem; color: var(--muted); margin-top: 4px; }
+  @media (max-width: 768px) {
+    .panels, .form-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔌 JSON-RPC 2.0 Request Builder</h1>
+<p class="subtitle">Build and validate JSON-RPC 2.0 requests. Supports single calls, batch requests, and notifications (no id). Optionally POST to a live endpoint.</p>
+
+<div class="form-grid">
+  <div class="field">
+    <label>Method</label>
+    <input type="text" id="method" placeholder="subtract" value="subtract">
+  </div>
+  <div class="field">
+    <label>Request ID</label>
+    <input type="text" id="id" placeholder="1" value="1">
+  </div>
+  <div class="field">
+    <label>Type</label>
+    <select id="type">
+      <option value="call">Call (with id)</option>
+      <option value="notify">Notification (no id)</option>
+    </select>
+  </div>
+</div>
+
+<div class="field" style="margin-top:14px">
+  <label>Params (JSON array for positional, JSON object for named, or leave empty)</label>
+  <textarea id="params" style="min-height:80px">[42, 23]</textarea>
+</div>
+
+<div class="controls">
+  <button class="btn" id="build">Build request</button>
+  <button class="btn btn-secondary" id="addBatch">Add to batch</button>
+  <button class="btn btn-secondary" id="clearBatch">Clear batch</button>
+  <button class="btn btn-secondary" id="sample">Load sample</button>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h3>Generated request</h3>
+    <textarea id="output" readonly></textarea>
+    <div id="status" class="status" style="display:none"></div>
+    <div class="controls">
+      <button class="btn btn-secondary" id="copy">Copy</button>
+      <button class="btn btn-secondary" id="format">Format / Minify</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Send to endpoint (optional)</h3>
+    <div class="field">
+      <label>POST URL</label>
+      <input type="url" id="url" placeholder="https://api.example.com/rpc">
+    </div>
+    <div class="hint">Requires server CORS. Response appears below.</div>
+    <div class="controls">
+      <button class="btn" id="send">Send</button>
+    </div>
+    <textarea id="response" readonly style="min-height:160px"></textarea>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let batch = [];
+let formatted = true;
+
+function showStatus(msg, ok) {
+  const s = $('status');
+  s.textContent = msg;
+  s.className = 'status ' + (ok ? 'ok' : 'err');
+  s.style.display = 'block';
+}
+
+function parseParams(text) {
+  text = text.trim();
+  if (!text) return undefined;
+  const v = JSON.parse(text);
+  if (typeof v !== 'object' || v === null) {
+    throw new Error('params must be an array or object');
+  }
+  return v;
+}
+
+function parseId(text) {
+  text = text.trim();
+  if (text === '') return 1;
+  if (/^-?\d+$/.test(text)) return parseInt(text, 10);
+  if (/^-?\d*\.\d+$/.test(text)) return parseFloat(text);
+  if (text === 'null') return null;
+  return text; // string id
+}
+
+function buildObject() {
+  const method = $('method').value.trim();
+  if (!method) throw new Error('method is required');
+  const obj = { jsonrpc: '2.0', method };
+  const p = parseParams($('params').value);
+  if (p !== undefined) obj.params = p;
+  if ($('type').value === 'call') {
+    obj.id = parseId($('id').value);
+  }
+  return obj;
+}
+
+function render(obj) {
+  $('output').value = formatted ? JSON.stringify(obj, null, 2) : JSON.stringify(obj);
+}
+
+function build() {
+  try {
+    if (batch.length > 0) {
+      const obj = buildObject();
+      const full = [...batch, obj];
+      render(full);
+      showStatus('Valid batch with ' + full.length + ' request(s).', true);
+    } else {
+      const obj = buildObject();
+      render(obj);
+      showStatus('Valid JSON-RPC 2.0 request.', true);
+    }
+  } catch (e) {
+    showStatus('Error: ' + e.message, false);
+  }
+}
+
+$('build').addEventListener('click', build);
+
+$('addBatch').addEventListener('click', () => {
+  try {
+    const obj = buildObject();
+    batch.push(obj);
+    render(batch);
+    showStatus('Added. Batch contains ' + batch.length + ' request(s).', true);
+    const nextId = (parseInt($('id').value, 10) || 0) + 1;
+    $('id').value = String(nextId);
+  } catch (e) {
+    showStatus('Error: ' + e.message, false);
+  }
+});
+
+$('clearBatch').addEventListener('click', () => {
+  batch = [];
+  $('output').value = '';
+  $('status').style.display = 'none';
+});
+
+$('sample').addEventListener('click', () => {
+  $('method').value = 'subtract';
+  $('params').value = '{"minuend": 42, "subtrahend": 23}';
+  $('id').value = '1';
+  $('type').value = 'call';
+  batch = [];
+  build();
+});
+
+$('copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('output').value);
+    showStatus('Copied to clipboard.', true);
+  } catch { showStatus('Copy failed.', false); }
+});
+
+$('format').addEventListener('click', () => {
+  try {
+    const obj = JSON.parse($('output').value);
+    formatted = !formatted;
+    render(obj);
+  } catch (e) { showStatus('Nothing to format.', false); }
+});
+
+$('send').addEventListener('click', async () => {
+  const url = $('url').value.trim();
+  if (!url) { showStatus('Enter a URL first.', false); return; }
+  let body;
+  try { body = $('output').value || JSON.stringify(buildObject()); } catch (e) { showStatus(e.message, false); return; }
+  $('response').value = 'Sending…';
+  try {
+    const t0 = performance.now();
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    });
+    const text = await res.text();
+    const ms = Math.round(performance.now() - t0);
+    let pretty = text;
+    try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+    $('response').value = `HTTP ${res.status} ${res.statusText} · ${ms}ms\n\n${pretty}`;
+  } catch (e) {
+    $('response').value = 'Fetch error: ' + e.message;
+  }
+});
+
+// initial
+build();
+</script>
+</body>
+</html>
