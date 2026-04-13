@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Pointer Evaluator — RFC 6901</title>
+<meta name="description" content="Evaluate JSON Pointer (RFC 6901) expressions against JSON documents. Resolve paths, handle escapes, and see all pointers in a document. 100% client-side.">
+<meta name="keywords" content="json pointer, rfc 6901, evaluator, json path, json navigation, slash path">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonpointer.html">
+<meta property="og:title" content="JSON Pointer Evaluator — RFC 6901">
+<meta property="og:description" content="Evaluate JSON Pointer expressions against JSON documents in real-time.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/jsonpointer.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea, input[type=text] { font-family: var(--mono); font-size: .85rem; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; width: 100%; box-sizing: border-box; }
+  textarea { min-height: 300px; resize: vertical; line-height: 1.5; }
+  .result-box { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-family: var(--mono); font-size: .82rem; white-space: pre-wrap; word-break: break-word; min-height: 60px; }
+  .result-box.error { border-color: var(--error); color: var(--error); }
+  .result-box.ok { border-color: var(--success); }
+  .pointer-list { margin-top: 10px; max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .p-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: .78rem; }
+  .p-row:last-child { border-bottom: 0; }
+  .p-row:hover { background: var(--surface2); }
+  .p-row .ptr { color: var(--accent); cursor: pointer; word-break: break-all; flex: 1; }
+  .p-row .val { color: var(--muted); max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .row label { font-size: .85rem; color: var(--muted); min-width: 60px; }
+  .hint { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>JSON Pointer Evaluator</h1>
+  <p class="subtitle">Evaluate <a href="https://datatracker.ietf.org/doc/html/rfc6901" style="color:var(--accent);">RFC 6901</a> JSON Pointer expressions against a JSON document. Supports standard escaping (<code>~0</code>, <code>~1</code>) and array indices, plus a browse view listing every pointer in the document.</p>
+
+  <div class="panels" style="margin-top:16px;">
+    <div class="card" style="padding:16px;">
+      <h2 style="font-size:.95rem;margin-bottom:10px;">JSON Document</h2>
+      <textarea id="json" spellcheck="false" placeholder='{"foo": ["bar", "baz"], "": 0, "a/b": 1, "c%d": 2, "e^f": 3, "g|h": 4, "i\\\\j": 5, "k\"l": 6, " ": 7, "m~n": 8}'></textarea>
+      <div class="hint">Tip: try pointers like <code>/foo/0</code>, <code>/a~1b</code>, <code>/m~0n</code>.</div>
+    </div>
+
+    <div class="card" style="padding:16px;">
+      <h2 style="font-size:.95rem;margin-bottom:10px;">Pointer & Result</h2>
+      <div class="row">
+        <label>Pointer</label>
+        <input type="text" id="pointer" placeholder="/foo/0">
+      </div>
+      <div class="row">
+        <label>URI frag</label>
+        <input type="text" id="frag" placeholder="#/foo/0" readonly>
+      </div>
+      <div class="result-box" id="result"></div>
+      <h2 style="font-size:.95rem;margin:14px 0 6px;">All pointers <span id="pcount" style="font-size:.75rem;color:var(--muted);font-weight:400;"></span></h2>
+      <div class="pointer-list" id="plist"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const DEFAULT = {
+  "foo": ["bar", "baz"],
+  "": 0,
+  "a/b": 1,
+  "c%d": 2,
+  "e^f": 3,
+  "g|h": 4,
+  "i\\j": 5,
+  "k\"l": 6,
+  " ": 7,
+  "m~n": 8
+};
+
+function unescapeToken(tok) {
+  // ~1 → / , ~0 → ~ (order matters)
+  return tok.replace(/~1/g, '/').replace(/~0/g, '~');
+}
+function escapeToken(tok) {
+  return String(tok).replace(/~/g, '~0').replace(/\//g, '~1');
+}
+
+function parsePointer(ptr) {
+  if (ptr === '') return [];
+  if (ptr[0] !== '/') throw new Error('Pointer must be empty or start with "/"');
+  return ptr.slice(1).split('/').map(unescapeToken);
+}
+
+function resolve(doc, ptr) {
+  const tokens = parsePointer(ptr);
+  let cur = doc;
+  for (const tok of tokens) {
+    if (cur === null || typeof cur !== 'object') {
+      throw new Error('Cannot descend into primitive at "' + tok + '"');
+    }
+    if (Array.isArray(cur)) {
+      if (tok === '-') throw new Error('Index "-" references one past end (no value)');
+      if (!/^(0|[1-9]\d*)$/.test(tok)) throw new Error('Invalid array index "' + tok + '"');
+      const i = parseInt(tok, 10);
+      if (i >= cur.length) throw new Error('Array index out of bounds: ' + i);
+      cur = cur[i];
+    } else {
+      if (!Object.prototype.hasOwnProperty.call(cur, tok)) {
+        throw new Error('Key not found: "' + tok + '"');
+      }
+      cur = cur[tok];
+    }
+  }
+  return cur;
+}
+
+function listAllPointers(doc, prefix = '', acc = []) {
+  acc.push({ ptr: prefix, val: doc });
+  if (doc !== null && typeof doc === 'object') {
+    if (Array.isArray(doc)) {
+      doc.forEach((v, i) => listAllPointers(v, prefix + '/' + i, acc));
+    } else {
+      for (const k of Object.keys(doc)) {
+        listAllPointers(doc[k], prefix + '/' + escapeToken(k), acc);
+      }
+    }
+  }
+  return acc;
+}
+
+const jsonEl = document.getElementById('json');
+const ptrEl = document.getElementById('pointer');
+const fragEl = document.getElementById('frag');
+const resEl = document.getElementById('result');
+const plistEl = document.getElementById('plist');
+const pcountEl = document.getElementById('pcount');
+
+function shortVal(v) {
+  try {
+    const s = JSON.stringify(v);
+    if (s === undefined) return String(v);
+    return s.length > 60 ? s.slice(0, 60) + '…' : s;
+  } catch { return String(v); }
+}
+
+function run() {
+  let doc;
+  try {
+    doc = JSON.parse(jsonEl.value);
+  } catch (e) {
+    resEl.className = 'result-box error';
+    resEl.textContent = 'JSON parse error: ' + e.message;
+    plistEl.innerHTML = '';
+    pcountEl.textContent = '';
+    return;
+  }
+
+  const ptr = ptrEl.value;
+  if (ptr === '' || ptr[0] === '/') {
+    try {
+      const v = resolve(doc, ptr);
+      resEl.className = 'result-box ok';
+      resEl.textContent = v === undefined ? 'undefined' : JSON.stringify(v, null, 2);
+    } catch (e) {
+      resEl.className = 'result-box error';
+      resEl.textContent = e.message;
+    }
+  } else {
+    resEl.className = 'result-box error';
+    resEl.textContent = 'Pointer must be empty or start with "/"';
+  }
+  fragEl.value = '#' + encodeURI(ptr).replace(/#/g, '%23');
+
+  const all = listAllPointers(doc);
+  pcountEl.textContent = '(' + all.length + ')';
+  plistEl.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for (const { ptr: p, val } of all) {
+    const row = document.createElement('div');
+    row.className = 'p-row';
+    const pSpan = document.createElement('span');
+    pSpan.className = 'ptr';
+    pSpan.textContent = p === '' ? '""  (root)' : p;
+    pSpan.title = 'Click to use';
+    pSpan.addEventListener('click', () => { ptrEl.value = p; run(); });
+    const vSpan = document.createElement('span');
+    vSpan.className = 'val';
+    vSpan.textContent = shortVal(val);
+    row.appendChild(pSpan);
+    row.appendChild(vSpan);
+    frag.appendChild(row);
+  }
+  plistEl.appendChild(frag);
+}
+
+jsonEl.addEventListener('input', run);
+ptrEl.addEventListener('input', run);
+
+jsonEl.value = JSON.stringify(DEFAULT, null, 2);
+ptrEl.value = '/foo/0';
+run();
+</script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KSUID Generator & Decoder — K-Sortable Unique IDs</title>
+<meta name="description" content="Generate and decode KSUIDs (K-Sortable Unique IDentifiers). 27-character base62 IDs with 32-bit timestamp and 128-bit payload. 100% client-side.">
+<meta name="keywords" content="ksuid, k-sortable unique id, generator, decoder, base62, segment, identifier">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ksuid.html">
+<meta property="og:title" content="KSUID Generator & Decoder">
+<meta property="og:description" content="Generate and decode Segment KSUIDs — sortable, 27-character IDs with embedded timestamp.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/ksuid.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .ksuid-list { display: grid; gap: 6px; margin-top: 10px; max-height: 340px; overflow: auto; }
+  .ksuid-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .82rem; background: var(--surface2); }
+  .ksuid-row .id { flex: 1; word-break: break-all; }
+  .ksuid-row .icon-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 3px 8px; border-radius: 4px; cursor: pointer; font-family: var(--mono); font-size: .75rem; }
+  .ksuid-row .icon-btn:hover { color: var(--text); border-color: var(--text); }
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .decode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+  .decode-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; background: var(--surface2); }
+  .decode-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
+  .decode-tile strong { font-family: var(--mono); word-break: break-all; font-weight: 500; }
+  input[type=text], input[type=number] { font-family: var(--mono); }
+  .status { margin-top: 10px; font-size: .85rem; }
+  .status.error { color: var(--error); }
+  @media (max-width: 768px) { .opts { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>KSUID Generator & Decoder</h1>
+  <p class="subtitle">Generate and inspect <strong>KSUIDs</strong> — Segment's K-Sortable Unique IDentifiers. Each KSUID is 160 bits: a 32-bit timestamp (seconds since 2014-05-13) plus 128 bits of randomness, encoded as 27 base62 characters.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:10px;">Generate KSUIDs</h2>
+    <div class="opts">
+      <label>Count:
+        <input type="number" id="count" value="5" min="1" max="200" style="width:80px;">
+      </label>
+      <button class="btn btn-primary" onclick="generate()">Generate</button>
+      <button class="btn btn-secondary" onclick="copyAll()">Copy all</button>
+    </div>
+    <div class="ksuid-list" id="list"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:10px;">Decode a KSUID</h2>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="decodeInput" placeholder="1HCpXwx2EK9oYluWbacgeCnFcLf" style="flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);">
+      <button class="btn" onclick="decode()">Decode</button>
+    </div>
+    <div class="decode-grid" id="decoded"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About KSUID</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      KSUID was introduced by <a href="https://segment.com/blog/a-brief-history-of-the-uuid/" style="color:var(--accent);">Segment</a> as an alternative to UUIDs with natural sort order by creation time. The timestamp uses a custom epoch of <code>2014-05-13T16:53:20Z</code>, giving it an effective range through the year 2150. The payload is 128 cryptographic random bits, encoded together as 27 base62 characters (case-sensitive: <code>0-9A-Za-z</code>).
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const EPOCH = 1400000000; // KSUID epoch in seconds (2014-05-13T16:53:20Z)
+const ALPHA = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const BASE = 62n;
+
+// Convert 20 bytes to 27-char base62 string (pad-left with '0')
+function bytesToBase62(bytes) {
+  let n = 0n;
+  for (const b of bytes) n = (n << 8n) | BigInt(b);
+  let out = '';
+  while (n > 0n) {
+    out = ALPHA[Number(n % BASE)] + out;
+    n /= BASE;
+  }
+  while (out.length < 27) out = '0' + out;
+  return out;
+}
+
+function base62ToBytes(s) {
+  let n = 0n;
+  for (const ch of s) {
+    const v = ALPHA.indexOf(ch);
+    if (v === -1) throw new Error('Invalid base62 character "' + ch + '"');
+    n = n * BASE + BigInt(v);
+  }
+  const bytes = new Uint8Array(20);
+  for (let i = 19; i >= 0; i--) {
+    bytes[i] = Number(n & 0xffn);
+    n >>= 8n;
+  }
+  if (n !== 0n) throw new Error('KSUID overflow (too large)');
+  return bytes;
+}
+
+function makeKSUIDBytes() {
+  const now = Math.floor(Date.now() / 1000) - EPOCH;
+  if (now < 0 || now > 0xffffffff) throw new Error('Timestamp out of range');
+  const bytes = new Uint8Array(20);
+  bytes[0] = (now >>> 24) & 0xff;
+  bytes[1] = (now >>> 16) & 0xff;
+  bytes[2] = (now >>> 8) & 0xff;
+  bytes[3] = now & 0xff;
+  crypto.getRandomValues(bytes.subarray(4));
+  return bytes;
+}
+
+function generate() {
+  const n = Math.min(200, Math.max(1, parseInt(document.getElementById('count').value) || 1));
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const bytes = makeKSUIDBytes();
+    const id = bytesToBase62(bytes);
+    const row = document.createElement('div');
+    row.className = 'ksuid-row';
+    row.innerHTML = `<div class="id">${id}</div><button class="icon-btn" title="Copy">Copy</button>`;
+    row.querySelector('button').addEventListener('click', () => copyText(id));
+    list.appendChild(row);
+  }
+}
+
+function copyAll() {
+  const ids = [...document.querySelectorAll('.ksuid-row .id')].map(el => el.textContent).join('\n');
+  if (ids) copyText(ids);
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function toHex(bytes) {
+  return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function decode() {
+  const el = document.getElementById('decoded');
+  const statusEl = document.getElementById('status');
+  statusEl.className = 'status';
+  statusEl.textContent = '';
+  el.innerHTML = '';
+  const input = document.getElementById('decodeInput').value.trim();
+  if (!input) return;
+  if (input.length !== 27) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'KSUID must be exactly 27 characters (got ' + input.length + ')';
+    return;
+  }
+  try {
+    const bytes = base62ToBytes(input);
+    const ts = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+    const unsignedTs = ts >>> 0;
+    const unixSec = unsignedTs + EPOCH;
+    const date = new Date(unixSec * 1000);
+    const payload = bytes.slice(4);
+    el.innerHTML = `
+      <div class="decode-tile"><span>Timestamp (KSUID epoch)</span><strong>${unsignedTs}</strong></div>
+      <div class="decode-tile"><span>Unix Timestamp</span><strong>${unixSec}</strong></div>
+      <div class="decode-tile"><span>Date (UTC)</span><strong>${date.toISOString()}</strong></div>
+      <div class="decode-tile"><span>Date (local)</span><strong>${date.toLocaleString()}</strong></div>
+      <div class="decode-tile"><span>Payload (hex)</span><strong>${toHex(payload)}</strong></div>
+      <div class="decode-tile"><span>Full (hex)</span><strong>${toHex(bytes)}</strong></div>
+    `;
+  } catch (e) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Decode error: ' + e.message;
+  }
+}
+
+document.getElementById('decodeInput').addEventListener('keydown', e => { if (e.key === 'Enter') decode(); });
+generate();
+</script>
+</body>
+</html>

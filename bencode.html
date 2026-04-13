@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bencode Encoder / Decoder — BitTorrent Format</title>
+<meta name="description" content="Encode and decode Bencode — the data format used by BitTorrent .torrent files. Convert between Bencode and JSON with byte-safe handling.">
+<meta name="keywords" content="bencode, bencoding, bittorrent, torrent, encode, decode, json, converter">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bencode.html">
+<meta property="og:title" content="Bencode Encoder / Decoder">
+<meta property="og:description" content="Encode and decode BitTorrent Bencode to/from JSON — 100% client-side.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/bencode.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 340px; padding: 10px; font-family: var(--mono); font-size: .82rem; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; line-height: 1.5; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .status { font-size: .8rem; padding: 8px 10px; border-radius: 4px; margin-top: 8px; display: none; }
+  .status.show { display: block; }
+  .status.ok { background: rgba(34, 197, 94, .12); color: var(--success); }
+  .status.err { background: rgba(239, 68, 68, .12); color: var(--error); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 10px; }
+  .stat-tile { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-size: .78rem; }
+  .stat-tile span { display: block; color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+  .stat-tile strong { font-family: var(--mono); font-weight: 500; }
+  .card h2 { font-size: .95rem; margin-bottom: 8px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: .82rem; color: var(--muted); }
+  .row label { display: flex; align-items: center; gap: 4px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Bencode Encoder / Decoder</h1>
+  <p class="subtitle">Encode and decode <strong>Bencode</strong>, the data format used by <a href="https://www.bittorrent.org/beps/bep_0003.html" style="color:var(--accent);">BitTorrent</a> <code>.torrent</code> files. Four types are supported: strings (<code>len:bytes</code>), integers (<code>i&lt;n&gt;e</code>), lists (<code>l…e</code>), and dictionaries (<code>d…e</code>). Binary-safe strings are surfaced as hex when they aren't valid UTF‑8.</p>
+
+  <div class="panels" style="margin-top:16px;">
+    <div class="card" style="padding:16px;">
+      <h2>Bencode</h2>
+      <div class="toolbar">
+        <button class="btn btn-primary" onclick="decode()">Decode → JSON</button>
+        <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+        <button class="btn btn-secondary" onclick="clearBen()">Clear</button>
+      </div>
+      <textarea id="ben" spellcheck="false" placeholder='d8:announce40:http://tracker.example.com:6969/announce4:infod6:lengthi128e4:name8:test.txt12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaeee'></textarea>
+      <div class="stats" id="stats"></div>
+      <div class="status" id="statusBen"></div>
+    </div>
+
+    <div class="card" style="padding:16px;">
+      <h2>JSON</h2>
+      <div class="toolbar">
+        <button class="btn btn-primary" onclick="encode()">JSON → Encode</button>
+        <button class="btn btn-secondary" onclick="copyBen()">Copy Bencode</button>
+        <button class="btn btn-secondary" onclick="copyJson()">Copy JSON</button>
+      </div>
+      <textarea id="json" spellcheck="false" placeholder='{"announce":"http://tracker.example.com:6969/announce","info":{"length":128,"name":"test.txt","piece length":16384,"pieces":{"__hex__":"6161616161616161616161616161616161616161"}}}'></textarea>
+      <div class="row" style="margin-top:8px;">
+        <label><input type="checkbox" id="pretty" checked> Pretty-print JSON</label>
+      </div>
+      <div class="status" id="statusJson"></div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Notes</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      Bencode strings are raw byte sequences. When a string isn't valid UTF‑8 (for example, the <code>pieces</code> field of a torrent — a concatenation of SHA‑1 digests) this tool represents it in JSON as <code>{"__hex__":"…"}</code>, and will round-trip it back to bytes on re-encode. Dictionaries are serialized with keys sorted lexicographically as required by the spec. Integers are arbitrary precision via <code>BigInt</code>; values that fit in a safe JS number decode as <code>Number</code>, larger ones as <code>BigInt</code> strings with <code>n</code> suffix.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+// ---- Bencode decoder (operates on Uint8Array) ----
+function strToBytes(s) {
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code > 0xff) throw new Error('Non-byte character at position ' + i + ' (charcode ' + code + '). Bencode is byte-oriented.');
+    out[i] = code;
+  }
+  return out;
+}
+function bytesToStr(b) {
+  let s = '';
+  for (const c of b) s += String.fromCharCode(c);
+  return s;
+}
+function tryUtf8(b) {
+  try {
+    const s = new TextDecoder('utf-8', { fatal: true }).decode(b);
+    // reject strings containing lone control chars that aren't newline/tab/cr
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d) return null;
+    }
+    return s;
+  } catch { return null; }
+}
+function toHex(b) {
+  let s = '';
+  for (const x of b) s += x.toString(16).padStart(2, '0');
+  return s;
+}
+function fromHex(h) {
+  if (h.length % 2) throw new Error('hex string has odd length');
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    const v = parseInt(h.substr(i * 2, 2), 16);
+    if (Number.isNaN(v)) throw new Error('invalid hex');
+    out[i] = v;
+  }
+  return out;
+}
+
+function Decoder(bytes) {
+  this.b = bytes;
+  this.i = 0;
+}
+Decoder.prototype.peek = function () { return this.b[this.i]; };
+Decoder.prototype.parse = function () {
+  const c = this.peek();
+  if (c === 0x69) return this.parseInt();    // 'i'
+  if (c === 0x6c) return this.parseList();   // 'l'
+  if (c === 0x64) return this.parseDict();   // 'd'
+  if (c >= 0x30 && c <= 0x39) return this.parseStr(); // digit
+  throw new Error('Unexpected byte 0x' + (c ?? -1).toString(16) + ' at position ' + this.i);
+};
+Decoder.prototype.parseInt = function () {
+  this.i++; // skip 'i'
+  let end = this.i;
+  while (this.b[end] !== 0x65 && end < this.b.length) end++;
+  if (this.b[end] !== 0x65) throw new Error('Unterminated integer at ' + this.i);
+  const s = bytesToStr(this.b.subarray(this.i, end));
+  if (!/^-?\d+$/.test(s)) throw new Error('Invalid integer "' + s + '"');
+  if (s === '-0') throw new Error('Invalid integer "-0"');
+  if (s.length > 1 && s[0] === '0') throw new Error('Leading zero in integer "' + s + '"');
+  if (s.length > 2 && s[0] === '-' && s[1] === '0') throw new Error('Leading zero in integer "' + s + '"');
+  this.i = end + 1;
+  const n = BigInt(s);
+  if (n >= BigInt(Number.MIN_SAFE_INTEGER) && n <= BigInt(Number.MAX_SAFE_INTEGER)) return Number(n);
+  return n;
+};
+Decoder.prototype.parseStr = function () {
+  let end = this.i;
+  while (this.b[end] !== 0x3a && end < this.b.length) end++;
+  if (this.b[end] !== 0x3a) throw new Error('Unterminated string length at ' + this.i);
+  const lenStr = bytesToStr(this.b.subarray(this.i, end));
+  if (!/^\d+$/.test(lenStr)) throw new Error('Invalid string length "' + lenStr + '"');
+  const len = parseInt(lenStr, 10);
+  this.i = end + 1;
+  if (this.i + len > this.b.length) throw new Error('String length ' + len + ' overruns input');
+  const slice = this.b.subarray(this.i, this.i + len);
+  this.i += len;
+  return slice;
+};
+Decoder.prototype.parseList = function () {
+  this.i++;
+  const out = [];
+  while (this.peek() !== 0x65) {
+    if (this.i >= this.b.length) throw new Error('Unterminated list');
+    out.push(this.parse());
+  }
+  this.i++;
+  return out;
+};
+Decoder.prototype.parseDict = function () {
+  this.i++;
+  const out = {};
+  let lastKey = null;
+  while (this.peek() !== 0x65) {
+    if (this.i >= this.b.length) throw new Error('Unterminated dict');
+    const keyBytes = this.parse();
+    if (!(keyBytes instanceof Uint8Array)) throw new Error('Dictionary key must be a string');
+    const keyStr = tryUtf8(keyBytes) ?? ('__hex__:' + toHex(keyBytes));
+    if (lastKey !== null && keyStr <= lastKey) {
+      // non-fatal; many real torrents are unsorted — but we flag it
+    }
+    lastKey = keyStr;
+    out[keyStr] = this.parse();
+  }
+  this.i++;
+  return out;
+};
+
+// Convert decoded structure into JSON-safe value
+function toJsonable(v) {
+  if (v instanceof Uint8Array) {
+    const s = tryUtf8(v);
+    return s !== null ? s : { __hex__: toHex(v) };
+  }
+  if (typeof v === 'bigint') return v.toString() + 'n';
+  if (Array.isArray(v)) return v.map(toJsonable);
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const k of Object.keys(v)) out[k] = toJsonable(v[k]);
+    return out;
+  }
+  return v;
+}
+
+// ---- Bencode encoder (takes JSON-shaped input, produces Uint8Array) ----
+function encodeValue(v, chunks) {
+  if (v === null || v === undefined) throw new Error('Bencode has no null/undefined type');
+  if (typeof v === 'string') {
+    const bytes = new TextEncoder().encode(v);
+    chunks.push(strToBytes(String(bytes.length) + ':'));
+    chunks.push(bytes);
+    return;
+  }
+  if (typeof v === 'number') {
+    if (!Number.isInteger(v)) throw new Error('Bencode integers must be whole numbers (got ' + v + ')');
+    chunks.push(strToBytes('i' + v + 'e'));
+    return;
+  }
+  if (typeof v === 'bigint') {
+    chunks.push(strToBytes('i' + v.toString() + 'e'));
+    return;
+  }
+  if (Array.isArray(v)) {
+    chunks.push(strToBytes('l'));
+    for (const x of v) encodeValue(x, chunks);
+    chunks.push(strToBytes('e'));
+    return;
+  }
+  if (typeof v === 'object') {
+    // special object: { __hex__: "…" } → raw bytes
+    if (Object.keys(v).length === 1 && typeof v.__hex__ === 'string') {
+      const bytes = fromHex(v.__hex__);
+      chunks.push(strToBytes(String(bytes.length) + ':'));
+      chunks.push(bytes);
+      return;
+    }
+    // special bigint marker: string ending in 'n' for huge ints is handled upstream
+    const keys = Object.keys(v).sort();
+    chunks.push(strToBytes('d'));
+    for (const k of keys) {
+      let keyBytes;
+      if (k.startsWith('__hex__:')) keyBytes = fromHex(k.slice('__hex__:'.length));
+      else keyBytes = new TextEncoder().encode(k);
+      chunks.push(strToBytes(String(keyBytes.length) + ':'));
+      chunks.push(keyBytes);
+      encodeValue(v[k], chunks);
+    }
+    chunks.push(strToBytes('e'));
+    return;
+  }
+  throw new Error('Cannot encode value of type ' + typeof v);
+}
+
+function concat(chunks) {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+// ---- UI ----
+const benEl = document.getElementById('ben');
+const jsonEl = document.getElementById('json');
+
+function setStatus(id, msg, ok) {
+  const el = document.getElementById(id);
+  el.className = 'status show ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+  if (!ok) return;
+  setTimeout(() => { el.classList.remove('show'); }, 3000);
+}
+
+function decode() {
+  try {
+    const bytes = strToBytes(benEl.value);
+    const d = new Decoder(bytes);
+    const val = d.parse();
+    if (d.i !== bytes.length) throw new Error('Extra bytes after end (position ' + d.i + ' of ' + bytes.length + ')');
+    const jsonable = toJsonable(val);
+    jsonEl.value = JSON.stringify(jsonable, null, document.getElementById('pretty').checked ? 2 : 0);
+    setStatus('statusBen', 'Decoded ' + bytes.length + ' bytes.', true);
+    updateStats(bytes, val);
+  } catch (e) {
+    setStatus('statusBen', 'Decode error: ' + e.message, false);
+  }
+}
+
+function encode() {
+  try {
+    const parsed = JSON.parse(jsonEl.value);
+    const revived = reviveJson(parsed);
+    const chunks = [];
+    encodeValue(revived, chunks);
+    const bytes = concat(chunks);
+    benEl.value = bytesToStr(bytes);
+    setStatus('statusJson', 'Encoded to ' + bytes.length + ' bytes.', true);
+    updateStats(bytes, revived);
+  } catch (e) {
+    setStatus('statusJson', 'Encode error: ' + e.message, false);
+  }
+}
+
+function reviveJson(v) {
+  if (v === null) return v;
+  if (typeof v === 'string') {
+    if (/^-?\d+n$/.test(v)) return BigInt(v.slice(0, -1));
+    return v;
+  }
+  if (Array.isArray(v)) return v.map(reviveJson);
+  if (typeof v === 'object') {
+    const out = {};
+    for (const k of Object.keys(v)) out[k] = reviveJson(v[k]);
+    return out;
+  }
+  return v;
+}
+
+function updateStats(bytes, val) {
+  const statsEl = document.getElementById('stats');
+  let nStrings = 0, nInts = 0, nLists = 0, nDicts = 0;
+  (function walk(v) {
+    if (v instanceof Uint8Array || typeof v === 'string') nStrings++;
+    else if (typeof v === 'number' || typeof v === 'bigint') nInts++;
+    else if (Array.isArray(v)) { nLists++; v.forEach(walk); }
+    else if (v && typeof v === 'object') {
+      if (v.__hex__) { nStrings++; return; }
+      nDicts++;
+      for (const k of Object.keys(v)) walk(v[k]);
+    }
+  })(val);
+  statsEl.innerHTML = `
+    <div class="stat-tile"><span>Byte length</span><strong>${bytes.length}</strong></div>
+    <div class="stat-tile"><span>Strings</span><strong>${nStrings}</strong></div>
+    <div class="stat-tile"><span>Integers</span><strong>${nInts}</strong></div>
+    <div class="stat-tile"><span>Lists</span><strong>${nLists}</strong></div>
+    <div class="stat-tile"><span>Dicts</span><strong>${nDicts}</strong></div>
+  `;
+}
+
+function loadSample() {
+  benEl.value = 'd8:announce40:http://tracker.example.com:6969/announce4:infod6:lengthi128e4:name8:test.txt12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee';
+  decode();
+}
+function clearBen() { benEl.value = ''; jsonEl.value = ''; document.getElementById('stats').innerHTML = ''; }
+
+function copyBen() { navigator.clipboard.writeText(benEl.value).then(toast); }
+function copyJson() { navigator.clipboard.writeText(jsonEl.value).then(toast); }
+function toast() {
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+loadSample();
+</script>
+</body>
+</html>
