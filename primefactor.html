@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prime Factorization Calculator — Divisors, GCD &amp; LCM | DevToolbox</title>
+<meta name="description" content="Factor integers into primes, find all divisors, and compute GCD / LCM. Supports big numbers via BigInt with Pollard's rho and Miller-Rabin primality tests.">
+<meta name="keywords" content="prime factorization, factor, divisors, gcd, lcm, number theory, bigint, miller rabin, pollard rho">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="Prime Factorization Calculator">
+<meta property="og:description" content="Factor big integers into primes, list divisors, and compute GCD/LCM in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/primefactor.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/primefactor.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.input-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin: 16px 0; }
+.input-row input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1.05rem; box-sizing: border-box; }
+.input-row input:focus { border-color: var(--accent); outline: none; }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
+.stat { padding: 14px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+.stat .lbl { font-size: .72rem; text-transform: uppercase; color: var(--muted); letter-spacing: .05em; }
+.stat .val { font-family: var(--mono); font-weight: 700; font-size: 1.15rem; margin-top: 4px; word-break: break-all; }
+.stat .val.good { color: var(--success); }
+.stat .val.bad { color: var(--error); }
+.factor-display { margin: 16px 0; padding: 20px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+.factor-display .expr { font-family: var(--mono); font-size: 1.2rem; line-height: 1.6; word-break: break-all; }
+.factor-display .expr sup { font-size: .75em; color: var(--accent); font-weight: 700; }
+.factor-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.factor-chip { padding: 4px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; font-family: var(--mono); font-size: .85rem; }
+.factor-chip.prime { border-color: var(--accent); color: var(--accent); }
+.divisors { margin-top: 20px; padding: 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); max-height: 320px; overflow-y: auto; }
+.divisor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 4px; font-family: var(--mono); font-size: .82rem; }
+.divisor { padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; text-align: center; }
+.tools { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px; }
+.tool-box { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+.tool-box h3 { margin: 0 0 8px; font-size: 1rem; }
+.tool-box input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); box-sizing: border-box; }
+.tool-box .result { margin-top: 10px; padding: 8px 12px; background: var(--bg); border-radius: var(--radius); font-family: var(--mono); font-weight: 700; word-break: break-all; min-height: 1.4em; }
+.err { color: var(--error); font-size: .85rem; margin-top: 6px; }
+@media (max-width: 768px) {
+  .input-row { grid-template-columns: 1fr; }
+  .tools { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<header>
+<h1>🧮 Prime Factorization</h1>
+<p class="subtitle">Factor integers into primes, list divisors, and compute GCD / LCM — works with big numbers via BigInt</p>
+</header>
+
+<div class="input-row">
+<input type="text" id="numInput" placeholder="Enter an integer (up to ~20 digits fast, larger works with some wait)" spellcheck="false">
+<button class="btn" id="factorBtn">Factor</button>
+</div>
+<div class="presets">
+<button class="btn btn-secondary btn-sm" data-num="360">360</button>
+<button class="btn btn-secondary btn-sm" data-num="1234567890">1,234,567,890</button>
+<button class="btn btn-secondary btn-sm" data-num="2147483647">2³¹−1</button>
+<button class="btn btn-secondary btn-sm" data-num="100000007">10⁸+7</button>
+<button class="btn btn-secondary btn-sm" data-num="999999999999">10¹²−1</button>
+<button class="btn btn-secondary btn-sm" data-num="8675309">8675309</button>
+</div>
+
+<div id="errBox" class="err"></div>
+
+<div class="stats" id="stats" style="display:none;">
+<div class="stat"><div class="lbl">Number</div><div class="val" id="sNum">—</div></div>
+<div class="stat"><div class="lbl">Is Prime?</div><div class="val" id="sPrime">—</div></div>
+<div class="stat"><div class="lbl">Distinct Primes</div><div class="val" id="sDistinct">—</div></div>
+<div class="stat"><div class="lbl">Total Divisors (d)</div><div class="val" id="sDivisors">—</div></div>
+<div class="stat"><div class="lbl">Sum of Divisors (σ)</div><div class="val" id="sSigma">—</div></div>
+<div class="stat"><div class="lbl">Euler's Totient (φ)</div><div class="val" id="sPhi">—</div></div>
+</div>
+
+<div class="factor-display" id="factorDisplay" style="display:none;">
+<div class="subtitle">Prime factorization</div>
+<div class="expr" id="factorExpr"></div>
+<div class="factor-list" id="factorList"></div>
+</div>
+
+<div class="divisors" id="divisorsBox" style="display:none;">
+<div class="subtitle" id="divisorsLabel">Divisors</div>
+<div class="divisor-grid" id="divisorsGrid"></div>
+</div>
+
+<div class="tools">
+<div class="tool-box">
+<h3>GCD</h3>
+<input type="text" id="gcdA" placeholder="a">
+<input type="text" id="gcdB" placeholder="b" style="margin-top:6px;">
+<div class="result" id="gcdResult">—</div>
+</div>
+<div class="tool-box">
+<h3>LCM</h3>
+<input type="text" id="lcmA" placeholder="a">
+<input type="text" id="lcmB" placeholder="b" style="margin-top:6px;">
+<div class="result" id="lcmResult">—</div>
+</div>
+</div>
+
+<footer style="margin-top:32px; text-align:center; font-size:.82rem; color:var(--muted);">
+Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+</div>
+
+<script>
+// BigInt math helpers
+function abs(n) { return n < 0n ? -n : n; }
+
+function gcd(a, b) {
+  a = abs(a); b = abs(b);
+  while (b) { [a, b] = [b, a % b]; }
+  return a;
+}
+function lcm(a, b) { if (a === 0n || b === 0n) return 0n; return abs(a / gcd(a, b) * b); }
+
+// modular exponentiation
+function mpow(base, exp, mod) {
+  let r = 1n;
+  base = ((base % mod) + mod) % mod;
+  while (exp > 0n) {
+    if (exp & 1n) r = (r * base) % mod;
+    exp >>= 1n;
+    base = (base * base) % mod;
+  }
+  return r;
+}
+
+// Miller-Rabin (deterministic for n < 3,317,044,064,679,887,385,961,981 with specific witnesses)
+function isProbablePrime(n) {
+  if (n < 2n) return false;
+  const smallPrimes = [2n,3n,5n,7n,11n,13n,17n,19n,23n,29n,31n,37n];
+  for (const p of smallPrimes) {
+    if (n === p) return true;
+    if (n % p === 0n) return false;
+  }
+  let d = n - 1n;
+  let r = 0n;
+  while ((d & 1n) === 0n) { d >>= 1n; r++; }
+  const witnesses = [2n,3n,5n,7n,11n,13n,17n,19n,23n,29n,31n,37n];
+  WitnessLoop: for (const a of witnesses) {
+    if (a >= n) continue;
+    let x = mpow(a, d, n);
+    if (x === 1n || x === n - 1n) continue;
+    for (let i = 0n; i < r - 1n; i++) {
+      x = (x * x) % n;
+      if (x === n - 1n) continue WitnessLoop;
+    }
+    return false;
+  }
+  return true;
+}
+
+// Pollard's rho
+function pollardRho(n) {
+  if (n % 2n === 0n) return 2n;
+  while (true) {
+    let x = BigInt(Math.floor(Math.random() * 1e9)) % n;
+    let y = x;
+    const c = BigInt(Math.floor(Math.random() * 1e9)) % n;
+    let d = 1n;
+    while (d === 1n) {
+      x = (x * x + c) % n;
+      y = (y * y + c) % n;
+      y = (y * y + c) % n;
+      d = gcd(abs(x - y), n);
+    }
+    if (d !== n) return d;
+  }
+}
+
+function factorize(n) {
+  if (n < 2n) return [];
+  const result = [];
+  // small trial division
+  const smallPrimes = [2n,3n,5n,7n,11n,13n,17n,19n,23n,29n,31n,37n,41n,43n,47n,53n,59n,61n,67n,71n,73n,79n,83n,89n,97n];
+  for (const p of smallPrimes) {
+    while (n % p === 0n) { result.push(p); n /= p; }
+  }
+  const stack = [n];
+  while (stack.length) {
+    const m = stack.pop();
+    if (m === 1n) continue;
+    if (isProbablePrime(m)) { result.push(m); continue; }
+    let d = pollardRho(m);
+    while (d === m) d = pollardRho(m);
+    stack.push(d);
+    stack.push(m / d);
+  }
+  result.sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+  return result;
+}
+
+function groupFactors(factors) {
+  const map = new Map();
+  for (const f of factors) map.set(f.toString(), (map.get(f.toString()) || 0) + 1);
+  return Array.from(map.entries()).map(([p, e]) => ({ p: BigInt(p), e }));
+}
+
+function divisors(grouped) {
+  let d = [1n];
+  for (const { p, e } of grouped) {
+    const next = [];
+    let pe = 1n;
+    for (let i = 0; i <= e; i++) {
+      for (const x of d) next.push(x * pe);
+      pe *= p;
+    }
+    d = next;
+  }
+  d.sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+  return d;
+}
+
+function sigma(grouped) {
+  let s = 1n;
+  for (const { p, e } of grouped) {
+    let pe = 1n;
+    let sum = 0n;
+    for (let i = 0; i <= e; i++) { sum += pe; pe *= p; }
+    s *= sum;
+  }
+  return s;
+}
+
+function totient(grouped, n) {
+  let r = n;
+  for (const { p } of grouped) { r = r / p * (p - 1n); }
+  return r;
+}
+
+function parseBig(s) {
+  s = s.trim().replace(/[, _]/g, '');
+  if (!/^-?\d+$/.test(s)) return null;
+  return BigInt(s);
+}
+
+function factor(show) {
+  const err = document.getElementById('errBox');
+  err.textContent = '';
+  const raw = document.getElementById('numInput').value;
+  const n = parseBig(raw);
+  if (n === null) { err.textContent = 'Please enter a valid integer.'; return; }
+  if (n < 0n) { err.textContent = 'Please enter a non-negative integer.'; return; }
+
+  document.getElementById('stats').style.display = 'grid';
+  document.getElementById('sNum').textContent = n.toLocaleString();
+
+  if (n === 0n || n === 1n) {
+    document.getElementById('sPrime').innerHTML = '<span class="bad">No</span>';
+    document.getElementById('sDistinct').textContent = '0';
+    document.getElementById('sDivisors').textContent = n === 1n ? '1' : '∞';
+    document.getElementById('sSigma').textContent = n === 1n ? '1' : '0';
+    document.getElementById('sPhi').textContent = n === 1n ? '1' : '0';
+    document.getElementById('factorDisplay').style.display = 'none';
+    document.getElementById('divisorsBox').style.display = 'none';
+    return;
+  }
+
+  const t0 = performance.now();
+  let factors;
+  try {
+    factors = factorize(n);
+  } catch (e) {
+    err.textContent = 'Failed to factor: ' + e.message;
+    return;
+  }
+  const ms = (performance.now() - t0).toFixed(1);
+  const grouped = groupFactors(factors);
+  const isPrime = grouped.length === 1 && grouped[0].e === 1;
+
+  const primeEl = document.getElementById('sPrime');
+  primeEl.innerHTML = isPrime ? '<span class="good">Yes</span>' : '<span class="bad">No</span>';
+  document.getElementById('sDistinct').textContent = grouped.length;
+  const dCount = grouped.reduce((a, g) => a * BigInt(g.e + 1), 1n);
+  document.getElementById('sDivisors').textContent = dCount.toString();
+  document.getElementById('sSigma').textContent = sigma(grouped).toString();
+  document.getElementById('sPhi').textContent = totient(grouped, n).toString();
+
+  // factorization display
+  const expr = document.getElementById('factorExpr');
+  expr.innerHTML = grouped.map(g => g.e === 1 ? g.p.toString() : `${g.p}<sup>${g.e}</sup>`).join(' × ') + `  <span class="subtitle" style="font-size:.8rem;">(${ms} ms)</span>`;
+  const list = document.getElementById('factorList');
+  list.innerHTML = '';
+  factors.forEach(f => {
+    const c = document.createElement('span');
+    c.className = 'factor-chip prime';
+    c.textContent = f.toString();
+    list.appendChild(c);
+  });
+  document.getElementById('factorDisplay').style.display = 'block';
+
+  // divisors
+  if (dCount <= 4096n) {
+    const divs = divisors(grouped);
+    const grid = document.getElementById('divisorsGrid');
+    grid.innerHTML = '';
+    divs.forEach(d => {
+      const el = document.createElement('div');
+      el.className = 'divisor';
+      el.textContent = d.toString();
+      grid.appendChild(el);
+    });
+    document.getElementById('divisorsLabel').textContent = `Divisors (${divs.length})`;
+    document.getElementById('divisorsBox').style.display = 'block';
+  } else {
+    document.getElementById('divisorsBox').style.display = 'none';
+  }
+}
+
+document.getElementById('factorBtn').addEventListener('click', () => factor(true));
+document.getElementById('numInput').addEventListener('keydown', e => { if (e.key === 'Enter') factor(true); });
+document.querySelectorAll('[data-num]').forEach(b => {
+  b.addEventListener('click', () => {
+    document.getElementById('numInput').value = b.dataset.num;
+    factor(true);
+  });
+});
+
+function updateGcd() {
+  const a = parseBig(document.getElementById('gcdA').value);
+  const b = parseBig(document.getElementById('gcdB').value);
+  if (a === null || b === null) { document.getElementById('gcdResult').textContent = '—'; return; }
+  document.getElementById('gcdResult').textContent = gcd(a, b).toString();
+}
+function updateLcm() {
+  const a = parseBig(document.getElementById('lcmA').value);
+  const b = parseBig(document.getElementById('lcmB').value);
+  if (a === null || b === null) { document.getElementById('lcmResult').textContent = '—'; return; }
+  document.getElementById('lcmResult').textContent = lcm(a, b).toString();
+}
+['gcdA','gcdB'].forEach(id => document.getElementById(id).addEventListener('input', updateGcd));
+['lcmA','lcmB'].forEach(id => document.getElementById(id).addEventListener('input', updateLcm));
+
+document.getElementById('numInput').value = '360';
+factor(true);
+document.getElementById('gcdA').value = '48';
+document.getElementById('gcdB').value = '180';
+updateGcd();
+document.getElementById('lcmA').value = '12';
+document.getElementById('lcmB').value = '18';
+updateLcm();
+</script>
+</body>
+</html>
