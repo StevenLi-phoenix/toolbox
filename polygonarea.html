@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polygon Area Calculator — Shoelace Formula</title>
+<meta name="description" content="Calculate the area, perimeter, and centroid of any simple polygon using the shoelace formula. Paste coordinates, see a live preview, and detect self-intersections.">
+<meta name="keywords" content="polygon area, shoelace formula, centroid calculator, polygon perimeter, gauss area">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/polygonarea.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea { width: 100%; min-height: 220px; font-family: var(--mono); font-size: .85rem; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); box-sizing: border-box; resize: vertical; }
+  .result { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 10px; }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1.2rem; color: var(--accent, #2563eb); word-break: break-word; }
+  .canvas-wrap { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); padding: 8px; }
+  canvas { width: 100%; height: 280px; display: block; background: var(--bg); border-radius: calc(var(--radius) - 2px); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .err { color: var(--error, #dc2626); font-size: .85rem; margin-top: 8px; }
+  .ok { color: var(--success, #15803d); font-size: .85rem; margin-top: 8px; }
+  .hint { font-size: .78rem; color: var(--muted); margin: 6px 0 10px; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📐 Polygon Area Calculator</h1>
+<p class="subtitle">Compute area, perimeter, and centroid of any simple polygon with the shoelace (Gauss) formula. Paste coordinates one pair per line — a live preview shows the shape and flags self-intersections.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Vertices</h2>
+    <p class="hint">One vertex per line: <code>x, y</code> or <code>x y</code>. The polygon auto-closes — no need to repeat the first point.</p>
+    <textarea id="input" spellcheck="false">0, 0
+4, 0
+4, 3
+2, 5
+0, 3</textarea>
+    <div class="actions">
+      <button class="btn" onclick="loadExample('square')">Square</button>
+      <button class="btn btn-secondary" onclick="loadExample('triangle')">Triangle</button>
+      <button class="btn btn-secondary" onclick="loadExample('pentagon')">Pentagon</button>
+      <button class="btn btn-secondary" onclick="loadExample('star')">Star</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('input').value=''; compute();">Clear</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div class="result">
+      <div class="k">Area (signed)</div>
+      <div class="v" id="area">—</div>
+    </div>
+    <div class="result">
+      <div class="k">Perimeter</div>
+      <div class="v" id="perim">—</div>
+    </div>
+    <div class="result">
+      <div class="k">Centroid</div>
+      <div class="v" id="cent">—</div>
+    </div>
+    <div class="result">
+      <div class="k">Bounding Box</div>
+      <div class="v" id="bbox">—</div>
+    </div>
+    <div class="result">
+      <div class="k">Winding Order</div>
+      <div class="v" id="wind">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top: 16px;">
+  <h2>Preview</h2>
+  <div class="canvas-wrap"><canvas id="canvas" width="800" height="400"></canvas></div>
+</div>
+
+<div class="card" style="margin-top: 16px;">
+  <h2>Shoelace Formula</h2>
+  <p style="font-size:.9rem; line-height:1.6;">For a polygon with vertices <code>(x₁,y₁), (x₂,y₂), …, (xₙ,yₙ)</code>:</p>
+  <p style="text-align:center; font-family:var(--mono); font-weight:700;">A = ½ |Σᵢ (xᵢ·yᵢ₊₁ − xᵢ₊₁·yᵢ)|</p>
+  <p style="font-size:.85rem; color:var(--muted);">The signed area is positive for counter-clockwise winding and negative for clockwise. The centroid is the area-weighted average of triangle fans from the origin.</p>
+</div>
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const examples = {
+  square: '0, 0\n4, 0\n4, 4\n0, 4',
+  triangle: '0, 0\n6, 0\n3, 5',
+  pentagon: '2, 0\n4, 1.5\n3.2, 4\n0.8, 4\n0, 1.5',
+  star: '5, 0\n6.18, 3.82\n10, 3.82\n6.91, 6.18\n8.09, 10\n5, 7.64\n1.91, 10\n3.09, 6.18\n0, 3.82\n3.82, 3.82'
+};
+
+function loadExample(name) {
+  document.getElementById('input').value = examples[name];
+  compute();
+}
+
+function parsePoints(text) {
+  const pts = [];
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const parts = trimmed.split(/[\s,;]+/).filter(Boolean).map(Number);
+    if (parts.length < 2 || parts.some(n => !Number.isFinite(n))) {
+      throw new Error(`Invalid point: "${trimmed}"`);
+    }
+    pts.push([parts[0], parts[1]]);
+  }
+  return pts;
+}
+
+function shoelace(pts) {
+  let s = 0;
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[(i + 1) % n];
+    s += x1 * y2 - x2 * y1;
+  }
+  return s / 2;
+}
+
+function perimeter(pts) {
+  let p = 0;
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[(i + 1) % n];
+    p += Math.hypot(x2 - x1, y2 - y1);
+  }
+  return p;
+}
+
+function centroid(pts) {
+  const n = pts.length;
+  let cx = 0, cy = 0, a = 0;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[(i + 1) % n];
+    const cross = x1 * y2 - x2 * y1;
+    a += cross;
+    cx += (x1 + x2) * cross;
+    cy += (y1 + y2) * cross;
+  }
+  a /= 2;
+  if (Math.abs(a) < 1e-12) {
+    let sx = 0, sy = 0;
+    pts.forEach(([x, y]) => { sx += x; sy += y; });
+    return [sx / n, sy / n];
+  }
+  return [cx / (6 * a), cy / (6 * a)];
+}
+
+function segIntersect(a, b, c, d) {
+  const d1 = (d[0] - c[0]) * (a[1] - c[1]) - (d[1] - c[1]) * (a[0] - c[0]);
+  const d2 = (d[0] - c[0]) * (b[1] - c[1]) - (d[1] - c[1]) * (b[0] - c[0]);
+  const d3 = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const d4 = (b[0] - a[0]) * (d[1] - a[1]) - (b[1] - a[1]) * (d[0] - a[0]);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+         ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+function hasSelfIntersection(pts) {
+  const n = pts.length;
+  if (n < 4) return false;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      const c = pts[j], d = pts[(j + 1) % n];
+      if (segIntersect(a, b, c, d)) return [i, j];
+    }
+  }
+  return false;
+}
+
+function draw(pts, cx, cy) {
+  const canvas = document.getElementById('canvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+  if (pts.length < 2) return;
+
+  const xs = pts.map(p => p[0]);
+  const ys = pts.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const dx = maxX - minX || 1, dy = maxY - minY || 1;
+  const pad = 30;
+  const scale = Math.min((W - 2 * pad) / dx, (H - 2 * pad) / dy);
+  const offX = (W - scale * dx) / 2 - minX * scale;
+  const offY = (H - scale * dy) / 2 + maxY * scale;
+
+  const tx = x => x * scale + offX;
+  const ty = y => offY - y * scale;
+
+  // Fill
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => {
+    const px = tx(x), py = ty(y);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  });
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(37, 99, 235, 0.15)';
+  ctx.fill();
+  ctx.strokeStyle = '#2563eb';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Vertices
+  ctx.fillStyle = '#2563eb';
+  pts.forEach(([x, y], i) => {
+    ctx.beginPath();
+    ctx.arc(tx(x), ty(y), 4, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = '#64748b';
+    ctx.font = '11px monospace';
+    ctx.fillText(`${i + 1}`, tx(x) + 6, ty(y) - 6);
+    ctx.fillStyle = '#2563eb';
+  });
+
+  // Centroid
+  if (Number.isFinite(cx) && Number.isFinite(cy)) {
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(tx(cx), ty(cy), 5, 0, 2 * Math.PI);
+    ctx.moveTo(tx(cx) - 8, ty(cy));
+    ctx.lineTo(tx(cx) + 8, ty(cy));
+    ctx.moveTo(tx(cx), ty(cy) - 8);
+    ctx.lineTo(tx(cx), ty(cy) + 8);
+    ctx.stroke();
+  }
+}
+
+function fmt(n, d = 4) {
+  if (!Number.isFinite(n)) return '—';
+  return Number(n.toFixed(d)).toString();
+}
+
+function compute() {
+  const text = document.getElementById('input').value;
+  const msg = document.getElementById('msg');
+  msg.innerHTML = '';
+  let pts;
+  try {
+    pts = parsePoints(text);
+  } catch (e) {
+    msg.innerHTML = `<div class="err">${e.message}</div>`;
+    draw([], NaN, NaN);
+    ['area', 'perim', 'cent', 'bbox', 'wind'].forEach(id => document.getElementById(id).textContent = '—');
+    return;
+  }
+  if (pts.length < 3) {
+    msg.innerHTML = `<div class="err">Need at least 3 points (got ${pts.length}).</div>`;
+    draw(pts, NaN, NaN);
+    ['area', 'perim', 'cent', 'bbox', 'wind'].forEach(id => document.getElementById(id).textContent = '—');
+    return;
+  }
+
+  const signed = shoelace(pts);
+  const area = Math.abs(signed);
+  const per = perimeter(pts);
+  const [cx, cy] = centroid(pts);
+  const xs = pts.map(p => p[0]);
+  const ys = pts.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+
+  document.getElementById('area').textContent = `${fmt(area)} (signed: ${fmt(signed)})`;
+  document.getElementById('perim').textContent = fmt(per);
+  document.getElementById('cent').textContent = `(${fmt(cx)}, ${fmt(cy)})`;
+  document.getElementById('bbox').textContent = `[${fmt(minX)}, ${fmt(minY)}] → [${fmt(maxX)}, ${fmt(maxY)}]`;
+  document.getElementById('wind').textContent = signed > 0 ? 'Counter-clockwise (CCW)' : signed < 0 ? 'Clockwise (CW)' : 'Degenerate';
+
+  const inter = hasSelfIntersection(pts);
+  if (inter) {
+    msg.innerHTML = `<div class="err">⚠ Polygon self-intersects (edges ${inter[0] + 1} and ${inter[1] + 1}). Shoelace result may be misleading.</div>`;
+  } else {
+    msg.innerHTML = `<div class="ok">✓ Simple polygon (${pts.length} vertices, no self-intersections).</div>`;
+  }
+
+  draw(pts, cx, cy);
+}
+
+document.getElementById('input').addEventListener('input', compute);
+window.addEventListener('resize', compute);
+compute();
+</script>
+</body>
+</html>

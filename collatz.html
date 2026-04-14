@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collatz Sequence Visualizer — 3n+1 Conjecture</title>
+<meta name="description" content="Visualize the Collatz (3n+1) sequence for any positive integer. See stopping time, maximum value, and a live chart of the trajectory. Supports BigInt for huge inputs.">
+<meta name="keywords" content="collatz conjecture, 3n+1 problem, hailstone sequence, stopping time, collatz visualizer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/collatz.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .controls label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 4px; margin-top: 10px; }
+  .controls input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; box-sizing: border-box; }
+  .result { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 10px; }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1.1rem; color: var(--accent, #2563eb); word-break: break-all; }
+  canvas { width: 100%; height: 260px; display: block; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  .seq { max-height: 240px; overflow-y: auto; font-family: var(--mono); font-size: .82rem; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); word-break: break-all; line-height: 1.5; }
+  .seq span { padding: 1px 4px; border-radius: 3px; margin-right: 2px; }
+  .seq .even { background: rgba(21, 128, 61, 0.15); color: #15803d; }
+  .seq .odd { background: rgba(220, 38, 38, 0.15); color: #dc2626; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+  .preset { padding: 6px; font-size: .78rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); cursor: pointer; color: var(--text); font-family: var(--mono); }
+  .preset:hover { border-color: var(--accent, #2563eb); }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } .preset-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🌀 Collatz Sequence</h1>
+<p class="subtitle">Apply the 3n+1 rule: if n is even, divide by 2; if n is odd, triple and add 1. Every tested number eventually reaches 1 — but it's still an unproven conjecture. BigInt support lets you test gigantic starting values.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Input</h2>
+    <div class="controls">
+      <label for="n">Starting number (positive integer)</label>
+      <input type="text" id="n" value="27">
+    </div>
+    <h3 style="font-size:.9rem;margin-top:14px">Famous values</h3>
+    <div class="preset-grid">
+      <button class="preset" onclick="setN('27')">27</button>
+      <button class="preset" onclick="setN('97')">97</button>
+      <button class="preset" onclick="setN('871')">871</button>
+      <button class="preset" onclick="setN('6171')">6171</button>
+      <button class="preset" onclick="setN('77031')">77031</button>
+      <button class="preset" onclick="setN('837799')">837799</button>
+      <button class="preset" onclick="setN('8400511')">8400511</button>
+      <button class="preset" onclick="setN('63728127')">63728127</button>
+      <button class="preset" onclick="setN('670617279')">670617279</button>
+    </div>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:10px;">These are record-holders: each sets a new stopping-time record starting from 1.</p>
+  </div>
+
+  <div class="card">
+    <h2>Statistics</h2>
+    <div class="result">
+      <div class="k">Total stopping time</div>
+      <div class="v" id="stop">—</div>
+    </div>
+    <div class="result">
+      <div class="k">Max value reached</div>
+      <div class="v" id="max">—</div>
+    </div>
+    <div class="result">
+      <div class="k">Max value at step</div>
+      <div class="v" id="maxAt">—</div>
+    </div>
+    <div class="result">
+      <div class="k">Even / odd steps</div>
+      <div class="v" id="parity">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top: 16px;">
+  <h2>Trajectory Plot</h2>
+  <p style="font-size:.78rem;color:var(--muted);">Y-axis is log-scaled to show the characteristic hailstone pattern.</p>
+  <canvas id="chart" width="800" height="260"></canvas>
+</div>
+
+<div class="card" style="margin-top: 16px;">
+  <h2>Sequence <span id="seqCount" style="font-size:.8rem;color:var(--muted);font-weight:400;"></span></h2>
+  <div class="seq" id="seq"></div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+function setN(v) {
+  document.getElementById('n').value = v;
+  compute();
+}
+
+function bigLog10(n) {
+  // approximate log10 for BigInt by slicing top digits
+  const s = n.toString();
+  const head = Number(s.slice(0, 15));
+  return Math.log10(head) + (s.length - Math.min(s.length, 15));
+}
+
+function collatz(start) {
+  const seq = [start];
+  let cur = start;
+  let maxVal = start;
+  let maxAt = 0;
+  let evens = 0, odds = 0;
+  let steps = 0;
+  const limit = 100000;
+  const ONE = 1n, TWO = 2n, THREE = 3n, ZERO = 0n;
+  while (cur !== ONE) {
+    if (cur % TWO === ZERO) {
+      cur = cur / TWO;
+      evens++;
+    } else {
+      cur = cur * THREE + ONE;
+      odds++;
+    }
+    steps++;
+    seq.push(cur);
+    if (cur > maxVal) { maxVal = cur; maxAt = steps; }
+    if (steps >= limit) break;
+  }
+  return { seq, steps, maxVal, maxAt, evens, odds, hitLimit: cur !== ONE };
+}
+
+function draw(seq) {
+  const canvas = document.getElementById('chart');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+  if (seq.length < 2) return;
+
+  const logs = seq.map(bigLog10);
+  const maxL = Math.max(...logs);
+  const minL = 0;
+  const pad = 28;
+
+  // axes
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, pad);
+  ctx.lineTo(pad, H - pad);
+  ctx.lineTo(W - pad, H - pad);
+  ctx.stroke();
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10px monospace';
+  ctx.fillText('log₁₀(n)', 4, 14);
+  ctx.fillText(`steps: ${seq.length - 1}`, W - pad - 80, H - 6);
+  ctx.fillText(maxL.toFixed(1), 2, pad + 4);
+  ctx.fillText('0', pad - 10, H - pad + 4);
+
+  const xOf = i => pad + (i / (seq.length - 1)) * (W - 2 * pad);
+  const yOf = l => H - pad - ((l - minL) / (maxL - minL || 1)) * (H - 2 * pad);
+
+  // Line
+  ctx.strokeStyle = '#2563eb';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  logs.forEach((l, i) => {
+    const x = xOf(i), y = yOf(l);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function renderSeq(seq) {
+  const el = document.getElementById('seq');
+  const count = document.getElementById('seqCount');
+  count.textContent = `(${seq.length} values)`;
+  const MAX = 2000;
+  const show = seq.slice(0, MAX);
+  const html = show.map(v => {
+    const isEven = v % 2n === 0n;
+    return `<span class="${isEven ? 'even' : 'odd'}">${v.toString()}</span>`;
+  }).join(' → ');
+  el.innerHTML = html + (seq.length > MAX ? ` <em>… (${seq.length - MAX} more truncated)</em>` : '');
+}
+
+function compute() {
+  const raw = document.getElementById('n').value.trim().replace(/[_,\s]/g, '');
+  const ids = ['stop', 'max', 'maxAt', 'parity'];
+  if (!/^\d+$/.test(raw) || raw === '0') {
+    ids.forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('seq').textContent = '';
+    document.getElementById('seqCount').textContent = '';
+    draw([1n]);
+    return;
+  }
+  const start = BigInt(raw);
+  const r = collatz(start);
+  document.getElementById('stop').textContent = r.hitLimit ? `> ${r.steps} (limit reached)` : `${r.steps} steps`;
+  document.getElementById('max').textContent = r.maxVal.toString();
+  document.getElementById('maxAt').textContent = `step ${r.maxAt}`;
+  document.getElementById('parity').textContent = `${r.evens} even · ${r.odds} odd`;
+  renderSeq(r.seq);
+  draw(r.seq);
+}
+
+document.getElementById('n').addEventListener('input', compute);
+window.addEventListener('resize', compute);
+compute();
+</script>
+</body>
+</html>
