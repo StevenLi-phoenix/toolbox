@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tar Archive Inspector — Free Online Tool</title>
+<meta name="description" content="Inspect the contents of a .tar archive in your browser — view file names, sizes, permissions, owner/group, mtime, link targets, and detect ustar/POSIX/GNU formats. Files never leave your machine.">
+<meta name="keywords" content="tar inspector, tar viewer, ustar, POSIX tar, GNU tar, pax header, archive viewer, file metadata, Unix permissions">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tar.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .drop {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 2.5rem 1rem; text-align: center; color: var(--muted);
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop.hover { border-color: var(--accent); background: var(--surface2); }
+  .drop strong { color: var(--text); display: block; font-size: 1.05rem; margin-bottom: .35rem; }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary .stat { padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .summary .stat .k { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .summary .stat .v { font-family: var(--mono); font-size: 1rem; margin-top: 2px; word-break: break-all; }
+  .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0 8px; }
+  .filter-row input[type=search] {
+    flex: 1; min-width: 180px; padding: 6px 10px;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: .88rem;
+  }
+  .files-table { width: 100%; border-collapse: collapse; font-size: .82rem; font-family: var(--mono); }
+  .files-table th, .files-table td { padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .files-table th { color: var(--muted); font-weight: 500; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--bg); }
+  .files-table th:hover { color: var(--text); }
+  .files-table tr:hover td { background: var(--surface2); }
+  .files-table .name { white-space: normal; word-break: break-all; max-width: 360px; }
+  .scroll-x { overflow-x: auto; max-height: 600px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .badge { display: inline-block; padding: 1px 6px; font-size: .72rem; border-radius: 4px; font-family: var(--mono); }
+  .b-file { background: #e0f2fe; color: #075985; }
+  .b-dir  { background: #fef3c7; color: #92400e; }
+  .b-link { background: #ede9fe; color: #5b21b6; }
+  .b-other{ background: #f3f4f6; color: #374151; }
+  .err-box { padding: 10px 14px; background: #fef2f2; color: var(--error); border: 1px solid #fecaca; border-radius: var(--radius); margin-top: 12px; }
+  .help { font-size: .82rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Tar Archive Inspector</h1>
+<p class="subtitle">Drop a <code>.tar</code> file (uncompressed) to list every entry — names, sizes, modes, owner/group, modification time, link targets, and the on-disk format. Everything runs locally; the file never leaves your browser.</p>
+
+<div class="card">
+  <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+    <strong>Drop a .tar file here, or click to choose</strong>
+    Plain tar only — gunzip your <code>.tar.gz</code> first. Browser-side parsing.
+    <input type="file" id="file" accept=".tar,application/x-tar" style="display:none;" onchange="onFile(event)">
+  </div>
+
+  <div id="error" style="display:none;" class="err-box"></div>
+
+  <div id="result" style="display:none;">
+    <div class="summary" id="summary"></div>
+
+    <div class="filter-row">
+      <input type="search" id="filter" placeholder="Filter by name…" oninput="renderTable()">
+      <button class="btn btn-secondary" onclick="exportJSON()">Export JSON</button>
+      <button class="btn btn-secondary" onclick="exportCSV()">Export CSV</button>
+    </div>
+
+    <div class="scroll-x">
+      <table class="files-table" id="table">
+        <thead><tr>
+          <th onclick="sortBy('name')">Name</th>
+          <th onclick="sortBy('type')">Type</th>
+          <th onclick="sortBy('mode')">Mode</th>
+          <th onclick="sortBy('size')">Size</th>
+          <th onclick="sortBy('uname')">Owner</th>
+          <th onclick="sortBy('gname')">Group</th>
+          <th onclick="sortBy('mtime')">Modified</th>
+          <th>Link Target</th>
+          <th>Format</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>About the tar format</h2>
+  <p class="help">A tar archive is a stream of 512-byte header blocks, each followed by the file's content padded to a 512-byte boundary. The original Unix V7 format had a tiny set of fields. The POSIX <strong>ustar</strong> extension added owner/group names and a magic string. <strong>GNU tar</strong> uses special type flags (<code>L</code>, <code>K</code>, <code>x</code>) for long names and extended attributes. <strong>PAX</strong> stores extended metadata as UTF-8 key/value records in a synthetic entry. This tool understands all four.</p>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let entries = [];
+let sortKey = 'name';
+let sortDir = 1;
+
+const dropEl = $('drop');
+['dragenter', 'dragover'].forEach(e => dropEl.addEventListener(e, ev => {
+  ev.preventDefault(); dropEl.classList.add('hover');
+}));
+['dragleave', 'drop'].forEach(e => dropEl.addEventListener(e, ev => {
+  ev.preventDefault(); dropEl.classList.remove('hover');
+}));
+dropEl.addEventListener('drop', ev => {
+  const f = ev.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+
+function onFile(ev) {
+  const f = ev.target.files[0];
+  if (f) handleFile(f);
+}
+
+function handleFile(file) {
+  $('error').style.display = 'none';
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      entries = parseTar(new Uint8Array(reader.result));
+      if (entries.length === 0) throw new Error('No tar entries found. Is the file actually a tarball (and not gzipped)?');
+      renderSummary(file);
+      renderTable();
+      $('result').style.display = 'block';
+    } catch (e) {
+      $('result').style.display = 'none';
+      $('error').textContent = 'Error: ' + e.message;
+      $('error').style.display = 'block';
+    }
+  };
+  reader.onerror = () => {
+    $('error').textContent = 'Failed to read file.';
+    $('error').style.display = 'block';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function readStr(bytes, off, len) {
+  let end = off;
+  while (end < off + len && bytes[end] !== 0) end++;
+  return new TextDecoder('utf-8', { fatal: false }).decode(bytes.subarray(off, end));
+}
+
+function readOctal(bytes, off, len) {
+  const s = readStr(bytes, off, len).trim();
+  if (!s) return 0;
+  // Tar can store binary numbers when high bit is set
+  if (bytes[off] & 0x80) {
+    let n = 0n;
+    for (let i = 0; i < len; i++) n = (n << 8n) | BigInt(bytes[off + i] & (i === 0 ? 0x7f : 0xff));
+    return Number(n);
+  }
+  return parseInt(s, 8) || 0;
+}
+
+const TYPE_NAMES = {
+  '0': 'file', '\0': 'file', '': 'file',
+  '1': 'hardlink', '2': 'symlink', '3': 'chardev', '4': 'blockdev',
+  '5': 'directory', '6': 'fifo', '7': 'contig',
+  'g': 'pax-global', 'x': 'pax-header',
+  'L': 'gnu-longname', 'K': 'gnu-longlink',
+  'D': 'gnu-dumpdir', 'M': 'gnu-multivol',
+  'N': 'gnu-longnames', 'S': 'gnu-sparse', 'V': 'gnu-volhdr',
+};
+
+function parseTar(buf) {
+  const out = [];
+  let off = 0;
+  let pendingLongName = null;
+  let pendingLongLink = null;
+  let pendingPax = null;
+
+  while (off + 512 <= buf.length) {
+    const block = buf;
+
+    // All-zero block = end of archive
+    let allZero = true;
+    for (let i = 0; i < 512; i++) if (block[off + i] !== 0) { allZero = false; break; }
+    if (allZero) break;
+
+    let name = readStr(block, off + 0, 100);
+    const mode = readOctal(block, off + 100, 8);
+    const uid = readOctal(block, off + 108, 8);
+    const gid = readOctal(block, off + 116, 8);
+    const size = readOctal(block, off + 124, 12);
+    const mtime = readOctal(block, off + 136, 12);
+    const chksum = readOctal(block, off + 148, 8);
+    let typeflag = String.fromCharCode(block[off + 156] || 0);
+    if (typeflag === '\0') typeflag = '0';
+    let linkname = readStr(block, off + 157, 100);
+    const magic = readStr(block, off + 257, 6);
+    const version = readStr(block, off + 263, 2);
+    const uname = readStr(block, off + 265, 32);
+    const gname = readStr(block, off + 297, 32);
+    const devmajor = readOctal(block, off + 329, 8);
+    const devminor = readOctal(block, off + 337, 8);
+    const prefix = readStr(block, off + 345, 155);
+
+    // Validate checksum (sum of all bytes with chksum field treated as spaces)
+    let computed = 0;
+    for (let i = 0; i < 512; i++) {
+      if (i >= 148 && i < 156) computed += 32;
+      else computed += block[off + i];
+    }
+    if (computed !== chksum) {
+      throw new Error(`Bad header checksum at offset ${off} (expected ${chksum}, got ${computed}). File may be corrupt or not a tar.`);
+    }
+
+    let format = 'v7';
+    if (magic === 'ustar' && version === '00') format = 'ustar';
+    else if (magic.startsWith('ustar') && (version === ' \0' || version === ' ' || version === '\0\0')) format = 'gnu';
+    else if (magic === 'ustar') format = 'ustar';
+
+    if (format === 'ustar' && prefix) name = prefix + '/' + name;
+
+    const dataLen = size;
+    const padded = Math.ceil(dataLen / 512) * 512;
+
+    // Handle long-name extensions (consume payload as the next entry's name)
+    if (typeflag === 'L') {
+      pendingLongName = readStr(buf, off + 512, dataLen).replace(/\0+$/, '');
+      off += 512 + padded;
+      continue;
+    }
+    if (typeflag === 'K') {
+      pendingLongLink = readStr(buf, off + 512, dataLen).replace(/\0+$/, '');
+      off += 512 + padded;
+      continue;
+    }
+    if (typeflag === 'x' || typeflag === 'g') {
+      const txt = readStr(buf, off + 512, dataLen);
+      const fields = parsePax(txt);
+      pendingPax = fields;
+      off += 512 + padded;
+      continue;
+    }
+
+    if (pendingLongName) { name = pendingLongName; pendingLongName = null; }
+    if (pendingLongLink) { linkname = pendingLongLink; pendingLongLink = null; }
+    if (pendingPax) {
+      if (pendingPax.path) name = pendingPax.path;
+      if (pendingPax.linkpath) linkname = pendingPax.linkpath;
+      if (pendingPax.size) {/* size override could be applied */}
+      pendingPax = null;
+    }
+
+    out.push({
+      name, mode, uid, gid, size, mtime, type: TYPE_NAMES[typeflag] || ('flag-' + typeflag),
+      typeflag, linkname, uname, gname, devmajor, devminor, format
+    });
+
+    off += 512 + padded;
+  }
+  return out;
+}
+
+function parsePax(text) {
+  const fields = {};
+  let i = 0;
+  while (i < text.length) {
+    let j = i;
+    while (j < text.length && text[j] !== ' ') j++;
+    if (j >= text.length) break;
+    const len = parseInt(text.substring(i, j), 10);
+    if (!len || isNaN(len)) break;
+    const record = text.substring(i, i + len);
+    const eq = record.indexOf('=');
+    if (eq > 0) {
+      const k = record.substring(record.indexOf(' ') + 1, eq);
+      const v = record.substring(eq + 1).replace(/\n$/, '');
+      fields[k] = v;
+    }
+    i += len;
+  }
+  return fields;
+}
+
+function modeStr(mode, type) {
+  const t = type === 'directory' ? 'd' : type === 'symlink' ? 'l' : type === 'hardlink' ? 'h'
+          : type === 'blockdev' ? 'b' : type === 'chardev' ? 'c' : type === 'fifo' ? 'p' : '-';
+  const r = (m, b) => m & b ? 'r' : '-';
+  const w = (m, b) => m & b ? 'w' : '-';
+  const x = (m, b, sb, sc) => (m & sb ? (m & b ? sc.toLowerCase() : sc.toUpperCase()) : (m & b ? 'x' : '-'));
+  const u = r(mode, 0o400) + w(mode, 0o200) + x(mode, 0o100, 0o4000, 's');
+  const g = r(mode, 0o040) + w(mode, 0o020) + x(mode, 0o010, 0o2000, 's');
+  const o = r(mode, 0o004) + w(mode, 0o002) + x(mode, 0o001, 0o1000, 't');
+  return t + u + g + o;
+}
+
+function fmtSize(n) {
+  if (n < 1024) return n + ' B';
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let v = n / 1024, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0) + ' ' + units[i];
+}
+
+function fmtTime(epoch) {
+  if (!epoch) return '—';
+  try { return new Date(epoch * 1000).toISOString().replace('T', ' ').replace('.000Z', 'Z'); }
+  catch { return String(epoch); }
+}
+
+function renderSummary(file) {
+  const total = entries.reduce((s, e) => s + (e.type === 'file' ? e.size : 0), 0);
+  const fmtCount = {};
+  for (const e of entries) fmtCount[e.format] = (fmtCount[e.format] || 0) + 1;
+  const typeCount = {};
+  for (const e of entries) typeCount[e.type] = (typeCount[e.type] || 0) + 1;
+  const fmtList = Object.entries(fmtCount).map(([k, v]) => `${k}\u00d7${v}`).join(', ');
+  const typeList = Object.entries(typeCount).map(([k, v]) => `${k}\u00d7${v}`).join(', ');
+
+  $('summary').innerHTML = `
+    <div class="stat"><div class="k">Archive</div><div class="v">${escapeHtml(file.name)}</div></div>
+    <div class="stat"><div class="k">File size</div><div class="v">${fmtSize(file.size)}</div></div>
+    <div class="stat"><div class="k">Entries</div><div class="v">${entries.length}</div></div>
+    <div class="stat"><div class="k">Total content</div><div class="v">${fmtSize(total)}</div></div>
+    <div class="stat"><div class="k">Format</div><div class="v">${escapeHtml(fmtList)}</div></div>
+    <div class="stat"><div class="k">Types</div><div class="v">${escapeHtml(typeList)}</div></div>
+  `;
+}
+
+function sortBy(k) {
+  if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = 1; }
+  renderTable();
+}
+
+function renderTable() {
+  const filter = ($('filter').value || '').toLowerCase();
+  let view = entries.filter(e => !filter || e.name.toLowerCase().includes(filter));
+  view.sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (typeof av === 'number') return (av - bv) * sortDir;
+    return String(av).localeCompare(String(bv)) * sortDir;
+  });
+  const html = view.map(e => `<tr>
+    <td class="name">${escapeHtml(e.name)}</td>
+    <td><span class="badge ${badgeClass(e.type)}">${e.type}</span></td>
+    <td>${escapeHtml(modeStr(e.mode, e.type))}</td>
+    <td>${e.type === 'file' ? fmtSize(e.size) : '—'}</td>
+    <td>${escapeHtml(e.uname || String(e.uid))}</td>
+    <td>${escapeHtml(e.gname || String(e.gid))}</td>
+    <td>${escapeHtml(fmtTime(e.mtime))}</td>
+    <td>${escapeHtml(e.linkname || '—')}</td>
+    <td>${e.format}</td>
+  </tr>`).join('');
+  $('tbody').innerHTML = html || '<tr><td colspan="9" style="text-align:center; color:var(--muted); padding:20px;">No entries match.</td></tr>';
+}
+
+function badgeClass(t) {
+  if (t === 'file') return 'b-file';
+  if (t === 'directory') return 'b-dir';
+  if (t === 'symlink' || t === 'hardlink') return 'b-link';
+  return 'b-other';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function exportJSON() {
+  const data = JSON.stringify(entries, null, 2);
+  download(data, 'tar-contents.json', 'application/json');
+}
+function exportCSV() {
+  const cols = ['name','type','mode','size','uname','gname','uid','gid','mtime','linkname','format'];
+  const rows = [cols.join(',')];
+  for (const e of entries) {
+    rows.push(cols.map(c => {
+      const v = c === 'mode' ? modeStr(e.mode, e.type) : c === 'mtime' ? fmtTime(e.mtime) : e[c];
+      const s = String(v == null ? '' : v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(','));
+  }
+  download(rows.join('\n'), 'tar-contents.csv', 'text/csv');
+}
+function download(text, name, type) {
+  const blob = new Blob([text], { type });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+</script>
+</body>
+</html>

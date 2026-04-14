@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAA Record Builder & Parser — Free Online Tool</title>
+<meta name="description" content="Build and parse DNS Certification Authority Authorization (CAA) records — issue, issuewild, iodef tags, critical flag, common CA hostnames, RFC 8659 compliant.">
+<meta name="keywords" content="CAA record, DNS, certificate authority, RFC 8659, issue, issuewild, iodef, Let's Encrypt, DigiCert, Sectigo">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/caa.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row-rec {
+    display: grid; grid-template-columns: 60px 130px 1fr 36px;
+    gap: 8px; align-items: center; margin-bottom: 6px;
+  }
+  .row-rec input, .row-rec select {
+    font-family: var(--mono); font-size: .88rem; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);
+  }
+  .row-rec .del {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 4px; cursor: pointer; height: 32px;
+  }
+  .row-rec .del:hover { color: var(--error); border-color: var(--error); }
+  .out-zone {
+    font-family: var(--mono); font-size: .88rem;
+    padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-top: 8px; white-space: pre; overflow-x: auto;
+  }
+  .ca-suggest {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .ca-chip {
+    font-size: .75rem; padding: 3px 9px; border: 1px solid var(--border);
+    background: var(--surface2); border-radius: 999px; cursor: pointer; color: var(--text);
+    font-family: var(--mono);
+  }
+  .ca-chip:hover { border-color: var(--accent); }
+  .lint-item {
+    display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px;
+    border-radius: 4px; font-size: .85rem; margin-bottom: 4px;
+  }
+  .lint-item.ok { background: #ecfdf5; color: var(--success); }
+  .lint-item.warn { background: #fffbeb; color: var(--warning); }
+  .lint-item.err { background: #fef2f2; color: var(--error); }
+  .lint-item .icon { font-weight: 700; min-width: 1em; }
+  textarea.parse { min-height: 90px; font-family: var(--mono); font-size: .85rem; }
+  .help { font-size: .82rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .tag-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .tag-table th, .tag-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .tag-table th { color: var(--muted); font-weight: 500; }
+  .tag-table td code { font-family: var(--mono); font-size: .8rem; }
+  @media (max-width: 768px) {
+    .row-rec { grid-template-columns: 1fr 1fr; gap: 6px; }
+    .row-rec .del { grid-column: 2; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CAA Record Builder &amp; Parser</h1>
+<p class="subtitle">Compose DNS Certification Authority Authorization records (RFC 8659) so only the CAs you trust can issue certificates for your domain. Outputs zone file lines, dig and BIND-compatible formats.</p>
+
+<div class="card">
+  <h2>Domain</h2>
+  <input type="text" id="domain" value="example.com" oninput="render()" placeholder="example.com" style="width:100%; max-width:400px; padding:8px 10px; font-family:var(--mono); border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text);">
+  <p class="help">CAA records are queried at the exact name; if absent, validators climb the DNS tree until they find one (RFC 8659 §3).</p>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>Records</h2>
+  <p class="help">Each row maps to one CAA RR. The <code>flags</code> byte's high bit (128 = critical) tells CAs they MUST refuse if they don't understand the tag.</p>
+
+  <div class="ca-suggest">
+    <span style="font-size:.8rem; color:var(--muted); align-self:center;">Quick add issue: </span>
+    <button class="ca-chip" onclick="quickIssue('letsencrypt.org')">letsencrypt.org</button>
+    <button class="ca-chip" onclick="quickIssue('digicert.com')">digicert.com</button>
+    <button class="ca-chip" onclick="quickIssue('sectigo.com')">sectigo.com</button>
+    <button class="ca-chip" onclick="quickIssue('globalsign.com')">globalsign.com</button>
+    <button class="ca-chip" onclick="quickIssue('amazon.com')">amazon.com</button>
+    <button class="ca-chip" onclick="quickIssue('amazontrust.com')">amazontrust.com</button>
+    <button class="ca-chip" onclick="quickIssue('pki.goog')">pki.goog</button>
+    <button class="ca-chip" onclick="quickIssue('buypass.com')">buypass.com</button>
+    <button class="ca-chip" onclick="quickIssue('comodoca.com')">comodoca.com</button>
+    <button class="ca-chip" onclick="quickIssue('entrust.net')">entrust.net</button>
+    <button class="ca-chip" onclick="quickIssue(';')">; (deny all)</button>
+  </div>
+
+  <div id="rows"></div>
+  <button class="btn btn-secondary" onclick="addRow()" style="margin-top:6px;">+ Add Record</button>
+
+  <h2 style="margin-top:1rem;">Zone File Output</h2>
+  <div class="out-zone" id="output"></div>
+  <div class="row" style="margin-top:8px; gap:8px; flex-wrap:wrap;">
+    <button class="btn" onclick="copyOut()">Copy Zone Lines</button>
+    <button class="btn btn-secondary" onclick="copyDig()">Copy <code>dig</code> command</button>
+    <button class="btn btn-secondary" onclick="copyJSON()">Copy JSON</button>
+  </div>
+
+  <h2 style="margin-top:1rem;">Lint</h2>
+  <div id="lint"></div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>Parse Existing Records</h2>
+  <p class="help">Paste output from <code>dig +short CAA example.com</code> or BIND zone lines and the rows above will be replaced.</p>
+  <textarea class="parse" id="parseIn" placeholder='0 issue "letsencrypt.org"
+0 issuewild ";"
+0 iodef "mailto:security@example.com"'></textarea>
+  <button class="btn btn-secondary" onclick="parseIn()" style="margin-top:6px;">Load into Builder</button>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>Tag Reference</h2>
+  <table class="tag-table">
+    <thead><tr><th>Tag</th><th>Meaning</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><code>issue</code></td><td>CA permitted to issue any cert (including wildcards if no <code>issuewild</code>).</td><td><code>0 issue "letsencrypt.org"</code></td></tr>
+      <tr><td><code>issuewild</code></td><td>CA permitted to issue wildcard certs only. Overrides <code>issue</code> for wildcards.</td><td><code>0 issuewild "digicert.com"</code></td></tr>
+      <tr><td><code>iodef</code></td><td>Where to send violation reports (RFC 6546). Email, URL, or both.</td><td><code>0 iodef "mailto:sec@example.com"</code></td></tr>
+      <tr><td><code>contactemail</code></td><td>Domain validation contact (CA/Browser Forum extension).</td><td><code>0 contactemail "admin@example.com"</code></td></tr>
+      <tr><td><code>contactphone</code></td><td>Domain validation phone contact (CA/Browser Forum).</td><td><code>0 contactphone "+1-555-555-0100"</code></td></tr>
+      <tr><td><code>; (semicolon)</code></td><td>Used as the value to <strong>deny all CAs</strong>: <code>0 issue ";"</code></td><td><code>0 issue ";"</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const TAGS = ['issue', 'issuewild', 'iodef', 'contactemail', 'contactphone'];
+
+let rows = [
+  { flags: 0, tag: 'issue', value: 'letsencrypt.org' },
+  { flags: 0, tag: 'iodef', value: 'mailto:security@example.com' },
+];
+
+function renderRows() {
+  const html = rows.map((r, i) =>
+    '<div class="row-rec">' +
+      '<input type="number" min="0" max="255" value="' + r.flags + '" title="flags (0 or 128)" oninput="updateField(' + i + ', \'flags\', this.value)">' +
+      '<select onchange="updateField(' + i + ', \'tag\', this.value)">' +
+        TAGS.map(t => `<option value="${t}" ${t===r.tag?'selected':''}>${t}</option>`).join('') +
+      '</select>' +
+      '<input type="text" placeholder="value" value="' + escapeAttr(r.value) + '" oninput="updateField(' + i + ', \'value\', this.value)">' +
+      '<button class="del" onclick="delRow(' + i + ')" title="Remove">&times;</button>' +
+    '</div>'
+  ).join('');
+  $('rows').innerHTML = html || '<div class="empty">No records yet — click "Add Record" or use a quick chip above.</div>';
+}
+
+function escapeAttr(s) { return String(s||'').replace(/"/g, '&quot;'); }
+
+function addRow() {
+  rows.push({ flags: 0, tag: 'issue', value: '' });
+  renderRows(); render();
+}
+function delRow(i) { rows.splice(i, 1); renderRows(); render(); }
+function updateField(i, k, v) {
+  if (k === 'flags') { const n = parseInt(v, 10); rows[i].flags = isNaN(n) ? 0 : Math.max(0, Math.min(255, n)); }
+  else rows[i][k] = v;
+  if (k === 'flags') renderRows();
+  render();
+}
+
+function quickIssue(value) {
+  rows.push({ flags: 0, tag: 'issue', value });
+  renderRows(); render();
+}
+
+function buildZone() {
+  const dom = ($('domain').value || 'example.com').trim();
+  return rows.map(r => {
+    const v = (r.value || '').replace(/"/g, '\\"');
+    return `${dom}.\tIN\tCAA\t${r.flags} ${r.tag} "${v}"`;
+  }).join('\n');
+}
+
+function buildJSON() {
+  const dom = ($('domain').value || 'example.com').trim();
+  return JSON.stringify({
+    name: dom,
+    type: 'CAA',
+    records: rows.map(r => ({ flags: r.flags, tag: r.tag, value: r.value }))
+  }, null, 2);
+}
+
+function render() {
+  $('output').textContent = buildZone();
+  lint();
+}
+
+function lint() {
+  const issues = [];
+  if (rows.length === 0) {
+    issues.push({ k: 'warn', m: 'No CAA records — any publicly trusted CA may issue certs (default).' });
+  }
+  const issueRows = rows.filter(r => r.tag === 'issue');
+  const wildRows = rows.filter(r => r.tag === 'issuewild');
+  const denyAll = issueRows.length === 1 && issueRows[0].value.trim() === ';';
+
+  if (denyAll && rows.length === 1) {
+    issues.push({ k: 'warn', m: '"issue ;" denies ALL CAs from issuing certs for this domain — make sure that\'s intentional.' });
+  }
+  if (issueRows.length === 0 && wildRows.length === 0) {
+    issues.push({ k: 'warn', m: 'No issue or issuewild tag — at least one is normally needed.' });
+  }
+  for (const r of rows) {
+    if (!TAGS.includes(r.tag)) {
+      issues.push({ k: 'err', m: `Unknown tag "${r.tag}".` });
+    }
+    if (!r.value.trim()) {
+      issues.push({ k: 'err', m: `Empty value for ${r.tag}.` });
+    }
+    if (r.flags !== 0 && r.flags !== 128) {
+      issues.push({ k: 'warn', m: `Non-standard flags=${r.flags}. Only 0 and 128 (critical) are defined.` });
+    }
+    if ((r.tag === 'issue' || r.tag === 'issuewild') && r.value.includes('://')) {
+      issues.push({ k: 'err', m: `${r.tag} value should be a CA hostname (e.g. letsencrypt.org), not a URL.` });
+    }
+    if (r.tag === 'iodef') {
+      const v = r.value.trim();
+      if (!v.startsWith('mailto:') && !v.startsWith('http://') && !v.startsWith('https://')) {
+        issues.push({ k: 'err', m: 'iodef value must be a mailto: or http(s):// URI.' });
+      }
+    }
+    if (r.tag === 'contactemail' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.value.trim())) {
+      issues.push({ k: 'err', m: 'contactemail must be a bare email address.' });
+    }
+  }
+  if (issues.length === 0) issues.push({ k: 'ok', m: 'Records look well-formed.' });
+
+  $('lint').innerHTML = issues.map(i =>
+    '<div class="lint-item ' + i.k + '"><span class="icon">' +
+    (i.k === 'ok' ? '\u2713' : i.k === 'warn' ? '!' : '\u2717') +
+    '</span><span>' + escapeHtml(i.m) + '</span></div>'
+  ).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function showToast() {
+  const t = $('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+function copyOut() { navigator.clipboard.writeText(buildZone()).then(showToast); }
+function copyDig() {
+  const dom = ($('domain').value || 'example.com').trim();
+  navigator.clipboard.writeText(`dig +short CAA ${dom}`).then(showToast);
+}
+function copyJSON() { navigator.clipboard.writeText(buildJSON()).then(showToast); }
+
+function parseIn() {
+  const lines = $('parseIn').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const parsed = [];
+  for (let line of lines) {
+    // Strip BIND zone prefix if present: "example.com. IN CAA ..."
+    line = line.replace(/^[^\s]+\s+(?:\d+\s+)?IN\s+CAA\s+/i, '');
+    // Match: <flags> <tag> "<value>"
+    const m = /^(\d+)\s+([a-zA-Z]+)\s+"((?:[^"\\]|\\.)*)"\s*$/.exec(line)
+           || /^(\d+)\s+([a-zA-Z]+)\s+(\S+)\s*$/.exec(line);
+    if (!m) continue;
+    parsed.push({
+      flags: parseInt(m[1], 10),
+      tag: m[2].toLowerCase(),
+      value: m[3].replace(/\\"/g, '"'),
+    });
+  }
+  if (parsed.length === 0) {
+    alert('Could not parse any CAA records. Expected: 0 issue "letsencrypt.org"');
+    return;
+  }
+  rows = parsed;
+  renderRows();
+  render();
+}
+
+renderRows();
+render();
+</script>
+</body>
+</html>

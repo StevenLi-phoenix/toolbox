@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HSTS Header Builder & Validator — Free Online Tool</title>
+<meta name="description" content="Build and validate HTTP Strict-Transport-Security headers — choose max-age, includeSubDomains, preload, parse existing headers, and check hstspreload.org submission requirements.">
+<meta name="keywords" content="HSTS, Strict-Transport-Security, HTTP header, hstspreload, preload list, includeSubDomains, max-age, security header, RFC 6797">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hsts.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .field-row {
+    display: grid; grid-template-columns: 180px 1fr; gap: 12px; align-items: center;
+    margin-bottom: 12px;
+  }
+  .field-row label { font-size: .9rem; font-weight: 500; }
+  .field-row input[type=number], .field-row select {
+    font-family: var(--mono); font-size: .9rem; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);
+  }
+  .checkrow { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 16px; }
+  .checkrow label { font-size: .9rem; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .out-header {
+    font-family: var(--mono); font-size: .95rem; word-break: break-all;
+    padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-top: 8px; line-height: 1.5;
+  }
+  .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .preset { font-size: .8rem; padding: 4px 10px; border: 1px solid var(--border);
+    background: var(--surface2); border-radius: 999px; cursor: pointer; color: var(--text); }
+  .preset:hover { border-color: var(--accent); }
+  .lint-item {
+    display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px;
+    border-radius: 4px; font-size: .85rem; margin-bottom: 4px;
+  }
+  .lint-item.ok { background: #ecfdf5; color: var(--success); }
+  .lint-item.warn { background: #fffbeb; color: var(--warning); }
+  .lint-item.err { background: #fef2f2; color: var(--error); }
+  .lint-item .icon { font-weight: 700; min-width: 1em; }
+  textarea.parse { min-height: 70px; font-family: var(--mono); font-size: .88rem; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: .85rem; }
+  .meta-grid .k { color: var(--muted); }
+  .meta-grid .v { font-family: var(--mono); }
+  .help { font-size: .82rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  @media (max-width: 768px) {
+    .field-row { grid-template-columns: 1fr; gap: 4px; }
+    .meta-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HSTS Header Builder &amp; Validator</h1>
+<p class="subtitle">Compose a Strict-Transport-Security header (RFC 6797), parse existing ones, and check whether your policy meets the hstspreload.org submission rules.</p>
+
+<div class="card">
+  <h2>Configure Policy</h2>
+
+  <div class="preset-row">
+    <button class="preset" onclick="preset('test')">Test (5 min)</button>
+    <button class="preset" onclick="preset('week')">1 week</button>
+    <button class="preset" onclick="preset('30d')">30 days</button>
+    <button class="preset" onclick="preset('1y')">1 year</button>
+    <button class="preset" onclick="preset('2y')">2 years (preload)</button>
+    <button class="preset" onclick="preset('off')">Disable (max-age=0)</button>
+  </div>
+
+  <div class="field-row">
+    <label for="age">max-age</label>
+    <div class="row" style="gap:6px; align-items:center;">
+      <input id="age" type="number" min="0" value="31536000" oninput="render()" style="width:160px;">
+      <select id="unit" onchange="convertUnit()">
+        <option value="1">seconds</option>
+        <option value="60">minutes</option>
+        <option value="3600">hours</option>
+        <option value="86400">days</option>
+        <option value="31536000" selected>years</option>
+      </select>
+      <span class="help" id="ageHuman" style="margin:0 0 0 6px;"></span>
+    </div>
+  </div>
+
+  <div class="checkrow">
+    <label><input type="checkbox" id="subdomains" checked onchange="render()"> includeSubDomains</label>
+    <label><input type="checkbox" id="preload" checked onchange="render()"> preload</label>
+  </div>
+
+  <h2 style="margin-top:1rem;">Generated Header</h2>
+  <div class="out-header" id="output"></div>
+  <div class="row" style="margin-top:8px; gap:8px; flex-wrap:wrap;">
+    <button class="btn" onclick="copyOut()">Copy Header</button>
+    <button class="btn btn-secondary" onclick="copyNginx()">Copy nginx</button>
+    <button class="btn btn-secondary" onclick="copyApache()">Copy Apache</button>
+    <button class="btn btn-secondary" onclick="copyCaddy()">Copy Caddy</button>
+  </div>
+
+  <h2 style="margin-top:1rem;">Lint &amp; Preload Eligibility</h2>
+  <div id="lint"></div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>Parse Existing Header</h2>
+  <p class="help">Paste a Strict-Transport-Security value (with or without the header name) to load it into the builder.</p>
+  <textarea class="parse" id="parseIn" placeholder="Strict-Transport-Security: max-age=31536000; includeSubDomains; preload"></textarea>
+  <button class="btn btn-secondary" onclick="parseIn()" style="margin-top:6px;">Load into Builder</button>
+  <div id="parsed" class="meta-grid" style="margin-top:12px;"></div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>About HSTS &amp; Preloading</h2>
+  <ul style="font-size:.88rem; line-height:1.6; padding-left:1.2rem; color:var(--muted);">
+    <li><strong>max-age=0</strong> tells the browser to drop any prior HSTS state — use it to back out of a deployment.</li>
+    <li><strong>includeSubDomains</strong> applies the policy to <em>every</em> subdomain. Make sure they all serve HTTPS first.</li>
+    <li><strong>preload</strong> opts your site into the Chromium preload list shipped with browsers, removing the trust-on-first-use gap.</li>
+    <li>Submission to <a href="https://hstspreload.org" rel="noopener" target="_blank">hstspreload.org</a> requires <code>max-age &ge; 31536000</code>, both flags, a redirect from HTTP, and HTTPS on every subdomain.</li>
+    <li>Removing a domain from the preload list can take months — start with a short max-age while testing.</li>
+  </ul>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function getAgeSeconds() {
+  const v = parseInt($('age').value, 10);
+  const mult = parseInt($('unit').value, 10);
+  if (!Number.isFinite(v) || v < 0) return 0;
+  return v * mult;
+}
+
+function humanAge(sec) {
+  if (sec === 0) return 'expires immediately';
+  const units = [
+    ['year', 31536000], ['month', 2592000], ['day', 86400],
+    ['hour', 3600], ['minute', 60], ['second', 1],
+  ];
+  for (const [name, s] of units) {
+    if (sec >= s) {
+      const n = sec / s;
+      const round = Number.isInteger(n) ? n : n.toFixed(2);
+      return `\u2248 ${round} ${name}${n === 1 ? '' : 's'}`;
+    }
+  }
+  return sec + ' seconds';
+}
+
+function convertUnit() {
+  // Recompute the displayed number to keep total seconds roughly stable.
+  // We keep the raw seconds in a data attribute when the user picks a preset,
+  // but for free-typed values we just recompute the human readout.
+  render();
+}
+
+function buildHeader() {
+  const sec = getAgeSeconds();
+  const subs = $('subdomains').checked;
+  const pre = $('preload').checked;
+  const parts = ['max-age=' + sec];
+  if (subs) parts.push('includeSubDomains');
+  if (pre) parts.push('preload');
+  return parts.join('; ');
+}
+
+function render() {
+  const sec = getAgeSeconds();
+  $('ageHuman').textContent = humanAge(sec);
+  const value = buildHeader();
+  $('output').textContent = 'Strict-Transport-Security: ' + value;
+  lint(sec);
+}
+
+function lint(sec) {
+  const subs = $('subdomains').checked;
+  const pre = $('preload').checked;
+  const issues = [];
+  const YEAR = 31536000;
+
+  if (sec === 0) {
+    issues.push({ k: 'warn', m: 'max-age=0 disables HSTS — browsers will drop any cached policy on next visit.' });
+    if (pre) issues.push({ k: 'err', m: 'A zero max-age combined with preload makes no sense. Remove preload.' });
+  } else if (sec < 300) {
+    issues.push({ k: 'warn', m: 'Very short max-age (< 5 minutes). Useful only for testing.' });
+  } else if (sec < 86400) {
+    issues.push({ k: 'warn', m: 'max-age is under 1 day — fine for testing, not for production.' });
+  }
+
+  if (pre) {
+    if (sec < YEAR) issues.push({ k: 'err', m: 'Preload requires max-age \u2265 31536000 (1 year).' });
+    if (!subs) issues.push({ k: 'err', m: 'Preload requires includeSubDomains.' });
+    issues.push({ k: 'warn', m: 'You also need: an HTTPS redirect from port 80, a valid cert on the apex, and HTTPS available on all subdomains. Submit at hstspreload.org.' });
+  }
+
+  if (subs && sec > 0 && !pre && sec >= YEAR) {
+    issues.push({ k: 'ok', m: 'Strong policy. Consider adding preload once every subdomain is HTTPS-ready.' });
+  }
+  if (sec >= YEAR && subs && pre) {
+    issues.push({ k: 'ok', m: 'Meets the hstspreload.org numeric requirements.' });
+  }
+  if (sec > 0 && !subs && !pre) {
+    issues.push({ k: 'ok', m: 'Apex-only policy — safe baseline before enabling subdomain coverage.' });
+  }
+
+  $('lint').innerHTML = issues.map(i =>
+    '<div class="lint-item ' + i.k + '"><span class="icon">' +
+    (i.k === 'ok' ? '\u2713' : i.k === 'warn' ? '!' : '\u2717') +
+    '</span><span>' + escapeHtml(i.m) + '</span></div>'
+  ).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function preset(kind) {
+  const map = {
+    test: { secs: 300, subs: false, pre: false },
+    week: { secs: 604800, subs: true, pre: false },
+    '30d': { secs: 2592000, subs: true, pre: false },
+    '1y': { secs: 31536000, subs: true, pre: false },
+    '2y': { secs: 63072000, subs: true, pre: true },
+    off: { secs: 0, subs: false, pre: false },
+  };
+  const p = map[kind];
+  if (!p) return;
+  // pick a friendly unit
+  const units = [
+    [31536000, 'years'], [86400, 'days'], [3600, 'hours'],
+    [60, 'minutes'], [1, 'seconds']
+  ];
+  let val = p.secs, unit = 1;
+  for (const [s] of units) {
+    if (p.secs >= s && p.secs % s === 0) { val = p.secs / s; unit = s; break; }
+  }
+  $('age').value = val;
+  $('unit').value = unit;
+  $('subdomains').checked = p.subs;
+  $('preload').checked = p.pre;
+  render();
+}
+
+function showToast() {
+  const t = $('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+function copyOut() { navigator.clipboard.writeText($('output').textContent).then(showToast); }
+
+function copyNginx() {
+  const v = buildHeader();
+  navigator.clipboard.writeText(`add_header Strict-Transport-Security "${v}" always;`).then(showToast);
+}
+function copyApache() {
+  const v = buildHeader();
+  navigator.clipboard.writeText(`Header always set Strict-Transport-Security "${v}"`).then(showToast);
+}
+function copyCaddy() {
+  const v = buildHeader();
+  navigator.clipboard.writeText(`header Strict-Transport-Security "${v}"`).then(showToast);
+}
+
+function parseIn() {
+  let txt = $('parseIn').value.trim();
+  if (!txt) return;
+  txt = txt.replace(/^Strict-Transport-Security\s*:\s*/i, '').trim();
+  const directives = txt.split(';').map(d => d.trim()).filter(Boolean);
+  let age = null, subs = false, pre = false;
+  const meta = {};
+  for (const d of directives) {
+    const [name, ...rest] = d.split('=');
+    const k = name.trim().toLowerCase();
+    const v = rest.join('=').trim();
+    if (k === 'max-age') {
+      age = parseInt(v.replace(/^"|"$/g, ''), 10);
+      meta['max-age'] = age;
+    } else if (k === 'includesubdomains') {
+      subs = true; meta['includeSubDomains'] = 'yes';
+    } else if (k === 'preload') {
+      pre = true; meta['preload'] = 'yes';
+    } else {
+      meta[k] = v || '(flag)';
+    }
+  }
+  if (age == null || isNaN(age)) {
+    alert('Could not find a valid max-age directive.');
+    return;
+  }
+  // Pick best unit for display
+  const units = [
+    [31536000, 'years'], [86400, 'days'], [3600, 'hours'],
+    [60, 'minutes'], [1, 'seconds']
+  ];
+  let val = age, unit = 1;
+  for (const [s] of units) {
+    if (age >= s && age % s === 0) { val = age / s; unit = s; break; }
+  }
+  $('age').value = val;
+  $('unit').value = unit;
+  $('subdomains').checked = subs;
+  $('preload').checked = pre;
+  render();
+
+  // Show parsed metadata
+  const html = Object.entries(meta).map(([k, v]) =>
+    `<div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(String(v))}</div>`
+  ).join('') + `<div class="k">human</div><div class="v">${humanAge(age)}</div>`;
+  $('parsed').innerHTML = html;
+}
+
+render();
+</script>
+</body>
+</html>
