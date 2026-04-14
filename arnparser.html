@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS ARN Parser & Builder</title>
+<meta name="description" content="Parse and build Amazon Resource Names (ARNs) — break apart partition, service, region, account, resource type, and resource ID. 100% client-side.">
+<meta name="keywords" content="aws, arn, parser, amazon resource name, iam, s3, lambda, builder">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/arnparser.html">
+<meta property="og:title" content="AWS ARN Parser & Builder">
+<meta property="og:description" content="Parse and build Amazon Resource Names (ARNs) — partition, service, region, account, resource.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/arnparser.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .arn-in { font-family: var(--mono); font-size: .95rem; width: 100%; }
+  .parts { display: grid; grid-template-columns: 110px 1fr; gap: 8px 14px; margin-top: 14px; font-size: .88rem; }
+  .parts .label { color: var(--muted); font-weight: 500; align-self: center; }
+  .parts .val { font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; word-break: break-all; min-height: 1.2em; }
+  .parts .val.empty { color: var(--muted); font-style: italic; }
+  .verdict { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius); font-size: .9rem; font-weight: 500; }
+  .verdict.ok { background: rgba(16,185,129,.1); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+  .verdict.bad { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.3); }
+  .verdict.warn { background: rgba(245,158,11,.1); color: #d97706; border: 1px solid rgba(245,158,11,.3); }
+  .build-grid { display: grid; grid-template-columns: 110px 1fr; gap: 8px 14px; }
+  .build-grid input, .build-grid select { font-family: var(--mono); font-size: .9rem; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); width: 100%; }
+  .built { font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-top: 12px; word-break: break-all; font-size: .92rem; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .examples button { font-family: var(--mono); font-size: .75rem; padding: 4px 8px; }
+  @media (max-width: 768px) {
+    .parts, .build-grid { grid-template-columns: 1fr; gap: 4px 0; }
+    .parts .label { margin-top: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>AWS ARN Parser &amp; Builder</h1>
+  <p class="subtitle">Parse and construct Amazon Resource Names. Format: <code>arn:partition:service:region:account-id:resource</code>. 100% client-side.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Parse an ARN</h2>
+    <input type="text" id="arn" class="arn-in" placeholder="arn:aws:s3:::my-bucket/path/to/object.txt" value="arn:aws:iam::123456789012:role/MyApplicationRole">
+    <div class="examples">
+      <button class="btn btn-secondary" onclick="loadEx('arn:aws:s3:::my-bucket/folder/file.txt')">S3 Object</button>
+      <button class="btn btn-secondary" onclick="loadEx('arn:aws:iam::123456789012:role/MyApplicationRole')">IAM Role</button>
+      <button class="btn btn-secondary" onclick="loadEx('arn:aws:lambda:us-east-1:123456789012:function:processOrders:PROD')">Lambda</button>
+      <button class="btn btn-secondary" onclick="loadEx('arn:aws:dynamodb:eu-west-1:123456789012:table/Orders/index/CustomerIndex')">DynamoDB Index</button>
+      <button class="btn btn-secondary" onclick="loadEx('arn:aws-cn:ec2:cn-north-1:123456789012:instance/i-1234567890abcdef0')">EC2 (China)</button>
+      <button class="btn btn-secondary" onclick="loadEx('arn:aws:sns:us-west-2:123456789012:my-topic')">SNS Topic</button>
+    </div>
+    <div id="verdict"></div>
+    <div class="parts" id="parts"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Build an ARN</h2>
+    <div class="build-grid">
+      <label class="label">Partition</label>
+      <select id="b_part">
+        <option value="aws">aws (commercial)</option>
+        <option value="aws-cn">aws-cn (China)</option>
+        <option value="aws-us-gov">aws-us-gov (GovCloud)</option>
+        <option value="aws-iso">aws-iso (US-ISO)</option>
+        <option value="aws-iso-b">aws-iso-b (US-ISOB)</option>
+      </select>
+      <label class="label">Service</label>
+      <input type="text" id="b_svc" placeholder="s3, iam, lambda, ec2…" value="lambda">
+      <label class="label">Region</label>
+      <input type="text" id="b_region" placeholder="us-east-1 (blank for global)" value="us-east-1">
+      <label class="label">Account ID</label>
+      <input type="text" id="b_acct" placeholder="123456789012" value="123456789012">
+      <label class="label">Resource</label>
+      <input type="text" id="b_res" placeholder="function:myFunc or table/MyTable" value="function:processOrders">
+    </div>
+    <div class="built" id="built"></div>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn btn-primary" onclick="copyBuilt()">Copy ARN</button>
+      <button class="btn btn-secondary" onclick="useBuilt()">Send to parser</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About ARN format</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      Every AWS resource has a unique ARN. The general formats are:
+    </p>
+    <pre style="font-family:var(--mono);font-size:.82rem;background:var(--surface2);padding:10px;border-radius:var(--radius);border:1px solid var(--border);overflow-x:auto;">arn:partition:service:region:account-id:resource-id
+arn:partition:service:region:account-id:resource-type/resource-id
+arn:partition:service:region:account-id:resource-type:resource-id</pre>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;margin-top:8px;">
+      Region and account-id are blank for some global services (S3 bucket ARNs, IAM users/roles). The resource portion may use <code>:</code> or <code>/</code> as separators depending on the service.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function parseArn(s) {
+  s = (s || '').trim();
+  if (!s) return { ok: false, error: 'empty' };
+  const segs = s.split(':');
+  if (segs.length < 6) return { ok: false, error: 'ARN must have at least 6 colon-separated segments' };
+  if (segs[0] !== 'arn') return { ok: false, error: 'Must start with "arn:"' };
+  const partition = segs[1];
+  const service = segs[2];
+  const region = segs[3];
+  const account = segs[4];
+  // Resource is everything after the 5th colon
+  const resource = segs.slice(5).join(':');
+  if (!partition) return { ok: false, error: 'Missing partition' };
+  if (!service) return { ok: false, error: 'Missing service' };
+  if (!resource) return { ok: false, error: 'Missing resource' };
+
+  // Try to split resource into type / id
+  let resType = '', resId = '';
+  if (resource.includes('/')) {
+    const idx = resource.indexOf('/');
+    resType = resource.slice(0, idx);
+    resId = resource.slice(idx + 1);
+  } else if (resource.includes(':')) {
+    const idx = resource.indexOf(':');
+    resType = resource.slice(0, idx);
+    resId = resource.slice(idx + 1);
+  } else {
+    resId = resource;
+  }
+
+  const warnings = [];
+  if (account && !/^\d{12}$/.test(account)) warnings.push('Account ID should be 12 digits');
+  if (!['aws','aws-cn','aws-us-gov','aws-iso','aws-iso-b'].includes(partition)) warnings.push('Unusual partition: ' + partition);
+  if (region && !/^[a-z]{2,}-[a-z]+-\d+$/.test(region) && region !== 'local') warnings.push('Unusual region format: ' + region);
+
+  return { ok: true, partition, service, region, account, resource, resType, resId, warnings };
+}
+
+function renderParse() {
+  const v = document.getElementById('arn').value;
+  const r = parseArn(v);
+  const verdictEl = document.getElementById('verdict');
+  const partsEl = document.getElementById('parts');
+  if (!r.ok) {
+    if (!v.trim()) { verdictEl.innerHTML = ''; partsEl.innerHTML = ''; return; }
+    verdictEl.innerHTML = '<div class="verdict bad">✗ ' + escapeHtml(r.error) + '</div>';
+    partsEl.innerHTML = '';
+    return;
+  }
+  const cls = r.warnings.length ? 'warn' : 'ok';
+  const icon = r.warnings.length ? '⚠' : '✓';
+  let msg = r.warnings.length ? ('Parsed with warnings: ' + r.warnings.join('; ')) : 'Valid ARN structure';
+  verdictEl.innerHTML = '<div class="verdict ' + cls + '">' + icon + ' ' + escapeHtml(msg) + '</div>';
+
+  const rows = [
+    ['Partition', r.partition],
+    ['Service', r.service],
+    ['Region', r.region || '(global)'],
+    ['Account ID', r.account || '(none)'],
+    ['Resource', r.resource],
+    ['Resource type', r.resType || '(none)'],
+    ['Resource ID', r.resId],
+  ];
+  partsEl.innerHTML = rows.map(([k, v]) => {
+    const empty = v === '(global)' || v === '(none)';
+    return '<div class="label">' + k + '</div><div class="val' + (empty ? ' empty' : '') + '">' + escapeHtml(v) + '</div>';
+  }).join('');
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function loadEx(s) {
+  document.getElementById('arn').value = s;
+  renderParse();
+}
+
+function buildArn() {
+  const p = document.getElementById('b_part').value;
+  const svc = document.getElementById('b_svc').value.trim();
+  const region = document.getElementById('b_region').value.trim();
+  const acct = document.getElementById('b_acct').value.trim();
+  const res = document.getElementById('b_res').value.trim();
+  return `arn:${p}:${svc}:${region}:${acct}:${res}`;
+}
+
+function renderBuild() {
+  document.getElementById('built').textContent = buildArn();
+}
+
+function copyBuilt() {
+  const v = buildArn();
+  navigator.clipboard.writeText(v).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function useBuilt() {
+  document.getElementById('arn').value = buildArn();
+  renderParse();
+  document.getElementById('arn').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+['arn'].forEach(id => document.getElementById(id).addEventListener('input', renderParse));
+['b_part','b_svc','b_region','b_acct','b_res'].forEach(id => document.getElementById(id).addEventListener('input', renderBuild));
+renderParse();
+renderBuild();
+</script>
+</body>
+</html>
