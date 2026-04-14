@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indentation Converter — Tabs ⇄ Spaces</title>
+<meta name="description" content="Convert source code indentation between tabs and spaces, normalize mixed indentation, detect the existing style, and trim trailing whitespace. 100% client-side.">
+<meta name="keywords" content="tabs to spaces, spaces to tabs, indentation converter, normalize indent, retab, expand tabs, source code formatter">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/indentconvert.html">
+<meta property="og:title" content="Indentation Converter — Tabs ⇄ Spaces">
+<meta property="og:description" content="Convert and normalize source code indentation between tabs and spaces.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/indentconvert.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea {
+    font-family: var(--mono);
+    font-size: .82rem;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 360px;
+    resize: vertical;
+    line-height: 1.5;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    white-space: pre;
+  }
+  .opts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px 16px;
+    padding: 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+  }
+  .opts label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--text); }
+  .opts label > span:first-child { color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; }
+  .opts label.cb { flex-direction: row; align-items: center; cursor: pointer; }
+  .opts label.cb input { margin: 0; }
+  .opts label.cb > span:first-child { text-transform: none; letter-spacing: 0; font-size: .82rem; color: var(--text); }
+  select, input[type=number] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 8px;
+    font-family: var(--sans);
+    font-size: .85rem;
+  }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+  .toolbar h2 { margin: 0; font-size: .95rem; flex: 1; }
+  .detect {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: .82rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px 16px;
+  }
+  .detect div span:first-child { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; display: block; }
+  .detect div span:last-child { font-family: var(--mono); font-weight: 600; color: var(--text); }
+  .detect .pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: .7rem;
+    margin-left: 4px;
+  }
+  .pill.tab { background: rgba(99, 102, 241, .15); color: var(--accent); border: 1px solid var(--accent); }
+  .pill.space { background: rgba(34, 197, 94, .15); color: var(--success); border: 1px solid var(--success); }
+  .pill.mixed { background: rgba(245, 158, 11, .15); color: #f59e0b; border: 1px solid #f59e0b; }
+  .stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: .75rem; color: var(--muted); margin-top: 6px; }
+  .stats b { color: var(--text); font-family: var(--mono); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } textarea { min-height: 240px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Indentation Converter</h1>
+  <p class="subtitle">Convert source code indentation between <strong>tabs</strong> and <strong>spaces</strong>, normalize mixed leading whitespace, and trim trailing spaces. The detector samples your input so you can see what style you started with before you commit a one-line change to a 200-line file.</p>
+
+  <div class="opts">
+    <label><span>Mode</span>
+      <select id="mode">
+        <option value="space2tab">Spaces → Tabs</option>
+        <option value="tab2space" selected>Tabs → Spaces</option>
+        <option value="normalize">Normalize (re-indent in target unit)</option>
+      </select>
+    </label>
+    <label><span>Source unit (width)</span>
+      <input type="number" id="srcWidth" value="4" min="1" max="16">
+    </label>
+    <label><span>Target unit (width)</span>
+      <input type="number" id="dstWidth" value="2" min="1" max="16">
+    </label>
+    <label class="cb"><input type="checkbox" id="trimTrail" checked> <span>Trim trailing whitespace</span></label>
+    <label class="cb"><input type="checkbox" id="leadingOnly" checked> <span>Only convert leading whitespace</span></label>
+    <label class="cb"><input type="checkbox" id="finalNl" checked> <span>Ensure final newline</span></label>
+  </div>
+
+  <div class="panels">
+    <div class="card" style="padding:16px;">
+      <div class="toolbar">
+        <h2>Input</h2>
+        <button class="btn btn-secondary" id="paste">Paste</button>
+        <button class="btn btn-secondary" id="loadSample">Sample</button>
+        <button class="btn btn-secondary" id="clearIn">Clear</button>
+      </div>
+      <textarea id="input" spellcheck="false" placeholder="Paste source code here…"></textarea>
+      <div class="stats"><span>chars: <b id="inChars">0</b></span><span>lines: <b id="inLines">0</b></span></div>
+    </div>
+
+    <div class="card" style="padding:16px;">
+      <div class="toolbar">
+        <h2>Output</h2>
+        <button class="btn btn-secondary" id="copy">Copy</button>
+        <button class="btn btn-secondary" id="swap" title="Use output as new input">↔ Swap</button>
+        <button class="btn btn-secondary" id="download">Download</button>
+      </div>
+      <textarea id="output" spellcheck="false" readonly></textarea>
+      <div class="stats"><span>chars: <b id="outChars">0</b></span><span>lines changed: <b id="changedLines">0</b></span><span>trailing trimmed: <b id="trimmedLines">0</b></span></div>
+    </div>
+  </div>
+
+  <div class="detect" id="detect">
+    <div><span>Detected style</span><span id="dStyle">—</span></div>
+    <div><span>Indented lines</span><span id="dCount">0</span></div>
+    <div><span>Avg indent</span><span id="dAvg">—</span></div>
+    <div><span>Tab lines</span><span id="dTab">0</span></div>
+    <div><span>Space lines</span><span id="dSpace">0</span></div>
+    <div><span>Mixed lines</span><span id="dMixed">0</span></div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const inEl = document.getElementById('input');
+const outEl = document.getElementById('output');
+const modeEl = document.getElementById('mode');
+const srcEl = document.getElementById('srcWidth');
+const dstEl = document.getElementById('dstWidth');
+const trimEl = document.getElementById('trimTrail');
+const leadEl = document.getElementById('leadingOnly');
+const nlEl = document.getElementById('finalNl');
+
+const inChars = document.getElementById('inChars');
+const inLines = document.getElementById('inLines');
+const outChars = document.getElementById('outChars');
+const changedLines = document.getElementById('changedLines');
+const trimmedLines = document.getElementById('trimmedLines');
+
+const dStyle = document.getElementById('dStyle');
+const dCount = document.getElementById('dCount');
+const dAvg = document.getElementById('dAvg');
+const dTab = document.getElementById('dTab');
+const dSpace = document.getElementById('dSpace');
+const dMixed = document.getElementById('dMixed');
+
+const toast = document.getElementById('toast');
+
+const SAMPLE = "function greet(name) {\n\tif (!name) {\n\t\treturn 'Hello, world!';\n\t}\n\tconst parts = name.split(' ');\n\treturn parts.map(p => {\n\t\treturn p[0].toUpperCase() + p.slice(1);\n\t}).join(' ');\n}\n\n// trailing spaces here →    \nconst x = 1;   \n";
+
+function detect(text) {
+  const lines = text.split('\n');
+  let tabLines = 0, spaceLines = 0, mixedLines = 0, indented = 0;
+  let totalSpaces = 0, totalSpaceLines = 0;
+  for (const line of lines) {
+    const m = line.match(/^([ \t]+)/);
+    if (!m) continue;
+    indented++;
+    const lead = m[1];
+    const hasTab = lead.includes('\t');
+    const hasSpace = lead.includes(' ');
+    if (hasTab && hasSpace) mixedLines++;
+    else if (hasTab) tabLines++;
+    else if (hasSpace) {
+      spaceLines++;
+      totalSpaces += lead.length;
+      totalSpaceLines++;
+    }
+  }
+  let style = '—';
+  let badge = '';
+  if (indented === 0) style = 'no indented lines';
+  else if (mixedLines > 0 && mixedLines >= Math.max(tabLines, spaceLines) / 2) {
+    style = 'mixed'; badge = '<span class="pill mixed">mixed</span>';
+  } else if (tabLines > spaceLines) {
+    style = 'tabs'; badge = '<span class="pill tab">\\t</span>';
+  } else if (spaceLines > 0) {
+    // try to guess width from gcd
+    let guess = 0;
+    if (totalSpaceLines) {
+      const counts = {};
+      for (const line of lines) {
+        const m = line.match(/^( +)/);
+        if (m) counts[m[1].length] = (counts[m[1].length] || 0) + 1;
+      }
+      const widths = Object.keys(counts).map(Number).filter(n => n > 0);
+      if (widths.length) {
+        let g = widths[0];
+        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+        for (const w of widths) g = gcd(g, w);
+        guess = g;
+      }
+    }
+    style = 'spaces' + (guess ? ' (width ' + guess + ')' : '');
+    badge = '<span class="pill space">' + (guess ? guess + 'sp' : 'sp') + '</span>';
+  }
+  return {
+    style, badge, indented, tabLines, spaceLines, mixedLines,
+    avgSpace: totalSpaceLines ? (totalSpaces / totalSpaceLines).toFixed(1) : '—'
+  };
+}
+
+function expandLeading(line, width) {
+  // Replace tabs in the leading whitespace with the right number of spaces to next tab stop
+  let out = '';
+  let col = 0;
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i];
+    if (ch === '\t') {
+      const pad = width - (col % width);
+      out += ' '.repeat(pad);
+      col += pad;
+      i++;
+    } else if (ch === ' ') {
+      out += ' ';
+      col++;
+      i++;
+    } else {
+      break;
+    }
+  }
+  return out + line.slice(i);
+}
+
+function leadingToTabs(line, width) {
+  // Convert leading run of spaces (and tabs) to tabs at given width, residual spaces remain
+  let i = 0, col = 0;
+  while (i < line.length && (line[i] === ' ' || line[i] === '\t')) {
+    if (line[i] === '\t') col += width - (col % width);
+    else col += 1;
+    i++;
+  }
+  const rest = line.slice(i);
+  const tabs = Math.floor(col / width);
+  const sp = col - tabs * width;
+  return '\t'.repeat(tabs) + ' '.repeat(sp) + rest;
+}
+
+function convertLine(line, mode, srcW, dstW, leadingOnly) {
+  if (mode === 'tab2space') {
+    if (leadingOnly) return expandLeading(line, srcW);
+    // expand all tabs (column-aware)
+    let out = '', col = 0;
+    for (const ch of line) {
+      if (ch === '\t') {
+        const pad = srcW - (col % srcW);
+        out += ' '.repeat(pad);
+        col += pad;
+      } else { out += ch; col++; }
+    }
+    return out;
+  }
+  if (mode === 'space2tab') {
+    if (leadingOnly) return leadingToTabs(line, srcW);
+    // also collapse runs of srcW spaces anywhere → tab (rare, but supported)
+    return line.replace(new RegExp(' '.repeat(srcW), 'g'), '\t');
+  }
+  if (mode === 'normalize') {
+    // First expand to spaces using srcW, then re-indent leading using dstW unit
+    const expanded = expandLeading(line, srcW);
+    const m = expanded.match(/^( *)/);
+    const leadLen = m[1].length;
+    if (leadLen === 0) return expanded;
+    const units = Math.round(leadLen / srcW);
+    return ' '.repeat(units * dstW) + expanded.slice(leadLen);
+  }
+  return line;
+}
+
+function run() {
+  const text = inEl.value;
+  inChars.textContent = text.length;
+  inLines.textContent = text ? text.split('\n').length : 0;
+
+  const det = detect(text);
+  dStyle.innerHTML = det.style + ' ' + det.badge;
+  dCount.textContent = det.indented;
+  dAvg.textContent = det.avgSpace + (det.avgSpace !== '—' ? ' spaces' : '');
+  dTab.textContent = det.tabLines;
+  dSpace.textContent = det.spaceLines;
+  dMixed.textContent = det.mixedLines;
+
+  if (!text) {
+    outEl.value = '';
+    outChars.textContent = '0';
+    changedLines.textContent = '0';
+    trimmedLines.textContent = '0';
+    return;
+  }
+
+  const mode = modeEl.value;
+  const srcW = Math.max(1, parseInt(srcEl.value, 10) || 4);
+  const dstW = Math.max(1, parseInt(dstEl.value, 10) || 2);
+  const lines = text.split('\n');
+  let changed = 0, trimmed = 0;
+  const out = lines.map(line => {
+    let nl = convertLine(line, mode, srcW, dstW, leadEl.checked);
+    if (trimEl.checked) {
+      const t = nl.replace(/[ \t]+$/, '');
+      if (t !== nl) trimmed++;
+      nl = t;
+    }
+    if (nl !== line) changed++;
+    return nl;
+  });
+  let result = out.join('\n');
+  if (nlEl.checked && !result.endsWith('\n')) result += '\n';
+
+  outEl.value = result;
+  outChars.textContent = result.length;
+  changedLines.textContent = changed;
+  trimmedLines.textContent = trimmed;
+}
+
+[inEl, modeEl, srcEl, dstEl, trimEl, leadEl, nlEl].forEach(el => {
+  el.addEventListener('input', run);
+  el.addEventListener('change', run);
+});
+
+document.getElementById('clearIn').addEventListener('click', () => { inEl.value = ''; run(); inEl.focus(); });
+document.getElementById('loadSample').addEventListener('click', () => { inEl.value = SAMPLE; run(); });
+document.getElementById('paste').addEventListener('click', async () => {
+  try { inEl.value = await navigator.clipboard.readText(); run(); } catch {}
+});
+document.getElementById('swap').addEventListener('click', () => { inEl.value = outEl.value; run(); });
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1500);
+}
+
+document.getElementById('copy').addEventListener('click', async () => {
+  if (!outEl.value) return;
+  try { await navigator.clipboard.writeText(outEl.value); showToast('Copied!'); }
+  catch { outEl.select(); document.execCommand('copy'); showToast('Copied!'); }
+});
+
+document.getElementById('download').addEventListener('click', () => {
+  if (!outEl.value) return;
+  const blob = new Blob([outEl.value], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'reindented.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+inEl.value = SAMPLE;
+run();
+</script>
+</body>
+</html>

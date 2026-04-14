@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMS Character Counter & Segment Calculator</title>
+<meta name="description" content="Count SMS characters with GSM-7 / UCS-2 encoding detection, segment count, and per-message byte size. Built for devs working with Twilio, Vonage, MessageBird & friends.">
+<meta name="keywords" content="sms counter, gsm-7, ucs-2, sms segment calculator, twilio, message length, character count">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/smscounter.html">
+<meta property="og:title" content="SMS Character Counter & Segment Calculator">
+<meta property="og:description" content="Count SMS characters, detect GSM-7 vs UCS-2 encoding, and see how many segments your message will use.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/smscounter.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    font-family: var(--mono);
+    font-size: .95rem;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 180px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+  .stat {
+    padding: 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+  }
+  .stat .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .stat .value { font-size: 1.4rem; font-weight: 600; color: var(--text); font-family: var(--mono); }
+  .stat .sub { font-size: .7rem; color: var(--muted); margin-top: 2px; }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .badge.gsm { background: rgba(34, 197, 94, .15); color: var(--success); border: 1px solid var(--success); }
+  .badge.ucs { background: rgba(245, 158, 11, .15); color: #f59e0b; border: 1px solid #f59e0b; }
+  .progress-wrap { margin-top: 14px; }
+  .progress {
+    height: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    transition: width .15s, background .15s;
+  }
+  .progress-bar.warn { background: #f59e0b; }
+  .progress-bar.danger { background: var(--error); }
+  .seg-info { display: flex; justify-content: space-between; font-size: .78rem; color: var(--muted); margin-top: 6px; }
+  .extended-list { margin-top: 16px; }
+  .extended-list h3 { font-size: .9rem; margin-bottom: 8px; }
+  .ext-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ext-char {
+    padding: 4px 9px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: .82rem;
+  }
+  .ext-char.flagged { border-color: var(--error); color: var(--error); }
+  .nonenc {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--error);
+    font-size: .8rem;
+    color: var(--text);
+  }
+  .nonenc strong { color: var(--error); }
+  .nonenc code {
+    background: var(--bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    margin: 0 2px;
+  }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  details { margin-top: 18px; }
+  details summary { cursor: pointer; font-size: .85rem; color: var(--muted); padding: 6px 0; }
+  details[open] summary { color: var(--text); }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: .82rem; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  th { font-weight: 600; color: var(--muted); }
+  td.num { font-family: var(--mono); text-align: right; }
+  @media (max-width: 768px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>SMS Character Counter</h1>
+  <p class="subtitle">Count SMS characters, detect <strong>GSM-7</strong> vs <strong>UCS-2</strong> encoding, and see how many message segments you'll be billed for. Useful when sending via Twilio, Vonage, MessageBird, AWS SNS, or any carrier-routed SMS.</p>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <div class="preset-row">
+      <button class="btn btn-secondary" data-sample="hello">Plain text</button>
+      <button class="btn btn-secondary" data-sample="emoji">With emoji</button>
+      <button class="btn btn-secondary" data-sample="extended">{ } [ ] ~ |</button>
+      <button class="btn btn-secondary" data-sample="long">Long (3 segments)</button>
+      <button class="btn" id="clear">Clear</button>
+    </div>
+    <textarea id="msg" spellcheck="false" placeholder="Type or paste your SMS message…"></textarea>
+
+    <div class="stats">
+      <div class="stat"><div class="label">Characters</div><div class="value" id="chars">0</div><div class="sub" id="charsSub">0 codepoints</div></div>
+      <div class="stat"><div class="label">Encoding</div><div class="value" id="encoding">—</div><div class="sub" id="encodingSub">auto-detected</div></div>
+      <div class="stat"><div class="label">Segments</div><div class="value" id="segs">0</div><div class="sub" id="segsSub">SMS messages</div></div>
+      <div class="stat"><div class="label">Bytes</div><div class="value" id="bytes">0</div><div class="sub">UTF-8 size</div></div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress"><div class="progress-bar" id="bar" style="width:0%;"></div></div>
+      <div class="seg-info">
+        <span id="segLeft">0 chars left in this segment</span>
+        <span id="segCap">cap: 160</span>
+      </div>
+    </div>
+
+    <div id="nonencBox" class="nonenc" style="display:none;">
+      <strong>Non-encodable characters detected.</strong>
+      Carriers may strip or mangle these. <span id="nonencList"></span>
+    </div>
+
+    <div class="extended-list" id="extWrap" style="display:none;">
+      <h3>GSM-7 extension chars in your message <span style="font-size:.72rem;color:var(--muted);font-weight:400;">(each counts as 2)</span></h3>
+      <div class="ext-grid" id="extList"></div>
+    </div>
+  </div>
+
+  <details>
+    <summary>How SMS encoding & segmentation work</summary>
+    <p style="font-size:.85rem;line-height:1.6;color:var(--muted);margin-top:8px;">
+      An SMS is delivered in one or more <strong>segments</strong> of 140 bytes each. The encoding decides how many characters fit in those bytes:
+    </p>
+    <table>
+      <thead><tr><th>Encoding</th><th>Single segment</th><th>Multi-part segment</th><th>When used</th></tr></thead>
+      <tbody>
+        <tr><td><strong>GSM-7</strong></td><td class="num">160 chars</td><td class="num">153 chars</td><td>Plain Latin + the GSM 03.38 alphabet</td></tr>
+        <tr><td><strong>UCS-2</strong></td><td class="num">70 chars</td><td class="num">67 chars</td><td>Any non-GSM character (emoji, CJK, accents)</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:.82rem;color:var(--muted);margin-top:10px;">
+      <strong>GSM-7 extension chars</strong> (<code>^ { } \ [ ] ~ | €</code> and form-feed) take <em>two</em> 7-bit positions instead of one.
+      <strong>Multi-part SMS</strong> reserves 6 bytes per segment for a UDH header used to reassemble the message — that's why the per-segment cap drops from 160→153 (GSM-7) and 70→67 (UCS-2).
+      A single non-GSM char (one emoji 😀, one curly quote ", one accented á that isn't in GSM) flips the entire message to UCS-2 and shrinks your cap to 70 chars per segment.
+    </p>
+  </details>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+// GSM 03.38 default alphabet
+const GSM_BASIC = new Set(
+  "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ\u001bÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà".split("")
+);
+// GSM 03.38 extension table — each char counts as TWO septets
+const GSM_EXT = new Set("\f^{}\\[~]|€".split(""));
+
+const msg = document.getElementById('msg');
+const chars = document.getElementById('chars');
+const charsSub = document.getElementById('charsSub');
+const encoding = document.getElementById('encoding');
+const encodingSub = document.getElementById('encodingSub');
+const segs = document.getElementById('segs');
+const segsSub = document.getElementById('segsSub');
+const bytes = document.getElementById('bytes');
+const bar = document.getElementById('bar');
+const segLeft = document.getElementById('segLeft');
+const segCap = document.getElementById('segCap');
+const nonencBox = document.getElementById('nonencBox');
+const nonencList = document.getElementById('nonencList');
+const extWrap = document.getElementById('extWrap');
+const extList = document.getElementById('extList');
+
+function classify(text) {
+  // Iterate by codepoint to handle astral plane (emoji, etc.)
+  const cps = Array.from(text);
+  let isGsm = true;
+  let gsmLen = 0;
+  const extInUse = [];
+  const nonGsmChars = new Set();
+
+  for (const cp of cps) {
+    if (GSM_BASIC.has(cp)) {
+      gsmLen += 1;
+    } else if (GSM_EXT.has(cp)) {
+      gsmLen += 2;
+      extInUse.push(cp);
+    } else {
+      isGsm = false;
+      nonGsmChars.add(cp);
+    }
+  }
+
+  // UCS-2 length: surrogate pairs count as 2 (each emoji like 😀 takes 2 UCS-2 units)
+  let ucs2Units = 0;
+  for (const cp of cps) ucs2Units += cp.length; // String.length already counts UTF-16 units per char
+
+  if (isGsm) {
+    const single = 160, multi = 153;
+    const segCount = gsmLen === 0 ? 0 : (gsmLen <= single ? 1 : Math.ceil(gsmLen / multi));
+    return { encoding: 'GSM-7', units: gsmLen, codepoints: cps.length, segCount, single, multi, extInUse, nonGsmChars: [] };
+  } else {
+    const single = 70, multi = 67;
+    const segCount = ucs2Units === 0 ? 0 : (ucs2Units <= single ? 1 : Math.ceil(ucs2Units / multi));
+    return { encoding: 'UCS-2', units: ucs2Units, codepoints: cps.length, segCount, single, multi, extInUse, nonGsmChars: [...nonGsmChars] };
+  }
+}
+
+function utf8Bytes(str) {
+  return new TextEncoder().encode(str).length;
+}
+
+function update() {
+  const text = msg.value;
+  const r = classify(text);
+
+  chars.textContent = r.units;
+  charsSub.textContent = r.codepoints + ' codepoint' + (r.codepoints === 1 ? '' : 's');
+
+  encoding.innerHTML = r.encoding + '<span class="badge ' + (r.encoding === 'GSM-7' ? 'gsm' : 'ucs') + '">' + (r.encoding === 'GSM-7' ? '7-bit' : '16-bit') + '</span>';
+  encodingSub.textContent = r.encoding === 'GSM-7' ? 'GSM 03.38 default alphabet' : 'Has non-GSM chars';
+
+  segs.textContent = r.segCount;
+  segsSub.textContent = r.segCount === 0 ? 'no message yet' : (r.segCount === 1 ? '1 message' : r.segCount + ' messages');
+
+  bytes.textContent = utf8Bytes(text);
+
+  // Progress bar within current/last segment
+  const cap = r.segCount > 1 ? r.multi : r.single;
+  const usedInLast = r.segCount > 1 ? (r.units - (r.segCount - 1) * r.multi) : r.units;
+  const pct = cap === 0 ? 0 : Math.min(100, (usedInLast / cap) * 100);
+  bar.style.width = pct + '%';
+  bar.classList.remove('warn', 'danger');
+  if (pct >= 95) bar.classList.add('danger');
+  else if (pct >= 80) bar.classList.add('warn');
+
+  segLeft.textContent = (cap - usedInLast) + ' units left in this segment';
+  segCap.textContent = 'cap: ' + cap + ' (' + r.encoding + (r.segCount > 1 ? ', multi-part' : '') + ')';
+
+  if (r.extInUse.length) {
+    extWrap.style.display = '';
+    extList.innerHTML = '';
+    const counts = {};
+    for (const c of r.extInUse) counts[c] = (counts[c] || 0) + 1;
+    for (const [c, n] of Object.entries(counts)) {
+      const el = document.createElement('span');
+      el.className = 'ext-char';
+      el.textContent = c + (n > 1 ? ' ×' + n : '');
+      extList.appendChild(el);
+    }
+  } else {
+    extWrap.style.display = 'none';
+  }
+
+  if (r.nonGsmChars.length) {
+    nonencBox.style.display = '';
+    nonencList.innerHTML = '';
+    const shown = r.nonGsmChars.slice(0, 24);
+    for (const c of shown) {
+      const code = document.createElement('code');
+      code.textContent = c;
+      nonencList.appendChild(code);
+    }
+    if (r.nonGsmChars.length > shown.length) {
+      const more = document.createElement('span');
+      more.textContent = ' +' + (r.nonGsmChars.length - shown.length) + ' more';
+      nonencList.appendChild(more);
+    }
+  } else {
+    nonencBox.style.display = 'none';
+  }
+}
+
+const SAMPLES = {
+  hello: "Hi Sam! Your appointment is confirmed for Tuesday at 3pm. Reply STOP to unsubscribe.",
+  emoji: "Order #4821 shipped 📦 — track it here: https://shp.example/4821 🚚",
+  extended: "Use the [reset] link or contact us at help@site.com (24/7) — pricing in € only.",
+  long: "Hi! This is your friendly reminder that your annual subscription renews on the 1st of next month. Your card ending in 4242 will be charged $129. If anything looks wrong, reply HELP and a human will get back to you within one business day. Thanks for being a customer."
+};
+
+document.querySelectorAll('[data-sample]').forEach(b => {
+  b.addEventListener('click', () => { msg.value = SAMPLES[b.dataset.sample]; update(); msg.focus(); });
+});
+document.getElementById('clear').addEventListener('click', () => { msg.value = ''; update(); msg.focus(); });
+
+msg.addEventListener('input', update);
+msg.value = SAMPLES.hello;
+update();
+</script>
+</body>
+</html>

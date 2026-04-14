@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Key Sorter — Stable, Diff-Friendly JSON</title>
+<meta name="description" content="Recursively sort JSON object keys for stable diffs, snapshot tests, and clean config files. Choose ascending, descending, natural, or case-insensitive order — and optionally sort arrays too.">
+<meta name="keywords" content="json sort, json key sort, stable json, deterministic json, json beautifier, snapshot test, alphabetize json">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonsort.html">
+<meta property="og:title" content="JSON Key Sorter">
+<meta property="og:description" content="Recursively sort JSON object keys to produce stable, diff-friendly output.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/jsonsort.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea {
+    font-family: var(--mono);
+    font-size: .82rem;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 360px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 16px; margin-bottom: 12px; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .opts label { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--text); cursor: pointer; }
+  .opts label.sel { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+  .opts label.sel span { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  select, input[type=number] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 5px 8px;
+    font-family: var(--sans);
+    font-size: .85rem;
+  }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .status {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    font-size: .82rem;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .status.ok { border-color: var(--success); color: var(--success); }
+  .status.error { border-color: var(--error); color: var(--error); }
+  .stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: .75rem; color: var(--muted); margin-top: 6px; }
+  .stats b { color: var(--text); font-family: var(--mono); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } textarea { min-height: 240px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>JSON Key Sorter</h1>
+  <p class="subtitle">Recursively sort JSON object keys to produce <strong>stable, diff-friendly</strong> output. Perfect for snapshot tests, lockfiles, config files, and reviewable PRs where key order shouldn't matter.</p>
+
+  <div class="opts">
+    <label class="sel"><span>Order</span>
+      <select id="order">
+        <option value="asc">Ascending (A → Z)</option>
+        <option value="desc">Descending (Z → A)</option>
+        <option value="natural">Natural (item2 &lt; item10)</option>
+        <option value="length">By length</option>
+      </select>
+    </label>
+    <label class="sel"><span>Case</span>
+      <select id="caseMode">
+        <option value="sensitive">Case-sensitive</option>
+        <option value="insensitive">Case-insensitive</option>
+      </select>
+    </label>
+    <label class="sel"><span>Indent</span>
+      <select id="indent">
+        <option value="2">2 spaces</option>
+        <option value="4">4 spaces</option>
+        <option value="tab">Tab</option>
+        <option value="0">Minified</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="sortArrays"> Sort arrays of primitives</label>
+    <label><input type="checkbox" id="sortArrayObjects"> Sort arrays of objects (by first key)</label>
+    <label><input type="checkbox" id="trailingNewline" checked> Trailing newline</label>
+  </div>
+
+  <div class="panels">
+    <div class="card" style="padding:16px;">
+      <div class="toolbar">
+        <h2 style="font-size:.95rem;margin:0;flex:1;">Input JSON</h2>
+        <button class="btn btn-secondary" id="paste">Paste</button>
+        <button class="btn btn-secondary" id="loadSample">Sample</button>
+        <button class="btn btn-secondary" id="clearIn">Clear</button>
+      </div>
+      <textarea id="input" spellcheck="false" placeholder='{"name":"toolbox","version":"1.0.0","scripts":{"test":"vitest","build":"vite","lint":"eslint ."}}'></textarea>
+      <div class="stats"><span>chars: <b id="inChars">0</b></span><span>lines: <b id="inLines">0</b></span></div>
+    </div>
+
+    <div class="card" style="padding:16px;">
+      <div class="toolbar">
+        <h2 style="font-size:.95rem;margin:0;flex:1;">Sorted JSON</h2>
+        <button class="btn btn-secondary" id="copy">Copy</button>
+        <button class="btn btn-secondary" id="download">Download</button>
+      </div>
+      <textarea id="output" spellcheck="false" readonly></textarea>
+      <div class="stats"><span>chars: <b id="outChars">0</b></span><span>lines: <b id="outLines">0</b></span><span>keys sorted: <b id="keysCount">0</b></span></div>
+    </div>
+  </div>
+
+  <div class="status" id="status">Awaiting input…</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const inEl = document.getElementById('input');
+const outEl = document.getElementById('output');
+const orderEl = document.getElementById('order');
+const caseEl = document.getElementById('caseMode');
+const indentEl = document.getElementById('indent');
+const sortArrEl = document.getElementById('sortArrays');
+const sortArrObjEl = document.getElementById('sortArrayObjects');
+const trailEl = document.getElementById('trailingNewline');
+const statusEl = document.getElementById('status');
+const inChars = document.getElementById('inChars');
+const inLines = document.getElementById('inLines');
+const outChars = document.getElementById('outChars');
+const outLines = document.getElementById('outLines');
+const keysCount = document.getElementById('keysCount');
+const toast = document.getElementById('toast');
+
+const SAMPLE = `{
+  "version": "2.4.1",
+  "name": "my-app",
+  "private": true,
+  "scripts": {
+    "test": "vitest",
+    "build": "vite build",
+    "dev": "vite",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "axios": "^1.6.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "eslint": "^8.55.0",
+    "@types/react": "^18.2.0",
+    "vitest": "^1.0.0"
+  },
+  "items": [
+    { "id": 3, "name": "gamma" },
+    { "id": 1, "name": "alpha" },
+    { "id": 2, "name": "beta" }
+  ]
+}`;
+
+let totalKeys = 0;
+
+function makeComparator() {
+  const order = orderEl.value;
+  const ci = caseEl.value === 'insensitive';
+  const dir = order === 'desc' ? -1 : 1;
+  if (order === 'natural') {
+    const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: ci ? 'base' : 'variant' });
+    return (a, b) => coll.compare(a, b);
+  }
+  if (order === 'length') {
+    return (a, b) => (a.length - b.length) * dir || a.localeCompare(b);
+  }
+  return (a, b) => {
+    const aa = ci ? a.toLowerCase() : a;
+    const bb = ci ? b.toLowerCase() : b;
+    if (aa < bb) return -1 * dir;
+    if (aa > bb) return 1 * dir;
+    return 0;
+  };
+}
+
+function sortValue(v, cmp, sortArr, sortArrObj) {
+  if (Array.isArray(v)) {
+    const mapped = v.map(item => sortValue(item, cmp, sortArr, sortArrObj));
+    const allPrim = mapped.every(x => x === null || typeof x !== 'object');
+    if (sortArr && allPrim) {
+      mapped.sort((a, b) => {
+        const sa = a === null ? '' : String(a);
+        const sb = b === null ? '' : String(b);
+        return cmp(sa, sb);
+      });
+    } else if (sortArrObj && mapped.every(x => x !== null && typeof x === 'object' && !Array.isArray(x))) {
+      mapped.sort((a, b) => {
+        const ak = Object.keys(a)[0] || '';
+        const bk = Object.keys(b)[0] || '';
+        const av = a[ak] === undefined ? '' : String(a[ak]);
+        const bv = b[bk] === undefined ? '' : String(b[bk]);
+        return cmp(av, bv);
+      });
+    }
+    return mapped;
+  }
+  if (v !== null && typeof v === 'object') {
+    const keys = Object.keys(v).slice().sort(cmp);
+    const out = {};
+    for (const k of keys) {
+      totalKeys += 1;
+      out[k] = sortValue(v[k], cmp, sortArr, sortArrObj);
+    }
+    return out;
+  }
+  return v;
+}
+
+function indentValue() {
+  const v = indentEl.value;
+  if (v === 'tab') return '\t';
+  if (v === '0') return 0;
+  return parseInt(v, 10);
+}
+
+function run() {
+  const txt = inEl.value;
+  inChars.textContent = txt.length;
+  inLines.textContent = txt ? txt.split('\n').length : 0;
+
+  if (!txt.trim()) {
+    outEl.value = '';
+    outChars.textContent = '0';
+    outLines.textContent = '0';
+    keysCount.textContent = '0';
+    statusEl.className = 'status';
+    statusEl.textContent = 'Awaiting input…';
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(txt);
+  } catch (e) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Parse error: ' + e.message;
+    return;
+  }
+
+  totalKeys = 0;
+  const cmp = makeComparator();
+  const sorted = sortValue(parsed, cmp, sortArrEl.checked, sortArrObjEl.checked);
+  const indent = indentValue();
+  let out = JSON.stringify(sorted, null, indent);
+  if (trailEl.checked && indent !== 0) out += '\n';
+
+  outEl.value = out;
+  outChars.textContent = out.length;
+  outLines.textContent = out.split('\n').length;
+  keysCount.textContent = totalKeys;
+
+  const delta = out.length - txt.length;
+  const sign = delta >= 0 ? '+' : '';
+  statusEl.className = 'status ok';
+  statusEl.textContent = 'Sorted ' + totalKeys + ' object key' + (totalKeys === 1 ? '' : 's') + ' · size ' + sign + delta + ' chars';
+}
+
+[inEl, orderEl, caseEl, indentEl, sortArrEl, sortArrObjEl, trailEl].forEach(el => {
+  el.addEventListener('input', run);
+  el.addEventListener('change', run);
+});
+
+document.getElementById('clearIn').addEventListener('click', () => { inEl.value = ''; run(); inEl.focus(); });
+document.getElementById('loadSample').addEventListener('click', () => { inEl.value = SAMPLE; run(); });
+document.getElementById('paste').addEventListener('click', async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    inEl.value = t;
+    run();
+  } catch (e) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Clipboard read failed — paste manually.';
+  }
+});
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1500);
+}
+
+document.getElementById('copy').addEventListener('click', async () => {
+  if (!outEl.value) return;
+  try {
+    await navigator.clipboard.writeText(outEl.value);
+    showToast('Copied!');
+  } catch {
+    outEl.select();
+    document.execCommand('copy');
+    showToast('Copied!');
+  }
+});
+
+document.getElementById('download').addEventListener('click', () => {
+  if (!outEl.value) return;
+  const blob = new Blob([outEl.value], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'sorted.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+inEl.value = SAMPLE;
+run();
+</script>
+</body>
+</html>
