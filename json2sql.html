@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON to SQL INSERT Generator — Free Online Tool</title>
+<meta name="description" content="Convert a JSON array of objects into SQL INSERT statements. Choose dialect (Postgres, MySQL, SQLite, MSSQL), customize table name, quoting, and batching. Runs entirely in your browser.">
+<meta name="keywords" content="json to sql, insert statements, json to insert, sql generator, bulk insert, postgres, mysql, sqlite">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/json2sql.html">
+<meta property="og:title" content="JSON to SQL INSERT Generator">
+<meta property="og:description" content="Turn JSON arrays into SQL INSERT statements in any dialect — all in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/json2sql.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 220px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; background: var(--bg); color: var(--text); resize: vertical; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 14px; margin: 14px 0 10px; }
+  .opts label { display: flex; flex-direction: column; font-size: .75rem; color: var(--muted); gap: 4px; }
+  .opts input[type=text], .opts input[type=number], .opts select { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .82rem; }
+  .checks { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 4px; font-size: .8rem; color: var(--muted); }
+  .checks label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  h3 { font-size: .9rem; font-weight: 600; margin: 14px 0 6px; }
+  .err { color: var(--error); font-size: .8rem; font-family: var(--mono); min-height: 1em; margin-top: 6px; }
+  .stats { font-size: .75rem; color: var(--muted); margin-top: 6px; }
+  @media (max-width: 768px) { .opts { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON to SQL INSERT Generator</h1>
+<p class="subtitle">Paste a JSON array of flat objects and get ready-to-run <code>INSERT</code> statements for Postgres, MySQL, SQLite, or MSSQL. Nested values are serialised to JSON strings automatically. All processing happens in your browser.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h3 style="margin-top:0;">Input JSON (array of objects)</h3>
+  <textarea id="input" spellcheck="false">[
+  {"id": 1, "name": "Ada Lovelace", "email": "ada@example.com", "active": true, "score": 99.5},
+  {"id": 2, "name": "Alan Turing", "email": "alan@example.com", "active": false, "score": 87.2},
+  {"id": 3, "name": "Grace Hopper", "email": null, "active": true, "score": 95}
+]</textarea>
+  <div class="err" id="err"></div>
+
+  <div class="opts">
+    <label>Table name
+      <input type="text" id="table" value="users">
+    </label>
+    <label>Dialect
+      <select id="dialect">
+        <option value="postgres">PostgreSQL</option>
+        <option value="mysql">MySQL</option>
+        <option value="sqlite">SQLite</option>
+        <option value="mssql">MSSQL / T-SQL</option>
+      </select>
+    </label>
+    <label>Batch size (0 = one per row)
+      <input type="number" id="batch" value="0" min="0" max="10000">
+    </label>
+    <label>Indent
+      <select id="indent">
+        <option value="  ">2 spaces</option>
+        <option value="    ">4 spaces</option>
+        <option value="	">Tab</option>
+        <option value="">None</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="checks">
+    <label><input type="checkbox" id="qIdent" checked> Quote identifiers</label>
+    <label><input type="checkbox" id="upper" checked> UPPERCASE keywords</label>
+    <label><input type="checkbox" id="onconflict"> ON CONFLICT / IGNORE</label>
+    <label><input type="checkbox" id="createtable"> Include CREATE TABLE</label>
+  </div>
+
+  <h3>Output SQL</h3>
+  <textarea id="output" readonly></textarea>
+  <div class="row" style="margin-top:10px;">
+    <button class="btn" onclick="copyOut()">Copy SQL</button>
+    <button class="btn btn-secondary" onclick="downloadSql()">Download .sql</button>
+  </div>
+  <div class="stats" id="stats"></div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function quoteIdent(name, dialect, enabled) {
+  if (!enabled) return name;
+  if (dialect === 'mysql') return '`' + name.replace(/`/g, '``') + '`';
+  if (dialect === 'mssql') return '[' + name.replace(/]/g, ']]') + ']';
+  return '"' + name.replace(/"/g, '""') + '"';
+}
+
+function sqlValue(v, dialect) {
+  if (v === null || v === undefined) return 'NULL';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'NULL';
+  if (typeof v === 'boolean') {
+    if (dialect === 'mysql' || dialect === 'mssql') return v ? '1' : '0';
+    return v ? 'TRUE' : 'FALSE';
+  }
+  if (v instanceof Date) return "'" + v.toISOString() + "'";
+  if (typeof v === 'object') {
+    const s = JSON.stringify(v);
+    return "'" + s.replace(/'/g, "''") + "'";
+  }
+  const s = String(v);
+  return "'" + s.replace(/'/g, "''") + "'";
+}
+
+function inferType(values, dialect) {
+  let hasBool = false, hasInt = true, hasNum = true, hasNull = false, maxLen = 0, hasObj = false;
+  for (const v of values) {
+    if (v === null || v === undefined) { hasNull = true; continue; }
+    if (typeof v === 'boolean') { hasBool = true; hasInt = false; hasNum = false; continue; }
+    if (typeof v === 'number') {
+      hasBool = false;
+      if (!Number.isInteger(v)) hasInt = false;
+      continue;
+    }
+    if (typeof v === 'object') { hasObj = true; hasBool = false; hasInt = false; hasNum = false; continue; }
+    hasBool = false; hasInt = false; hasNum = false;
+    const s = String(v);
+    if (s.length > maxLen) maxLen = s.length;
+  }
+  if (hasBool) return dialect === 'mssql' ? 'BIT' : 'BOOLEAN';
+  if (hasInt && !hasObj) return dialect === 'mssql' ? 'BIGINT' : 'BIGINT';
+  if (hasNum && !hasObj) return dialect === 'mssql' ? 'FLOAT' : 'DOUBLE PRECISION';
+  if (hasObj) return dialect === 'postgres' ? 'JSONB' : 'TEXT';
+  const len = Math.max(32, Math.min(1024, maxLen * 2 || 255));
+  if (dialect === 'mssql') return `NVARCHAR(${len})`;
+  if (dialect === 'mysql') return `VARCHAR(${len})`;
+  return 'TEXT';
+}
+
+function build() {
+  const err = $('err'); err.textContent = '';
+  let data;
+  try { data = JSON.parse($('input').value); }
+  catch (e) { err.textContent = 'JSON parse error: ' + e.message; $('output').value = ''; $('stats').textContent = ''; return; }
+  if (!Array.isArray(data)) { err.textContent = 'Expected a JSON array of objects at the top level.'; $('output').value = ''; $('stats').textContent = ''; return; }
+  if (data.length === 0) { $('output').value = '-- (empty array)'; $('stats').textContent = '0 rows'; return; }
+
+  const table = $('table').value.trim() || 'my_table';
+  const dialect = $('dialect').value;
+  const batch = Math.max(0, parseInt($('batch').value, 10) || 0);
+  const indent = $('indent').value;
+  const qIdent = $('qIdent').checked;
+  const upper = $('upper').checked;
+  const onconflict = $('onconflict').checked;
+  const createtable = $('createtable').checked;
+
+  const kw = s => upper ? s.toUpperCase() : s.toLowerCase();
+  // Collect column order (union of all keys, first-seen order)
+  const cols = [];
+  const seen = new Set();
+  for (const row of data) {
+    if (row == null || typeof row !== 'object' || Array.isArray(row)) { err.textContent = 'Every array element must be a JSON object.'; $('output').value = ''; $('stats').textContent = ''; return; }
+    for (const k of Object.keys(row)) if (!seen.has(k)) { seen.add(k); cols.push(k); }
+  }
+
+  const qTable = quoteIdent(table, dialect, qIdent);
+  const qCols = cols.map(c => quoteIdent(c, dialect, qIdent));
+
+  const lines = [];
+
+  if (createtable) {
+    const colDefs = cols.map(c => {
+      const values = data.map(r => r[c]);
+      return `${indent}${quoteIdent(c, dialect, qIdent)} ${inferType(values, dialect)}`;
+    }).join(',\n');
+    lines.push(`${kw('create table if not exists')} ${qTable} (\n${colDefs}\n);\n`);
+  }
+
+  const suffix = (() => {
+    if (!onconflict) return '';
+    if (dialect === 'postgres' || dialect === 'sqlite') return ' ' + kw('on conflict do nothing');
+    if (dialect === 'mysql') return ''; // handled via INSERT IGNORE
+    return ''; // mssql: no simple equivalent
+  })();
+
+  const insertKw = (() => {
+    if (onconflict && dialect === 'mysql') return kw('insert ignore into');
+    return kw('insert into');
+  })();
+
+  const valuesKw = kw('values');
+  const rowTuple = row => '(' + cols.map(c => sqlValue(row[c], dialect)).join(', ') + ')';
+
+  if (batch === 0 || batch === 1) {
+    for (const row of data) {
+      lines.push(`${insertKw} ${qTable} (${qCols.join(', ')}) ${valuesKw} ${rowTuple(row)}${suffix};`);
+    }
+  } else {
+    for (let i = 0; i < data.length; i += batch) {
+      const chunk = data.slice(i, i + batch);
+      const tuples = chunk.map(r => `${indent || '  '}${rowTuple(r)}`).join(',\n');
+      lines.push(`${insertKw} ${qTable} (${qCols.join(', ')}) ${valuesKw}\n${tuples}${suffix};`);
+    }
+  }
+
+  $('output').value = lines.join('\n');
+  $('stats').textContent = `${data.length} row${data.length === 1 ? '' : 's'} · ${cols.length} column${cols.length === 1 ? '' : 's'} · ${lines.length} statement${lines.length === 1 ? '' : 's'}`;
+}
+
+function copyOut() {
+  navigator.clipboard.writeText($('output').value).then(() => {
+    const t = $('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function downloadSql() {
+  const blob = new Blob([$('output').value], { type: 'application/sql' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = ($('table').value.trim() || 'insert') + '.sql';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+['input', 'table', 'dialect', 'batch', 'indent', 'qIdent', 'upper', 'onconflict', 'createtable'].forEach(id => {
+  const el = $(id);
+  el.addEventListener('input', build);
+  el.addEventListener('change', build);
+});
+build();
+</script>
+</body>
+</html>

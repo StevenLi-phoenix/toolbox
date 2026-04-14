@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Age & Date Difference Calculator — Free Online Tool</title>
+<meta name="description" content="Calculate age or the exact difference between two dates — years, months, days, weeks, hours, minutes, and seconds. Shows next birthday and day of week. Runs entirely in your browser.">
+<meta name="keywords" content="age calculator, date difference, date diff, days between dates, next birthday, years months days">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/agecalc.html">
+<meta property="og:title" content="Age & Date Difference Calculator">
+<meta property="og:description" content="Exact age in years/months/days plus next birthday countdown — computed in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/agecalc.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .dates { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; }
+  .dates label { display: flex; flex-direction: column; gap: 6px; font-size: .78rem; color: var(--muted); }
+  .dates input { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; }
+  .big { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+  .big .tile { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); text-align: center; }
+  .big .tile .n { font-size: 1.6rem; font-weight: 600; font-family: var(--mono); color: var(--text); }
+  .big .tile .l { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+  .facts { margin-top: 18px; display: grid; gap: 8px; }
+  .facts .fact { display: flex; justify-content: space-between; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .85rem; }
+  .facts .fact span:first-child { color: var(--muted); }
+  .facts .fact span:last-child { font-family: var(--mono); }
+  h3 { font-size: .9rem; font-weight: 600; margin: 14px 0 6px; }
+  .err { color: var(--error); font-size: .8rem; margin-top: 8px; min-height: 1em; }
+  @media (max-width: 768px) {
+    .dates, .big { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Age & Date Difference Calculator</h1>
+<p class="subtitle">Pick two dates (or one date plus "now") to see the exact difference — calendar years/months/days plus total weeks, days, hours, minutes, and seconds. If the first date looks like a birthday, the countdown to the next one is shown too.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="dates">
+    <label>From (birthday / start)
+      <input type="date" id="from">
+    </label>
+    <label>To
+      <input type="date" id="to">
+    </label>
+  </div>
+  <div class="row" style="margin-top:10px;">
+    <button class="btn btn-secondary" onclick="setNow()">Set "To" = Today</button>
+    <button class="btn btn-secondary" onclick="swapDates()">Swap</button>
+  </div>
+  <div class="err" id="err"></div>
+
+  <h3>Calendar difference</h3>
+  <div class="big">
+    <div class="tile"><div class="n" id="y">0</div><div class="l">Years</div></div>
+    <div class="tile"><div class="n" id="m">0</div><div class="l">Months</div></div>
+    <div class="tile"><div class="n" id="d">0</div><div class="l">Days</div></div>
+  </div>
+
+  <h3>Total elapsed</h3>
+  <div class="facts" id="facts"></div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function parseDate(v) {
+  if (!v) return null;
+  const [y, m, d] = v.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+function fmtDate(dt) {
+  const wd = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+  const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
+  return `${wd}, ${mn} ${dt.getDate()}, ${dt.getFullYear()}`;
+}
+
+function diffYMD(a, b) {
+  // a <= b
+  let y = b.getFullYear() - a.getFullYear();
+  let m = b.getMonth() - a.getMonth();
+  let d = b.getDate() - a.getDate();
+  if (d < 0) {
+    m -= 1;
+    const prev = new Date(b.getFullYear(), b.getMonth(), 0);
+    d += prev.getDate();
+  }
+  if (m < 0) { y -= 1; m += 12; }
+  return { y, m, d };
+}
+
+function nextBirthday(birth, today) {
+  let next = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
+  if (next < today) next = new Date(today.getFullYear() + 1, birth.getMonth(), birth.getDate());
+  return next;
+}
+
+function fmtNum(n) { return n.toLocaleString('en-US'); }
+
+function update() {
+  const err = $('err'); err.textContent = '';
+  const a0 = parseDate($('from').value);
+  const b0 = parseDate($('to').value);
+  if (!a0 || !b0) { err.textContent = 'Enter both dates.'; return; }
+  let a = a0, b = b0, sign = '';
+  if (a > b) { [a, b] = [b, a]; sign = '−'; }
+
+  const { y, m, d } = diffYMD(a, b);
+  $('y').textContent = sign + fmtNum(y);
+  $('m').textContent = sign + fmtNum(m);
+  $('d').textContent = sign + fmtNum(d);
+
+  const ms = b - a;
+  const totalDays = Math.round(ms / 86400000);
+  const totalWeeks = Math.floor(totalDays / 7);
+  const totalHours = totalDays * 24;
+  const totalMinutes = totalHours * 60;
+  const totalSeconds = totalMinutes * 60;
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const birth = a0;
+  const isBirthdayUse = b0 >= birth; // treat "from" as birthday
+  let nb = null, daysToNb = null;
+  if (isBirthdayUse) {
+    nb = nextBirthday(birth, today);
+    daysToNb = Math.round((nb - today) / 86400000);
+  }
+
+  const facts = [
+    ['From', fmtDate(a0)],
+    ['To', fmtDate(b0)],
+    ['Total days', fmtNum(totalDays)],
+    ['Total weeks', fmtNum(totalWeeks) + ' + ' + (totalDays - totalWeeks * 7) + 'd'],
+    ['Total hours', fmtNum(totalHours)],
+    ['Total minutes', fmtNum(totalMinutes)],
+    ['Total seconds', fmtNum(totalSeconds)],
+  ];
+  if (nb && daysToNb !== null) {
+    facts.push(['Next birthday', fmtDate(nb) + ' (in ' + daysToNb + ' day' + (daysToNb === 1 ? '' : 's') + ')']);
+  }
+  $('facts').innerHTML = facts.map(([k, v]) => `<div class="fact"><span>${k}</span><span>${v}</span></div>`).join('');
+}
+
+function setNow() {
+  const t = new Date();
+  $('to').value = t.toISOString().slice(0, 10);
+  update();
+}
+function swapDates() {
+  const a = $('from').value, b = $('to').value;
+  $('from').value = b; $('to').value = a;
+  update();
+}
+
+// defaults: from = 2000-01-01, to = today
+$('from').value = '2000-01-01';
+$('to').value = new Date().toISOString().slice(0, 10);
+['from', 'to'].forEach(id => $(id).addEventListener('input', update));
+update();
+</script>
+</body>
+</html>
