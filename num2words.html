@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Number to Words Converter — Spell Out Numbers in English</title>
+<meta name="description" content="Convert numbers into English words — cardinal, ordinal, currency, and check-writing styles. Handles integers, decimals, negatives, and numbers up to the decillions. Works offline in your browser.">
+<meta name="keywords" content="number to words, spell out number, number in english, currency in words, check writing">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/num2words.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
+  input.num { font-family: var(--mono); font-size: 1.1rem; padding: 12px 14px; }
+  .out-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    font-family: var(--sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    min-height: 60px;
+    margin-bottom: 10px;
+    word-wrap: break-word;
+  }
+  .out-label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 6px 0 4px; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 10px; }
+  .opts label { display: flex; align-items: center; gap: 6px; font-weight: 400; font-size: .88rem; }
+  .field-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .field-row label { font-size: .85rem; font-weight: 600; }
+  .hint { font-size: .8rem; color: var(--muted); margin-top: -2px; }
+  .samples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .samples button { font-size: .78rem; padding: 5px 10px; }
+  .error { color: var(--error); font-size: .85rem; margin-top: 6px; }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔢 Number to Words</h1>
+<p class="subtitle">Spell out any number in English — supports integers, decimals, negatives, ordinals, currency, and check-writing style (“Two Hundred and 75/100 dollars”). Handles values up to one vigintillion.</p>
+
+<div class="container">
+  <div class="panels">
+    <div class="card">
+      <h2>Input</h2>
+      <input type="text" id="num" class="num" value="1234.56" spellcheck="false" autocomplete="off">
+      <div class="hint">Commas, underscores, and spaces in the number are ignored. Use <code>-</code> for negatives and <code>.</code> as the decimal point.</div>
+
+      <div class="samples">
+        <button class="btn-secondary" onclick="setNum('42')">42</button>
+        <button class="btn-secondary" onclick="setNum('1234.56')">1,234.56</button>
+        <button class="btn-secondary" onclick="setNum('-987654321')">-987,654,321</button>
+        <button class="btn-secondary" onclick="setNum('1000000000000')">1 trillion</button>
+        <button class="btn-secondary" onclick="setNum('0.00175')">0.00175</button>
+        <button class="btn-secondary" onclick="setNum('2026')">2026</button>
+      </div>
+
+      <h2 style="margin-top:18px">Options</h2>
+      <div class="opts">
+        <label><input type="checkbox" id="opt-and" checked> Use “and” before tens</label>
+        <label><input type="checkbox" id="opt-hyphen" checked> Hyphenate 21–99</label>
+        <label><input type="checkbox" id="opt-title"> Title Case output</label>
+        <label><input type="checkbox" id="opt-upper"> UPPERCASE output</label>
+      </div>
+
+      <div class="field-row">
+        <label>Currency</label>
+        <select id="opt-cur">
+          <option value="usd">US Dollar (USD)</option>
+          <option value="eur">Euro (EUR)</option>
+          <option value="gbp">British Pound (GBP)</option>
+          <option value="inr">Indian Rupee (INR)</option>
+          <option value="jpy">Japanese Yen (JPY)</option>
+          <option value="none">None</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Output</h2>
+
+      <div class="out-label">Cardinal</div>
+      <div class="out-box" id="out-card"></div>
+
+      <div class="out-label">Ordinal (1st, 2nd, 3rd…)</div>
+      <div class="out-box" id="out-ord"></div>
+
+      <div class="out-label">Currency</div>
+      <div class="out-box" id="out-cur"></div>
+
+      <div class="out-label">Check writing</div>
+      <div class="out-box" id="out-check"></div>
+
+      <div class="out-label">Scientific</div>
+      <div class="out-box" id="out-sci"></div>
+
+      <div id="err" class="error"></div>
+
+      <div class="btn-row">
+        <button class="btn" onclick="copyAll()">Copy all</button>
+        <button class="btn-secondary" onclick="copyOne('card')">Copy cardinal</button>
+        <button class="btn-secondary" onclick="copyOne('cur')">Copy currency</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const ONES = ['zero','one','two','three','four','five','six','seven','eight','nine','ten',
+  'eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+const TENS = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+const SCALE = ['','thousand','million','billion','trillion','quadrillion','quintillion','sextillion',
+  'septillion','octillion','nonillion','decillion','undecillion','duodecillion','tredecillion',
+  'quattuordecillion','quindecillion','sexdecillion','septendecillion','octodecillion','novemdecillion',
+  'vigintillion'];
+
+const CURRENCIES = {
+  usd: { major: 'dollar',  minor: 'cent',   symbol: '$' },
+  eur: { major: 'euro',    minor: 'cent',   symbol: '€' },
+  gbp: { major: 'pound',   minor: 'penny',  minorP: 'pence', symbol: '£' },
+  inr: { major: 'rupee',   minor: 'paisa',  minorP: 'paise', symbol: '₹' },
+  jpy: { major: 'yen',     minor: null,     symbol: '¥' },
+  none:{ major: null,      minor: null }
+};
+
+// Convert a 0..999 integer to words
+function under1000(n, useAnd, hyphen) {
+  if (n === 0) return '';
+  const parts = [];
+  const hundreds = Math.floor(n / 100);
+  const rem = n % 100;
+  if (hundreds) parts.push(ONES[hundreds] + ' hundred');
+  if (rem) {
+    if (hundreds && useAnd) parts.push('and');
+    if (rem < 20) parts.push(ONES[rem]);
+    else {
+      const t = Math.floor(rem / 10);
+      const o = rem % 10;
+      parts.push(o ? (TENS[t] + (hyphen ? '-' : ' ') + ONES[o]) : TENS[t]);
+    }
+  }
+  return parts.join(' ');
+}
+
+// Integer (as BigInt) to words
+function intToWords(nBig, opts) {
+  if (nBig === 0n) return 'zero';
+  const neg = nBig < 0n;
+  if (neg) nBig = -nBig;
+  const groups = [];
+  while (nBig > 0n) {
+    groups.push(Number(nBig % 1000n));
+    nBig /= 1000n;
+  }
+  if (groups.length > SCALE.length) return null;
+  const parts = [];
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const g = groups[i];
+    if (g === 0) continue;
+    const w = under1000(g, opts.useAnd && i === 0, opts.hyphen);
+    parts.push(SCALE[i] ? `${w} ${SCALE[i]}` : w);
+  }
+  // If only higher groups exist and we want "and" before < 100 remainder
+  let text = parts.join(' ');
+  if (neg) text = 'negative ' + text;
+  return text;
+}
+
+function applyCase(s, opts) {
+  if (!s) return s;
+  if (opts.upper) return s.toUpperCase();
+  if (opts.title) return s.replace(/\b([a-z])/g, (_, c) => c.toUpperCase());
+  return s;
+}
+
+function parseNumber(raw) {
+  if (!raw) return null;
+  const s = raw.replace(/[,_\s]/g, '').trim();
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
+  return s;
+}
+
+// Ordinal suffix words: handle last word
+const ORD_SIMPLE = { one:'first', two:'second', three:'third', five:'fifth', eight:'eighth', nine:'ninth', twelve:'twelfth' };
+function toOrdinal(words) {
+  if (!words) return '';
+  // apply ordinal to last word
+  const parts = words.split(' ');
+  let last = parts.pop();
+  // handle hyphenated ex: twenty-one
+  const hParts = last.split('-');
+  let tail = hParts.pop();
+  if (ORD_SIMPLE[tail]) tail = ORD_SIMPLE[tail];
+  else if (tail.endsWith('y')) tail = tail.slice(0, -1) + 'ieth';
+  else tail = tail + 'th';
+  hParts.push(tail);
+  parts.push(hParts.join('-'));
+  return parts.join(' ');
+}
+
+// Decimal part word: each digit spelled
+function decimalSpell(frac) {
+  return 'point ' + frac.split('').map(d => ONES[+d]).join(' ');
+}
+
+function compute() {
+  const raw = document.getElementById('num').value;
+  const opts = {
+    useAnd: document.getElementById('opt-and').checked,
+    hyphen: document.getElementById('opt-hyphen').checked,
+    title: document.getElementById('opt-title').checked,
+    upper: document.getElementById('opt-upper').checked
+  };
+  const curKey = document.getElementById('opt-cur').value;
+
+  const err = document.getElementById('err');
+  err.textContent = '';
+
+  const clean = parseNumber(raw);
+  if (clean === null) {
+    err.textContent = raw.trim() ? 'Not a valid number.' : '';
+    ['out-card','out-ord','out-cur','out-check','out-sci'].forEach(id => document.getElementById(id).textContent = '');
+    return;
+  }
+
+  const neg = clean.startsWith('-');
+  const body = neg ? clean.slice(1) : clean;
+  const [intPart, fracPart = ''] = body.split('.');
+
+  // Cardinal
+  const intBig = BigInt((neg ? '-' : '') + intPart);
+  let cardinal = intToWords(intBig, opts);
+  if (cardinal === null) {
+    err.textContent = 'Number is too large to spell (above vigintillion).';
+    ['out-card','out-ord','out-cur','out-check','out-sci'].forEach(id => document.getElementById(id).textContent = '');
+    return;
+  }
+  if (fracPart) {
+    const trimmed = fracPart.replace(/0+$/, '');
+    if (trimmed) cardinal += ' ' + decimalSpell(trimmed);
+  }
+  document.getElementById('out-card').textContent = applyCase(cardinal, opts);
+
+  // Ordinal (integers only)
+  let ordinal;
+  if (fracPart && fracPart.replace(/0/g, '')) {
+    ordinal = '(ordinals are only defined for whole numbers)';
+  } else {
+    const baseWords = intToWords(intBig, opts);
+    ordinal = toOrdinal(baseWords);
+  }
+  document.getElementById('out-ord').textContent = applyCase(ordinal, opts);
+
+  // Currency
+  const cur = CURRENCIES[curKey];
+  let curText = '';
+  if (curKey === 'none' || !cur.major) {
+    curText = '(no currency selected)';
+  } else {
+    // Normalize fraction to 2 digits for money (except JPY)
+    const hasMinor = cur.minor !== null;
+    let majorBig, minor = 0;
+    if (hasMinor) {
+      // take first 2 decimals (rounded)
+      let f = fracPart.slice(0, 3);
+      if (f.length === 3) {
+        const round = +f[2] >= 5 ? 1 : 0;
+        minor = +f.slice(0, 2) + round;
+      } else {
+        minor = +(f.padEnd(2, '0'));
+      }
+      if (minor >= 100) { minor -= 100; majorBig = intBig + (neg ? -1n : 1n); }
+      else majorBig = intBig;
+    } else {
+      // JPY: round to integer
+      const round = fracPart && +fracPart[0] >= 5 ? 1n : 0n;
+      majorBig = intBig + (neg ? -round : round);
+      minor = 0;
+    }
+    const absMajor = majorBig < 0n ? -majorBig : majorBig;
+    const majorWords = intToWords(absMajor, opts);
+    const majorLabel = absMajor === 1n ? cur.major : cur.major + 's';
+    let out = `${majorWords} ${majorLabel}`;
+    if (hasMinor) {
+      const minorWords = intToWords(BigInt(minor), opts);
+      const minorLabel = minor === 1
+        ? (cur.minor)
+        : (cur.minorP || cur.minor + 's');
+      out += ` and ${minorWords} ${minorLabel}`;
+    }
+    if (majorBig < 0n) out = 'negative ' + out;
+    curText = out;
+  }
+  document.getElementById('out-cur').textContent = applyCase(curText, opts);
+
+  // Check writing style: "One Thousand Two Hundred Thirty-Four and 56/100"
+  let checkText = '';
+  if (curKey !== 'none' && cur.major) {
+    const hasMinor = cur.minor !== null;
+    let majorBig, minorStr;
+    if (hasMinor) {
+      const f = (fracPart || '').slice(0, 2).padEnd(2, '0');
+      majorBig = intBig < 0n ? -intBig : intBig;
+      minorStr = f;
+    } else {
+      majorBig = intBig < 0n ? -intBig : intBig;
+      minorStr = '00';
+    }
+    // Check style omits "and" in the words portion
+    const majW = intToWords(majorBig, { ...opts, useAnd: false });
+    const majTitle = majW.replace(/\b([a-z])/g, (_, c) => c.toUpperCase());
+    const unit = cur.major + 's';
+    checkText = `${majTitle}${hasMinor ? ` and ${minorStr}/100` : ''} ${unit}`;
+    if (intBig < 0n) checkText = 'Negative ' + checkText;
+  } else {
+    checkText = '(no currency selected)';
+  }
+  document.getElementById('out-check').textContent = checkText;
+
+  // Scientific
+  let sci;
+  try {
+    const num = Number(clean);
+    if (!isFinite(num)) sci = clean + ' (too large for scientific notation)';
+    else sci = num.toExponential();
+  } catch { sci = ''; }
+  document.getElementById('out-sci').textContent = sci;
+}
+
+function setNum(v) { document.getElementById('num').value = v; compute(); }
+function copyAll() {
+  const lines = [
+    'Cardinal: ' + document.getElementById('out-card').textContent,
+    'Ordinal: ' + document.getElementById('out-ord').textContent,
+    'Currency: ' + document.getElementById('out-cur').textContent,
+    'Check: ' + document.getElementById('out-check').textContent,
+    'Scientific: ' + document.getElementById('out-sci').textContent
+  ].join('\n');
+  navigator.clipboard.writeText(lines).then(() => showToast('Copied all!'));
+}
+function copyOne(key) {
+  const el = document.getElementById('out-' + key);
+  navigator.clipboard.writeText(el.textContent).then(() => showToast('Copied!'));
+}
+function showToast(m) {
+  const t = document.getElementById('toast');
+  t.textContent = m;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+['num','opt-and','opt-hyphen','opt-title','opt-upper','opt-cur']
+  .forEach(id => document.getElementById(id).addEventListener('input', compute));
+
+compute();
+</script>
+</body>
+</html>

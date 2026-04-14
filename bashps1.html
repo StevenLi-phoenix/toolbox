@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bash PS1 Prompt Builder — Visual Shell Prompt Generator</title>
+<meta name="description" content="Visually design a Bash PS1 prompt with colors, user, host, path, git branch, and exit code segments. Preview how it renders and copy the export line for your .bashrc.">
+<meta name="keywords" content="bash ps1, ps1 builder, bash prompt, shell prompt, bashrc, zsh prompt, terminal colors">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bashps1.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
+  .seg-list { display: grid; gap: 8px; }
+  .seg {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    background: var(--surface);
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .seg .drag { color: var(--muted); font-size: 1.1rem; cursor: grab; user-select: none; text-align: center; }
+  .seg-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: center; }
+  .seg-row input, .seg-row select { font-size: .82rem; padding: 5px 8px; }
+  .seg-row .lab { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 2px; }
+  .seg-actions button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 4px 6px; font-size: 1rem; }
+  .seg-actions button:hover { color: var(--error); }
+  .add-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .add-row button { font-size: .82rem; padding: 6px 10px; }
+  .preview {
+    background: #1a1a1a;
+    color: #ddd;
+    font-family: var(--mono);
+    font-size: .88rem;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.55;
+    min-height: 60px;
+  }
+  .preview .cursor { background: #ddd; color: #1a1a1a; padding: 0 2px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .export-box {
+    font-family: var(--mono);
+    font-size: .85rem;
+    background: var(--surface2);
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 8px;
+  }
+  .hint-row { font-size: .78rem; color: var(--muted); margin-top: 6px; }
+  .swatches { display: flex; gap: 4px; flex-wrap: wrap; }
+  .sw {
+    width: 22px; height: 22px; border-radius: 4px; cursor: pointer;
+    border: 1px solid rgba(0,0,0,.15);
+  }
+  .sw.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🖥️ Bash PS1 Prompt Builder</h1>
+<p class="subtitle">Drag segments, pick colors, and watch the prompt render live. Uses standard Bash <code>PS1</code> escape codes (<code>\u \h \w \$ \A</code>) and ANSI color with proper <code>\[ \]</code> wrappers so readline counts the width correctly. Copy the line straight into your <code>~/.bashrc</code>.</p>
+
+<div class="container">
+  <div class="panels">
+    <div class="card">
+      <h2>Segments</h2>
+      <div class="seg-list" id="seg-list"></div>
+      <div class="add-row">
+        <button class="btn-secondary" onclick="addSeg('user')">+ User</button>
+        <button class="btn-secondary" onclick="addSeg('host')">+ Host</button>
+        <button class="btn-secondary" onclick="addSeg('userhost')">+ user@host</button>
+        <button class="btn-secondary" onclick="addSeg('cwd')">+ CWD</button>
+        <button class="btn-secondary" onclick="addSeg('cwdfull')">+ Full path</button>
+        <button class="btn-secondary" onclick="addSeg('git')">+ Git branch</button>
+        <button class="btn-secondary" onclick="addSeg('time')">+ Time</button>
+        <button class="btn-secondary" onclick="addSeg('date')">+ Date</button>
+        <button class="btn-secondary" onclick="addSeg('exit')">+ Exit code</button>
+        <button class="btn-secondary" onclick="addSeg('jobs')">+ Jobs</button>
+        <button class="btn-secondary" onclick="addSeg('text')">+ Text</button>
+        <button class="btn-secondary" onclick="addSeg('newline')">+ Newline</button>
+        <button class="btn-secondary" onclick="addSeg('prompt')">+ $ prompt</button>
+      </div>
+
+      <h2 style="margin-top:18px">Presets</h2>
+      <div class="add-row">
+        <button class="btn-secondary" onclick="loadPreset('default')">Default</button>
+        <button class="btn-secondary" onclick="loadPreset('minimal')">Minimal</button>
+        <button class="btn-secondary" onclick="loadPreset('git')">With Git</button>
+        <button class="btn-secondary" onclick="loadPreset('twoline')">Two-line</button>
+        <button class="btn-secondary" onclick="loadPreset('powerline')">Faux powerline</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Preview</h2>
+      <div class="preview" id="preview"></div>
+      <div class="hint-row">Simulated — your real prompt will substitute <code>$USER</code>, <code>$HOSTNAME</code>, <code>$PWD</code>, etc.</div>
+
+      <h2 style="margin-top:16px">PS1 export</h2>
+      <div class="btn-row">
+        <button class="btn" onclick="copyExport()">Copy</button>
+        <button class="btn-secondary" onclick="copyRaw()">Copy raw PS1</button>
+      </div>
+      <div class="export-box" id="export-box"></div>
+      <div class="hint-row">Append this to <code>~/.bashrc</code> and run <code>source ~/.bashrc</code>.</div>
+    </div>
+  </div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+// --- Color palette (ANSI 16) ---
+const ANSI = [
+  { k: 'none',    n: '—',         css: null,       fg: null, bg: null },
+  { k: 'black',   n: 'black',     css: '#1a1a1a',  fg: 30, bg: 40 },
+  { k: 'red',     n: 'red',       css: '#d94a4a',  fg: 31, bg: 41 },
+  { k: 'green',   n: 'green',     css: '#4ad97a',  fg: 32, bg: 42 },
+  { k: 'yellow',  n: 'yellow',    css: '#e6c84a',  fg: 33, bg: 43 },
+  { k: 'blue',    n: 'blue',      css: '#5a8bd9',  fg: 34, bg: 44 },
+  { k: 'magenta', n: 'magenta',   css: '#c56ad9',  fg: 35, bg: 45 },
+  { k: 'cyan',    n: 'cyan',      css: '#4ac4d9',  fg: 36, bg: 46 },
+  { k: 'white',   n: 'white',     css: '#eaeaea',  fg: 37, bg: 47 },
+  { k: 'brblack', n: 'br-black',  css: '#555',     fg: 90, bg: 100 },
+  { k: 'brred',   n: 'br-red',    css: '#ff6d6d',  fg: 91, bg: 101 },
+  { k: 'brgreen', n: 'br-green',  css: '#6dff99',  fg: 92, bg: 102 },
+  { k: 'bryellow',n: 'br-yellow', css: '#ffe46d',  fg: 93, bg: 103 },
+  { k: 'brblue',  n: 'br-blue',   css: '#6da7ff',  fg: 94, bg: 104 },
+  { k: 'brmagenta',n:'br-magenta',css: '#e08bff',  fg: 95, bg: 105 },
+  { k: 'brcyan',  n: 'br-cyan',   css: '#6de0ff',  fg: 96, bg: 106 },
+  { k: 'brwhite', n: 'br-white',  css: '#fff',     fg: 97, bg: 107 },
+];
+const COLOR_MAP = Object.fromEntries(ANSI.map(c => [c.k, c]));
+
+// --- Segment definitions ---
+const SEG_TYPES = {
+  user:     { label: 'User',       ps1: '\\u',       sample: 'ada' },
+  host:     { label: 'Host',       ps1: '\\h',       sample: 'wsrv' },
+  userhost: { label: 'user@host',  ps1: '\\u@\\h',   sample: 'ada@wsrv' },
+  cwd:      { label: 'CWD (base)', ps1: '\\W',       sample: 'toolbox' },
+  cwdfull:  { label: 'Full path',  ps1: '\\w',       sample: '~/code/toolbox' },
+  git:      { label: 'Git branch', ps1: '$(__git_ps1 " (%s)")', sample: ' (main)' },
+  time:     { label: 'Time (24h)', ps1: '\\A',       sample: '14:32' },
+  date:     { label: 'Date',       ps1: '\\d',       sample: 'Tue Apr 14' },
+  exit:     { label: 'Exit code',  ps1: '$?',        sample: '0' },
+  jobs:     { label: 'Jobs',       ps1: '\\j',       sample: '0' },
+  text:     { label: 'Text',       ps1: ' ',         sample: ' ' },
+  newline:  { label: 'Newline',    ps1: '\\n',       sample: '\n' },
+  prompt:   { label: '$ prompt',   ps1: '\\$',       sample: '$' },
+};
+
+let segments = [];
+let dragIdx = -1;
+
+function defaultSeg(type) {
+  const s = { type, fg: 'none', bg: 'none', bold: false, text: '' };
+  if (type === 'text') s.text = ' ';
+  if (type === 'user' || type === 'userhost') s.fg = 'brgreen';
+  if (type === 'cwd' || type === 'cwdfull') s.fg = 'brblue';
+  if (type === 'git') { s.fg = 'bryellow'; }
+  if (type === 'prompt') { s.text = ' '; }
+  return s;
+}
+
+function addSeg(type) {
+  segments.push(defaultSeg(type));
+  render();
+}
+function removeSeg(i) { segments.splice(i, 1); render(); }
+function moveSeg(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= segments.length) return;
+  [segments[i], segments[j]] = [segments[j], segments[i]];
+  render();
+}
+
+function colorSelect(id, key, val) {
+  let html = `<select data-i="${id}" data-f="${key}">`;
+  ANSI.forEach(c => {
+    html += `<option value="${c.k}"${val === c.k ? ' selected' : ''}>${c.n}</option>`;
+  });
+  html += '</select>';
+  return html;
+}
+
+function render() {
+  const list = document.getElementById('seg-list');
+  if (!segments.length) {
+    list.innerHTML = '<div class="empty" style="padding:14px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center;color:var(--muted)">No segments yet — add one below.</div>';
+  } else {
+    list.innerHTML = segments.map((s, i) => {
+      const def = SEG_TYPES[s.type];
+      const isText = s.type === 'text';
+      const isNewline = s.type === 'newline';
+      const body = isNewline
+        ? `<div><span class="lab">Type</span><b>${def.label}</b></div>`
+        : `
+          <div class="seg-row">
+            <div>
+              <span class="lab">${isText ? 'Literal' : def.label}</span>
+              ${isText
+                ? `<input type="text" data-i="${i}" data-f="text" value="${escAttr(s.text)}" placeholder=" ">`
+                : `<div style="font-family:var(--mono);font-size:.82rem;color:var(--muted)">${escHtml(def.ps1)}</div>`}
+            </div>
+            <div>
+              <span class="lab">Fg</span>
+              ${colorSelect(i, 'fg', s.fg)}
+            </div>
+            <div>
+              <span class="lab">Bg</span>
+              ${colorSelect(i, 'bg', s.bg)}
+            </div>
+            <div>
+              <span class="lab">Bold</span>
+              <input type="checkbox" data-i="${i}" data-f="bold" ${s.bold ? 'checked' : ''}>
+            </div>
+          </div>`;
+      return `
+        <div class="seg" draggable="true" data-i="${i}">
+          <div class="drag" title="Drag">≡</div>
+          ${body}
+          <div class="seg-actions">
+            <button title="Up" onclick="moveSeg(${i},-1)">↑</button>
+            <button title="Down" onclick="moveSeg(${i},1)">↓</button>
+            <button title="Remove" onclick="removeSeg(${i})">&times;</button>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('select, input').forEach(el => {
+      el.addEventListener('input', e => {
+        const i = +e.target.dataset.i;
+        const f = e.target.dataset.f;
+        if (f === 'bold') segments[i][f] = e.target.checked;
+        else segments[i][f] = e.target.value;
+        updatePreview();
+      });
+    });
+
+    // drag & drop
+    list.querySelectorAll('.seg').forEach(el => {
+      el.addEventListener('dragstart', e => {
+        dragIdx = +el.dataset.i;
+        el.style.opacity = '.4';
+      });
+      el.addEventListener('dragend', () => { el.style.opacity = '1'; dragIdx = -1; });
+      el.addEventListener('dragover', e => { e.preventDefault(); });
+      el.addEventListener('drop', e => {
+        e.preventDefault();
+        const target = +el.dataset.i;
+        if (dragIdx === -1 || dragIdx === target) return;
+        const moved = segments.splice(dragIdx, 1)[0];
+        segments.splice(target, 0, moved);
+        render();
+      });
+    });
+  }
+  updatePreview();
+}
+
+function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// --- Build PS1 ---
+function buildPs1() {
+  const out = [];
+  segments.forEach(s => {
+    const def = SEG_TYPES[s.type];
+    const fg = COLOR_MAP[s.fg];
+    const bg = COLOR_MAP[s.bg];
+    const codes = [];
+    if (s.bold) codes.push('1');
+    if (fg && fg.fg !== null) codes.push(String(fg.fg));
+    if (bg && bg.bg !== null) codes.push(String(bg.bg));
+    let pre = '', post = '';
+    if (codes.length) {
+      pre = `\\[\\e[${codes.join(';')}m\\]`;
+      post = `\\[\\e[0m\\]`;
+    }
+    const content = s.type === 'text' ? s.text : def.ps1;
+    out.push(pre + content + post);
+  });
+  return out.join('');
+}
+
+function previewHtml() {
+  let html = '';
+  segments.forEach(s => {
+    const def = SEG_TYPES[s.type];
+    const fg = COLOR_MAP[s.fg];
+    const bg = COLOR_MAP[s.bg];
+    let style = '';
+    if (fg && fg.css) style += `color:${fg.css};`;
+    if (bg && bg.css) style += `background:${bg.css};`;
+    if (s.bold) style += 'font-weight:700;';
+    let sample;
+    if (s.type === 'text') sample = s.text;
+    else if (s.type === 'newline') sample = '\n';
+    else sample = def.sample;
+    sample = escHtml(sample);
+    html += style ? `<span style="${style}">${sample}</span>` : sample;
+  });
+  html += '<span class="cursor">&nbsp;</span>';
+  return html;
+}
+
+function updatePreview() {
+  document.getElementById('preview').innerHTML = previewHtml();
+  const ps1 = buildPs1();
+  const exp = `export PS1='${ps1.replace(/'/g, "'\\''")}'`;
+  document.getElementById('export-box').textContent = exp;
+}
+
+function copyExport() {
+  const text = document.getElementById('export-box').textContent;
+  navigator.clipboard.writeText(text).then(() => showToast('Copied!'));
+}
+function copyRaw() {
+  navigator.clipboard.writeText(buildPs1()).then(() => showToast('Copied raw PS1!'));
+}
+function showToast(m) {
+  const t = document.getElementById('toast');
+  t.textContent = m;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+// --- Presets ---
+function loadPreset(kind) {
+  segments = [];
+  if (kind === 'default') {
+    segments = [
+      { ...defaultSeg('userhost'), fg: 'brgreen', bold: true },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ':' },
+      { ...defaultSeg('cwdfull'), fg: 'brblue', bold: true },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: '' },
+      { ...defaultSeg('prompt') }
+    ];
+  } else if (kind === 'minimal') {
+    segments = [
+      { ...defaultSeg('cwd'), fg: 'brcyan' },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ' ' },
+      { ...defaultSeg('prompt') },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ' ' }
+    ];
+  } else if (kind === 'git') {
+    segments = [
+      { ...defaultSeg('user'), fg: 'brgreen', bold: true },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ' ' },
+      { ...defaultSeg('cwd'), fg: 'brblue' },
+      { ...defaultSeg('git'), fg: 'bryellow' },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ' ' },
+      { ...defaultSeg('prompt'), fg: 'brwhite' },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ' ' }
+    ];
+  } else if (kind === 'twoline') {
+    segments = [
+      { ...defaultSeg('time'), fg: 'brmagenta' },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ' ' },
+      { ...defaultSeg('userhost'), fg: 'brgreen' },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ' ' },
+      { ...defaultSeg('cwdfull'), fg: 'brblue' },
+      { type: 'newline', fg: 'none', bg: 'none', bold: false },
+      { ...defaultSeg('prompt'), fg: 'brwhite', bold: true },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ' ' }
+    ];
+  } else if (kind === 'powerline') {
+    segments = [
+      { type: 'user', fg: 'black', bg: 'brgreen', bold: true, text: '' },
+      { type: 'text', fg: 'brgreen', bg: 'brblue', bold: false, text: '' },
+      { type: 'cwd', fg: 'black', bg: 'brblue', bold: false, text: '' },
+      { type: 'text', fg: 'brblue', bg: 'none', bold: false, text: ' ' },
+      { ...defaultSeg('prompt'), fg: 'brwhite' },
+      { type: 'text', fg: 'none', bg: 'none', bold: false, text: ' ' }
+    ];
+  }
+  render();
+}
+
+loadPreset('git');
+</script>
+</body>
+</html>

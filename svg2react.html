@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVG → React Component — Convert SVG to JSX</title>
+<meta name="description" content="Convert raw SVG markup into a ready-to-use React component. CamelCases attributes, swaps class → className, self-closes void tags, and supports TypeScript, forwardRef, and currentColor.">
+<meta name="keywords" content="svg to react, svg to jsx, svg react component, react svg, convert svg">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/svg2react.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
+  textarea { min-height: 280px; font-family: var(--mono); font-size: .85rem; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 14px; margin: 10px 0 14px; }
+  .opts label { display: flex; align-items: center; gap: 6px; font-weight: 400; font-size: .85rem; }
+  .field-row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .field-row label { font-size: .85rem; font-weight: 600; }
+  .output-box { min-height: 280px; max-height: 520px; overflow: auto; }
+  .preview {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    background: var(--bg2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 160px;
+    margin-top: 10px;
+  }
+  .preview svg { max-width: 100%; max-height: 240px; }
+  .status { padding: 8px 12px; border-radius: var(--radius); font-size: .82rem; margin-top: 8px; }
+  .status.ok { background: #e8f5ec; color: var(--success); }
+  .status.err { background: #fceaea; color: var(--error); }
+  code.inline { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: .82rem; }
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>⚛️ SVG → React Component</h1>
+<p class="subtitle">Paste raw SVG markup and get a clean React component. Attributes are camel-cased, <code class="inline">class</code> becomes <code class="inline">className</code>, comments and XML declarations are stripped, and void tags are self-closed. Everything runs locally.</p>
+
+<div class="container">
+  <div class="panels">
+    <div class="card">
+      <h2>SVG input</h2>
+      <textarea id="svg-input" spellcheck="false" placeholder="Paste SVG here…"></textarea>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="loadExample()">Load example</button>
+        <button class="btn-secondary" onclick="document.getElementById('svg-input').value='';convert();">Clear</button>
+      </div>
+      <div class="preview" id="preview"></div>
+      <div id="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Options</h2>
+      <div class="field-row">
+        <label>Component name</label>
+        <input type="text" id="opt-name" value="Icon" spellcheck="false">
+      </div>
+      <div class="field-row">
+        <label>Language</label>
+        <select id="opt-lang">
+          <option value="jsx">JavaScript (JSX)</option>
+          <option value="tsx">TypeScript (TSX)</option>
+        </select>
+      </div>
+      <div class="opts">
+        <label><input type="checkbox" id="opt-props" checked> Spread <code class="inline">...props</code></label>
+        <label><input type="checkbox" id="opt-ref"> Use <code class="inline">forwardRef</code></label>
+        <label><input type="checkbox" id="opt-color"> Replace colors with <code class="inline">currentColor</code></label>
+        <label><input type="checkbox" id="opt-stripids" checked> Strip <code class="inline">id</code> attributes</label>
+        <label><input type="checkbox" id="opt-stripdims"> Remove fixed <code class="inline">width</code>/<code class="inline">height</code></label>
+        <label><input type="checkbox" id="opt-memo"> Wrap in <code class="inline">React.memo</code></label>
+      </div>
+
+      <h2 style="margin-top:14px">Component</h2>
+      <div class="btn-row">
+        <button class="btn" onclick="copyOutput()">Copy</button>
+        <button class="btn-secondary" onclick="downloadOutput()">Download</button>
+      </div>
+      <pre class="output-box" id="output"></pre>
+    </div>
+  </div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const VOID_TAGS = new Set(['circle','ellipse','line','path','polygon','polyline','rect','stop','use','image']);
+const DROP_ATTRS = new Set(['xmlns:xlink','xml:space']);
+
+// Convert kebab-case attr to camelCase, except for data-* / aria-* and namespaced.
+function camelAttr(name) {
+  if (name === 'class') return 'className';
+  if (name === 'for') return 'htmlFor';
+  if (name.startsWith('data-') || name.startsWith('aria-')) return name;
+  if (name.includes(':')) {
+    // xlink:href → xlinkHref, xml:lang → xmlLang
+    const [ns, rest] = name.split(':');
+    return ns + rest.charAt(0).toUpperCase() + rest.slice(1);
+  }
+  return name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function parseStyle(str) {
+  const out = {};
+  str.split(';').forEach(decl => {
+    const idx = decl.indexOf(':');
+    if (idx < 0) return;
+    const prop = decl.slice(0, idx).trim();
+    const val = decl.slice(idx + 1).trim();
+    if (!prop) return;
+    const camel = prop.startsWith('-') ? prop : prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    out[camel] = val;
+  });
+  return out;
+}
+
+function styleToJsx(str) {
+  const obj = parseStyle(str);
+  const parts = Object.entries(obj).map(([k, v]) => {
+    const key = /^[a-zA-Z_$][\w$]*$/.test(k) ? k : JSON.stringify(k);
+    return `${key}: ${JSON.stringify(v)}`;
+  });
+  return '{{ ' + parts.join(', ') + ' }}';
+}
+
+function serialize(node, indent, opts) {
+  if (node.nodeType === 3) {
+    const txt = node.nodeValue.replace(/\s+/g, ' ');
+    if (!txt.trim()) return '';
+    return indent + txt.trim().replace(/[{}]/g, m => `{'${m}'}`) + '\n';
+  }
+  if (node.nodeType !== 1) return '';
+  const tag = node.tagName;
+  const attrs = [];
+  for (const a of Array.from(node.attributes)) {
+    let name = a.name;
+    let val = a.value;
+    if (DROP_ATTRS.has(name)) continue;
+    if (opts.stripIds && name === 'id') continue;
+    if (opts.stripDims && (name === 'width' || name === 'height') && tag === 'svg') continue;
+    if (opts.currentColor && (name === 'fill' || name === 'stroke') && val !== 'none' && val !== 'transparent') {
+      val = 'currentColor';
+    }
+    const rName = camelAttr(name);
+    if (name === 'style') {
+      attrs.push(`style=${styleToJsx(val)}`);
+    } else {
+      attrs.push(`${rName}="${val.replace(/"/g, '&quot;')}"`);
+    }
+  }
+
+  // On the root <svg>, optionally add spread props
+  if (opts.spreadHere) {
+    attrs.push('{...props}');
+    opts.spreadHere = false;
+  }
+
+  const attrStr = attrs.length ? ' ' + attrs.join(' ') : '';
+  const children = Array.from(node.childNodes)
+    .map(c => serialize(c, indent + '  ', opts))
+    .join('');
+
+  const isVoid = VOID_TAGS.has(tag) || !children.trim();
+  if (isVoid) return `${indent}<${tag}${attrStr} />\n`;
+  return `${indent}<${tag}${attrStr}>\n${children}${indent}</${tag}>\n`;
+}
+
+function convert() {
+  const src = document.getElementById('svg-input').value.trim();
+  const preview = document.getElementById('preview');
+  const status = document.getElementById('status');
+  const out = document.getElementById('output');
+
+  if (!src) {
+    preview.innerHTML = '<span style="color:var(--muted)">Preview appears here</span>';
+    status.innerHTML = '';
+    out.textContent = '';
+    return;
+  }
+
+  // Sanitize: strip XML decl, comments, DOCTYPE
+  let clean = src
+    .replace(/<\?xml[^?]*\?>/g, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .trim();
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(clean, 'image/svg+xml');
+  const err = doc.querySelector('parsererror');
+  if (err) {
+    status.innerHTML = '<div class="status err">Could not parse SVG — check the markup.</div>';
+    preview.innerHTML = '';
+    out.textContent = '';
+    return;
+  }
+  const root = doc.documentElement;
+  if (!root || root.tagName.toLowerCase() !== 'svg') {
+    status.innerHTML = '<div class="status err">Top-level element must be &lt;svg&gt;.</div>';
+    preview.innerHTML = '';
+    out.textContent = '';
+    return;
+  }
+
+  preview.innerHTML = clean;
+
+  const name = (document.getElementById('opt-name').value.trim() || 'Icon').replace(/[^A-Za-z0-9_]/g, '') || 'Icon';
+  const lang = document.getElementById('opt-lang').value;
+  const spread = document.getElementById('opt-props').checked;
+  const useRef = document.getElementById('opt-ref').checked;
+  const currentColor = document.getElementById('opt-color').checked;
+  const stripIds = document.getElementById('opt-stripids').checked;
+  const stripDims = document.getElementById('opt-stripdims').checked;
+  const memo = document.getElementById('opt-memo').checked;
+
+  // forwardRef implies spread
+  const effectiveSpread = spread || useRef;
+  const opts = { spreadHere: effectiveSpread, currentColor, stripIds, stripDims };
+  const body = serialize(root, '    ', opts);
+  const ts = lang === 'tsx';
+
+  const headerImport = useRef
+    ? (ts
+        ? `import { forwardRef, SVGProps, Ref } from 'react';`
+        : `import { forwardRef } from 'react';`)
+    : (ts
+        ? `import { SVGProps } from 'react';`
+        : (memo ? `import { memo } from 'react';` : `import React from 'react';`));
+
+  let componentSrc;
+  if (useRef) {
+    const propsType = ts ? `: SVGProps<SVGSVGElement>` : '';
+    const refType = ts ? `: Ref<SVGSVGElement>` : '';
+    const refBody = body.replace('{...props}', 'ref={ref} {...props}');
+    componentSrc =
+`const ${name} = forwardRef((props${propsType}, ref${refType}) => (
+${refBody}));
+
+${name}.displayName = '${name}';
+
+export default ${memo ? `memo(${name})` : name};`;
+  } else {
+    const propsType = ts ? `: SVGProps<SVGSVGElement>` : '';
+    const arg = spread ? `props${propsType}` : (ts ? `_props${propsType}` : '');
+    componentSrc =
+`function ${name}(${arg}) {
+  return (
+${body}  );
+}
+
+export default ${memo ? `memo(${name})` : name};`;
+  }
+
+  const fileHeader = `${headerImport}\n\n`;
+  out.textContent = fileHeader + componentSrc + '\n';
+}
+
+function copyOutput() {
+  const text = document.getElementById('output').textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => showToast('Copied!'));
+}
+function downloadOutput() {
+  const text = document.getElementById('output').textContent;
+  if (!text) return;
+  const name = (document.getElementById('opt-name').value.trim() || 'Icon').replace(/[^A-Za-z0-9_]/g, '') || 'Icon';
+  const ext = document.getElementById('opt-lang').value;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name}.${ext}`;
+  a.click();
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+function loadExample() {
+  document.getElementById('svg-input').value =
+`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather">
+  <!-- heart icon -->
+  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+</svg>`;
+  convert();
+}
+
+document.querySelectorAll('#svg-input, #opt-name, #opt-lang, #opt-props, #opt-ref, #opt-color, #opt-stripids, #opt-stripdims, #opt-memo')
+  .forEach(el => el.addEventListener('input', convert));
+
+loadExample();
+</script>
+</body>
+</html>
