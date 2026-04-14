@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Haversine Distance Calculator — Great Circle Distance Tool</title>
+<meta name="description" content="Calculate the great-circle distance between two latitude/longitude coordinates using the Haversine formula. Supports km, mi, nautical miles, and initial/final bearing.">
+<meta name="keywords" content="haversine, great circle, distance calculator, lat lng, bearing, gps, nautical mile">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/haversine.html">
+<meta property="og:title" content="Haversine Distance Calculator">
+<meta property="og:description" content="Compute great-circle distance and bearing between two coordinates — in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/haversine.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .pt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .pt { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .pt h3 { font-size: .9rem; font-weight: 600; margin-bottom: 10px; }
+  .pt label { display: block; font-size: .78rem; color: var(--muted); margin: 8px 0 4px; }
+  .pt input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .9rem; background: var(--bg); color: var(--text); }
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+  .result { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .result .v { font-family: var(--mono); font-size: 1rem; font-weight: 600; margin-top: 4px; }
+  .err { color: var(--error); font-size: .85rem; margin-top: 10px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .presets button { padding: 4px 10px; font-size: .75rem; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); color: var(--muted); cursor: pointer; font-family: var(--sans); }
+  .presets button:hover { background: var(--surface2); color: var(--text); }
+  @media (max-width: 768px) { .pt-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Haversine Distance Calculator</h1>
+<p class="subtitle">Compute great-circle distance and initial/final bearing between two latitude/longitude coordinates. Uses the Haversine formula on a spherical Earth (mean radius 6371 km). Accurate to ~0.3% versus a full ellipsoid model — plenty good for most flight, navigation, and location-matching work.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="pt-grid">
+    <div class="pt">
+      <h3>Point A (From)</h3>
+      <label for="lat1">Latitude</label>
+      <input id="lat1" placeholder="e.g. 51.5074" value="51.5074">
+      <label for="lon1">Longitude</label>
+      <input id="lon1" placeholder="e.g. -0.1278" value="-0.1278">
+    </div>
+    <div class="pt">
+      <h3>Point B (To)</h3>
+      <label for="lat2">Latitude</label>
+      <input id="lat2" placeholder="e.g. 40.7128" value="40.7128">
+      <label for="lon2">Longitude</label>
+      <input id="lon2" placeholder="e.g. -74.0060" value="-74.0060">
+    </div>
+  </div>
+
+  <div class="presets">
+    <span style="font-size:.75rem;color:var(--muted);align-self:center;">Presets:</span>
+    <button onclick="load(51.5074,-0.1278,40.7128,-74.0060)">London → NYC</button>
+    <button onclick="load(35.6762,139.6503,-33.8688,151.2093)">Tokyo → Sydney</button>
+    <button onclick="load(48.8566,2.3522,37.7749,-122.4194)">Paris → SF</button>
+    <button onclick="load(-22.9068,-43.1729,-33.9249,18.4241)">Rio → Cape Town</button>
+    <button onclick="load(0,0,0,180)">Equator ½ circum.</button>
+  </div>
+
+  <div class="err" id="err"></div>
+  <div class="results" id="results"></div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h2 style="font-size:.95rem;margin-bottom:8px;">About the Haversine formula</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+    Given two points with latitudes φ₁, φ₂ and longitude difference Δλ:<br>
+    <code style="font-family:var(--mono);">a = sin²(Δφ/2) + cos(φ₁)·cos(φ₂)·sin²(Δλ/2)</code><br>
+    <code style="font-family:var(--mono);">c = 2·atan2(√a, √(1−a))</code><br>
+    <code style="font-family:var(--mono);">d = R · c</code> &nbsp;where R is Earth's mean radius (6371 km).<br><br>
+    The initial bearing θ is computed with:
+    <code style="font-family:var(--mono);">θ = atan2(sin(Δλ)·cos(φ₂), cos(φ₁)·sin(φ₂) − sin(φ₁)·cos(φ₂)·cos(Δλ))</code><br>
+    The final bearing is the initial bearing from B back to A, plus 180°.
+  </p>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const R_KM = 6371;
+const toRad = d => d * Math.PI / 180;
+const toDeg = r => r * 180 / Math.PI;
+
+function parseCoord(s) {
+  if (s == null) return NaN;
+  s = String(s).trim();
+  if (!s) return NaN;
+  // Accept plain decimal or DMS like 51°30'26"N
+  const dms = s.match(/^(-?\d+(?:\.\d+)?)[°\s]+(\d+(?:\.\d+)?)['′\s]+(\d+(?:\.\d+)?)?["″\s]*([NSEW])?$/i);
+  if (dms) {
+    let v = parseFloat(dms[1]) + parseFloat(dms[2]) / 60 + (parseFloat(dms[3]) || 0) / 3600;
+    if (dms[4] && /[SW]/i.test(dms[4])) v = -v;
+    return v;
+  }
+  const v = parseFloat(s);
+  return isNaN(v) ? NaN : v;
+}
+
+function compute() {
+  $('err').textContent = '';
+  $('results').innerHTML = '';
+  const lat1 = parseCoord($('lat1').value);
+  const lon1 = parseCoord($('lon1').value);
+  const lat2 = parseCoord($('lat2').value);
+  const lon2 = parseCoord($('lon2').value);
+  if ([lat1, lon1, lat2, lon2].some(isNaN)) { $('err').textContent = 'Enter valid numeric coordinates.'; return; }
+  if (Math.abs(lat1) > 90 || Math.abs(lat2) > 90) { $('err').textContent = 'Latitude must be in [-90, 90].'; return; }
+  if (Math.abs(lon1) > 180 || Math.abs(lon2) > 180) { $('err').textContent = 'Longitude must be in [-180, 180].'; return; }
+
+  const φ1 = toRad(lat1), φ2 = toRad(lat2);
+  const Δφ = toRad(lat2 - lat1);
+  const Δλ = toRad(lon2 - lon1);
+
+  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const km = R_KM * c;
+
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+  const θ = Math.atan2(y, x);
+  const initial = (toDeg(θ) + 360) % 360;
+
+  // Final bearing = initial bearing from B to A, reversed
+  const y2 = Math.sin(-Δλ) * Math.cos(φ1);
+  const x2 = Math.cos(φ2)*Math.sin(φ1) - Math.sin(φ2)*Math.cos(φ1)*Math.cos(-Δλ);
+  const final = (toDeg(Math.atan2(y2, x2)) + 180 + 360) % 360;
+
+  const fmt = (n, d=3) => n.toLocaleString(undefined, { maximumFractionDigits: d });
+  const compass = b => {
+    const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+    return dirs[Math.round(b / 22.5) % 16];
+  };
+
+  const items = [
+    { k: 'Distance (km)', v: fmt(km) + ' km' },
+    { k: 'Distance (mi)', v: fmt(km * 0.621371) + ' mi' },
+    { k: 'Nautical mi',   v: fmt(km * 0.539957) + ' nm' },
+    { k: 'Meters',        v: fmt(km * 1000, 1) + ' m' },
+    { k: 'Initial bearing', v: fmt(initial, 2) + '° ' + compass(initial) },
+    { k: 'Final bearing',   v: fmt(final, 2) + '° ' + compass(final) },
+  ];
+  $('results').innerHTML = items.map(i => `<div class="result"><div class="k">${i.k}</div><div class="v">${i.v}</div></div>`).join('');
+}
+
+function load(a, b, c, d) {
+  $('lat1').value = a; $('lon1').value = b; $('lat2').value = c; $('lon2').value = d;
+  compute();
+}
+
+['lat1','lon1','lat2','lon2'].forEach(id => $(id).addEventListener('input', compute));
+compute();
+</script>
+</body>
+</html>

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iCalendar RRULE Builder — RFC 5545 Recurrence Rule Generator</title>
+<meta name="description" content="Build and preview iCalendar RRULE (RFC 5545) recurrence rules. Configure frequency, interval, byday/bymonth/bymonthday, count, until — and see the next occurrences computed in your browser.">
+<meta name="keywords" content="rrule, ical, icalendar, rfc 5545, recurrence, calendar, repeat, ics">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/rrule.html">
+<meta property="og:title" content="iCalendar RRULE Builder">
+<meta property="og:description" content="Generate RFC 5545 recurrence rules with a live preview of the next occurrences.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/rrule.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .fg { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .fg > div label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; }
+  .fg input, .fg select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; background: var(--bg); color: var(--text); }
+  h3 { font-size: .9rem; font-weight: 600; margin: 14px 0 8px; }
+  .days, .months { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { padding: 5px 11px; font-size: .78rem; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); color: var(--muted); cursor: pointer; font-family: var(--sans); user-select: none; }
+  .pill.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .rule-out { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-family: var(--mono); font-size: .9rem; word-break: break-all; }
+  .occ { margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .occ-row { padding: 7px 12px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: .82rem; display: flex; justify-content: space-between; align-items: center; }
+  .occ-row:last-child { border-bottom: none; }
+  .occ-row .i { color: var(--muted); font-size: .72rem; }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; }
+  .human { font-size: .88rem; color: var(--muted); margin-top: 6px; font-style: italic; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>iCalendar RRULE Builder</h1>
+<p class="subtitle">Generate an RFC 5545 <code>RRULE</code> for calendar events. Pick a frequency, interval, by-day / by-month / by-month-day selectors, and either a <code>COUNT</code> or <code>UNTIL</code> boundary. The tool prints the rule line and previews the next occurrences starting from a DTSTART you control — no server, no calendar library.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="fg">
+    <div>
+      <label for="dtstart">DTSTART (local)</label>
+      <input id="dtstart" type="datetime-local">
+    </div>
+    <div>
+      <label for="freq">FREQ</label>
+      <select id="freq">
+        <option value="DAILY">DAILY</option>
+        <option value="WEEKLY" selected>WEEKLY</option>
+        <option value="MONTHLY">MONTHLY</option>
+        <option value="YEARLY">YEARLY</option>
+        <option value="HOURLY">HOURLY</option>
+        <option value="MINUTELY">MINUTELY</option>
+      </select>
+    </div>
+    <div>
+      <label for="interval">INTERVAL</label>
+      <input id="interval" type="number" min="1" value="1">
+    </div>
+    <div>
+      <label for="wkst">WKST (week start)</label>
+      <select id="wkst">
+        <option value="MO" selected>MO (ISO / Europe)</option>
+        <option value="SU">SU (US)</option>
+      </select>
+    </div>
+  </div>
+
+  <h3>BYDAY</h3>
+  <div class="days" id="byday"></div>
+
+  <h3>BYMONTH</h3>
+  <div class="months" id="bymonth"></div>
+
+  <div class="fg" style="margin-top:14px;">
+    <div>
+      <label for="bymonthday">BYMONTHDAY (comma list, e.g. 1,15,-1)</label>
+      <input id="bymonthday" placeholder="e.g. 1,15">
+    </div>
+    <div>
+      <label for="bysetpos">BYSETPOS (e.g. 1 first, -1 last)</label>
+      <input id="bysetpos" placeholder="e.g. -1">
+    </div>
+    <div>
+      <label for="count">COUNT</label>
+      <input id="count" type="number" min="1" placeholder="(blank = unlimited)">
+    </div>
+    <div>
+      <label for="until">UNTIL (local)</label>
+      <input id="until" type="datetime-local">
+    </div>
+  </div>
+
+  <h3>RRULE</h3>
+  <div class="rule-out" id="out">RRULE:</div>
+  <div class="human" id="human"></div>
+  <div class="row" style="margin-top:10px;">
+    <button class="btn" onclick="copyRule()">Copy RRULE</button>
+    <button class="btn btn-secondary" onclick="copyIcs()">Copy as .ics snippet</button>
+  </div>
+  <div class="err" id="err"></div>
+
+  <h3>Next 10 occurrences</h3>
+  <div class="occ" id="occ"></div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h2 style="font-size:.95rem;margin-bottom:8px;">Examples</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.8;">
+    <strong>Every weekday:</strong> <code>FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR</code><br>
+    <strong>First Monday of every month:</strong> <code>FREQ=MONTHLY;BYDAY=MO;BYSETPOS=1</code><br>
+    <strong>Last day of every month:</strong> <code>FREQ=MONTHLY;BYMONTHDAY=-1</code><br>
+    <strong>Every 2 weeks on Tuesday:</strong> <code>FREQ=WEEKLY;INTERVAL=2;BYDAY=TU</code><br>
+    <strong>Yearly on March 15:</strong> <code>FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15</code>
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const DAYS = ['MO','TU','WE','TH','FR','SA','SU'];
+const DAY_IDX = { SU:0, MO:1, TU:2, WE:3, TH:4, FR:5, SA:6 };
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const bydayEl = $('byday');
+DAYS.forEach(d => {
+  const b = document.createElement('span');
+  b.className = 'pill'; b.textContent = d; b.dataset.v = d;
+  b.addEventListener('click', () => { b.classList.toggle('on'); update(); });
+  bydayEl.appendChild(b);
+});
+const bymonthEl = $('bymonth');
+MONTHS.forEach((m, i) => {
+  const b = document.createElement('span');
+  b.className = 'pill'; b.textContent = m; b.dataset.v = String(i + 1);
+  b.addEventListener('click', () => { b.classList.toggle('on'); update(); });
+  bymonthEl.appendChild(b);
+});
+
+// Default dtstart: next Monday 09:00
+function defaultDtstart() {
+  const d = new Date(); d.setSeconds(0, 0);
+  const day = d.getDay();
+  const daysUntilMon = (8 - day) % 7 || 7;
+  d.setDate(d.getDate() + daysUntilMon);
+  d.setHours(9, 0, 0, 0);
+  return d;
+}
+function toLocalInput(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+$('dtstart').value = toLocalInput(defaultDtstart());
+
+function selectedPills(el) {
+  return [...el.querySelectorAll('.pill.on')].map(p => p.dataset.v);
+}
+
+function buildRule() {
+  const parts = [];
+  parts.push('FREQ=' + $('freq').value);
+  const iv = parseInt($('interval').value, 10);
+  if (iv && iv !== 1) parts.push('INTERVAL=' + iv);
+  const wk = $('wkst').value;
+  if (wk !== 'MO') parts.push('WKST=' + wk);
+  const bd = selectedPills(bydayEl);
+  if (bd.length) parts.push('BYDAY=' + bd.join(','));
+  const bm = selectedPills(bymonthEl);
+  if (bm.length) parts.push('BYMONTH=' + bm.join(','));
+  const bmd = $('bymonthday').value.trim();
+  if (bmd) parts.push('BYMONTHDAY=' + bmd.replace(/\s+/g, ''));
+  const bsp = $('bysetpos').value.trim();
+  if (bsp) parts.push('BYSETPOS=' + bsp.replace(/\s+/g, ''));
+  const count = parseInt($('count').value, 10);
+  const until = $('until').value;
+  if (count > 0) parts.push('COUNT=' + count);
+  else if (until) {
+    const d = new Date(until);
+    const iso = d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    parts.push('UNTIL=' + iso);
+  }
+  return 'RRULE:' + parts.join(';');
+}
+
+// Minimal RRULE expander — supports FREQ DAILY/WEEKLY/MONTHLY/YEARLY/HOURLY/MINUTELY
+// with INTERVAL, BYDAY, BYMONTH, BYMONTHDAY, BYSETPOS, COUNT, UNTIL.
+function expand(rule, dtstart, maxCount = 10) {
+  const body = rule.replace(/^RRULE:/, '');
+  const p = Object.fromEntries(body.split(';').filter(Boolean).map(kv => {
+    const [k, v] = kv.split('='); return [k, v];
+  }));
+  const freq = p.FREQ;
+  const interval = parseInt(p.INTERVAL || '1', 10);
+  const countLimit = p.COUNT ? parseInt(p.COUNT, 10) : Infinity;
+  let untilDate = null;
+  if (p.UNTIL) {
+    const m = p.UNTIL.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?Z?$/);
+    if (m) untilDate = new Date(Date.UTC(+m[1], m[2]-1, +m[3], +(m[4]||0), +(m[5]||0), +(m[6]||0)));
+  }
+  const byday = p.BYDAY ? p.BYDAY.split(',') : [];
+  const bymonth = p.BYMONTH ? p.BYMONTH.split(',').map(Number) : [];
+  const bymonthday = p.BYMONTHDAY ? p.BYMONTHDAY.split(',').map(Number) : [];
+  const bysetpos = p.BYSETPOS ? p.BYSETPOS.split(',').map(Number) : [];
+
+  const results = [];
+  let cur = new Date(dtstart);
+  const hardLimit = 5000;
+  let iter = 0;
+
+  function matchesDayFilters(d) {
+    if (bymonth.length && !bymonth.includes(d.getMonth() + 1)) return false;
+    if (bymonthday.length) {
+      const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      const allowed = bymonthday.map(n => n < 0 ? dim + n + 1 : n);
+      if (!allowed.includes(d.getDate())) return false;
+    }
+    if (byday.length && (freq !== 'MONTHLY' && freq !== 'YEARLY')) {
+      // plain day-of-week filter
+      const names = byday.map(b => b.replace(/^[+-]?\d+/, ''));
+      if (!names.includes(DAYS[(d.getDay() + 6) % 7])) return false;
+    }
+    return true;
+  }
+
+  function expandMonth(year, month) {
+    // month is 0-indexed. Returns sorted list of dates in this month matching filters.
+    const dim = new Date(year, month + 1, 0).getDate();
+    const candidates = [];
+    for (let day = 1; day <= dim; day++) {
+      const d = new Date(cur); d.setFullYear(year, month, day);
+      if (bymonth.length && !bymonth.includes(month + 1)) continue;
+      if (bymonthday.length) {
+        const allowed = bymonthday.map(n => n < 0 ? dim + n + 1 : n);
+        if (!allowed.includes(day)) continue;
+      }
+      if (byday.length) {
+        const names = byday.map(b => b.replace(/^[+-]?\d+/, ''));
+        if (!names.includes(DAYS[(d.getDay() + 6) % 7])) continue;
+      }
+      candidates.push(d);
+    }
+    if (bysetpos.length) {
+      const picked = new Set();
+      for (const pos of bysetpos) {
+        const idx = pos > 0 ? pos - 1 : candidates.length + pos;
+        if (idx >= 0 && idx < candidates.length) picked.add(idx);
+      }
+      return [...picked].sort((a, b) => a - b).map(i => candidates[i]);
+    }
+    return candidates;
+  }
+
+  if (freq === 'MONTHLY' || freq === 'YEARLY') {
+    let y = cur.getFullYear(), mo = cur.getMonth();
+    let steps = 0;
+    while (results.length < maxCount && iter++ < hardLimit) {
+      const monthsToCheck = freq === 'YEARLY' ? [0,1,2,3,4,5,6,7,8,9,10,11] : [mo];
+      for (const mm of monthsToCheck) {
+        const list = expandMonth(y, mm);
+        for (const d of list) {
+          if (d < dtstart) continue;
+          if (untilDate && d > untilDate) return results;
+          if (results.length >= countLimit) return results;
+          results.push(new Date(d));
+          if (results.length >= maxCount) return results;
+        }
+      }
+      steps++;
+      if (freq === 'MONTHLY') {
+        mo += interval;
+        while (mo > 11) { mo -= 12; y++; }
+      } else {
+        y += interval;
+      }
+    }
+    return results;
+  }
+
+  // DAILY / WEEKLY / HOURLY / MINUTELY — step-based
+  const stepMs = {
+    DAILY: 86400000,
+    WEEKLY: 604800000,
+    HOURLY: 3600000,
+    MINUTELY: 60000,
+  }[freq];
+  if (!stepMs) return results;
+
+  // For WEEKLY with BYDAY, generate per-week list of matching days.
+  if (freq === 'WEEKLY' && byday.length) {
+    const names = byday.map(b => b.replace(/^[+-]?\d+/, ''));
+    // Find start of week (Monday) of dtstart
+    const start = new Date(dtstart);
+    const dayFromMon = (start.getDay() + 6) % 7;
+    const weekStart = new Date(start); weekStart.setDate(start.getDate() - dayFromMon);
+    let wk = 0;
+    while (results.length < maxCount && iter++ < hardLimit) {
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(weekStart);
+        d.setDate(weekStart.getDate() + wk * 7 * interval + i);
+        d.setHours(start.getHours(), start.getMinutes(), start.getSeconds(), 0);
+        if (d < dtstart) continue;
+        if (!names.includes(DAYS[(d.getDay() + 6) % 7])) continue;
+        if (bymonth.length && !bymonth.includes(d.getMonth() + 1)) continue;
+        if (untilDate && d > untilDate) return results;
+        if (results.length >= countLimit) return results;
+        results.push(d);
+        if (results.length >= maxCount) return results;
+      }
+      wk++;
+    }
+    return results;
+  }
+
+  while (results.length < maxCount && iter++ < hardLimit) {
+    if (untilDate && cur > untilDate) break;
+    if (matchesDayFilters(cur)) {
+      results.push(new Date(cur));
+      if (results.length >= countLimit) break;
+    }
+    cur = new Date(cur.getTime() + stepMs * interval);
+  }
+  return results;
+}
+
+function humanize(p) {
+  const body = p.replace(/^RRULE:/, '');
+  const o = Object.fromEntries(body.split(';').filter(Boolean).map(kv => kv.split('=')));
+  const iv = parseInt(o.INTERVAL || '1', 10);
+  const f = { DAILY:'day', WEEKLY:'week', MONTHLY:'month', YEARLY:'year', HOURLY:'hour', MINUTELY:'minute' }[o.FREQ] || o.FREQ;
+  let s = iv === 1 ? `every ${f}` : `every ${iv} ${f}s`;
+  if (o.BYDAY) s += ` on ${o.BYDAY.replace(/,/g, ', ')}`;
+  if (o.BYMONTHDAY) s += ` on day ${o.BYMONTHDAY}`;
+  if (o.BYMONTH) s += ` in month ${o.BYMONTH}`;
+  if (o.BYSETPOS) s += ` (set pos ${o.BYSETPOS})`;
+  if (o.COUNT) s += `, ${o.COUNT} times`;
+  else if (o.UNTIL) s += `, until ${o.UNTIL}`;
+  return s;
+}
+
+function update() {
+  $('err').textContent = '';
+  const rule = buildRule();
+  $('out').textContent = rule;
+  $('human').textContent = humanize(rule);
+  try {
+    const dt = new Date($('dtstart').value);
+    if (isNaN(dt)) throw new Error('Invalid DTSTART');
+    const occs = expand(rule, dt, 10);
+    $('occ').innerHTML = occs.length
+      ? occs.map((d, i) => `<div class="occ-row"><span>${d.toString().replace(/ GMT.*$/, '')}</span><span class="i">#${i + 1}</span></div>`).join('')
+      : '<div class="occ-row"><span class="i">No occurrences produced — check your filters.</span></div>';
+  } catch (e) {
+    $('err').textContent = e.message;
+  }
+}
+
+function copyRule() {
+  navigator.clipboard.writeText($('out').textContent).then(toast);
+}
+function copyIcs() {
+  const dt = new Date($('dtstart').value);
+  const iso = dt.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const ics = `BEGIN:VEVENT\nDTSTART:${iso}\n${$('out').textContent}\nSUMMARY:Recurring event\nEND:VEVENT`;
+  navigator.clipboard.writeText(ics).then(toast);
+}
+function toast() {
+  const t = $('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+['dtstart','freq','interval','wkst','bymonthday','bysetpos','count','until'].forEach(id => {
+  $(id).addEventListener('input', update);
+  $(id).addEventListener('change', update);
+});
+update();
+</script>
+</body>
+</html>
