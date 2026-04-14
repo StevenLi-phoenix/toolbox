@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discord Markdown Preview</title>
+<meta name="description" content="Preview Discord-flavored markdown — bold, italics, spoilers, code blocks, block quotes, headings, mentions, timestamps, and custom emoji. Character limits and message splitting included.">
+<meta name="keywords" content="discord markdown, discord preview, discord spoiler, discord formatting, discord message editor">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/discordmd.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea {
+    width: 100%; box-sizing: border-box;
+    min-height: 420px; resize: vertical;
+    font-family: var(--mono); font-size: .88rem; line-height: 1.55;
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px;
+  }
+  .preview {
+    min-height: 420px;
+    background: #313338; color: #dbdee1;
+    border-radius: var(--radius); padding: 16px 18px;
+    font-family: "gg sans", "Helvetica Neue", Arial, sans-serif;
+    font-size: 1rem; line-height: 1.375;
+    overflow: auto;
+  }
+  .preview h1, .preview h2, .preview h3 { color: #f2f3f5; margin: .6em 0 .3em; line-height: 1.25; font-weight: 700; }
+  .preview h1 { font-size: 1.5rem; }
+  .preview h2 { font-size: 1.25rem; }
+  .preview h3 { font-size: 1rem; }
+  .preview strong { font-weight: 700; color: #f2f3f5; }
+  .preview em { font-style: italic; }
+  .preview u { text-decoration: underline; }
+  .preview s { text-decoration: line-through; opacity: .7; }
+  .preview a { color: #00a8fc; text-decoration: none; }
+  .preview a:hover { text-decoration: underline; }
+  .preview code.inline {
+    background: #2b2d31; padding: .1em .3em; border-radius: 3px;
+    font-family: "Consolas", ui-monospace, monospace; font-size: .85em;
+  }
+  .preview pre.block {
+    background: #2b2d31; padding: .6em .8em; border-radius: 4px;
+    font-family: "Consolas", ui-monospace, monospace; font-size: .85em;
+    overflow-x: auto; margin: .4em 0;
+  }
+  .preview blockquote {
+    border-left: 4px solid #4f545c; padding-left: 10px; margin: .2em 0;
+    color: #dbdee1;
+  }
+  .preview .spoiler {
+    background: #202225; color: transparent; border-radius: 3px;
+    cursor: pointer; padding: 0 2px;
+  }
+  .preview .spoiler.revealed { background: #434750; color: #dbdee1; cursor: text; }
+  .preview .mention {
+    background: rgba(88,101,242,.3); color: #c9cdfb;
+    border-radius: 3px; padding: 0 2px; font-weight: 500;
+  }
+  .preview .mention:hover { background: rgba(88,101,242,.6); color: #fff; cursor: pointer; }
+  .preview .emoji { font-style: normal; }
+  .preview ul, .preview ol { margin: .2em 0 .2em 1.4em; }
+  .preview hr { border: none; border-top: 1px solid #4f545c; margin: .6em 0; }
+  .preview .timestamp { background: #4e5058; color: #dbdee1; padding: 0 4px; border-radius: 3px; }
+  .counter { font-size: .8rem; color: var(--muted); margin-top: 8px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .counter b { color: var(--text); }
+  .counter .warn { color: var(--warning); }
+  .counter .err  { color: var(--error); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Discord Markdown Preview</h1>
+<p class="subtitle">Live preview for Discord-flavored markdown — spoilers, code blocks, quotes, mentions, and timestamps.</p>
+
+<div class="card">
+  <div class="panels">
+    <div>
+      <h3 style="margin:0 0 6px;font-size:.85rem;color:var(--muted)">Markdown</h3>
+      <textarea id="src" spellcheck="false"></textarea>
+      <div class="counter" id="counter"></div>
+    </div>
+    <div>
+      <h3 style="margin:0 0 6px;font-size:.85rem;color:var(--muted)">Preview</h3>
+      <div class="preview" id="preview"></div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:12px;gap:8px;display:flex;flex-wrap:wrap">
+    <button class="btn" id="copy">Copy Markdown</button>
+    <button class="btn btn-secondary" id="clear">Clear</button>
+    <button class="btn btn-secondary" id="sample">Load Sample</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Syntax Cheat Sheet</h2>
+  <ul style="font-size:.88rem;line-height:1.7;margin:0;padding-left:1.2rem">
+    <li><code>**bold**</code> · <code>*italic*</code> · <code>__underline__</code> · <code>~~strike~~</code></li>
+    <li><code># H1</code> · <code>## H2</code> · <code>### H3</code> (must start the line)</li>
+    <li><code>&gt; quote</code> · <code>&gt;&gt;&gt; block quote</code></li>
+    <li><code>`inline code`</code> · triple backticks for code blocks with optional language</li>
+    <li><code>||spoiler||</code> — click to reveal</li>
+    <li>Mentions: <code>&lt;@123&gt;</code> user, <code>&lt;@&amp;123&gt;</code> role, <code>&lt;#123&gt;</code> channel</li>
+    <li>Timestamps: <code>&lt;t:1700000000:R&gt;</code> (relative, short, long)</li>
+    <li>Custom emoji: <code>&lt;:name:123&gt;</code> · <code>&lt;a:name:123&gt;</code> (animated)</li>
+  </ul>
+</div>
+
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderInline(text) {
+  let out = escHtml(text);
+
+  // Custom emoji <:name:id> or <a:name:id>
+  out = out.replace(/&lt;(a?):([A-Za-z0-9_]+):(\d+)&gt;/g, (m, a, name) =>
+    `<span class="emoji" title=":${name}:">:${name}:</span>`);
+
+  // Mentions
+  out = out.replace(/&lt;@!?(\d+)&gt;/g, (m, id) => `<span class="mention">@user-${id}</span>`);
+  out = out.replace(/&lt;@&amp;(\d+)&gt;/g, (m, id) => `<span class="mention">@role-${id}</span>`);
+  out = out.replace(/&lt;#(\d+)&gt;/g, (m, id) => `<span class="mention">#channel-${id}</span>`);
+  out = out.replace(/@(everyone|here)\b/g, '<span class="mention">@$1</span>');
+
+  // Timestamps <t:unix:fmt>
+  out = out.replace(/&lt;t:(\d+)(?::([tTdDfFR]))?&gt;/g, (m, ts, fmt) => {
+    const d = new Date(parseInt(ts, 10) * 1000);
+    let text;
+    switch (fmt) {
+      case 't': text = d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); break;
+      case 'T': text = d.toLocaleTimeString(); break;
+      case 'd': text = d.toLocaleDateString(); break;
+      case 'D': text = d.toLocaleDateString([], {year:'numeric',month:'long',day:'numeric'}); break;
+      case 'F': text = d.toLocaleString([], {weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}); break;
+      case 'R': text = relativeTime(d); break;
+      default : text = d.toLocaleString();
+    }
+    return `<span class="timestamp" title="${escHtml(d.toISOString())}">${escHtml(text)}</span>`;
+  });
+
+  // Inline code — must come before other formatters to protect contents
+  const codes = [];
+  out = out.replace(/`([^`\n]+)`/g, (m, c) => {
+    codes.push(c); return `\u0000${codes.length - 1}\u0000`;
+  });
+
+  // Spoilers ||text||
+  out = out.replace(/\|\|([\s\S]+?)\|\|/g, (m, s) => `<span class="spoiler">${s}</span>`);
+
+  // Links [text](url)
+  out = out.replace(/\[([^\]]+)\]\((https?:[^\s)]+)\)/g, (m, t, u) => `<a href="${u}" rel="noopener" target="_blank">${t}</a>`);
+
+  // Bold **text**
+  out = out.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+  // Underline __text__
+  out = out.replace(/__([^_\n]+?)__/g, '<u>$1</u>');
+  // Italic *text* or _text_
+  out = out.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
+  out = out.replace(/(^|[^_])_([^_\n]+?)_(?!_)/g, '$1<em>$2</em>');
+  // Strike ~~text~~
+  out = out.replace(/~~([^~\n]+?)~~/g, '<s>$1</s>');
+
+  // Restore inline code
+  out = out.replace(/\u0000(\d+)\u0000/g, (m, i) => `<code class="inline">${escHtml(codes[parseInt(i,10)])}</code>`);
+
+  return out;
+}
+
+function relativeTime(d) {
+  const diff = (d.getTime() - Date.now()) / 1000;
+  const abs = Math.abs(diff);
+  const fmt = (v, u) => `${v < 0 ? '' : 'in '}${Math.abs(Math.round(v))} ${u}${Math.abs(Math.round(v)) === 1 ? '' : 's'}${v < 0 ? ' ago' : ''}`;
+  if (abs < 60)    return fmt(diff, 'second');
+  if (abs < 3600)  return fmt(diff/60, 'minute');
+  if (abs < 86400) return fmt(diff/3600, 'hour');
+  if (abs < 2592000)  return fmt(diff/86400, 'day');
+  if (abs < 31536000) return fmt(diff/2592000, 'month');
+  return fmt(diff/31536000, 'year');
+}
+
+function render(src) {
+  // Extract fenced code blocks
+  const blocks = [];
+  src = src.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+    blocks.push({ lang, code });
+    return `\u0001${blocks.length - 1}\u0001`;
+  });
+
+  const lines = src.split('\n');
+  const html = [];
+  let inBlockquote3 = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Restore code block placeholder
+    const m = line.match(/^\u0001(\d+)\u0001$/);
+    if (m) {
+      const b = blocks[parseInt(m[1], 10)];
+      html.push(`<pre class="block"><code>${escHtml(b.code.replace(/\n$/, ''))}</code></pre>`);
+      continue;
+    }
+
+    // Headings
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    if (h) {
+      const lvl = h[1].length;
+      html.push(`<h${lvl}>${renderInline(h[2])}</h${lvl}>`);
+      continue;
+    }
+
+    // Block quote >>> (consumes rest)
+    if (/^>>>\s*/.test(line)) {
+      inBlockquote3 = true;
+      line = line.replace(/^>>>\s*/, '');
+      html.push(`<blockquote>${renderInline(line)}`);
+      continue;
+    }
+    if (inBlockquote3) {
+      html.push('<br>' + renderInline(line));
+      if (i === lines.length - 1) html.push('</blockquote>');
+      continue;
+    }
+
+    // Single-line quote
+    if (/^>\s+/.test(line)) {
+      html.push(`<blockquote>${renderInline(line.replace(/^>\s+/, ''))}</blockquote>`);
+      continue;
+    }
+
+    // Bullet list (- or *)
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        items.push(`<li>${renderInline(lines[i].replace(/^\s*[-*]\s+/, ''))}</li>`);
+        i++;
+      }
+      i--;
+      html.push(`<ul>${items.join('')}</ul>`);
+      continue;
+    }
+
+    if (line.trim() === '') { html.push('<br>'); continue; }
+    html.push(`<div>${renderInline(line)}</div>`);
+  }
+  if (inBlockquote3) html.push('</blockquote>');
+
+  return html.join('');
+}
+
+function update() {
+  const src = $('src').value;
+  $('preview').innerHTML = render(src);
+
+  // Counters
+  const c = src.length;
+  const lines = src.split('\n').length;
+  const max = 2000;
+  const cls = c > max ? 'err' : (c > max * 0.9 ? 'warn' : '');
+  $('counter').innerHTML =
+    `<span class="${cls}"><b>${c}</b> / ${max} chars</span>` +
+    `<span><b>${lines}</b> lines</span>` +
+    (c > max ? `<span class="err">Exceeds single message — ${Math.ceil(c/max)} messages needed</span>` : '');
+
+  // Make spoilers clickable
+  $('preview').querySelectorAll('.spoiler').forEach(el => {
+    el.addEventListener('click', () => el.classList.toggle('revealed'));
+  });
+}
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg || 'Copied!';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+$('src').addEventListener('input', update);
+$('copy').addEventListener('click', () => navigator.clipboard.writeText($('src').value).then(() => showToast('Copied!')));
+$('clear').addEventListener('click', () => { $('src').value = ''; update(); });
+$('sample').addEventListener('click', () => { $('src').value = SAMPLE; update(); });
+
+const SAMPLE = `# Deployment Notes
+## Release **v1.2.0**
+
+Hello <@123456789>, the new release is ready — *finally*.
+
+> This is a single-line quote.
+
+Use \`npm run build\` to compile, then:
+\`\`\`bash
+git tag v1.2.0
+git push origin v1.2.0
+\`\`\`
+
+Key changes:
+- **Fixes** a login bug (~~again~~)
+- __Adds__ dark mode toggle
+- ||Secret feature hidden here||
+
+See you in the meeting <t:${Math.floor(Date.now()/1000) + 3600}:R> in <#555>.
+`;
+
+$('src').value = SAMPLE;
+update();
+</script>
+</body>
+</html>

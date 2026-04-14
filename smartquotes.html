@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Quotes &amp; Typography Converter</title>
+<meta name="description" content="Convert straight quotes to curly (smart) quotes, fix dashes and ellipses, or strip typographic punctuation back to ASCII. Works fully offline with configurable locale and quote styles.">
+<meta name="keywords" content="smart quotes, curly quotes, typographic quotes, straight quotes, em dash, en dash, ellipsis, ascii to unicode, prettify text">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/smartquotes.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea {
+    width: 100%; box-sizing: border-box;
+    min-height: 360px; resize: vertical;
+    font-family: var(--mono); font-size: .88rem; line-height: 1.55;
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px;
+  }
+  .opts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px 18px; padding: 12px 14px; margin-bottom: 14px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .opts label { display: flex; align-items: center; gap: 6px; font-size: .85rem; }
+  .opts label.sel { flex-direction: column; align-items: stretch; gap: 4px; }
+  .opts label.sel span { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; font-size: .85rem; }
+  .stats { font-size: .8rem; color: var(--muted); margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .stats b { color: var(--text); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Smart Quotes &amp; Typography</h1>
+<p class="subtitle">Convert straight quotes to curly quotes, fix dashes and ellipses, or strip them back to plain ASCII.</p>
+
+<div class="card">
+  <div class="opts">
+    <label class="sel"><span>Mode</span>
+      <select id="mode">
+        <option value="smart">Straight → Smart</option>
+        <option value="dumb">Smart → Straight</option>
+      </select>
+    </label>
+    <label class="sel"><span>Quote style</span>
+      <select id="style">
+        <option value="en">English “ ” ‘ ’</option>
+        <option value="de">German „ “ ‚ ‘</option>
+        <option value="fr">French « » ‹ ›</option>
+        <option value="guil">Guillemets « »</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="dashes" checked> Fix dashes (--, ---)</label>
+    <label><input type="checkbox" id="ellipsis" checked> Fix ellipsis (…)</label>
+    <label><input type="checkbox" id="arrows"> Fix arrows (→ ← ⇒)</label>
+    <label><input type="checkbox" id="fractions"> Fix fractions (½ ⅓ ¼)</label>
+    <label><input type="checkbox" id="multiply"> Use × for dimensions</label>
+  </div>
+
+  <div class="panels">
+    <div>
+      <h3 style="margin:0 0 6px;font-size:.85rem;color:var(--muted)">Input</h3>
+      <textarea id="in" placeholder='Type or paste text with "straight quotes", apostrophes, and -- dashes...'></textarea>
+    </div>
+    <div>
+      <h3 style="margin:0 0 6px;font-size:.85rem;color:var(--muted)">Output</h3>
+      <textarea id="out" readonly></textarea>
+    </div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="row" style="margin-top:12px;gap:8px;display:flex;flex-wrap:wrap">
+    <button class="btn" id="copy">Copy Output</button>
+    <button class="btn btn-secondary" id="swap">Use Output as Input</button>
+    <button class="btn btn-secondary" id="clear">Clear</button>
+    <button class="btn btn-secondary" id="sample">Load Sample</button>
+  </div>
+</div>
+
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const STYLES = {
+  en:   { ldq:'\u201C', rdq:'\u201D', lsq:'\u2018', rsq:'\u2019' },
+  de:   { ldq:'\u201E', rdq:'\u201C', lsq:'\u201A', rsq:'\u2018' },
+  fr:   { ldq:'\u00AB\u202F', rdq:'\u202F\u00BB', lsq:'\u2039\u202F', rsq:'\u202F\u203A' },
+  guil: { ldq:'\u00AB', rdq:'\u00BB', lsq:'\u2039', rsq:'\u203A' },
+};
+
+function toSmart(text, opts) {
+  const s = STYLES[opts.style] || STYLES.en;
+  let out = text;
+
+  // Ellipsis: ... → …
+  if (opts.ellipsis) out = out.replace(/\.{3,}/g, '\u2026');
+
+  // Dashes: --- → em dash, -- → en dash  (order matters)
+  if (opts.dashes) {
+    out = out.replace(/---/g, '\u2014');
+    out = out.replace(/--/g, '\u2013');
+  }
+
+  // Arrows
+  if (opts.arrows) {
+    out = out.replace(/-->/g, '\u2192').replace(/<--/g, '\u2190').replace(/==>/g, '\u21D2').replace(/<==/g, '\u21D0');
+  }
+
+  // Fractions
+  if (opts.fractions) {
+    const frac = {'1/2':'\u00BD','1/3':'\u2153','2/3':'\u2154','1/4':'\u00BC','3/4':'\u00BE','1/5':'\u2155','2/5':'\u2156','3/5':'\u2157','4/5':'\u2158','1/6':'\u2159','5/6':'\u215A','1/8':'\u215B','3/8':'\u215C','5/8':'\u215D','7/8':'\u215E'};
+    out = out.replace(/\b([1-9])\/([2-9])\b/g, (m, a, b) => frac[a+'/'+b] || m);
+  }
+
+  // Multiplication sign for dimensions (e.g. 3 x 4 → 3 × 4)
+  if (opts.multiply) {
+    out = out.replace(/(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)/g, '$1\u00D7$2');
+  }
+
+  // Apostrophes inside words: don't → don’t
+  out = out.replace(/([A-Za-z])'([A-Za-z])/g, '$1' + s.rsq + '$2');
+  // Trailing apostrophe: boys' → boys’
+  out = out.replace(/([A-Za-z])'/g, '$1' + s.rsq);
+  // Decade apostrophe: '90s → ’90s
+  out = out.replace(/(^|[\s\(\[])'(\d{2})s\b/g, '$1' + s.rsq + '$2s');
+
+  // Double quotes: opening vs closing
+  out = out.replace(/(^|[\s\(\[\{\u2014\u2013>"/])"/g, '$1' + s.ldq);
+  out = out.replace(/"/g, s.rdq);
+
+  // Remaining single quotes (opening position)
+  out = out.replace(/(^|[\s\(\[\{\u2014\u2013>])'/g, '$1' + s.lsq);
+  out = out.replace(/'/g, s.rsq);
+
+  return out;
+}
+
+function toDumb(text) {
+  return text
+    .replace(/[\u2018\u2019\u201A\u201B\u2039\u203A]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"')
+    .replace(/\u2014/g, '---')
+    .replace(/\u2013/g, '--')
+    .replace(/\u2026/g, '...')
+    .replace(/\u2192/g, '-->').replace(/\u2190/g, '<--').replace(/\u21D2/g, '==>').replace(/\u21D0/g, '<==')
+    .replace(/\u00D7/g, 'x')
+    .replace(/[\u00A0\u202F\u2009]/g, ' ');
+}
+
+function run() {
+  const text = $('in').value;
+  const mode = $('mode').value;
+  const opts = {
+    style:    $('style').value,
+    dashes:   $('dashes').checked,
+    ellipsis: $('ellipsis').checked,
+    arrows:   $('arrows').checked,
+    fractions:$('fractions').checked,
+    multiply: $('multiply').checked,
+  };
+  const output = mode === 'smart' ? toSmart(text, opts) : toDumb(text);
+  $('out').value = output;
+
+  // Stats
+  const changes = diffCount(text, output);
+  $('stats').innerHTML =
+    '<span><b>' + text.length + '</b> chars in</span>' +
+    '<span><b>' + output.length + '</b> chars out</span>' +
+    '<span><b>' + changes + '</b> replacements</span>';
+}
+
+function diffCount(a, b) {
+  let n = 0;
+  const len = Math.min(a.length, b.length);
+  for (let i = 0; i < len; i++) if (a[i] !== b[i]) n++;
+  n += Math.abs(a.length - b.length);
+  return n;
+}
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg || 'Copied!';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+['in','mode','style','dashes','ellipsis','arrows','fractions','multiply'].forEach(id => {
+  $(id).addEventListener('input', run);
+  $(id).addEventListener('change', run);
+});
+
+$('copy').addEventListener('click', () => {
+  navigator.clipboard.writeText($('out').value).then(() => showToast('Copied!'));
+});
+$('swap').addEventListener('click', () => { $('in').value = $('out').value; run(); });
+$('clear').addEventListener('click', () => { $('in').value=''; run(); });
+$('sample').addEventListener('click', () => {
+  $('in').value = `She said, "It's the '90s -- everyone's doing it..."\nThe recipe calls for 1/2 cup of sugar and a 3 x 5 pan.\nFollow the rules --> you'll be fine.`;
+  run();
+});
+
+// Initial sample
+$('in').value = `She said, "It's the '90s -- everyone's doing it..."\nUse 1/2 cup and a 3 x 5 pan. Continue --> here.`;
+run();
+</script>
+</body>
+</html>

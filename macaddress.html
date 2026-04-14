@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAC Address Tool — Generator, Validator & Formatter</title>
+<meta name="description" content="Generate, validate, normalize, and inspect MAC addresses. Convert between colon, dash, dot, and bare formats, detect unicast/multicast and local/global bits, and build EUI-64 identifiers.">
+<meta name="keywords" content="mac address, mac generator, mac validator, eui-48, eui-64, mac format, oui, multicast, locally administered">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/macaddress.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input[type="text"] {
+    flex: 1; min-width: 260px;
+    font-family: var(--mono); font-size: 1rem;
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--accent, #6366f1); }
+  .status { margin-top: 10px; font-size: .88rem; min-height: 1.4em; }
+  .status.err { color: var(--error); }
+  .status.ok { color: var(--success); }
+  .grid-out { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .kv { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--surface2); }
+  .kv h3 { margin: 0 0 8px; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .kv .val { font-family: var(--mono); font-size: .92rem; word-break: break-all; cursor: pointer; }
+  .kv .val:hover { color: var(--accent, #6366f1); }
+  .flags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .flag { padding: 4px 10px; border-radius: 999px; font-size: .78rem; border: 1px solid var(--border); color: var(--muted); }
+  .flag.on { color: var(--success); border-color: var(--success); }
+  .flag.warn { color: var(--warning); border-color: var(--warning); }
+  .opts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-family: var(--sans); font-size: .88rem; }
+  @media (max-width: 768px) { .grid-out { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>MAC Address Tool</h1>
+<p class="subtitle">Generate, validate, normalize, and inspect EUI-48 / EUI-64 MAC addresses — all offline.</p>
+
+<div class="card">
+  <div class="row">
+    <input type="text" id="mac" placeholder="00:1A:2B:3C:4D:5E" autocomplete="off" spellcheck="false">
+    <button class="btn" id="random">Random</button>
+    <button class="btn btn-secondary" id="local">Random (Local)</button>
+    <button class="btn btn-secondary" id="clear">Clear</button>
+  </div>
+  <div class="status" id="status"></div>
+</div>
+
+<div id="results" style="display:none">
+  <div class="card">
+    <h2>Formats</h2>
+    <div class="grid-out">
+      <div class="kv"><h3>Colon (IEEE 802)</h3><div class="val" id="f-colon"></div></div>
+      <div class="kv"><h3>Dash (Windows)</h3><div class="val" id="f-dash"></div></div>
+      <div class="kv"><h3>Dot (Cisco)</h3><div class="val" id="f-dot"></div></div>
+      <div class="kv"><h3>Bare (hex)</h3><div class="val" id="f-bare"></div></div>
+      <div class="kv"><h3>Lowercase</h3><div class="val" id="f-lower"></div></div>
+      <div class="kv"><h3>Uppercase</h3><div class="val" id="f-upper"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Properties</h2>
+    <div class="flags" id="flags"></div>
+    <div class="grid-out" style="margin-top:14px">
+      <div class="kv"><h3>OUI (first 24 bits)</h3><div class="val" id="p-oui"></div></div>
+      <div class="kv"><h3>NIC (last 24 bits)</h3><div class="val" id="p-nic"></div></div>
+      <div class="kv"><h3>First byte (binary)</h3><div class="val" id="p-bin"></div></div>
+      <div class="kv"><h3>Integer (decimal)</h3><div class="val" id="p-int"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>EUI-64 (Modified)</h2>
+    <p class="subtitle" style="margin-top:0">IPv6 SLAAC-style identifier: insert FFFE in the middle and flip the U/L bit.</p>
+    <div class="grid-out">
+      <div class="kv"><h3>EUI-64</h3><div class="val" id="e-eui64"></div></div>
+      <div class="kv"><h3>IPv6 link-local suffix</h3><div class="val" id="e-ipv6"></div></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function normalize(input) {
+  const hex = (input || '').replace(/[\s:\-.]/g, '').toLowerCase();
+  if (!/^[0-9a-f]{12}$/.test(hex)) return null;
+  return hex;
+}
+
+function toColon(h) { return h.match(/.{2}/g).join(':'); }
+function toDash(h)  { return h.match(/.{2}/g).join('-'); }
+function toDot(h)   { return h.match(/.{4}/g).join('.'); }
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg || 'Copied!';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => showToast('Copied ' + text));
+}
+
+function analyze() {
+  const raw = $('mac').value.trim();
+  const status = $('status');
+  const results = $('results');
+  if (!raw) {
+    status.textContent = '';
+    status.className = 'status';
+    results.style.display = 'none';
+    return;
+  }
+  const h = normalize(raw);
+  if (!h) {
+    status.textContent = 'Invalid MAC — need 12 hexadecimal digits (with or without separators).';
+    status.className = 'status err';
+    results.style.display = 'none';
+    return;
+  }
+  status.textContent = 'Valid 48-bit MAC address';
+  status.className = 'status ok';
+  results.style.display = 'block';
+
+  const upper = h.toUpperCase();
+  $('f-colon').textContent = toColon(upper);
+  $('f-dash').textContent  = toDash(upper);
+  $('f-dot').textContent   = toDot(upper);
+  $('f-bare').textContent  = upper;
+  $('f-lower').textContent = toColon(h);
+  $('f-upper').textContent = toColon(upper);
+
+  // Properties
+  const firstByte = parseInt(h.substr(0, 2), 16);
+  const isMulticast = (firstByte & 0x01) === 0x01;
+  const isLocal     = (firstByte & 0x02) === 0x02;
+  const isBroadcast = h === 'ffffffffffff';
+  const isZero      = h === '000000000000';
+
+  const flags = $('flags');
+  flags.innerHTML = '';
+  const add = (label, on, warn=false) => {
+    const el = document.createElement('span');
+    el.className = 'flag' + (on ? (warn ? ' warn' : ' on') : '');
+    el.textContent = (on ? '✓ ' : '✗ ') + label;
+    flags.appendChild(el);
+  };
+  add('Unicast', !isMulticast);
+  add('Multicast', isMulticast, true);
+  add('Globally unique (OUI)', !isLocal);
+  add('Locally administered', isLocal, true);
+  if (isBroadcast) add('Broadcast (FF:FF:FF:FF:FF:FF)', true, true);
+  if (isZero)      add('All-zero', true, true);
+
+  $('p-oui').textContent = toColon(upper).split(':').slice(0, 3).join(':');
+  $('p-nic').textContent = toColon(upper).split(':').slice(3).join(':');
+  $('p-bin').textContent = firstByte.toString(2).padStart(8, '0') +
+    '   (bit0=I/G ' + (isMulticast?'multicast':'unicast') +
+    ', bit1=U/L ' + (isLocal?'local':'universal') + ')';
+  // Build decimal safely (48 bits < 2^53)
+  const intVal = parseInt(h, 16);
+  $('p-int').textContent = intVal.toString();
+
+  // EUI-64 modified
+  const b = h.match(/.{2}/g);
+  const firstFlipped = (parseInt(b[0], 16) ^ 0x02).toString(16).padStart(2, '0');
+  const eui64 = [firstFlipped, b[1], b[2], 'ff', 'fe', b[3], b[4], b[5]].join('').toUpperCase();
+  $('e-eui64').textContent = eui64.match(/.{2}/g).join(':');
+
+  // IPv6 link-local suffix: fe80::<eui64 grouped>
+  const e64 = eui64.toLowerCase();
+  const g = e64.match(/.{4}/g);
+  $('e-ipv6').textContent = 'fe80::' + g.join(':');
+}
+
+function randomMac(local) {
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  // Force unicast (clear bit 0)
+  bytes[0] &= 0xfe;
+  if (local) bytes[0] |= 0x02;   // locally administered
+  else       bytes[0] &= 0xfd;   // globally unique
+  const hex = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+  $('mac').value = toColon(hex).toUpperCase();
+  analyze();
+}
+
+$('mac').addEventListener('input', analyze);
+$('random').addEventListener('click', () => randomMac(false));
+$('local').addEventListener('click', () => randomMac(true));
+$('clear').addEventListener('click', () => { $('mac').value=''; analyze(); });
+
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('val')) copyText(e.target.textContent);
+});
+
+// Demo
+$('mac').value = '00:1A:2B:3C:4D:5E';
+analyze();
+</script>
+</body>
+</html>
