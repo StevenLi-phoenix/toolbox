@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hash Collision Probability Calculator — Birthday Problem</title>
+<meta name="description" content="Calculate the probability of a hash collision using the birthday problem. Choose UUID, MD5, SHA-1, SHA-256 or custom bit sizes, and see how many items before 50% collision.">
+<meta name="keywords" content="hash collision probability, birthday problem, UUID collision, SHA-256 collision, hash space calculator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hashcollision.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .controls label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 4px; margin-top: 12px; }
+  .controls input, .controls select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .88rem; box-sizing: border-box; }
+  .preset-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px; }
+  .preset { padding: 8px; font-size: .78rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); cursor: pointer; color: var(--text); text-align: left; }
+  .preset:hover { border-color: var(--accent, #2563eb); }
+  .preset strong { display: block; font-size: .85rem; }
+  .preset span { color: var(--muted); font-size: .72rem; }
+  .result { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 12px; }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1.3rem; color: var(--accent, #2563eb); word-break: break-word; }
+  .result .desc { font-size: .82rem; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .risk-bar { height: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+  .risk-bar .fill { height: 100%; transition: width .2s; }
+  .risk-low { background: #15803d; }
+  .risk-med { background: #d97706; }
+  .risk-high { background: #dc2626; }
+  .thresholds { margin-top: 14px; }
+  .th-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
+  .th-row:last-child { border-bottom: none; }
+  .th-row .lbl { font-family: var(--mono); color: var(--muted); }
+  .th-row .val { font-family: var(--mono); font-weight: 700; }
+  .explain { font-size: .85rem; line-height: 1.6; margin-top: 14px; }
+  .explain code { background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .85rem; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } .preset-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🎲 Hash Collision Probability</h1>
+<p class="subtitle">Birthday-problem calculator for hash spaces. Given a hash bit size and a number of generated items, compute the probability of at least one collision.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Inputs</h2>
+    <div class="controls">
+      <label for="bits">Hash size (bits)</label>
+      <input type="number" id="bits" value="128" min="1" max="512">
+
+      <label for="items">Number of items</label>
+      <input type="text" id="items" value="1e9">
+      <p style="font-size:.75rem;color:var(--muted);margin:4px 0 0">Supports scientific notation (e.g. <code>1e9</code>, <code>2.5e12</code>).</p>
+    </div>
+
+    <h3 style="font-size:.9rem;margin-top:16px">Presets</h3>
+    <div class="preset-grid">
+      <button class="preset" onclick="preset(32, 'CRC32')"><strong>CRC32</strong><span>32-bit</span></button>
+      <button class="preset" onclick="preset(64, 'xxHash64 / Snowflake')"><strong>64-bit hash</strong><span>xxHash, FNV, Snowflake ID</span></button>
+      <button class="preset" onclick="preset(122, 'UUID v4')"><strong>UUID v4</strong><span>122 random bits</span></button>
+      <button class="preset" onclick="preset(128, 'MD5')"><strong>MD5</strong><span>128-bit (broken)</span></button>
+      <button class="preset" onclick="preset(160, 'SHA-1')"><strong>SHA-1</strong><span>160-bit (broken)</span></button>
+      <button class="preset" onclick="preset(256, 'SHA-256')"><strong>SHA-256</strong><span>256-bit</span></button>
+      <button class="preset" onclick="preset(384, 'SHA-384')"><strong>SHA-384</strong><span>384-bit</span></button>
+      <button class="preset" onclick="preset(512, 'SHA-512')"><strong>SHA-512</strong><span>512-bit</span></button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div class="result">
+      <div class="k">Collision probability</div>
+      <div class="v" id="prob">—</div>
+      <div class="risk-bar"><div class="fill" id="probBar" style="width:0%"></div></div>
+      <div class="desc" id="probDesc"></div>
+    </div>
+
+    <div class="result">
+      <div class="k">Hash space size</div>
+      <div class="v" id="space">—</div>
+      <div class="desc" id="spaceDesc"></div>
+    </div>
+
+    <h3 style="font-size:.9rem;margin-top:12px">Items before reaching probability</h3>
+    <div class="thresholds" id="thresholds"></div>
+
+    <div class="explain">
+      <h3 style="font-size:.9rem;margin:12px 0 4px">Formula</h3>
+      <p>For <code>n</code> items in a hash space of size <code>N = 2^bits</code>, the approximate probability of at least one collision (birthday problem) is:</p>
+      <p style="text-align:center;font-family:var(--mono);font-weight:700">P ≈ 1 − e^(−n(n−1)/(2N))</p>
+      <p style="color:var(--muted)">The 50% threshold is reached at roughly <code>n ≈ 1.1774 × √N</code>.</p>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+function preset(bits, label) {
+  document.getElementById('bits').value = bits;
+  compute();
+}
+
+function parseItems(s) {
+  s = s.trim().replace(/[_,\s]/g, '');
+  if (!s) return NaN;
+  // Support 1e9, 1.5e12, 1000000, etc.
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? n : NaN;
+}
+
+// Use BigInt log for large exponents: log2(N) = bits, so N = 2^bits
+// P ≈ 1 - exp(-n*(n-1) / (2N)). For small exponent, use Math.expm1.
+function collisionProb(bits, n) {
+  if (n < 2) return 0;
+  // exponent = -n*(n-1)/(2*N), with N = 2^bits
+  // In log2: exponent = -(n^2 - n) / 2^(bits+1)
+  // Use log: let x = n*(n-1) / 2^(bits+1)
+  // log2(x) = 2*log2(n) - (bits+1)   (approx for large n)
+  const logN = bits * Math.LN2; // ln(N)
+  // x = n*(n-1) / (2N), ln x = ln(n) + ln(n-1) - ln(2) - ln(N)
+  const lnX = Math.log(n) + Math.log(n - 1) - Math.LN2 - logN;
+  if (lnX > 20) return 1; // x huge → p ≈ 1
+  const x = Math.exp(lnX);
+  // P = 1 - exp(-x) = -expm1(-x)
+  return -Math.expm1(-x);
+}
+
+function itemsFor(bits, targetProb) {
+  // Solve -n*(n-1)/(2N) = ln(1 - p)  =>  n^2 - n + 2N*ln(1-p) = 0
+  // n ≈ (1 + sqrt(1 - 8N*ln(1-p))) / 2
+  // For small p: n ≈ sqrt(2N * -ln(1-p))
+  const lnTerm = -Math.log(1 - targetProb); // positive
+  const logN = bits * Math.LN2;
+  const ln2NT = Math.LN2 + logN + Math.log(lnTerm);
+  const n = Math.exp(ln2NT / 2);
+  return n;
+}
+
+function formatBig(n) {
+  if (!Number.isFinite(n)) return '∞';
+  if (n === 0) return '0';
+  if (n < 1) return n.toExponential(3);
+  if (n < 1e6) return Math.round(n).toLocaleString();
+  return n.toExponential(3);
+}
+
+function formatProb(p) {
+  if (p >= 0.9999) return '> 99.99% (≈ certain)';
+  if (p >= 0.01) return (p * 100).toFixed(4) + '%';
+  if (p === 0) return '0%';
+  // Very small
+  return p.toExponential(3) + ' (' + (p * 100).toExponential(3) + '%)';
+}
+
+function spaceSize(bits) {
+  if (bits <= 53) return Math.pow(2, bits).toLocaleString();
+  // Approximate using scientific notation: 2^bits = 10^(bits*log10(2))
+  const exp = bits * Math.LOG10E * Math.LN2;
+  const whole = Math.floor(exp);
+  const frac = Math.pow(10, exp - whole);
+  return frac.toFixed(3) + ' × 10^' + whole;
+}
+
+function compute() {
+  const bits = parseInt(document.getElementById('bits').value, 10);
+  const items = parseItems(document.getElementById('items').value);
+  if (!Number.isFinite(bits) || bits < 1 || !Number.isFinite(items)) {
+    document.getElementById('prob').textContent = '—';
+    return;
+  }
+
+  const p = collisionProb(bits, items);
+  document.getElementById('prob').textContent = formatProb(p);
+  const bar = document.getElementById('probBar');
+  bar.style.width = (Math.min(p, 1) * 100).toFixed(2) + '%';
+  bar.className = 'fill ' + (p < 0.01 ? 'risk-low' : p < 0.5 ? 'risk-med' : 'risk-high');
+
+  let desc;
+  if (p < 1e-15) desc = 'Negligible — effectively impossible at human scales.';
+  else if (p < 1e-9) desc = 'Astronomically unlikely — safe for most applications.';
+  else if (p < 1e-6) desc = 'Very low — acceptable for non-critical uniqueness.';
+  else if (p < 0.01) desc = 'Low — consider collision handling for critical systems.';
+  else if (p < 0.5) desc = 'Meaningful — collisions likely to occur.';
+  else desc = 'High — collisions almost certain.';
+  document.getElementById('probDesc').textContent = desc;
+
+  document.getElementById('space').textContent = spaceSize(bits) + ' (2^' + bits + ')';
+  document.getElementById('spaceDesc').textContent = `${items.toExponential(3)} items generated.`;
+
+  const thresholds = [0.000001, 0.0001, 0.01, 0.5];
+  const labels = ['0.0001% (1 in 1M)', '0.01% (1 in 10K)', '1%', '50% (birthday bound)'];
+  let html = '';
+  thresholds.forEach((t, i) => {
+    const n = itemsFor(bits, t);
+    html += `<div class="th-row"><span class="lbl">${labels[i]}</span><span class="val">${formatBig(n)} items</span></div>`;
+  });
+  document.getElementById('thresholds').innerHTML = html;
+}
+
+document.getElementById('bits').addEventListener('input', compute);
+document.getElementById('items').addEventListener('input', compute);
+compute();
+</script>
+</body>
+</html>

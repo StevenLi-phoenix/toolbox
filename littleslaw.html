@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Little's Law Calculator — Queue &amp; Throughput Sizing</title>
+<meta name="description" content="Apply Little's Law (L = λW) to size queues, thread pools, and connection pools. Solve for any variable given the other two.">
+<meta name="keywords" content="Little's Law calculator, queueing theory, thread pool sizing, throughput calculator, concurrency, queue depth">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/littleslaw.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .var-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 8px; }
+  .var-row { display: grid; grid-template-columns: 110px 1fr 90px; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .var-row.solved { background: #dcfce7; border-color: #86efac; }
+  .var-row label { font-weight: 700; font-size: .88rem; font-family: var(--mono); }
+  .var-row input, .var-row select { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .88rem; box-sizing: border-box; }
+  .var-row input:disabled { background: var(--surface2); color: var(--muted); }
+  .var-row .desc { grid-column: 1 / -1; font-size: .75rem; color: var(--muted); margin-top: 2px; }
+  .solve-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .solve-row .btn { padding: 8px 14px; border: 1px solid var(--border); border-radius: 99px; background: var(--bg); color: var(--text); cursor: pointer; font-size: .82rem; }
+  .solve-row .btn.active { background: var(--accent, #2563eb); color: white; border-color: var(--accent, #2563eb); }
+  .result { margin-top: 14px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .result .formula { font-family: var(--mono); font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+  .result .val { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; color: var(--accent, #2563eb); }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .preset { padding: 6px 12px; font-size: .78rem; border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .preset:hover { border-color: var(--accent, #2563eb); }
+  .explain { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .explain h3 { font-size: .9rem; margin: 14px 0 6px; }
+  .explain code { background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .85rem; }
+  .explain ul { padding-left: 18px; margin: 6px 0; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } .var-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>⚖️ Little's Law Calculator</h1>
+<p class="subtitle">Apply <strong>L = λW</strong> to size queues, thread pools, connection pools, and concurrent requests. Solve for the variable you don't know.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Inputs</h2>
+    <div class="solve-row">
+      <span style="font-size:.82rem;color:var(--muted);align-self:center">Solve for:</span>
+      <button class="btn active" data-solve="L">L (items in system)</button>
+      <button class="btn" data-solve="lambda">λ (arrival rate)</button>
+      <button class="btn" data-solve="W">W (wait time)</button>
+    </div>
+
+    <div class="var-grid">
+      <div class="var-row" id="row-L">
+        <label>L</label>
+        <input type="number" id="L" step="any" value="20">
+        <span style="font-size:.8rem;color:var(--muted)">items</span>
+        <div class="desc">Average number of items in the system (queue length, threads busy, open connections).</div>
+      </div>
+      <div class="var-row" id="row-lambda">
+        <label>λ (lambda)</label>
+        <input type="number" id="lambda" step="any" value="100">
+        <select id="lambdaUnit">
+          <option value="1">/sec</option>
+          <option value="60">/min</option>
+          <option value="3600">/hour</option>
+        </select>
+        <div class="desc">Arrival rate — how many items enter per unit time (requests per second, orders per minute).</div>
+      </div>
+      <div class="var-row" id="row-W">
+        <label>W</label>
+        <input type="number" id="W" step="any" value="200">
+        <select id="WUnit">
+          <option value="0.001">ms</option>
+          <option value="1">sec</option>
+          <option value="60">min</option>
+        </select>
+        <div class="desc">Average time each item spends in the system (latency, service time, sojourn time).</div>
+      </div>
+    </div>
+
+    <div class="preset-row" style="margin-top:14px">
+      <span style="font-size:.78rem;color:var(--muted);align-self:center">Presets:</span>
+      <button class="preset" onclick="loadPreset('web')">Web API</button>
+      <button class="preset" onclick="loadPreset('db')">DB pool</button>
+      <button class="preset" onclick="loadPreset('worker')">Worker queue</button>
+      <button class="preset" onclick="loadPreset('callcenter')">Call center</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Result</h2>
+    <div class="result" id="result">
+      <div class="formula">L = λ × W</div>
+      <div class="val" id="resultVal">—</div>
+      <div id="resultDesc" style="font-size:.82rem;color:var(--muted);margin-top:6px"></div>
+    </div>
+
+    <div class="explain" style="margin-top:16px">
+      <h3>About Little's Law</h3>
+      <p>Little's Law states that in any stable system:</p>
+      <p style="text-align:center;font-size:1.05rem;font-family:var(--mono);font-weight:700;margin:10px 0">L = λ × W</p>
+      <ul>
+        <li><strong>L</strong> — average number of items in the system</li>
+        <li><strong>λ</strong> — long-run average arrival rate</li>
+        <li><strong>W</strong> — average time an item spends in the system</li>
+      </ul>
+      <h3>Practical uses</h3>
+      <ul>
+        <li><strong>Thread pool sizing:</strong> If your service handles 500 rps at 50 ms average latency, you need ≥ 25 concurrent workers.</li>
+        <li><strong>Queue depth:</strong> Given producer rate and service time, compute average depth.</li>
+        <li><strong>Connection pools:</strong> DB connections needed = QPS × query time.</li>
+      </ul>
+      <p style="color:var(--muted);margin-top:10px">Assumes the system is stable (arrivals ≤ processing capacity). For unstable or bursty systems, use percentile-based sizing or queueing models (M/M/c).</p>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+let solveFor = 'L';
+
+const PRESETS = {
+  web:        { lambda: 500, lambdaUnit: '1', W: 50,  WUnit: '0.001', solve: 'L' },
+  db:         { lambda: 1000, lambdaUnit: '1', W: 5,   WUnit: '0.001', solve: 'L' },
+  worker:     { lambda: 10,  lambdaUnit: '60', W: 30,  WUnit: '1',     solve: 'L' },
+  callcenter: { lambda: 120, lambdaUnit: '60', W: 4,   WUnit: '60',    solve: 'L' }
+};
+
+function loadPreset(key) {
+  const p = PRESETS[key];
+  document.getElementById('lambda').value = p.lambda;
+  document.getElementById('lambdaUnit').value = p.lambdaUnit;
+  document.getElementById('W').value = p.W;
+  document.getElementById('WUnit').value = p.WUnit;
+  setSolve(p.solve);
+}
+
+function setSolve(v) {
+  solveFor = v;
+  document.querySelectorAll('.solve-row .btn').forEach(b => b.classList.toggle('active', b.dataset.solve === v));
+  document.querySelectorAll('.var-row').forEach(r => r.classList.remove('solved'));
+  ['L', 'lambda', 'W'].forEach(k => {
+    const disabled = k === v;
+    document.getElementById(k).disabled = disabled;
+    if (disabled) document.getElementById('row-' + k).classList.add('solved');
+  });
+  compute();
+}
+
+function compute() {
+  const L = parseFloat(document.getElementById('L').value);
+  const lambda = parseFloat(document.getElementById('lambda').value);
+  const lambdaUnit = parseFloat(document.getElementById('lambdaUnit').value);
+  const W = parseFloat(document.getElementById('W').value);
+  const WUnit = parseFloat(document.getElementById('WUnit').value);
+
+  const lambdaPerSec = lambda / lambdaUnit;
+  const WSec = W * WUnit;
+
+  const resultVal = document.getElementById('resultVal');
+  const resultDesc = document.getElementById('resultDesc');
+  const formula = document.querySelector('.result .formula');
+
+  if (solveFor === 'L') {
+    if (!Number.isFinite(lambdaPerSec) || !Number.isFinite(WSec)) { resultVal.textContent = '—'; return; }
+    const val = lambdaPerSec * WSec;
+    formula.textContent = 'L = λ × W';
+    resultVal.textContent = fmt(val) + ' items';
+    resultDesc.textContent = `At ${fmt(lambdaPerSec)} items/sec with ${fmt(WSec * 1000)} ms average time, the system holds ~${fmt(val)} items on average.`;
+    document.getElementById('L').value = fmt(val);
+  } else if (solveFor === 'lambda') {
+    if (!Number.isFinite(L) || !Number.isFinite(WSec) || WSec === 0) { resultVal.textContent = '—'; return; }
+    const valSec = L / WSec;
+    const valInUnit = valSec * lambdaUnit;
+    formula.textContent = 'λ = L / W';
+    resultVal.textContent = fmt(valSec) + ' /sec';
+    resultDesc.textContent = `With ${fmt(L)} items and ${fmt(WSec * 1000)} ms wait, throughput is ${fmt(valSec)}/sec (${fmt(valInUnit)}/${unitLabel('lambda', lambdaUnit)}).`;
+    document.getElementById('lambda').value = fmt(valInUnit);
+  } else if (solveFor === 'W') {
+    if (!Number.isFinite(L) || !Number.isFinite(lambdaPerSec) || lambdaPerSec === 0) { resultVal.textContent = '—'; return; }
+    const valSec = L / lambdaPerSec;
+    const valInUnit = valSec / WUnit;
+    formula.textContent = 'W = L / λ';
+    resultVal.textContent = fmt(valSec * 1000) + ' ms';
+    resultDesc.textContent = `With ${fmt(L)} items and ${fmt(lambdaPerSec)}/sec arrivals, average time is ${fmt(valSec * 1000)} ms (${fmt(valInUnit)} ${unitLabel('W', WUnit)}).`;
+    document.getElementById('W').value = fmt(valInUnit);
+  }
+}
+
+function fmt(n) {
+  if (!Number.isFinite(n)) return '—';
+  if (Math.abs(n) >= 10000) return n.toFixed(0);
+  if (Math.abs(n) >= 100) return n.toFixed(1);
+  if (Math.abs(n) >= 1) return n.toFixed(2);
+  if (Math.abs(n) >= 0.01) return n.toFixed(3);
+  return n.toFixed(4);
+}
+
+function unitLabel(kind, unit) {
+  if (kind === 'lambda') return ({ '1': '/sec', '60': '/min', '3600': '/hour' })[unit];
+  if (kind === 'W') return ({ '0.001': 'ms', '1': 'sec', '60': 'min' })[unit];
+  return '';
+}
+
+document.querySelectorAll('.solve-row .btn').forEach(b => b.addEventListener('click', () => setSolve(b.dataset.solve)));
+['L', 'lambda', 'W', 'lambdaUnit', 'WUnit'].forEach(id => {
+  document.getElementById(id).addEventListener('input', compute);
+  document.getElementById(id).addEventListener('change', compute);
+});
+setSolve('L');
+</script>
+</body>
+</html>
