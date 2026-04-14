@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DKIM Record Builder & Parser</title>
+<meta name="description" content="Build and parse DKIM TXT records (RFC 6376). Generate selector._domainkey records, decode public keys, and validate tag values. 100% client-side.">
+<meta name="keywords" content="dkim, dkim record, dkim builder, dkim parser, email authentication, dns txt">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dkim.html">
+<meta property="og:title" content="DKIM Record Builder & Parser">
+<meta property="og:description" content="Compose and decode DKIM TXT records with tag-by-tag explanations.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/dkim.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .field { display: grid; gap: 4px; margin-bottom: 10px; }
+  .field label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .85rem;
+  }
+  .field textarea { min-height: 80px; resize: vertical; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .out {
+    font-family: var(--mono); font-size: .82rem; padding: 12px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); white-space: pre-wrap; word-break: break-all;
+    min-height: 80px;
+  }
+  .tag-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 8px; }
+  .tag-table th, .tag-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .tag-table th { color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .tag-table code { font-family: var(--mono); color: var(--text); }
+  .err { color: var(--error); font-size: .82rem; margin-top: 6px; }
+  .ok { color: var(--success); font-size: .82rem; margin-top: 6px; }
+  .selector-line { font-family: var(--mono); font-size: .82rem; color: var(--muted); margin-top: 6px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } .row2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>DKIM Record Builder & Parser</h1>
+  <p class="subtitle">Compose a DKIM TXT record (RFC 6376) for your DNS zone, or paste an existing record to inspect every tag. Tags are validated, the public key is wrapped to 255-character chunks, and unknown tags are flagged.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="tabs">
+      <button class="tab active" data-tab="build">Build</button>
+      <button class="tab" data-tab="parse">Parse</button>
+    </div>
+
+    <div id="pane-build">
+      <div class="panels">
+        <div>
+          <div class="row2">
+            <div class="field">
+              <label for="selector">Selector</label>
+              <input id="selector" value="default" placeholder="default">
+            </div>
+            <div class="field">
+              <label for="domain">Domain</label>
+              <input id="domain" value="example.com" placeholder="example.com">
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label for="version">v (version)</label>
+              <select id="version"><option>DKIM1</option></select>
+            </div>
+            <div class="field">
+              <label for="keytype">k (key type)</label>
+              <select id="keytype">
+                <option value="rsa">rsa</option>
+                <option value="ed25519">ed25519</option>
+              </select>
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label for="hashalg">h (hash algorithms)</label>
+              <input id="hashalg" placeholder="sha256 (optional)">
+            </div>
+            <div class="field">
+              <label for="service">s (service type)</label>
+              <input id="service" placeholder="email (optional)">
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label for="flags">t (flags)</label>
+              <select id="flags">
+                <option value="">— none —</option>
+                <option value="y">y (testing)</option>
+                <option value="s">s (strict subdomain)</option>
+                <option value="y:s">y:s (testing + strict)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="notes">n (notes)</label>
+              <input id="notes" placeholder="optional admin note">
+            </div>
+          </div>
+          <div class="field">
+            <label for="pubkey">p (public key — base64 or full PEM)</label>
+            <textarea id="pubkey" placeholder="MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A... or paste a -----BEGIN PUBLIC KEY----- block"></textarea>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="build()">Build Record</button>
+            <button class="btn btn-secondary" onclick="loadExample()">Example</button>
+            <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+          </div>
+          <div class="selector-line" id="selectorLine"></div>
+          <div id="buildErr"></div>
+        </div>
+        <div>
+          <label style="font-size:.78rem;color:var(--muted);font-weight:600;">TXT record value</label>
+          <div class="out" id="recordOut"></div>
+          <button class="btn btn-secondary" style="margin-top:8px;" onclick="copyOut('recordOut')">Copy record</button>
+
+          <label style="font-size:.78rem;color:var(--muted);font-weight:600;display:block;margin-top:14px;">Split into 255-char strings (BIND-style)</label>
+          <div class="out" id="splitOut"></div>
+          <button class="btn btn-secondary" style="margin-top:8px;" onclick="copyOut('splitOut')">Copy split</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="pane-parse" style="display:none;">
+      <div class="field">
+        <label for="parseInput">Paste a DKIM TXT record</label>
+        <textarea id="parseInput" placeholder='v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4...'></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="parse()">Parse</button>
+        <button class="btn btn-secondary" onclick="loadParseExample()">Example</button>
+      </div>
+      <div id="parseResult"></div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">DKIM tags (RFC 6376 §3.6.1)</h2>
+    <table class="tag-table">
+      <tr><th>Tag</th><th>Meaning</th></tr>
+      <tr><td><code>v</code></td><td>Version. Must be <code>DKIM1</code> if present, and must be the first tag.</td></tr>
+      <tr><td><code>k</code></td><td>Key type. <code>rsa</code> (default) or <code>ed25519</code> (RFC 8463).</td></tr>
+      <tr><td><code>p</code></td><td>Public-key data, base64. An empty value means the key has been revoked.</td></tr>
+      <tr><td><code>h</code></td><td>Acceptable hash algorithms (colon-separated). Usually <code>sha256</code>.</td></tr>
+      <tr><td><code>s</code></td><td>Service type — typically <code>email</code> or <code>*</code>.</td></tr>
+      <tr><td><code>t</code></td><td>Flags: <code>y</code> = testing, <code>s</code> = i= must match d= exactly.</td></tr>
+      <tr><td><code>n</code></td><td>Free-form admin notes (rarely used).</td></tr>
+      <tr><td><code>g</code></td><td>Granularity (DKIM 0.x legacy, ignored by RFC 6376 verifiers).</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const TAG_DESCRIPTIONS = {
+  v: 'Version. Must be DKIM1.',
+  k: 'Key type (rsa, ed25519).',
+  p: 'Public key (base64). Empty = revoked.',
+  h: 'Acceptable hash algorithms.',
+  s: 'Service type — email or *.',
+  t: 'Flags — y (testing), s (strict d=/i= match).',
+  n: 'Notes for the administrator.',
+  g: 'Granularity (DKIM 0.x legacy).',
+};
+const KNOWN_TAGS = new Set(Object.keys(TAG_DESCRIPTIONS));
+
+function stripPemAndWhitespace(s) {
+  return s.replace(/-----BEGIN [^-]+-----/g, '')
+          .replace(/-----END [^-]+-----/g, '')
+          .replace(/\s+/g, '');
+}
+
+function isBase64(s) {
+  if (!s) return false;
+  if (s.length % 4 !== 0) return false;
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(s);
+}
+
+function build() {
+  const errEl = document.getElementById('buildErr');
+  errEl.innerHTML = '';
+  const v = document.getElementById('version').value;
+  const k = document.getElementById('keytype').value;
+  const h = document.getElementById('hashalg').value.trim();
+  const s = document.getElementById('service').value.trim();
+  const t = document.getElementById('flags').value.trim();
+  const n = document.getElementById('notes').value.trim();
+  let p = stripPemAndWhitespace(document.getElementById('pubkey').value);
+
+  if (!p) {
+    errEl.innerHTML = '<div class="err">Public key (p=) is required. Use empty p= only to revoke a key.</div>';
+  } else if (!isBase64(p)) {
+    errEl.innerHTML = '<div class="err">Public key does not look like valid base64. Strip any spaces or paste the PEM block.</div>';
+  }
+
+  const parts = [`v=${v}`, `k=${k}`];
+  if (h) parts.push(`h=${h}`);
+  if (s) parts.push(`s=${s}`);
+  if (t) parts.push(`t=${t}`);
+  if (n) parts.push(`n=${n.replace(/;/g, '')}`);
+  parts.push(`p=${p}`);
+
+  const record = parts.join('; ');
+  document.getElementById('recordOut').textContent = record;
+
+  // Split into 255-char chunks for BIND
+  const chunks = [];
+  for (let i = 0; i < record.length; i += 255) chunks.push(record.slice(i, i + 255));
+  const sel = (document.getElementById('selector').value || 'default').trim();
+  const dom = (document.getElementById('domain').value || 'example.com').trim();
+  const fqdn = `${sel}._domainkey.${dom}`;
+  const split = `${fqdn}. IN TXT ` + chunks.map(c => `"${c}"`).join(' ');
+  document.getElementById('splitOut').textContent = split;
+  document.getElementById('selectorLine').textContent = `Publish at: ${fqdn}`;
+}
+
+function clearAll() {
+  ['hashalg','service','notes','pubkey'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('recordOut').textContent = '';
+  document.getElementById('splitOut').textContent = '';
+  document.getElementById('selectorLine').textContent = '';
+  document.getElementById('buildErr').innerHTML = '';
+}
+
+function loadExample() {
+  document.getElementById('selector').value = 'mail';
+  document.getElementById('domain').value = 'example.com';
+  document.getElementById('keytype').value = 'rsa';
+  document.getElementById('hashalg').value = 'sha256';
+  document.getElementById('service').value = 'email';
+  document.getElementById('flags').value = '';
+  document.getElementById('notes').value = '';
+  document.getElementById('pubkey').value =
+    'MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDwIRP/UC3SBsEmGqZ9ZJW3/DkMoGeLnQg1fWn7/zYt' +
+    'IxN2SnFCjxOCKG9v3b4jYfcTNh5ijSsq631uBItLa7od+v/RtdC2UzJ1lWT947qR+Rcac2gbto/NMqJ0' +
+    'fzfVjH4OuKhitdY9tf6mcwGjaNBcWToIMmPSPDdQPNUYckcQ2QIDAQAB';
+  build();
+}
+
+function parse() {
+  const input = document.getElementById('parseInput').value.trim();
+  const out = document.getElementById('parseResult');
+  if (!input) { out.innerHTML = ''; return; }
+
+  // Strip surrounding quotes joined into one string
+  const cleaned = input.replace(/"\s*"/g, '').replace(/^"|"$/g, '').trim();
+  const pairs = cleaned.split(';').map(s => s.trim()).filter(Boolean);
+  const tags = {};
+  const dupes = [];
+  const malformed = [];
+  for (const pair of pairs) {
+    const eq = pair.indexOf('=');
+    if (eq < 1) { malformed.push(pair); continue; }
+    const name = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    if (tags.hasOwnProperty(name)) dupes.push(name);
+    tags[name] = value;
+  }
+
+  let html = '<table class="tag-table"><tr><th>Tag</th><th>Value</th><th>Note</th></tr>';
+  const orderedKnown = ['v','k','p','h','s','t','n','g'];
+  const seen = new Set();
+  const allTagNames = Object.keys(tags);
+
+  for (const name of orderedKnown) {
+    if (!(name in tags)) continue;
+    seen.add(name);
+    const value = tags[name];
+    let note = TAG_DESCRIPTIONS[name];
+    if (name === 'v' && value !== 'DKIM1') note = '⚠ Should be DKIM1';
+    if (name === 'k' && !['rsa','ed25519'].includes(value)) note = '⚠ Unknown key type — expected rsa or ed25519';
+    if (name === 'p') {
+      if (value === '') note = '⚠ Empty p= means the key is REVOKED';
+      else if (!isBase64(value)) note = '⚠ Not valid base64';
+      else note = `OK — ${value.length} base64 chars`;
+    }
+    html += `<tr><td><code>${name}</code></td><td><code>${escapeHtml(value || '(empty)')}</code></td><td>${note}</td></tr>`;
+  }
+  for (const name of allTagNames) {
+    if (seen.has(name)) continue;
+    if (!KNOWN_TAGS.has(name)) {
+      html += `<tr><td><code>${escapeHtml(name)}</code></td><td><code>${escapeHtml(tags[name])}</code></td><td>⚠ Unknown tag</td></tr>`;
+    }
+  }
+  html += '</table>';
+
+  if (!('v' in tags)) html += '<div class="err">Missing v= tag (DKIM1 expected as the first tag).</div>';
+  if (!('p' in tags)) html += '<div class="err">Missing p= tag (public key required).</div>';
+  if (dupes.length) html += `<div class="err">Duplicate tag(s): ${dupes.join(', ')}</div>`;
+  if (malformed.length) html += `<div class="err">Malformed segment(s): ${malformed.map(escapeHtml).join(', ')}</div>`;
+
+  if ('p' in tags && tags.p && isBase64(tags.p)) {
+    const bytes = atobLen(tags.p);
+    html += `<div class="ok">Public key decodes to ${bytes} bytes (${tags.p.length} base64 chars).</div>`;
+  }
+
+  out.innerHTML = html;
+}
+
+function atobLen(s) {
+  try { return atob(s).length; } catch (e) { return 0; }
+}
+
+function loadParseExample() {
+  document.getElementById('parseInput').value =
+    'v=DKIM1; k=rsa; s=email; h=sha256; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDwIRP/UC3SBsEmGqZ9ZJW3/DkMoGeLnQg1fWn7/zYtIxN2SnFCjxOCKG9v3b4jYfcTNh5ijSsq631uBItLa7od+v/RtdC2UzJ1lWT947qR+Rcac2gbto/NMqJ0fzfVjH4OuKhitdY9tf6mcwGjaNBcWToIMmPSPDdQPNUYckcQ2QIDAQAB';
+  parse();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function copyOut(id) {
+  const text = document.getElementById(id).textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('pane-build').style.display = tab === 'build' ? '' : 'none';
+    document.getElementById('pane-parse').style.display = tab === 'parse' ? '' : 'none';
+  });
+});
+
+// Live update
+['selector','domain','version','keytype','hashalg','service','flags','notes','pubkey'].forEach(id => {
+  document.getElementById(id).addEventListener('input', build);
+  document.getElementById(id).addEventListener('change', build);
+});
+loadExample();
+</script>
+</body>
+</html>

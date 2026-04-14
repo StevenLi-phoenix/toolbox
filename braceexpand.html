@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bash Brace Expansion Visualizer</title>
+<meta name="description" content="Expand bash-style brace patterns like file{1..10}.txt or {dev,staging,prod}/app.{js,ts} into the full list. Supports lists, numeric ranges with steps, padding, and nesting.">
+<meta name="keywords" content="bash, brace expansion, brace expand, glob, shell, range, sequence">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/braceexpand.html">
+<meta property="og:title" content="Bash Brace Expansion Visualizer">
+<meta property="og:description" content="Expand bash brace patterns into the full list of strings, just like the shell.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/braceexpand.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea { min-height: 100px; font-family: var(--mono); font-size: .9rem; }
+  .out {
+    font-family: var(--mono); font-size: .85rem; padding: 12px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); white-space: pre; overflow: auto;
+    min-height: 320px; max-height: 500px;
+  }
+  .meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-top: 8px; }
+  .meta strong { color: var(--text); font-family: var(--mono); }
+  .err { color: var(--error); font-size: .82rem; margin-top: 8px; }
+  .opt-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 10px 0; font-size: .85rem; }
+  .examples { display: flex; flex-direction: column; gap: 6px; }
+  .examples button {
+    text-align: left; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .82rem; cursor: pointer;
+  }
+  .examples button:hover { background: var(--surface2); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Bash Brace Expansion</h1>
+  <p class="subtitle">Type a bash brace pattern and see exactly what the shell would expand it to — without running anything. Supports comma lists <code>{a,b,c}</code>, numeric ranges <code>{1..10}</code>, character ranges <code>{a..z}</code>, ranges with steps <code>{0..20..2}</code>, zero padding <code>{001..010}</code>, and arbitrary nesting <code>{a,b{1..3},c}</code>.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="panels">
+      <div>
+        <label for="input" style="font-size:.78rem;color:var(--muted);font-weight:600;">Pattern</label>
+        <textarea id="input" placeholder="file{1..10}.txt"></textarea>
+        <div class="opt-row">
+          <label><input type="checkbox" id="optDedup"> Deduplicate output</label>
+          <label><input type="checkbox" id="optSort"> Sort output</label>
+          <label>Separator:
+            <select id="sep">
+              <option value="\n">newline</option>
+              <option value=" ">space</option>
+              <option value=",">comma</option>
+            </select>
+          </label>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="run()">Expand</button>
+          <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+        </div>
+        <div class="err" id="err"></div>
+        <div class="meta" id="meta"></div>
+
+        <h3 style="font-size:.85rem;margin:18px 0 8px;">Examples</h3>
+        <div class="examples" id="examples"></div>
+      </div>
+      <div>
+        <label style="font-size:.78rem;color:var(--muted);font-weight:600;">Expansion</label>
+        <div class="out" id="out"></div>
+        <button class="btn btn-secondary" style="margin-top:8px;" onclick="copyOut()">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Notes</h2>
+    <ul style="font-size:.85rem;color:var(--muted);line-height:1.7;padding-left:1.1rem;">
+      <li>This implements the GNU bash brace-expansion grammar — it does <em>not</em> perform globbing, parameter expansion, or word splitting.</li>
+      <li>Adjacent groups produce a Cartesian product: <code>{a,b}{1,2}</code> → <code>a1 a2 b1 b2</code>.</li>
+      <li>Numeric ranges respect zero-padding when either endpoint is padded: <code>{01..05}</code> → <code>01 02 03 04 05</code>.</li>
+      <li>Character ranges work on single ASCII letters: <code>{a..f}</code> → <code>a b c d e f</code>. They go in either direction.</li>
+      <li>An optional step can reverse direction: <code>{10..1..2}</code> → <code>10 8 6 4 2</code>.</li>
+      <li>If a brace group can't be parsed (single element, no <code>..</code>, no comma), it is left intact like bash does.</li>
+      <li>To prevent runaway expansion, output is capped at <strong>100,000</strong> entries.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const MAX_OUTPUT = 100000;
+
+// Find matching closing brace, respecting nesting. Returns index of '}' or -1.
+function findMatchingBrace(s, openIdx) {
+  let depth = 0;
+  for (let i = openIdx; i < s.length; i++) {
+    const c = s[i];
+    if (c === '\\') { i++; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+// Split top-level commas inside a brace body.
+function splitTopLevelCommas(body) {
+  const parts = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === '\\') { i++; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') depth--;
+    else if (c === ',' && depth === 0) { parts.push(body.slice(start, i)); start = i + 1; }
+  }
+  parts.push(body.slice(start));
+  return parts;
+}
+
+// Numeric or character range parser. Returns array of strings or null.
+function parseRange(body) {
+  // {N..M} or {N..M..S}
+  const m = body.match(/^(-?\d+)\.\.(-?\d+)(?:\.\.(-?\d+))?$/);
+  if (m) {
+    const aStr = m[1], bStr = m[2];
+    const a = parseInt(aStr, 10), b = parseInt(bStr, 10);
+    let step = m[3] !== undefined ? Math.abs(parseInt(m[3], 10)) : 1;
+    if (step === 0) step = 1;
+    // Detect zero padding: bash pads when either endpoint has a leading zero (and width > digits).
+    const wA = aStr.replace('-','').length, wB = bStr.replace('-','').length;
+    const padded = (aStr.replace('-','').startsWith('0') && wA > 1) || (bStr.replace('-','').startsWith('0') && wB > 1);
+    const width = Math.max(wA, wB);
+    const out = [];
+    if (a <= b) {
+      for (let v = a; v <= b; v += step) out.push(fmt(v, padded, width));
+    } else {
+      for (let v = a; v >= b; v -= step) out.push(fmt(v, padded, width));
+    }
+    return out;
+  }
+  // {a..z} or {a..z..2}
+  const cm = body.match(/^([A-Za-z])\.\.([A-Za-z])(?:\.\.(-?\d+))?$/);
+  if (cm) {
+    const a = cm[1].charCodeAt(0), b = cm[2].charCodeAt(0);
+    let step = cm[3] !== undefined ? Math.abs(parseInt(cm[3], 10)) : 1;
+    if (step === 0) step = 1;
+    const out = [];
+    if (a <= b) for (let v = a; v <= b; v += step) out.push(String.fromCharCode(v));
+    else for (let v = a; v >= b; v -= step) out.push(String.fromCharCode(v));
+    return out;
+  }
+  return null;
+}
+
+function fmt(n, padded, width) {
+  if (!padded) return String(n);
+  const neg = n < 0;
+  const absStr = String(Math.abs(n));
+  const padWidth = neg ? width - 1 : width;
+  return (neg ? '-' : '') + absStr.padStart(Math.max(absStr.length, padWidth), '0');
+}
+
+// Find first valid brace group in s. Returns {open, close, parts} or null.
+function findFirstGroup(s) {
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '\\') { i++; continue; }
+    if (s[i] !== '{') continue;
+    const close = findMatchingBrace(s, i);
+    if (close === -1) continue;
+    const body = s.slice(i + 1, close);
+    // Check if it contains expandable content
+    const range = parseRange(body);
+    if (range) return { open: i, close, parts: range };
+    const parts = splitTopLevelCommas(body);
+    if (parts.length > 1) {
+      // Recursively expand each part
+      const expanded = [];
+      for (const p of parts) {
+        for (const e of expand(p)) expanded.push(e);
+        if (expanded.length > MAX_OUTPUT) throw new Error('Output too large (>100,000 items)');
+      }
+      return { open: i, close, parts: expanded };
+    }
+    // Otherwise this brace group is not a valid expansion — skip past the open brace
+  }
+  return null;
+}
+
+function expand(s) {
+  const grp = findFirstGroup(s);
+  if (!grp) return [s];
+  const before = s.slice(0, grp.open);
+  const after = s.slice(grp.close + 1);
+  const tails = expand(after);
+  const out = [];
+  for (const part of grp.parts) {
+    for (const tail of tails) {
+      out.push(before + part + tail);
+      if (out.length > MAX_OUTPUT) throw new Error('Output too large (>100,000 items)');
+    }
+  }
+  return out;
+}
+
+function run() {
+  const errEl = document.getElementById('err');
+  const metaEl = document.getElementById('meta');
+  const outEl = document.getElementById('out');
+  errEl.textContent = '';
+  metaEl.innerHTML = '';
+  const input = document.getElementById('input').value;
+  if (!input.trim()) { outEl.textContent = ''; return; }
+
+  let result;
+  try {
+    // bash splits by whitespace at the start; expand each token, join.
+    const tokens = input.split(/\s+/).filter(Boolean);
+    result = [];
+    for (const tok of tokens) {
+      const expanded = expand(tok);
+      for (const e of expanded) {
+        result.push(unescape(e));
+        if (result.length > MAX_OUTPUT) throw new Error('Output too large (>100,000 items)');
+      }
+    }
+  } catch (e) {
+    errEl.textContent = e.message;
+    outEl.textContent = '';
+    return;
+  }
+
+  const originalCount = result.length;
+  if (document.getElementById('optDedup').checked) result = [...new Set(result)];
+  if (document.getElementById('optSort').checked) result.sort();
+
+  const sepRaw = document.getElementById('sep').value;
+  const sep = sepRaw === '\\n' ? '\n' : sepRaw;
+  outEl.textContent = result.join(sep);
+
+  metaEl.innerHTML =
+    `<span><strong>${result.length.toLocaleString()}</strong> items</span>` +
+    (originalCount !== result.length ? `<span>(from ${originalCount.toLocaleString()})</span>` : '') +
+    `<span><strong>${outEl.textContent.length.toLocaleString()}</strong> chars</span>`;
+}
+
+function unescape(s) {
+  return s.replace(/\\(.)/g, '$1');
+}
+
+function clearAll() {
+  document.getElementById('input').value = '';
+  document.getElementById('out').textContent = '';
+  document.getElementById('meta').innerHTML = '';
+  document.getElementById('err').textContent = '';
+}
+
+function copyOut() {
+  const text = document.getElementById('out').textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+const EXAMPLES = [
+  'file{1..10}.txt',
+  '{dev,staging,prod}/app.{js,ts}',
+  'host-{01..16}.example.com',
+  'img_{0..20..5}.png',
+  '{a..f}{1..3}',
+  '/var/log/{nginx,apache}/{access,error}.log',
+  '{red,green,{light,dark}-blue}',
+  'backup-{2020..2024}-{01..12}-01.tgz',
+];
+const examplesEl = document.getElementById('examples');
+EXAMPLES.forEach(ex => {
+  const b = document.createElement('button');
+  b.textContent = ex;
+  b.onclick = () => { document.getElementById('input').value = ex; run(); };
+  examplesEl.appendChild(b);
+});
+
+document.getElementById('input').addEventListener('input', run);
+['optDedup','optSort','sep'].forEach(id => document.getElementById(id).addEventListener('change', run));
+
+document.getElementById('input').value = 'file{1..10}.txt';
+run();
+</script>
+</body>
+</html>

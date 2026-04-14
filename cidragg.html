@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIDR Aggregator & IP Range Merger</title>
+<meta name="description" content="Merge a list of IPv4 CIDR blocks and IP ranges into the smallest equivalent set of CIDRs. Supports a.b.c.d-e.f.g.h and a.b.c.d/n inputs. 100% client-side.">
+<meta name="keywords" content="cidr, aggregator, summarization, supernet, ip range, subnet, merge cidr">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cidragg.html">
+<meta property="og:title" content="CIDR Aggregator & IP Range Merger">
+<meta property="og:description" content="Aggregate IPv4 CIDRs and ranges into the smallest covering set.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/cidragg.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea { min-height: 240px; font-family: var(--mono); font-size: .85rem; }
+  .out {
+    font-family: var(--mono); font-size: .85rem; padding: 12px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); white-space: pre; overflow: auto;
+    min-height: 240px; max-height: 400px;
+  }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .stat .label { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .stat .val { font-family: var(--mono); font-size: 1rem; color: var(--text); margin-top: 2px; }
+  .err { color: var(--error); font-size: .82rem; margin-top: 8px; white-space: pre-wrap; }
+  .opt-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 10px 0; font-size: .85rem; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>CIDR Aggregator</h1>
+  <p class="subtitle">Paste a list of IPv4 CIDR blocks, single IPs, or <code>a.b.c.d-e.f.g.h</code> ranges. The tool merges overlapping or adjacent prefixes into the smallest equivalent set of CIDR blocks — useful for firewall rules, route tables, and ACL minimization.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="panels">
+      <div>
+        <label for="input" style="font-size:.78rem;color:var(--muted);font-weight:600;">Input (one per line)</label>
+        <textarea id="input" placeholder="10.0.0.0/24&#10;10.0.1.0/24&#10;192.168.1.10&#10;192.168.1.11-192.168.1.20&#10;172.16.0.0/16"></textarea>
+        <div class="opt-row">
+          <label><input type="checkbox" id="optRange"> Output as ranges (start-end) instead of CIDR</label>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="aggregate()">Aggregate</button>
+          <button class="btn btn-secondary" onclick="loadExample()">Example</button>
+          <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+        </div>
+        <div class="err" id="err"></div>
+      </div>
+      <div>
+        <label style="font-size:.78rem;color:var(--muted);font-weight:600;">Aggregated output</label>
+        <div class="out" id="out"></div>
+        <button class="btn btn-secondary" style="margin-top:8px;" onclick="copyOut()">Copy</button>
+        <div class="stats" id="stats"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">How it works</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      Each input is converted to a numeric <code>[start, end]</code> interval. Intervals are sorted and merged when they touch or overlap. Each merged interval is then split into the largest CIDR blocks that fit at aligned boundaries — the same algorithm used by <code>aggregate6</code>, <code>netaddr.cidr_merge</code>, and Cisco's <em>route summarization</em>.
+    </p>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      Lines starting with <code>#</code> are treated as comments. Whitespace and empty lines are ignored. Single IPs become <code>/32</code> blocks.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function ipToInt(ip) {
+  const parts = ip.split('.');
+  if (parts.length !== 4) throw new Error('Invalid IP: ' + ip);
+  let n = 0;
+  for (const p of parts) {
+    if (!/^\d+$/.test(p)) throw new Error('Invalid IP: ' + ip);
+    const v = parseInt(p, 10);
+    if (v < 0 || v > 255) throw new Error('Octet out of range in: ' + ip);
+    n = n * 256 + v;
+  }
+  return n;
+}
+function intToIp(n) {
+  return [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff].join('.');
+}
+
+function parseLine(line) {
+  // returns [startInt, endInt]
+  line = line.trim();
+  if (line.includes('/')) {
+    const [ip, prefStr] = line.split('/');
+    const prefix = parseInt(prefStr, 10);
+    if (isNaN(prefix) || prefix < 0 || prefix > 32) throw new Error('Bad prefix: ' + line);
+    const base = ipToInt(ip);
+    const size = prefix === 0 ? 0x100000000 : (1 << (32 - prefix)) >>> 0;
+    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+    const start = (base & mask) >>> 0;
+    const end = (start + size - 1) >>> 0;
+    return [start, end];
+  }
+  if (line.includes('-')) {
+    const [a, b] = line.split('-').map(s => s.trim());
+    const s = ipToInt(a), e = ipToInt(b);
+    if (e < s) throw new Error('Range end before start: ' + line);
+    return [s, e];
+  }
+  const v = ipToInt(line);
+  return [v, v];
+}
+
+function mergeIntervals(intervals) {
+  intervals.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+  const out = [];
+  for (const [s, e] of intervals) {
+    if (out.length && s <= out[out.length - 1][1] + 1) {
+      out[out.length - 1][1] = Math.max(out[out.length - 1][1], e);
+    } else {
+      out.push([s, e]);
+    }
+  }
+  return out;
+}
+
+function lowestBitPrefix(n) {
+  // returns the largest "host bits" power-of-two block aligned at n.
+  // For n=0, full /0 block possible
+  if (n === 0) return 32;
+  // count trailing zeros
+  let tz = 0;
+  let x = n;
+  while ((x & 1) === 0 && tz < 32) { tz++; x >>>= 1; }
+  return tz;
+}
+
+function rangeToCidrs(start, end) {
+  const out = [];
+  let cur = start;
+  while (cur <= end) {
+    const maxHostBits = lowestBitPrefix(cur); // alignment-limited
+    const maxByRange = Math.floor(Math.log2(end - cur + 1));
+    const hostBits = Math.min(maxHostBits, maxByRange);
+    const prefix = 32 - hostBits;
+    const size = Math.pow(2, hostBits);
+    out.push({ start: cur, prefix, size });
+    cur += size;
+    if (cur > 0xffffffff) break;
+  }
+  return out;
+}
+
+function aggregate() {
+  const errEl = document.getElementById('err');
+  errEl.textContent = '';
+  const lines = document.getElementById('input').value.split('\n');
+  const intervals = [];
+  const errors = [];
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    try {
+      intervals.push(parseLine(trimmed));
+    } catch (e) {
+      errors.push(`Line ${i + 1}: ${e.message}`);
+    }
+  }
+  if (errors.length) errEl.textContent = errors.join('\n');
+  if (intervals.length === 0) {
+    document.getElementById('out').textContent = '';
+    document.getElementById('stats').innerHTML = '';
+    return;
+  }
+
+  const merged = mergeIntervals(intervals.map(p => [p[0], p[1]]));
+  const asRanges = document.getElementById('optRange').checked;
+  let outLines = [];
+  let totalAddrs = 0;
+  let cidrCount = 0;
+  for (const [s, e] of merged) {
+    totalAddrs += (e - s + 1);
+    if (asRanges) {
+      outLines.push(`${intToIp(s)}-${intToIp(e)}`);
+    } else {
+      const cidrs = rangeToCidrs(s, e);
+      for (const c of cidrs) {
+        outLines.push(`${intToIp(c.start)}/${c.prefix}`);
+        cidrCount++;
+      }
+    }
+  }
+  document.getElementById('out').textContent = outLines.join('\n');
+
+  const inputCount = intervals.length;
+  const outCount = asRanges ? merged.length : cidrCount;
+  const reduction = inputCount > 0 ? Math.round((1 - outCount / inputCount) * 100) : 0;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="label">Input entries</div><div class="val">${inputCount}</div></div>
+    <div class="stat"><div class="label">Output entries</div><div class="val">${outCount}</div></div>
+    <div class="stat"><div class="label">Reduction</div><div class="val">${reduction}%</div></div>
+    <div class="stat"><div class="label">Total addresses</div><div class="val">${totalAddrs.toLocaleString()}</div></div>
+  `;
+}
+
+function loadExample() {
+  document.getElementById('input').value = [
+    '# Sample input — overlaps, duplicates, adjacent blocks, ranges',
+    '10.0.0.0/24',
+    '10.0.1.0/24',
+    '10.0.2.0/23',
+    '10.0.0.128/25',
+    '192.168.1.10',
+    '192.168.1.11-192.168.1.20',
+    '172.16.0.0/16',
+    '172.16.5.0/24',
+    '203.0.113.0/26',
+    '203.0.113.64/26',
+    '203.0.113.128/25',
+  ].join('\n');
+  aggregate();
+}
+
+function clearAll() {
+  document.getElementById('input').value = '';
+  document.getElementById('out').textContent = '';
+  document.getElementById('stats').innerHTML = '';
+  document.getElementById('err').textContent = '';
+}
+
+function copyOut() {
+  const text = document.getElementById('out').textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+document.getElementById('input').addEventListener('input', () => {
+  clearTimeout(window._aggT);
+  window._aggT = setTimeout(aggregate, 200);
+});
+document.getElementById('optRange').addEventListener('change', aggregate);
+
+loadExample();
+</script>
+</body>
+</html>
