@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N-gram Text Analyzer — Free Online Tool</title>
+<meta name="description" content="Generate and rank character or word n-grams from any text. See unigram, bigram, trigram frequencies, total tokens, and unique counts for NLP analysis.">
+<meta name="keywords" content="ngram analyzer, bigram, trigram, text frequency, NLP tokenizer, character ngram, word ngram">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ngram.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .9rem;
+    background: var(--bg); color: var(--text); min-height: 180px;
+    box-sizing: border-box; resize: vertical;
+  }
+  .controls {
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    margin-top: 12px; font-size: .85rem;
+  }
+  .controls label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .controls select, .controls input[type="number"] {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); font-family: var(--mono);
+    font-size: .85rem;
+  }
+  .controls input[type="number"] { width: 60px; }
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin-top: 14px;
+  }
+  .stat {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px; text-align: center;
+  }
+  .stat-val { font-family: var(--mono); font-size: 1.4rem; font-weight: 600; color: var(--text); }
+  .stat-lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+  table {
+    width: 100%; border-collapse: collapse; margin-top: 14px;
+    font-family: var(--mono); font-size: .88rem;
+  }
+  th, td {
+    text-align: left; padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface2); color: var(--muted);
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+    font-weight: 600; position: sticky; top: 0;
+  }
+  td.gram { color: var(--text); word-break: break-all; }
+  td.count, td.pct { text-align: right; }
+  .bar {
+    display: inline-block; height: 10px; background: var(--accent, #3b82f6);
+    border-radius: 2px; vertical-align: middle; margin-left: 8px;
+    opacity: .85;
+  }
+  .table-wrap { max-height: 480px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 14px; }
+  .empty-msg { padding: 30px; text-align: center; color: var(--muted); font-size: .85rem; }
+  @media (max-width: 768px) {
+    .stat-val { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>N-gram Text Analyzer</h1>
+<p class="subtitle">Tokenize text into character or word n-grams, count their frequencies, and inspect the most common patterns. Useful for language detection, autocomplete, plagiarism heuristics, and exploratory NLP.</p>
+
+<div class="card">
+  <h2>Input Text</h2>
+  <textarea id="input" placeholder="Paste any text here…" oninput="analyze()">The quick brown fox jumps over the lazy dog. The dog sleeps in the sun while the fox hunts in the meadow. The quick fox is clever and the lazy dog is slow.</textarea>
+  <div class="controls">
+    <label>Mode:
+      <select id="mode" onchange="analyze()">
+        <option value="word">Word</option>
+        <option value="char">Character</option>
+      </select>
+    </label>
+    <label>N:
+      <input id="n" type="number" min="1" max="10" value="2" onchange="analyze()">
+    </label>
+    <label>Top:
+      <input id="top" type="number" min="5" max="500" value="50" onchange="analyze()">
+    </label>
+    <label><input type="checkbox" id="lower" checked onchange="analyze()"> Lowercase</label>
+    <label><input type="checkbox" id="stripPunct" checked onchange="analyze()"> Strip punctuation</label>
+    <label><input type="checkbox" id="includeSpaces" onchange="analyze()"> Include spaces (char mode)</label>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Statistics</h2>
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="tokens">—</div><div class="stat-lbl">Tokens</div></div>
+    <div class="stat"><div class="stat-val" id="grams">—</div><div class="stat-lbl">N-grams</div></div>
+    <div class="stat"><div class="stat-val" id="unique">—</div><div class="stat-lbl">Unique</div></div>
+    <div class="stat"><div class="stat-val" id="ttr">—</div><div class="stat-lbl">Type/Token</div></div>
+    <div class="stat"><div class="stat-val" id="entropy">—</div><div class="stat-lbl">Entropy (bits)</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Frequency Table</h2>
+  <div class="table-wrap">
+    <table id="freqTable">
+      <thead><tr><th>#</th><th>N-gram</th><th style="text-align:right">Count</th><th style="text-align:right">%</th><th></th></tr></thead>
+      <tbody id="freqBody"></tbody>
+    </table>
+  </div>
+  <div style="margin-top:10px"><button class="btn btn-secondary btn-sm" onclick="exportCSV()">Download CSV</button></div>
+</div>
+
+<div class="card">
+  <h2>About N-grams</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    An <strong>n-gram</strong> is a contiguous sequence of <em>n</em> items from a text. <strong>Word n-grams</strong> capture phrase patterns ("the quick" is a bigram). <strong>Character n-grams</strong> are great for language detection, fuzzy matching, and signature hashing because they tolerate misspellings. <strong>Type/Token Ratio</strong> measures lexical diversity (unique grams / total grams). <strong>Shannon entropy</strong> reflects the average information per n-gram in bits.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let lastResult = null;
+
+function tokenize(text, mode) {
+  let t = text;
+  if ($('lower').checked) t = t.toLowerCase();
+  if (mode === 'word') {
+    if ($('stripPunct').checked) t = t.replace(/[^\p{L}\p{N}\s']/gu, ' ');
+    return t.split(/\s+/).filter(Boolean);
+  } else {
+    if ($('stripPunct').checked) t = t.replace(/[^\p{L}\p{N}\s]/gu, '');
+    if (!$('includeSpaces').checked) t = t.replace(/\s+/g, '');
+    return [...t];
+  }
+}
+
+function buildGrams(tokens, n, mode) {
+  const out = [];
+  if (tokens.length < n) return out;
+  const sep = mode === 'word' ? ' ' : '';
+  for (let i = 0; i <= tokens.length - n; i++) {
+    out.push(tokens.slice(i, i + n).join(sep));
+  }
+  return out;
+}
+
+function analyze() {
+  const text = $('input').value;
+  const n = Math.max(1, Math.min(10, parseInt($('n').value) || 2));
+  const top = Math.max(5, Math.min(500, parseInt($('top').value) || 50));
+  const mode = $('mode').value;
+  const tokens = tokenize(text, mode);
+  const grams = buildGrams(tokens, n, mode);
+
+  const counts = new Map();
+  for (const g of grams) counts.set(g, (counts.get(g) || 0) + 1);
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+
+  $('tokens').textContent = tokens.length;
+  $('grams').textContent = grams.length;
+  $('unique').textContent = counts.size;
+  $('ttr').textContent = grams.length ? (counts.size / grams.length).toFixed(3) : '—';
+
+  let entropy = 0;
+  if (grams.length) {
+    for (const [, c] of counts) {
+      const p = c / grams.length;
+      entropy -= p * Math.log2(p);
+    }
+  }
+  $('entropy').textContent = entropy ? entropy.toFixed(3) : '—';
+
+  const tbody = $('freqBody');
+  tbody.innerHTML = '';
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">No n-grams to display. Increase text length or decrease N.</td></tr>';
+    lastResult = [];
+    return;
+  }
+  const maxCount = sorted[0][1];
+  const slice = sorted.slice(0, top);
+  lastResult = slice;
+  for (let i = 0; i < slice.length; i++) {
+    const [g, c] = slice[i];
+    const pct = (c / grams.length * 100).toFixed(2);
+    const w = Math.max(2, Math.round(c / maxCount * 120));
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + (i + 1) + '</td>' +
+                   '<td class="gram">' + escapeHtml(g) + '</td>' +
+                   '<td class="count">' + c + '</td>' +
+                   '<td class="pct">' + pct + '%</td>' +
+                   '<td><span class="bar" style="width:' + w + 'px"></span></td>';
+    tbody.appendChild(tr);
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function exportCSV() {
+  if (!lastResult || !lastResult.length) return;
+  const csv = 'ngram,count\n' + lastResult.map(([g, c]) =>
+    '"' + g.replace(/"/g, '""') + '",' + c
+  ).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'ngrams.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+analyze();
+</script>
+</body>
+</html>
