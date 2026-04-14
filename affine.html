@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Affine Cipher Encoder / Decoder — Free Online Tool</title>
+<meta name="description" content="Encrypt and decrypt text with the Affine cipher E(x) = (ax + b) mod 26. Automatic modular inverse, brute-force all valid keys, and visual substitution table.">
+<meta name="keywords" content="affine cipher, modular arithmetic cipher, substitution cipher, cryptography, brute force">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/affine.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 160px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .keys {
+    display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; margin-bottom: 14px; align-items: end;
+  }
+  .keys select, .keys input {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg); color: var(--text); width: 100%; box-sizing: border-box;
+  }
+  .formula { font-family: var(--mono); font-size: .9rem; color: var(--muted); text-align: center; margin: 10px 0; padding: 8px; background: var(--surface2); border-radius: var(--radius); }
+  .formula strong { color: var(--text); }
+  .sub-table {
+    display: grid; grid-template-columns: repeat(13, 1fr); gap: 4px;
+    margin-top: 12px; font-family: var(--mono); font-size: .78rem;
+  }
+  .st-cell {
+    text-align: center; padding: 8px 2px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--surface2);
+  }
+  .st-cell b { display: block; font-size: .88rem; color: var(--text); }
+  .st-cell span { color: var(--muted); font-size: .7rem; }
+  .brute {
+    font-family: var(--mono); font-size: .82rem;
+    max-height: 260px; overflow: auto;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px; background: var(--surface2);
+  }
+  .brute-row { display: grid; grid-template-columns: 80px 1fr; gap: 10px; padding: 3px 6px; border-radius: 3px; }
+  .brute-row:hover { background: var(--bg); cursor: pointer; }
+  .brute-row code { color: var(--muted); }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .keys { grid-template-columns: 1fr; }
+    .sub-table { grid-template-columns: repeat(7, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Affine Cipher</h1>
+<p class="subtitle">The Affine cipher is a substitution cipher that combines multiplication and addition modulo 26. Encryption is <code>E(x) = (ax + b) mod 26</code>, where <code>a</code> must be coprime with 26 so the mapping is reversible. Only 12 valid values of <code>a</code> exist (1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25) — multiply that by the 26 choices for <code>b</code> and you get 312 possible keys, trivially brute-forceable.</p>
+
+<div class="card">
+  <div class="keys">
+    <div>
+      <label class="head" for="keyA">Multiplier <code>a</code> (coprime with 26)</label>
+      <select id="keyA" onchange="run('plain')"></select>
+    </div>
+    <div>
+      <label class="head" for="keyB">Offset <code>b</code> (0–25)</label>
+      <input type="number" id="keyB" min="0" max="25" value="8" oninput="run('plain')">
+    </div>
+    <div>
+      <button class="btn btn-secondary" onclick="randomKey()">🎲 Random</button>
+    </div>
+  </div>
+
+  <div class="formula">
+    Encrypt: <strong>E(x) = (<span id="fa">5</span> · x + <span id="fb">8</span>) mod 26</strong>
+    &nbsp;&nbsp;·&nbsp;&nbsp;
+    Decrypt: <strong>D(y) = <span id="fai">21</span>(y − <span id="fb2">8</span>) mod 26</strong>
+  </div>
+
+  <div class="panels">
+    <div>
+      <label class="head" for="plain">Plain text</label>
+      <textarea id="plain" oninput="run('plain')" spellcheck="false">The quick brown fox jumps over the lazy dog</textarea>
+    </div>
+    <div>
+      <label class="head" for="cipher">Affine cipher</label>
+      <textarea id="cipher" oninput="run('cipher')" spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="stats">
+    <span>letters encoded <strong id="lenEnc">0</strong></span>
+    <span>total chars <strong id="lenTot">0</strong></span>
+    <span>key space explored <strong id="lenSpace">1 / 312</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Substitution Table</h2>
+  <div id="subtable" class="sub-table"></div>
+</div>
+
+<div class="card">
+  <h2>Brute Force All Keys</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">Click any row to load that key. 312 possible combinations — instant crack for short ciphertext.</p>
+  <div id="brute" class="brute"></div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const COPRIMES = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25];
+
+function modInverse(a, m) {
+  a = ((a % m) + m) % m;
+  for (let x = 1; x < m; x++) if ((a * x) % m === 1) return x;
+  return null;
+}
+
+function encChar(ch, a, b) {
+  const code = ch.charCodeAt(0);
+  if (code >= 65 && code <= 90) return String.fromCharCode(((a * (code - 65) + b) % 26 + 26) % 26 + 65);
+  if (code >= 97 && code <= 122) return String.fromCharCode(((a * (code - 97) + b) % 26 + 26) % 26 + 97);
+  return ch;
+}
+
+function decChar(ch, a, b) {
+  const ai = modInverse(a, 26);
+  if (ai === null) return ch;
+  const code = ch.charCodeAt(0);
+  if (code >= 65 && code <= 90) return String.fromCharCode(((ai * ((code - 65) - b)) % 26 + 26) % 26 + 65);
+  if (code >= 97 && code <= 122) return String.fromCharCode(((ai * ((code - 97) - b)) % 26 + 26) % 26 + 97);
+  return ch;
+}
+
+function encrypt(text, a, b) {
+  let n = 0;
+  let out = '';
+  for (const ch of text) {
+    const e = encChar(ch, a, b);
+    if (e !== ch) n++;
+    out += e;
+  }
+  return { out, n };
+}
+
+function decrypt(text, a, b) {
+  let n = 0;
+  let out = '';
+  for (const ch of text) {
+    const d = decChar(ch, a, b);
+    if (d !== ch) n++;
+    out += d;
+  }
+  return { out, n };
+}
+
+function initKeyA() {
+  const sel = $('keyA');
+  for (const v of COPRIMES) {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = v;
+    if (v === 5) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+
+function run(source) {
+  source = source || 'plain';
+  const a = parseInt($('keyA').value, 10);
+  const b = ((parseInt($('keyB').value, 10) || 0) % 26 + 26) % 26;
+  $('fa').textContent = a;
+  $('fb').textContent = b;
+  $('fb2').textContent = b;
+  $('fai').textContent = modInverse(a, 26);
+
+  if (source === 'plain') {
+    const r = encrypt($('plain').value, a, b);
+    $('cipher').value = r.out;
+    $('lenEnc').textContent = r.n;
+    $('lenTot').textContent = $('plain').value.length;
+  } else {
+    const r = decrypt($('cipher').value, a, b);
+    $('plain').value = r.out;
+    $('lenEnc').textContent = r.n;
+    $('lenTot').textContent = $('cipher').value.length;
+  }
+
+  renderTable(a, b);
+  renderBrute();
+}
+
+function renderTable(a, b) {
+  const box = $('subtable');
+  box.innerHTML = '';
+  for (let i = 0; i < 26; i++) {
+    const plain = String.fromCharCode(65 + i);
+    const cipher = String.fromCharCode(((a * i + b) % 26 + 26) % 26 + 65);
+    const d = document.createElement('div');
+    d.className = 'st-cell';
+    d.innerHTML = '<b>' + plain + '</b><span>↓</span><b>' + cipher + '</b>';
+    box.appendChild(d);
+  }
+}
+
+function renderBrute() {
+  const box = $('brute');
+  const cipherText = $('cipher').value;
+  if (!cipherText.trim()) { box.innerHTML = '<span class="empty">Enter ciphertext to brute force.</span>'; return; }
+  const sample = cipherText.length > 60 ? cipherText.slice(0, 60) + '…' : cipherText;
+  box.innerHTML = '';
+  for (const a of COPRIMES) {
+    for (let b = 0; b < 26; b++) {
+      const dec = decrypt(sample, a, b).out;
+      const row = document.createElement('div');
+      row.className = 'brute-row';
+      row.innerHTML = '<code>a=' + a + ', b=' + b + '</code><span>' + dec.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</span>';
+      row.onclick = () => { $('keyA').value = a; $('keyB').value = b; run('cipher'); };
+      box.appendChild(row);
+    }
+  }
+}
+
+function randomKey() {
+  $('keyA').value = COPRIMES[Math.floor(Math.random() * COPRIMES.length)];
+  $('keyB').value = Math.floor(Math.random() * 26);
+  run('plain');
+}
+
+initKeyA();
+run('plain');
+</script>
+</body>
+</html>

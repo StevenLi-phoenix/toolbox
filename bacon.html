@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bacon Cipher Encoder / Decoder — Free Online Tool</title>
+<meta name="description" content="Encode and decode text using Francis Bacon's biliteral cipher — each letter becomes a 5-character A/B sequence. Supports the original 24-letter and modern 26-letter variants.">
+<meta name="keywords" content="bacon cipher, biliteral cipher, francis bacon, steganography, binary cipher, ciphering">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bacon.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 180px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; font-size: .88rem; }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .controls select, .controls input[type=text] {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;
+    font-family: var(--mono); background: var(--bg); color: var(--text);
+  }
+  .grid-cells {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;
+    margin-top: 12px; font-family: var(--mono); font-size: .82rem;
+  }
+  .gc-cell {
+    padding: 8px 6px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface2); text-align: center;
+  }
+  .gc-cell b { display: block; font-size: 1rem; color: var(--text); margin-bottom: 2px; }
+  .gc-cell code { color: var(--muted); font-size: .75rem; }
+  .stego {
+    margin-top: 10px; padding: 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--sans); line-height: 1.7; font-size: .92rem;
+  }
+  .stego .b { font-weight: 800; text-transform: uppercase; color: var(--text); }
+  .stego .a { font-weight: 400; text-transform: lowercase; color: var(--muted); }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .grid-cells { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Bacon Cipher</h1>
+<p class="subtitle">Francis Bacon's biliteral cipher (1605) encodes each letter of the alphabet as a 5-character sequence of two symbols — traditionally <code>A</code> and <code>B</code>. It's essentially a 5-bit binary code, making it one of the earliest examples of binary encoding for text. Bacon used it for steganography: by hiding the <em>two forms</em> in different typefaces of an innocent cover text, a secret message could be concealed in plain sight.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Alphabet:
+      <select id="variant" onchange="run('plain')">
+        <option value="24">24-letter (I=J, U=V)</option>
+        <option value="26">26-letter (full)</option>
+      </select>
+    </label>
+    <label>Symbols:
+      <input type="text" id="sym0" value="A" maxlength="1" style="width:36px;text-align:center" oninput="run('plain')">
+      /
+      <input type="text" id="sym1" value="B" maxlength="1" style="width:36px;text-align:center" oninput="run('plain')">
+    </label>
+    <label><input type="checkbox" id="spaces" checked onchange="run('plain')"> Group by letter</label>
+  </div>
+
+  <div class="panels">
+    <div>
+      <label class="head" for="plain">Plain text</label>
+      <textarea id="plain" oninput="run('plain')" spellcheck="false">The quick brown fox</textarea>
+    </div>
+    <div>
+      <label class="head" for="cipher">Bacon cipher</label>
+      <textarea id="cipher" oninput="run('cipher')" spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="stats">
+    <span>letters <strong id="lenIn">0</strong></span>
+    <span>cipher length <strong id="lenOut">0</strong></span>
+    <span>variant <strong id="lenVar">24</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Steganographic Cover</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:6px">Pick any cover text — every 5 letters conceal one secret letter. Bold = B, normal = A.</p>
+  <label class="head" for="cover">Cover text (letters only are used as bits)</label>
+  <textarea id="cover" oninput="renderStego()" spellcheck="false" style="min-height:70px">The British journalists filed reports from the newly rebuilt parliament building while distant church bells rang out over the frozen river below the hilltop keep.</textarea>
+  <div id="stego" class="stego"></div>
+</div>
+
+<div class="card">
+  <h2>Alphabet Table</h2>
+  <div id="alphabet" class="grid-cells"></div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const MAP_24 = {
+  A: 'AAAAA', B: 'AAAAB', C: 'AAABA', D: 'AAABB', E: 'AABAA',
+  F: 'AABAB', G: 'AABBA', H: 'AABBB', I: 'ABAAA', J: 'ABAAA',
+  K: 'ABAAB', L: 'ABABA', M: 'ABABB', N: 'ABBAA', O: 'ABBAB',
+  P: 'ABBBA', Q: 'ABBBB', R: 'BAAAA', S: 'BAAAB', T: 'BAABA',
+  U: 'BAABB', V: 'BAABB', W: 'BABAA', X: 'BABAB', Y: 'BABBA', Z: 'BABBB'
+};
+const MAP_26 = {};
+(function() {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (let i = 0; i < 26; i++) {
+    MAP_26[letters[i]] = i.toString(2).padStart(5, '0').replace(/0/g, 'A').replace(/1/g, 'B');
+  }
+})();
+
+function curMap() { return $('variant').value === '24' ? MAP_24 : MAP_26; }
+function curSym() { return [($('sym0').value || 'A')[0], ($('sym1').value || 'B')[0]]; }
+function normalize(code) {
+  const [s0, s1] = curSym();
+  return code.replace(/A/g, s0).replace(/B/g, s1);
+}
+function denormalize(s) {
+  const [s0, s1] = curSym();
+  return s.toUpperCase().split('').map(c => {
+    if (c === s0.toUpperCase()) return 'A';
+    if (c === s1.toUpperCase()) return 'B';
+    return '';
+  }).join('');
+}
+
+function encode(text) {
+  const map = curMap();
+  const spaces = $('spaces').checked;
+  const parts = [];
+  let n = 0;
+  for (const ch of text.toUpperCase()) {
+    if (map[ch]) { parts.push(normalize(map[ch])); n++; }
+    else if (ch === ' ' && spaces) parts.push('/');
+  }
+  return { out: spaces ? parts.join(' ') : parts.join(''), n };
+}
+
+function decode(text) {
+  const map = curMap();
+  const rev = {};
+  for (const k in map) { if (!(map[k] in rev)) rev[map[k]] = k; }
+  const bits = denormalize(text);
+  let out = '';
+  let n = 0;
+  for (let i = 0; i + 5 <= bits.length; i += 5) {
+    const chunk = bits.slice(i, i + 5);
+    if (rev[chunk]) { out += rev[chunk]; n++; }
+    else out += '?';
+  }
+  return { out, n };
+}
+
+function run(source) {
+  source = source || 'plain';
+  if (source === 'plain') {
+    const r = encode($('plain').value);
+    $('cipher').value = r.out;
+    $('lenIn').textContent = r.n;
+    $('lenOut').textContent = r.out.length;
+  } else {
+    const r = decode($('cipher').value);
+    $('plain').value = r.out;
+    $('lenIn').textContent = r.n;
+    $('lenOut').textContent = $('cipher').value.length;
+  }
+  $('lenVar').textContent = $('variant').value + '-letter';
+  renderAlphabet();
+  renderStego();
+}
+
+function renderAlphabet() {
+  const box = $('alphabet');
+  box.innerHTML = '';
+  const map = curMap();
+  const shown = new Set();
+  for (const letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
+    const code = map[letter];
+    const key = letter + code;
+    if (shown.has(code) && $('variant').value === '24') continue;
+    shown.add(code);
+    const d = document.createElement('div');
+    d.className = 'gc-cell';
+    let lbl = letter;
+    if ($('variant').value === '24') {
+      if (letter === 'I') lbl = 'I/J';
+      if (letter === 'J') continue;
+      if (letter === 'U') lbl = 'U/V';
+      if (letter === 'V') continue;
+    }
+    d.innerHTML = '<b>' + lbl + '</b><code>' + normalize(code) + '</code>';
+    box.appendChild(d);
+  }
+}
+
+function renderStego() {
+  const cipherBits = denormalize($('cipher').value);
+  const cover = $('cover').value;
+  const box = $('stego');
+  if (!cipherBits) { box.innerHTML = '<span class="empty" style="color:var(--muted)">Enter plain text above to generate a cover.</span>'; return; }
+  let html = '';
+  let bitIdx = 0;
+  for (const ch of cover) {
+    if (/[a-zA-Z]/.test(ch)) {
+      if (bitIdx < cipherBits.length) {
+        const bit = cipherBits[bitIdx];
+        html += '<span class="' + (bit === 'B' ? 'b' : 'a') + '">' + ch + '</span>';
+        bitIdx++;
+      } else {
+        html += '<span style="color:var(--border)">' + ch + '</span>';
+      }
+    } else {
+      html += ch;
+    }
+  }
+  if (bitIdx < cipherBits.length) {
+    html += '<br><small style="color:var(--error)">Cover too short — need ' + (cipherBits.length - bitIdx) + ' more letters.</small>';
+  }
+  box.innerHTML = html;
+}
+
+run('plain');
+</script>
+</body>
+</html>
