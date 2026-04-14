@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gray Code Converter & Sequence Generator</title>
+<meta name="description" content="Convert between binary and reflected Gray code, explore Gray sequences, and verify single-bit transitions. Educational bit visualization included.">
+<meta name="keywords" content="gray code, reflected binary, rotary encoder, hamming, bit flip, converter">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/graycode.html">
+<meta property="og:title" content="Gray Code Converter">
+<meta property="og:description" content="Convert between binary and reflected Gray code with a visual bit table.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/graycode.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  input[type=text], input[type=number] { font-family: var(--mono); }
+  .out-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+  .out-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .out-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
+  .out-tile strong { font-family: var(--mono); font-size: .95rem; word-break: break-all; color: var(--text); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-family: var(--mono); font-size: .82rem; }
+  th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: center; }
+  th { background: var(--surface2); font-weight: 600; font-size: .72rem; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+  td.flipped { background: rgba(250, 204, 21, 0.15); font-weight: 600; color: var(--text); }
+  td.bit-1 { color: var(--success); }
+  td.bit-0 { color: var(--muted); }
+  .summary-row { margin-top: 10px; font-size: .82rem; color: var(--muted); }
+  @media (max-width: 768px) {
+    table { font-size: .72rem; }
+    th, td { padding: 4px 5px; }
+    .opts { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Gray Code Converter</h1>
+  <p class="subtitle">Convert between plain binary and reflected Gray code. Gray code (a.k.a. reflected binary code) ensures that consecutive values differ by exactly one bit — the basis for rotary encoders, Karnaugh maps, and glitch-free counters.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="opts">
+      <label>Input:
+        <select id="mode">
+          <option value="dec">Decimal</option>
+          <option value="bin">Binary</option>
+          <option value="hex">Hex</option>
+          <option value="gray">Gray (binary)</option>
+        </select>
+      </label>
+      <label>Bit width:
+        <select id="width">
+          <option value="4">4 bits</option>
+          <option value="8" selected>8 bits</option>
+          <option value="16">16 bits</option>
+          <option value="32">32 bits</option>
+        </select>
+      </label>
+    </div>
+    <label for="value">Value</label>
+    <input type="text" id="value" placeholder="Enter value…" value="42">
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-primary" onclick="convert()">Convert</button>
+      <button class="btn btn-secondary" onclick="sample()">Sample</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+
+    <div class="out-grid" id="out"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Gray sequence — n-1, n, n+1, n+2</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px;">Adjacent rows differ in exactly one bit (highlighted). This single-bit transition property is why Gray code is used in rotary encoders: a mis-aligned read still gives a neighbouring value rather than a wild jump.</p>
+    <div style="overflow-x:auto;"><table id="seq"></table></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About reflected Gray code</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      <strong>Binary → Gray:</strong> <code>g = b ^ (b >> 1)</code><br>
+      <strong>Gray → Binary:</strong> XOR every bit with all higher bits: <code>b = g; b ^= b >> 1; b ^= b >> 2; ...</code><br>
+      Named after Frank Gray (Bell Labs, 1953), reflected binary code is used in rotary and linear position encoders, Karnaugh maps, digital-to-analog converters, genetic algorithms, and Gray-scale modulation constellations in QAM.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function b2g(n) { return n ^ (n >>> 1); }
+function g2b(g) {
+  let b = g;
+  for (let shift = 1; shift < 32; shift <<= 1) b ^= b >>> shift;
+  return b >>> 0;
+}
+
+function parseInput(str, mode) {
+  str = str.trim().replace(/^0x/i, '').replace(/^0b/i, '').replace(/\s+/g, '');
+  if (str === '') throw new Error('Empty input');
+  let n;
+  if (mode === 'dec') {
+    if (!/^[0-9]+$/.test(str)) throw new Error('Not a valid decimal');
+    n = parseInt(str, 10);
+  } else if (mode === 'bin') {
+    if (!/^[01]+$/.test(str)) throw new Error('Not a valid binary number');
+    n = parseInt(str, 2);
+  } else if (mode === 'hex') {
+    if (!/^[0-9a-fA-F]+$/.test(str)) throw new Error('Not a valid hex number');
+    n = parseInt(str, 16);
+  } else if (mode === 'gray') {
+    if (!/^[01]+$/.test(str)) throw new Error('Not a valid binary Gray value');
+    n = g2b(parseInt(str, 2));
+  } else {
+    throw new Error('Unknown mode');
+  }
+  if (n > 0xffffffff || n < 0) throw new Error('Value out of 32-bit unsigned range');
+  return n >>> 0;
+}
+
+function pad(n, width) { return n.toString(2).padStart(width, '0'); }
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() { document.getElementById('status').className = 'status'; }
+
+function renderOut(binInt, grayInt, width) {
+  const max = (width >= 32) ? 0xffffffff : ((1 << width) - 1) >>> 0;
+  const bMasked = binInt & max;
+  const gMasked = grayInt & max;
+  const hexWidth = Math.ceil(width / 4);
+  document.getElementById('out').innerHTML = `
+    <div class="out-tile"><span>Decimal</span><strong>${bMasked}</strong></div>
+    <div class="out-tile"><span>Binary</span><strong>${pad(bMasked, width)}</strong></div>
+    <div class="out-tile"><span>Hex</span><strong>0x${bMasked.toString(16).padStart(hexWidth, '0').toUpperCase()}</strong></div>
+    <div class="out-tile"><span>Gray (bin)</span><strong>${pad(gMasked, width)}</strong></div>
+    <div class="out-tile"><span>Gray (dec)</span><strong>${gMasked}</strong></div>
+    <div class="out-tile"><span>Gray (hex)</span><strong>0x${gMasked.toString(16).padStart(hexWidth, '0').toUpperCase()}</strong></div>
+  `;
+}
+
+function renderSequence(center, width) {
+  const max = (width >= 32) ? 0xffffffff : ((1 << width) - 1) >>> 0;
+  const start = Math.max(0, center - 1);
+  const rows = [];
+  for (let i = 0; i < 4; i++) {
+    const n = (start + i) & max;
+    if (start + i > max) break;
+    rows.push({ dec: n, bin: pad(n, width), gray: pad(b2g(n) & max, width) });
+  }
+  // Build header
+  let html = '<thead><tr><th>Dec</th>';
+  for (let b = width - 1; b >= 0; b--) html += `<th>b${b}</th>`;
+  html += '<th>→ Gray</th>';
+  for (let b = width - 1; b >= 0; b--) html += `<th>g${b}</th>`;
+  html += '</tr></thead><tbody>';
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    const prev = r > 0 ? rows[r-1] : null;
+    html += '<tr>';
+    html += `<td><strong>${row.dec}</strong></td>`;
+    for (let b = 0; b < width; b++) {
+      const bit = row.bin[b];
+      const flipped = prev && bit !== prev.bin[b];
+      html += `<td class="bit-${bit}${flipped ? ' flipped' : ''}">${bit}</td>`;
+    }
+    html += '<td>·</td>';
+    for (let b = 0; b < width; b++) {
+      const bit = row.gray[b];
+      const flipped = prev && bit !== prev.gray[b];
+      html += `<td class="bit-${bit}${flipped ? ' flipped' : ''}">${bit}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  document.getElementById('seq').innerHTML = html;
+}
+
+function convert() {
+  clearStatus();
+  try {
+    const mode = document.getElementById('mode').value;
+    const width = parseInt(document.getElementById('width').value, 10);
+    const n = parseInput(document.getElementById('value').value, mode);
+    const max = (width >= 32) ? 0xffffffff : ((1 << width) - 1) >>> 0;
+    if (n > max) throw new Error(`Value exceeds ${width}-bit range (max ${max})`);
+    const gray = b2g(n) >>> 0;
+    renderOut(n, gray, width);
+    renderSequence(n, width);
+  } catch (e) {
+    setStatus(e.message, 'error');
+    document.getElementById('out').innerHTML = '';
+    document.getElementById('seq').innerHTML = '';
+  }
+}
+
+function sample() {
+  document.getElementById('mode').value = 'dec';
+  document.getElementById('width').value = '8';
+  document.getElementById('value').value = '42';
+  convert();
+}
+function clearAll() {
+  document.getElementById('value').value = '';
+  document.getElementById('out').innerHTML = '';
+  document.getElementById('seq').innerHTML = '';
+  clearStatus();
+}
+
+document.getElementById('value').addEventListener('input', convert);
+document.getElementById('mode').addEventListener('change', convert);
+document.getElementById('width').addEventListener('change', convert);
+convert();
+</script>
+</body>
+</html>

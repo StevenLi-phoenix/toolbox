@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EIP-55 Ethereum Address Checksum Validator</title>
+<meta name="description" content="Validate and generate EIP-55 mixed-case checksums for Ethereum addresses. Also supports EIP-1191 chain-specific checksums. 100% client-side.">
+<meta name="keywords" content="eip-55, eip55, ethereum, address, checksum, keccak, eip-1191, crypto">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/eip55.html">
+<meta property="og:title" content="EIP-55 Ethereum Address Checksum">
+<meta property="og:description" content="Validate and generate EIP-55 and EIP-1191 Ethereum address checksums.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/eip55.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .addr-in { font-family: var(--mono); font-size: .95rem; letter-spacing: .01em; }
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .result { font-family: var(--mono); font-size: 1rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 10px; word-break: break-all; line-height: 1.6; }
+  .result .upper { color: var(--text); font-weight: 600; }
+  .result .lower { color: var(--muted); }
+  .verdict { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius); font-size: .9rem; font-weight: 500; }
+  .verdict.ok { background: rgba(16,185,129,.1); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+  .verdict.bad { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.3); }
+  .verdict.neutral { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px; }
+  .meta-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; }
+  .meta-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 2px; }
+  .meta-tile strong { font-family: var(--mono); word-break: break-all; }
+  @media (max-width: 768px) { .opts { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>EIP-55 Ethereum Address Checksum</h1>
+  <p class="subtitle">Validate and generate mixed-case checksums for Ethereum addresses per <a href="https://eips.ethereum.org/EIPS/eip-55" target="_blank" rel="noopener">EIP-55</a>. Optional <a href="https://eips.ethereum.org/EIPS/eip-1191" target="_blank" rel="noopener">EIP-1191</a> mode adds chain-specific checksum variance (Rootstock, etc.). 100% client-side.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <label for="addr">Ethereum address (0x + 40 hex chars)</label>
+    <input type="text" id="addr" class="addr-in" placeholder="0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed" value="0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed">
+    <div class="opts" style="margin-top:10px;">
+      <label>Mode:
+        <select id="mode">
+          <option value="eip55">EIP-55 (standard)</option>
+          <option value="eip1191">EIP-1191 (chain-specific)</option>
+        </select>
+      </label>
+      <label id="chain-wrap" style="display:none;">Chain ID:
+        <select id="chain">
+          <option value="1">1 — Ethereum Mainnet</option>
+          <option value="30">30 — Rootstock Mainnet</option>
+          <option value="31">31 — Rootstock Testnet</option>
+          <option value="137">137 — Polygon</option>
+          <option value="56">56 — BNB Smart Chain</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </label>
+      <label id="chain-custom-wrap" style="display:none;">
+        <input type="number" id="chainCustom" placeholder="e.g. 42" style="width:110px;">
+      </label>
+    </div>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-primary" onclick="run()">Checksum</button>
+      <button class="btn btn-secondary" onclick="sample()">Sample</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+
+    <div id="verdict"></div>
+    <div class="result" id="result" style="display:none;"></div>
+    <div class="meta-grid" id="meta"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About EIP-55</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      An Ethereum address is 20 bytes (40 hex chars) and is case-insensitive for the network. EIP-55 adds a checksum by capitalising hex letters (<code>a-f</code>) based on the Keccak-256 hash of the lowercase address: if the corresponding hash nibble is ≥ 8, the letter is uppercase. Wallets reject addresses with an invalid mixed-case checksum, catching typos before funds are lost.<br>
+      <strong>EIP-1191</strong> prefixes the chain ID to the address before hashing, producing different checksums per chain so an address valid on Ethereum is marked invalid on Rootstock.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+/* Minimal Keccak-256 implementation (FIPS 202 Keccak-f[1600], rate 136).
+   No external deps. Based on public-domain reference pseudocode. */
+const KECCAK_RC = [
+  0x0000000000000001n, 0x0000000000008082n, 0x800000000000808An, 0x8000000080008000n,
+  0x000000000000808Bn, 0x0000000080000001n, 0x8000000080008081n, 0x8000000000008009n,
+  0x000000000000008An, 0x0000000000000088n, 0x0000000080008009n, 0x000000008000000An,
+  0x000000008000808Bn, 0x800000000000008Bn, 0x8000000000008089n, 0x8000000000008003n,
+  0x8000000000008002n, 0x8000000000000080n, 0x000000000000800An, 0x800000008000000An,
+  0x8000000080008081n, 0x8000000000008080n, 0x0000000080000001n, 0x8000000080008008n,
+];
+const KECCAK_ROT = [
+  [0, 36, 3, 41, 18],
+  [1, 44, 10, 45, 2],
+  [62, 6, 43, 15, 61],
+  [28, 55, 25, 21, 56],
+  [27, 20, 39, 8, 14],
+];
+const MASK64 = (1n << 64n) - 1n;
+function rotl64(x, n) {
+  n = BigInt(n) % 64n;
+  return (((x << n) | (x >> (64n - n))) & MASK64);
+}
+function keccakF(state) {
+  for (let round = 0; round < 24; round++) {
+    // Theta
+    const C = new Array(5);
+    for (let x = 0; x < 5; x++) {
+      C[x] = state[x][0] ^ state[x][1] ^ state[x][2] ^ state[x][3] ^ state[x][4];
+    }
+    const D = new Array(5);
+    for (let x = 0; x < 5; x++) {
+      D[x] = C[(x + 4) % 5] ^ rotl64(C[(x + 1) % 5], 1);
+    }
+    for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) state[x][y] ^= D[x];
+    // Rho + Pi
+    const B = [[0n,0n,0n,0n,0n],[0n,0n,0n,0n,0n],[0n,0n,0n,0n,0n],[0n,0n,0n,0n,0n],[0n,0n,0n,0n,0n]];
+    for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) {
+      B[y][(2*x + 3*y) % 5] = rotl64(state[x][y], KECCAK_ROT[x][y]);
+    }
+    // Chi
+    for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) {
+      state[x][y] = B[x][y] ^ ((~B[(x+1) % 5][y]) & MASK64 & B[(x+2) % 5][y]);
+    }
+    // Iota
+    state[0][0] ^= KECCAK_RC[round];
+  }
+}
+function keccak256(bytes) {
+  const rate = 136; // 1600-512 = 1088 bits = 136 bytes
+  // Keccak (pre-FIPS-202) padding: append 0x01 ... 0x80
+  const padLen = rate - (bytes.length % rate);
+  const buf = new Uint8Array(bytes.length + padLen);
+  buf.set(bytes);
+  buf[bytes.length] = 0x01;
+  buf[buf.length - 1] |= 0x80;
+  const state = [[0n,0n,0n,0n,0n],[0n,0n,0n,0n,0n],[0n,0n,0n,0n,0n],[0n,0n,0n,0n,0n],[0n,0n,0n,0n,0n]];
+  for (let off = 0; off < buf.length; off += rate) {
+    for (let i = 0; i < rate; i++) {
+      const x = (i >> 3) % 5;
+      const y = Math.floor((i >> 3) / 5);
+      const bit = BigInt((i & 7) * 8);
+      state[x][y] ^= BigInt(buf[off + i]) << bit;
+    }
+    keccakF(state);
+  }
+  // Squeeze 32 bytes
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    const x = (i >> 3) % 5;
+    const y = Math.floor((i >> 3) / 5);
+    const bit = BigInt((i & 7) * 8);
+    out[i] = Number((state[x][y] >> bit) & 0xffn);
+  }
+  return out;
+}
+function bytesToHex(bytes) {
+  return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/* Self-tests against known Keccak-256 vectors. */
+(function selftest() {
+  const h1 = bytesToHex(keccak256(new Uint8Array(0)));
+  const h2 = bytesToHex(keccak256(new TextEncoder().encode('abc')));
+  const expect1 = 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470';
+  const expect2 = '4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45';
+  if (h1 !== expect1 || h2 !== expect2) {
+    console.warn('keccak256 self-test failed:', h1, h2);
+  }
+})();
+
+function toChecksum(addr, chainId) {
+  const lower = addr.toLowerCase().replace(/^0x/, '');
+  if (!/^[0-9a-f]{40}$/.test(lower)) throw new Error('Address must be 40 hex chars');
+  const prefix = chainId != null ? (String(chainId) + '0x') : '';
+  const input = new TextEncoder().encode(prefix + lower);
+  const hash = keccak256(input);
+  const hashHex = bytesToHex(hash);
+  let out = '0x';
+  for (let i = 0; i < 40; i++) {
+    const c = lower[i];
+    if (/[0-9]/.test(c)) out += c;
+    else {
+      const nibble = parseInt(hashHex[i], 16);
+      out += nibble >= 8 ? c.toUpperCase() : c;
+    }
+  }
+  return out;
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() { document.getElementById('status').className = 'status'; }
+
+function getChainId() {
+  if (document.getElementById('mode').value !== 'eip1191') return null;
+  const sel = document.getElementById('chain').value;
+  if (sel === 'custom') {
+    const v = parseInt(document.getElementById('chainCustom').value, 10);
+    if (isNaN(v) || v < 0) throw new Error('Invalid custom chain ID');
+    return v;
+  }
+  return parseInt(sel, 10);
+}
+
+function renderResult(original, checksummed, chainId) {
+  const resEl = document.getElementById('result');
+  // Colour nibbles that differ from lowercase to show which were promoted.
+  let html = '0x';
+  const lower = checksummed.slice(2).toLowerCase();
+  for (let i = 0; i < 40; i++) {
+    const ch = checksummed[2 + i];
+    if (ch !== lower[i]) html += '<span class="upper">' + ch + '</span>';
+    else html += '<span class="lower">' + ch + '</span>';
+  }
+  resEl.innerHTML = html;
+  resEl.style.display = '';
+
+  const metaEl = document.getElementById('meta');
+  metaEl.innerHTML = `
+    <div class="meta-tile"><span>Checksummed</span><strong>${checksummed}</strong></div>
+    <div class="meta-tile"><span>Lowercase</span><strong>0x${lower}</strong></div>
+    ${chainId != null ? `<div class="meta-tile"><span>Chain ID</span><strong>${chainId}</strong></div>` : ''}
+    <div class="meta-tile"><span>Copy</span><strong><button class="btn btn-secondary" style="padding:4px 10px;font-size:.78rem;" onclick="copyVal('${checksummed}')">Copy checksummed</button></strong></div>
+  `;
+}
+
+function run() {
+  clearStatus();
+  const verdictEl = document.getElementById('verdict');
+  const raw = document.getElementById('addr').value.trim();
+  if (!raw) { verdictEl.innerHTML = ''; document.getElementById('result').style.display = 'none'; document.getElementById('meta').innerHTML = ''; return; }
+  try {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(raw)) throw new Error('Not a valid 0x-prefixed 40-char hex address');
+    const chainId = getChainId();
+    const checksummed = toChecksum(raw, chainId);
+    renderResult(raw, checksummed, chainId);
+
+    const isAllLower = raw === raw.toLowerCase();
+    const isAllUpper = raw.slice(2) === raw.slice(2).toUpperCase();
+    if (isAllLower || isAllUpper) {
+      verdictEl.innerHTML = '<div class="verdict neutral">ℹ Input had no case information — generated checksum above.</div>';
+    } else if (raw === checksummed) {
+      verdictEl.innerHTML = '<div class="verdict ok">✓ Valid EIP-55 checksum — case matches expected.</div>';
+    } else {
+      verdictEl.innerHTML = '<div class="verdict bad">✗ Invalid checksum — input case does not match EIP-55. Expected:<br><code style="word-break:break-all;">' + checksummed + '</code></div>';
+    }
+  } catch (e) {
+    verdictEl.innerHTML = '';
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('meta').innerHTML = '';
+    setStatus(e.message, 'error');
+  }
+}
+
+function sample() {
+  document.getElementById('addr').value = '0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359';
+  run();
+}
+function clearAll() {
+  document.getElementById('addr').value = '';
+  document.getElementById('verdict').innerHTML = '';
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('meta').innerHTML = '';
+  clearStatus();
+}
+function copyVal(v) {
+  navigator.clipboard.writeText(v).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+document.getElementById('mode').addEventListener('change', () => {
+  document.getElementById('chain-wrap').style.display = document.getElementById('mode').value === 'eip1191' ? '' : 'none';
+  const c = document.getElementById('chain-custom-wrap');
+  c.style.display = (document.getElementById('mode').value === 'eip1191' && document.getElementById('chain').value === 'custom') ? '' : 'none';
+  run();
+});
+document.getElementById('chain').addEventListener('change', () => {
+  document.getElementById('chain-custom-wrap').style.display = document.getElementById('chain').value === 'custom' ? '' : 'none';
+  run();
+});
+document.getElementById('chainCustom').addEventListener('input', run);
+document.getElementById('addr').addEventListener('input', run);
+run();
+</script>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base62 Encoder / Decoder — Short IDs, URL Shorteners</title>
+<meta name="description" content="Encode and decode Base62 strings for short IDs, URL shorteners, and compact tokens. Supports text, hex, and integer modes. 100% client-side.">
+<meta name="keywords" content="base62, encoder, decoder, short url, short id, token, url shortener">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/base62.html">
+<meta property="og:title" content="Base62 Encoder / Decoder">
+<meta property="og:description" content="Encode and decode Base62 strings — text, hex bytes, or integers.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/base62.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .io { display: grid; gap: 12px; }
+  .io textarea { min-height: 140px; font-family: var(--mono); font-size: .88rem; }
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .arrow { text-align: center; font-size: 1.4rem; color: var(--muted); padding: 4px 0; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
+  .meta-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; }
+  .meta-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 2px; }
+  .meta-tile strong { font-family: var(--mono); word-break: break-all; }
+  code.alpha { font-family: var(--mono); font-size: .78rem; color: var(--muted); word-break: break-all; }
+  @media (max-width: 768px) { .opts { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Base62 Encoder / Decoder</h1>
+  <p class="subtitle">Convert text, hex bytes, or integers to and from Base62 — a compact alphanumeric encoding commonly used by URL shorteners (bit.ly, YouTube video IDs), short-token generators, and ID compaction schemes.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="opts">
+      <label>Alphabet:
+        <select id="alphabet">
+          <option value="std">Standard (0-9 A-Z a-z)</option>
+          <option value="inv">Inverted (0-9 a-z A-Z)</option>
+          <option value="gmp">GMP (0-9 A-Z a-z — same as std)</option>
+        </select>
+      </label>
+      <label>Input as:
+        <select id="mode">
+          <option value="utf8">UTF-8 text</option>
+          <option value="hex">Hex bytes</option>
+          <option value="int">Integer (decimal)</option>
+        </select>
+      </label>
+    </div>
+    <div class="opts"><code class="alpha" id="alphaDisplay"></code></div>
+
+    <div class="io">
+      <div>
+        <label for="input">Input</label>
+        <textarea id="input" placeholder="Enter text, hex bytes, integer, or Base62 string..."></textarea>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="encode()">Encode →</button>
+          <button class="btn" onclick="decode()">← Decode</button>
+          <button class="btn btn-secondary" onclick="swapIO()">Swap</button>
+          <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+          <button class="btn btn-secondary" onclick="clearIO()">Clear</button>
+        </div>
+      </div>
+      <div class="arrow">⇅</div>
+      <div>
+        <label for="output">Output</label>
+        <textarea id="output" placeholder="Result will appear here..."></textarea>
+        <div class="btn-row">
+          <button class="btn" onclick="copyOutput()">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta-grid" id="meta"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About Base62</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      Base62 encodes binary or integer data using 62 case-sensitive alphanumeric characters (<code>0-9 A-Z a-z</code>). Unlike Base64, it has no padding and is safe inside URLs without escaping. It expands data ~34% (vs. Base64's 33%), but stays URL-safe, double-click-selectable, and free of special characters. Common in URL shorteners, short content IDs (YouTube, Instagram), and compact integer serialization.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const ALPHABETS = {
+  std: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+  inv: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  gmp: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+};
+
+function getAlphabet() { return ALPHABETS[document.getElementById('alphabet').value]; }
+
+function updateAlphaDisplay() {
+  document.getElementById('alphaDisplay').textContent = 'Alphabet: ' + getAlphabet();
+}
+
+// Encode bytes to Base62 string (preserves leading zero bytes with alphabet[0]).
+function base62EncodeBytes(bytes, alpha) {
+  if (bytes.length === 0) return '';
+  // Count leading zero bytes — they map to leading alphabet[0] chars.
+  let zeros = 0;
+  while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  // Convert to big integer using BigInt (safe and simple).
+  let n = 0n;
+  for (let i = zeros; i < bytes.length; i++) n = (n << 8n) | BigInt(bytes[i]);
+  let str = '';
+  if (n === 0n && zeros === bytes.length) return alpha[0].repeat(zeros);
+  while (n > 0n) {
+    const r = Number(n % 62n);
+    n = n / 62n;
+    str = alpha[r] + str;
+  }
+  return alpha[0].repeat(zeros) + str;
+}
+
+function base62DecodeToBytes(str, alpha) {
+  if (str.length === 0) return new Uint8Array(0);
+  const map = {};
+  for (let i = 0; i < alpha.length; i++) map[alpha[i]] = i;
+  let zeros = 0;
+  while (zeros < str.length && str[zeros] === alpha[0]) zeros++;
+  let n = 0n;
+  for (let i = 0; i < str.length; i++) {
+    const c = map[str[i]];
+    if (c === undefined) throw new Error('Invalid character "' + str[i] + '" at position ' + i);
+    n = n * 62n + BigInt(c);
+  }
+  if (n === 0n) return new Uint8Array(zeros);
+  const out = [];
+  while (n > 0n) {
+    out.unshift(Number(n & 0xffn));
+    n = n >> 8n;
+  }
+  // Restore leading-zero bytes, minus any that were non-zero "value" zeros already.
+  // For a leading zero character run, we subtract 1 because base62 mapped it ambiguously.
+  // Simpler: prepend (zeros) zero bytes.
+  const result = new Uint8Array(zeros + out.length);
+  for (let i = 0; i < out.length; i++) result[zeros + i] = out[i];
+  return result;
+}
+
+function base62EncodeInt(decStr, alpha) {
+  let neg = false;
+  let s = decStr.trim();
+  if (s.startsWith('-')) { neg = true; s = s.slice(1); }
+  if (!/^\d+$/.test(s)) throw new Error('Not a valid integer');
+  let n = BigInt(s);
+  if (n === 0n) return alpha[0];
+  let out = '';
+  while (n > 0n) {
+    out = alpha[Number(n % 62n)] + out;
+    n = n / 62n;
+  }
+  return (neg ? '-' : '') + out;
+}
+
+function base62DecodeInt(str, alpha) {
+  let neg = false;
+  let s = str.trim();
+  if (s.startsWith('-')) { neg = true; s = s.slice(1); }
+  if (s.length === 0) throw new Error('Empty input');
+  const map = {};
+  for (let i = 0; i < alpha.length; i++) map[alpha[i]] = i;
+  let n = 0n;
+  for (let i = 0; i < s.length; i++) {
+    const c = map[s[i]];
+    if (c === undefined) throw new Error('Invalid character "' + s[i] + '" at position ' + i);
+    n = n * 62n + BigInt(c);
+  }
+  return (neg ? '-' : '') + n.toString(10);
+}
+
+function hexToBytes(hex) {
+  hex = hex.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (hex.length % 2 !== 0) throw new Error('Hex string must have even length');
+  if (!/^[0-9a-fA-F]*$/.test(hex)) throw new Error('Invalid hex characters');
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+function bytesToHex(bytes) {
+  return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() { document.getElementById('status').className = 'status'; }
+
+function renderMeta(info) {
+  const el = document.getElementById('meta');
+  if (!info) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="meta-tile"><span>Input length</span><strong>${info.inLen}</strong></div>
+    <div class="meta-tile"><span>Output length</span><strong>${info.outLen}</strong></div>
+    <div class="meta-tile"><span>Ratio</span><strong>${(info.outLen / Math.max(info.inLen, 1)).toFixed(2)}×</strong></div>
+  `;
+}
+
+function encode() {
+  clearStatus();
+  const input = document.getElementById('input').value;
+  if (!input) { document.getElementById('output').value = ''; renderMeta(null); return; }
+  try {
+    const mode = document.getElementById('mode').value;
+    const alpha = getAlphabet();
+    let out, inLen;
+    if (mode === 'int') {
+      out = base62EncodeInt(input, alpha);
+      inLen = input.replace(/\s+/g, '').length;
+    } else {
+      const bytes = mode === 'hex' ? hexToBytes(input.trim()) : new TextEncoder().encode(input);
+      out = base62EncodeBytes(bytes, alpha);
+      inLen = bytes.length;
+    }
+    document.getElementById('output').value = out;
+    renderMeta({ inLen, outLen: out.length });
+  } catch (e) {
+    setStatus('Encode error: ' + e.message, 'error');
+  }
+}
+
+function decode() {
+  clearStatus();
+  const input = document.getElementById('input').value.trim();
+  if (!input) { document.getElementById('output').value = ''; renderMeta(null); return; }
+  try {
+    const mode = document.getElementById('mode').value;
+    const alpha = getAlphabet();
+    let out;
+    if (mode === 'int') {
+      out = base62DecodeInt(input, alpha);
+    } else {
+      const bytes = base62DecodeToBytes(input, alpha);
+      if (mode === 'hex') out = bytesToHex(bytes);
+      else {
+        try { out = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+        catch { out = bytesToHex(bytes); setStatus('Not valid UTF-8, showing hex', 'warning'); }
+      }
+    }
+    document.getElementById('output').value = out;
+    renderMeta({ inLen: input.length, outLen: out.length });
+  } catch (e) {
+    setStatus('Decode error: ' + e.message, 'error');
+  }
+}
+
+function swapIO() {
+  const a = document.getElementById('input');
+  const b = document.getElementById('output');
+  [a.value, b.value] = [b.value, a.value];
+}
+function clearIO() {
+  document.getElementById('input').value = '';
+  document.getElementById('output').value = '';
+  renderMeta(null);
+  clearStatus();
+}
+function loadSample() {
+  const mode = document.getElementById('mode').value;
+  if (mode === 'int') document.getElementById('input').value = '125896734';
+  else if (mode === 'hex') document.getElementById('input').value = '48 65 6c 6c 6f';
+  else document.getElementById('input').value = 'Hello, Base62!';
+  encode();
+}
+function copyOutput() {
+  const text = document.getElementById('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+document.getElementById('alphabet').addEventListener('change', updateAlphaDisplay);
+updateAlphaDisplay();
+</script>
+</body>
+</html>
