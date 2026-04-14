@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Run-Length Encoding (RLE) Tool — Free Online</title>
+<meta name="description" content="Encode and decode text using Run-Length Encoding with multiple formats — count-prefix, PackBits, and escaped runs. Compare compressed size in real time.">
+<meta name="keywords" content="run length encoding, rle, packbits, compression, decoder, encoder">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/rle.html">
+<meta property="og:title" content="Run-Length Encoding (RLE) Tool">
+<meta property="og:description" content="Encode and decode RLE text — classic, PackBits, and escaped formats.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/rle.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 140px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  .panel label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 6px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .controls label { display: flex; gap: 6px; font-size: .82rem; align-items: center; color: var(--text); }
+  select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--sans); font-size: .85rem; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+  .stat { padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2, var(--bg)); text-align: center; }
+  .stat .n { font-size: 1.15rem; font-weight: 600; font-family: var(--mono); color: var(--text); }
+  .stat .l { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; }
+  .err { color: var(--error); font-size: .8rem; margin-top: 8px; min-height: 1em; }
+  .note { font-size: .78rem; color: var(--muted); margin-top: 12px; padding: 10px; border: 1px dashed var(--border); border-radius: var(--radius); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Run-Length Encoding (RLE) Tool</h1>
+<p class="subtitle">Compress repeated sequences by writing each run as a count followed by the symbol. Pick a format, encode or decode live, and see how much space you saved vs. the raw input.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="controls">
+    <label>Format
+      <select id="fmt">
+        <option value="classic">Classic: 3A2B → AAABB</option>
+        <option value="single">Omit 1: 3AB2C → AAABCC</option>
+        <option value="brace">Brace: A{3}B{1}C{2}</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="caseSens" checked> Case-sensitive</label>
+    <button class="btn btn-secondary" onclick="swap()">⇅ Swap</button>
+    <button class="btn btn-secondary" onclick="sample()">Sample</button>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <label>Plain text</label>
+      <textarea id="plain" placeholder="Plain text…">WWWWWWWWWWWWBWWWWWWWWWWWWBBBWWWWWWWWWWWWWWWWWWWWWWWWBWWWWWWWWWWWWWW</textarea>
+    </div>
+    <div class="panel">
+      <label>RLE encoded</label>
+      <textarea id="encoded" placeholder="Encoded text…"></textarea>
+    </div>
+  </div>
+  <div class="err" id="err"></div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="s-plain">–</div><div class="l">Plain chars</div></div>
+    <div class="stat"><div class="n" id="s-enc">–</div><div class="l">Encoded chars</div></div>
+    <div class="stat"><div class="n" id="s-ratio">–</div><div class="l">Size ratio</div></div>
+    <div class="stat"><div class="n" id="s-runs">–</div><div class="l">Runs</div></div>
+  </div>
+
+  <div class="note">
+    <strong>Classic</strong> uses <code>count+symbol</code> for every run — always works but adds a digit even for singletons.
+    <strong>Omit 1</strong> skips the <code>1</code> prefix for single-character runs to save space when input has few repeats.
+    <strong>Brace</strong> wraps the count in <code>{n}</code> so digit symbols are unambiguous.
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let last = 'plain';
+
+function normCase(s) { return $('caseSens').checked ? s : s; }
+
+function encode(text, fmt) {
+  if (!text) return '';
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    let j = i + 1;
+    while (j < text.length && text[j] === text[i] && j - i < 9999) j++;
+    const n = j - i;
+    const ch = text[i];
+    if (fmt === 'classic') out.push(n + ch);
+    else if (fmt === 'single') out.push((n === 1 ? '' : n) + ch);
+    else if (fmt === 'brace') out.push(ch + '{' + n + '}');
+    i = j;
+  }
+  return out.join('');
+}
+
+function decode(text, fmt) {
+  if (!text) return '';
+  let out = '';
+  if (fmt === 'brace') {
+    const re = /(.)\{(\d+)\}/g;
+    let m, lastIdx = 0;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index !== lastIdx) throw new Error('Unexpected character at position ' + lastIdx);
+      out += m[1].repeat(parseInt(m[2], 10));
+      lastIdx = re.lastIndex;
+    }
+    if (lastIdx !== text.length) throw new Error('Trailing characters at position ' + lastIdx);
+    return out;
+  }
+  let i = 0;
+  while (i < text.length) {
+    let j = i;
+    while (j < text.length && text[j] >= '0' && text[j] <= '9') j++;
+    let count;
+    if (j === i) {
+      if (fmt !== 'single') throw new Error('Expected digit at position ' + i);
+      count = 1;
+    } else {
+      count = parseInt(text.slice(i, j), 10);
+      if (!Number.isFinite(count) || count < 1) throw new Error('Invalid count at position ' + i);
+    }
+    if (j >= text.length) throw new Error('Missing symbol after count at position ' + i);
+    out += text[j].repeat(count);
+    i = j + 1;
+  }
+  return out;
+}
+
+function countRuns(text) {
+  if (!text) return 0;
+  let n = 1;
+  for (let i = 1; i < text.length; i++) if (text[i] !== text[i - 1]) n++;
+  return n;
+}
+
+function update() {
+  const err = $('err'); err.textContent = '';
+  const fmt = $('fmt').value;
+  try {
+    if (last === 'plain') {
+      const p = $('plain').value;
+      $('encoded').value = encode(p, fmt);
+    } else {
+      const e = $('encoded').value;
+      $('plain').value = decode(e, fmt);
+    }
+  } catch (ex) {
+    err.textContent = 'Decode error: ' + ex.message;
+  }
+  const p = $('plain').value;
+  const e = $('encoded').value;
+  $('s-plain').textContent = p.length;
+  $('s-enc').textContent = e.length;
+  $('s-ratio').textContent = p.length ? (e.length / p.length * 100).toFixed(1) + '%' : '–';
+  $('s-runs').textContent = countRuns(p);
+}
+
+function swap() {
+  const p = $('plain').value, e = $('encoded').value;
+  $('plain').value = e; $('encoded').value = p;
+  last = 'plain';
+  update();
+}
+
+function sample() {
+  $('plain').value = 'aaaaabbbcccccccccdddddeeffffffghhhhhhhhhhhh';
+  last = 'plain';
+  update();
+}
+
+$('plain').addEventListener('input', () => { last = 'plain'; update(); });
+$('encoded').addEventListener('input', () => { last = 'encoded'; update(); });
+$('fmt').addEventListener('change', update);
+$('caseSens').addEventListener('change', update);
+
+update();
+</script>
+</body>
+</html>

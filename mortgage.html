@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mortgage / Loan Amortization Calculator — Free Online Tool</title>
+<meta name="description" content="Calculate monthly mortgage and loan payments with full amortization schedule — principal, interest, extra payments, and total cost. Runs entirely in your browser.">
+<meta name="keywords" content="mortgage calculator, loan calculator, amortization, monthly payment, interest, principal, extra payment">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mortgage.html">
+<meta property="og:title" content="Mortgage / Loan Amortization Calculator">
+<meta property="og:description" content="Monthly payments, full schedules, and extra-payment projections — no data leaves your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/mortgage.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .inputs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .inputs label { display: flex; flex-direction: column; gap: 6px; font-size: .78rem; color: var(--muted); }
+  .inputs input, .inputs select { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+  .stat { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2, var(--bg)); text-align: center; }
+  .stat .n { font-size: 1.2rem; font-weight: 600; font-family: var(--mono); color: var(--text); }
+  .stat .l { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; }
+  .stat.hi .n { color: var(--success, #4a9); }
+  h3 { font-size: .9rem; font-weight: 600; margin: 18px 0 8px; }
+  .sched-wrap { overflow: auto; max-height: 360px; border: 1px solid var(--border); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: .78rem; font-family: var(--mono); }
+  th, td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--border); }
+  th { position: sticky; top: 0; background: var(--bg); color: var(--muted); font-weight: 600; font-size: .7rem; text-transform: uppercase; letter-spacing: .4px; z-index: 1; }
+  td:first-child, th:first-child { text-align: center; }
+  tr.year-end { background: var(--surface2, rgba(0,0,0,.04)); font-weight: 600; }
+  .chart { margin-top: 14px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+  .err { color: var(--error); font-size: .8rem; margin-top: 8px; min-height: 1em; }
+  @media (max-width: 768px) {
+    .inputs { grid-template-columns: 1fr 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Mortgage / Loan Amortization</h1>
+<p class="subtitle">Enter loan amount, interest rate, and term to see your monthly payment, total interest, and full amortization schedule. Add optional extra monthly payments to see how much time and interest you save.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="inputs">
+    <label>Loan amount
+      <input type="number" id="amount" value="300000" step="1000" min="0">
+    </label>
+    <label>Annual interest rate (%)
+      <input type="number" id="rate" value="6.5" step="0.01" min="0">
+    </label>
+    <label>Term
+      <input type="number" id="years" value="30" step="1" min="1">
+    </label>
+    <label>Term unit
+      <select id="unit">
+        <option value="y">Years</option>
+        <option value="m">Months</option>
+      </select>
+    </label>
+    <label>Extra monthly payment
+      <input type="number" id="extra" value="0" step="50" min="0">
+    </label>
+    <label>Currency
+      <select id="cur">
+        <option value="$">USD ($)</option>
+        <option value="€">EUR (€)</option>
+        <option value="£">GBP (£)</option>
+        <option value="¥">JPY (¥)</option>
+        <option value="₹">INR (₹)</option>
+        <option value="A$">AUD (A$)</option>
+        <option value="C$">CAD (C$)</option>
+      </select>
+    </label>
+  </div>
+  <div class="err" id="err"></div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="s-mp">–</div><div class="l">Monthly payment</div></div>
+    <div class="stat"><div class="n" id="s-int">–</div><div class="l">Total interest</div></div>
+    <div class="stat"><div class="n" id="s-tot">–</div><div class="l">Total paid</div></div>
+    <div class="stat hi"><div class="n" id="s-save">–</div><div class="l">Interest saved</div></div>
+  </div>
+
+  <h3>Principal vs. interest over time</h3>
+  <div class="chart" id="chart"></div>
+
+  <h3>Amortization schedule (year-end rows highlighted)</h3>
+  <div class="sched-wrap">
+    <table id="sched">
+      <thead><tr><th>#</th><th>Payment</th><th>Principal</th><th>Interest</th><th>Balance</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function fmtMoney(n, cur) {
+  const sign = n < 0 ? '-' : '';
+  const v = Math.abs(n);
+  return sign + cur + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function compute(P, annualRate, totalMonths, extra) {
+  const r = annualRate / 100 / 12;
+  let basePayment;
+  if (r === 0) basePayment = P / totalMonths;
+  else basePayment = P * r / (1 - Math.pow(1 + r, -totalMonths));
+  const schedule = [];
+  let bal = P, totalInt = 0, totalPaid = 0;
+  for (let i = 1; i <= totalMonths && bal > 0.005; i++) {
+    const interest = bal * r;
+    let principal = basePayment - interest + extra;
+    if (principal > bal) principal = bal;
+    const payment = principal + interest;
+    bal -= principal;
+    if (bal < 0.005) bal = 0;
+    totalInt += interest;
+    totalPaid += payment;
+    schedule.push({ i, payment, principal, interest, bal });
+    if (bal === 0) break;
+  }
+  return { basePayment, schedule, totalInt, totalPaid };
+}
+
+function renderChart(schedule) {
+  if (!schedule.length) { $('chart').innerHTML = ''; return; }
+  const w = 640, h = 140, padL = 40, padR = 10, padT = 10, padB = 22;
+  const n = schedule.length;
+  const maxBal = schedule[0].bal + schedule[0].principal;
+  const scaleX = i => padL + (i / (n - 1 || 1)) * (w - padL - padR);
+  const scaleY = v => padT + (1 - v / maxBal) * (h - padT - padB);
+  let balPath = '';
+  let cumPr = 0, cumIn = 0;
+  const prPath = [], inPath = [];
+  schedule.forEach((s, idx) => {
+    const x = scaleX(idx);
+    balPath += (idx === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + scaleY(s.bal).toFixed(1) + ' ';
+    cumPr += s.principal; cumIn += s.interest;
+    prPath.push(x.toFixed(1) + ',' + scaleY(cumPr).toFixed(1));
+    inPath.push(x.toFixed(1) + ',' + scaleY(cumIn).toFixed(1));
+  });
+  const mkPath = pts => 'M' + pts.join(' L');
+  const grid = [];
+  for (let g = 0; g <= 4; g++) {
+    const y = padT + (g / 4) * (h - padT - padB);
+    grid.push(`<line x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`);
+  }
+  const svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:100%;height:auto;">
+    ${grid.join('')}
+    <path d="${balPath}" fill="none" stroke="#4a9" stroke-width="2"/>
+    <path d="${mkPath(prPath)}" fill="none" stroke="#48c" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <path d="${mkPath(inPath)}" fill="none" stroke="#c74" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <text x="${padL}" y="${h - 4}" font-size="10" fill="var(--muted)" font-family="var(--mono)">month 1</text>
+    <text x="${w - padR}" y="${h - 4}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="var(--mono)">month ${n}</text>
+    <text x="${padL - 4}" y="${padT + 8}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="var(--mono)">max</text>
+    <g font-size="10" font-family="var(--mono)">
+      <text x="${w - padR - 150}" y="${padT + 10}" fill="#4a9">— balance</text>
+      <text x="${w - padR - 90}" y="${padT + 10}" fill="#48c">-- principal</text>
+      <text x="${w - padR - 30}" y="${padT + 10}" fill="#c74">-- interest</text>
+    </g>
+  </svg>`;
+  $('chart').innerHTML = svg;
+}
+
+function update() {
+  const err = $('err'); err.textContent = '';
+  const P = parseFloat($('amount').value);
+  const rate = parseFloat($('rate').value);
+  const term = parseFloat($('years').value);
+  const unit = $('unit').value;
+  const extra = parseFloat($('extra').value) || 0;
+  const cur = $('cur').value;
+  if (!(P > 0) || !(rate >= 0) || !(term > 0)) {
+    err.textContent = 'Enter a positive loan amount, rate, and term.';
+    ['s-mp','s-int','s-tot','s-save'].forEach(id => $(id).textContent = '–');
+    $('sched').querySelector('tbody').innerHTML = '';
+    $('chart').innerHTML = '';
+    return;
+  }
+  const totalMonths = unit === 'y' ? Math.round(term * 12) : Math.round(term);
+  const baseline = compute(P, rate, totalMonths, 0);
+  const withExtra = compute(P, rate, totalMonths, extra);
+
+  $('s-mp').textContent = fmtMoney(baseline.basePayment + extra, cur);
+  $('s-int').textContent = fmtMoney(withExtra.totalInt, cur);
+  $('s-tot').textContent = fmtMoney(withExtra.totalPaid, cur);
+  const saved = baseline.totalInt - withExtra.totalInt;
+  $('s-save').textContent = extra > 0 ? fmtMoney(saved, cur) + (withExtra.schedule.length < baseline.schedule.length ? ' · ' + (baseline.schedule.length - withExtra.schedule.length) + ' mo' : '') : '–';
+
+  const rows = withExtra.schedule.map(s => {
+    const ye = s.i % 12 === 0;
+    return `<tr class="${ye ? 'year-end' : ''}"><td>${s.i}</td><td>${fmtMoney(s.payment, cur)}</td><td>${fmtMoney(s.principal, cur)}</td><td>${fmtMoney(s.interest, cur)}</td><td>${fmtMoney(s.bal, cur)}</td></tr>`;
+  }).join('');
+  $('sched').querySelector('tbody').innerHTML = rows;
+  renderChart(withExtra.schedule);
+}
+
+['amount','rate','years','unit','extra','cur'].forEach(id => $(id).addEventListener('input', update));
+update();
+</script>
+</body>
+</html>

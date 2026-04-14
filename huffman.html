@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Huffman Coding Visualizer — Free Online Tool</title>
+<meta name="description" content="Build a Huffman tree from any input text, inspect per-symbol frequencies and codes, and encode/decode to a compact bitstring. Runs entirely in your browser.">
+<meta name="keywords" content="huffman coding, huffman tree, prefix code, compression, entropy encoding, information theory">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/huffman.html">
+<meta property="og:title" content="Huffman Coding Visualizer">
+<meta property="og:description" content="Build Huffman trees, inspect codes, and see real compression ratios.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/huffman.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 120px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
+  .stat { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2, var(--bg)); text-align: center; }
+  .stat .n { font-size: 1.3rem; font-weight: 600; font-family: var(--mono); color: var(--text); }
+  .stat .l { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+  h3 { font-size: .9rem; font-weight: 600; margin: 18px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; font-family: var(--mono); }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; }
+  .sym { display: inline-block; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); }
+  pre.out { white-space: pre-wrap; word-break: break-all; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); font-family: var(--mono); font-size: .8rem; max-height: 220px; overflow: auto; }
+  .tree { overflow-x: auto; padding: 16px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+  .tree svg { display: block; margin: 0 auto; }
+  .err { color: var(--error); font-size: .8rem; margin-top: 8px; min-height: 1em; }
+  @media (max-width: 768px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Huffman Coding Visualizer</h1>
+<p class="subtitle">Type or paste any text to build its Huffman tree — see per-symbol frequencies, the resulting prefix codes, the encoded bitstring, and the compression vs. a fixed 8-bit encoding.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <label style="font-size:.78rem;color:var(--muted);">Input text</label>
+  <textarea id="in" placeholder="Type or paste text to encode…">the quick brown fox jumps over the lazy dog</textarea>
+  <div class="row" style="margin-top:10px;gap:8px;">
+    <button class="btn" onclick="run()">Build tree</button>
+    <button class="btn btn-secondary" onclick="sample('mississippi river')">Sample: mississippi</button>
+    <button class="btn btn-secondary" onclick="sample('abracadabra')">Sample: abracadabra</button>
+    <button class="btn btn-secondary" onclick="sample('AAAAAAAABBBBCCD')">Skewed sample</button>
+  </div>
+  <div class="err" id="err"></div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="s-sym">–</div><div class="l">Symbols</div></div>
+    <div class="stat"><div class="n" id="s-len">–</div><div class="l">Text length</div></div>
+    <div class="stat"><div class="n" id="s-bits">–</div><div class="l">Huffman bits</div></div>
+    <div class="stat"><div class="n" id="s-ratio">–</div><div class="l">vs 8-bit</div></div>
+  </div>
+
+  <h3>Code table</h3>
+  <div style="overflow-x:auto;">
+    <table id="tbl"><thead><tr><th>Symbol</th><th>Freq</th><th>Code</th><th>Bits</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <h3>Huffman tree</h3>
+  <div class="tree" id="tree"></div>
+
+  <h3>Encoded bitstring</h3>
+  <pre class="out" id="encoded"></pre>
+
+  <h3>Round-trip decode check</h3>
+  <pre class="out" id="decoded"></pre>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function sample(s) { $('in').value = s; run(); }
+
+function buildTree(freq) {
+  const nodes = Object.entries(freq).map(([s, f]) => ({ s, f, l: null, r: null }));
+  if (nodes.length === 1) {
+    // Pad so we get at least one bit per symbol
+    return { s: null, f: nodes[0].f, l: nodes[0], r: null };
+  }
+  while (nodes.length > 1) {
+    nodes.sort((a, b) => a.f - b.f);
+    const a = nodes.shift();
+    const b = nodes.shift();
+    nodes.push({ s: null, f: a.f + b.f, l: a, r: b });
+  }
+  return nodes[0];
+}
+
+function assignCodes(node, prefix, codes) {
+  if (!node) return;
+  if (node.s !== null) {
+    codes[node.s] = prefix || '0';
+    return;
+  }
+  assignCodes(node.l, prefix + '0', codes);
+  assignCodes(node.r, prefix + '1', codes);
+}
+
+function escapeSym(s) {
+  if (s === ' ') return '␣';
+  if (s === '\n') return '\\n';
+  if (s === '\t') return '\\t';
+  if (s === '\r') return '\\r';
+  const c = s.charCodeAt(0);
+  if (c < 32 || c === 127) return '\\x' + c.toString(16).padStart(2, '0');
+  return s;
+}
+
+function escHtml(s) {
+  return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+function layoutTree(root) {
+  // Compute positions for every node
+  let leafIdx = 0;
+  const walk = (n, depth) => {
+    if (!n) return;
+    walk(n.l, depth + 1);
+    if (!n.l && !n.r) { n._x = leafIdx++; }
+    walk(n.r, depth + 1);
+    if (n.l || n.r) {
+      const xs = [];
+      if (n.l) xs.push(n.l._x);
+      if (n.r) xs.push(n.r._x);
+      n._x = xs.reduce((a, b) => a + b, 0) / xs.length;
+    }
+    n._d = depth;
+  };
+  walk(root, 0);
+  let maxDepth = 0;
+  const maxD = n => { if (!n) return; maxDepth = Math.max(maxDepth, n._d); maxD(n.l); maxD(n.r); };
+  maxD(root);
+  return { leafCount: leafIdx, maxDepth };
+}
+
+function renderTree(root) {
+  const { leafCount, maxDepth } = layoutTree(root);
+  const xStep = 58;
+  const yStep = 62;
+  const padX = 30, padY = 30;
+  const w = Math.max(leafCount * xStep + padX * 2, 280);
+  const h = (maxDepth + 1) * yStep + padY * 2;
+  const edges = [];
+  const nodes = [];
+  const walk = (n, parent, label) => {
+    if (!n) return;
+    const x = padX + n._x * xStep;
+    const y = padY + n._d * yStep;
+    if (parent) {
+      const px = padX + parent._x * xStep;
+      const py = padY + parent._d * yStep;
+      edges.push(`<line x1="${px}" y1="${py}" x2="${x}" y2="${y}" stroke="var(--border)" stroke-width="1.5"/>`);
+      const mx = (px + x) / 2, my = (py + y) / 2;
+      edges.push(`<text x="${mx}" y="${my - 2}" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="var(--mono)">${label}</text>`);
+    }
+    const isLeaf = !n.l && !n.r;
+    if (isLeaf) {
+      nodes.push(`<circle cx="${x}" cy="${y}" r="16" fill="var(--surface2, var(--bg))" stroke="var(--accent, #6aa)" stroke-width="2"/>`);
+      nodes.push(`<text x="${x}" y="${y + 2}" text-anchor="middle" font-size="11" fill="var(--text)" font-family="var(--mono)">${escHtml(escapeSym(n.s))}</text>`);
+      nodes.push(`<text x="${x}" y="${y + 28}" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="var(--mono)">${n.f}</text>`);
+    } else {
+      nodes.push(`<circle cx="${x}" cy="${y}" r="10" fill="var(--bg)" stroke="var(--border)" stroke-width="1.5"/>`);
+      nodes.push(`<text x="${x}" y="${y + 3}" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="var(--mono)">${n.f}</text>`);
+    }
+    walk(n.l, n, '0');
+    walk(n.r, n, '1');
+  };
+  walk(root, null, '');
+  $('tree').innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${edges.join('')}${nodes.join('')}</svg>`;
+}
+
+function run() {
+  const err = $('err'); err.textContent = '';
+  const text = $('in').value;
+  if (!text) { err.textContent = 'Enter some text.'; return; }
+  const freq = {};
+  for (const ch of text) freq[ch] = (freq[ch] || 0) + 1;
+  const root = buildTree(freq);
+  const codes = {};
+  assignCodes(root, '', codes);
+
+  const encoded = [...text].map(c => codes[c]).join('');
+  // Decode for round-trip verification
+  let decoded = '';
+  let node = root;
+  for (const bit of encoded) {
+    node = bit === '0' ? node.l : node.r;
+    if (node && !node.l && !node.r) { decoded += node.s; node = root; }
+  }
+
+  const symbols = Object.keys(freq).length;
+  const fixedBits = text.length * 8;
+  const huffBits = encoded.length;
+  const ratio = fixedBits ? (huffBits / fixedBits * 100).toFixed(1) + '%' : '–';
+
+  $('s-sym').textContent = symbols;
+  $('s-len').textContent = text.length;
+  $('s-bits').textContent = huffBits;
+  $('s-ratio').textContent = ratio;
+
+  const rows = Object.entries(freq).sort((a, b) => b[1] - a[1])
+    .map(([s, f]) => `<tr><td><span class="sym">${escHtml(escapeSym(s))}</span></td><td>${f}</td><td>${codes[s]}</td><td>${codes[s].length}</td></tr>`).join('');
+  $('tbl').querySelector('tbody').innerHTML = rows;
+
+  renderTree(root);
+  $('encoded').textContent = encoded || '(empty)';
+  $('decoded').textContent = decoded === text
+    ? '✓ Round-trip OK — decoded output matches input exactly.'
+    : '✗ Mismatch: ' + JSON.stringify(decoded);
+}
+
+$('in').addEventListener('input', run);
+run();
+</script>
+</body>
+</html>
