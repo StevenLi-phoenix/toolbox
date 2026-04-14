@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP Timing Waterfall Visualizer — Analyze Request Phases</title>
+<meta name="description" content="Visualize an HTTP request timing breakdown (DNS, TCP, TLS, TTFB, download) as a waterfall. Paste numbers from DevTools or curl and see where your time goes.">
+<meta name="keywords" content="http timing, waterfall, ttfb, dns, tcp, tls, performance, chrome devtools, curl">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/httptiming.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .inputs label { font-size: .78rem; color: var(--muted); font-weight: 600; display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .inputs input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .9rem; background: var(--bg); color: var(--text); }
+  .inputs input:focus { outline: none; border-color: var(--accent); }
+  .waterfall { margin-top: 14px; }
+  .bar-row { display: grid; grid-template-columns: 130px 1fr 90px; gap: 10px; align-items: center; margin-bottom: 6px; font-size: .82rem; }
+  .bar-label { font-weight: 600; color: var(--text); }
+  .bar-track { position: relative; height: 20px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .bar-fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+  .bar-value { font-family: var(--mono); color: var(--muted); text-align: right; font-size: .8rem; }
+  .phase-dns   { background: #60a5fa; }
+  .phase-tcp   { background: #34d399; }
+  .phase-tls   { background: #fbbf24; }
+  .phase-send  { background: #f472b6; }
+  .phase-wait  { background: #a78bfa; }
+  .phase-recv  { background: #fb923c; }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; }
+  .stat { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .stat span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 2px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat strong { font-family: var(--mono); font-size: 1.1rem; }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .preset { font-size: .78rem; padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; color: var(--muted); }
+  .preset:hover { background: var(--surface2); color: var(--text); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: .78rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+  .analysis { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .analysis li { margin-bottom: 6px; }
+  .curl-paste { width: 100%; min-height: 110px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .82rem; background: var(--bg); color: var(--text); resize: vertical; }
+  @media (max-width: 768px) {
+    .bar-row { grid-template-columns: 90px 1fr 70px; font-size: .78rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HTTP Timing Waterfall</h1>
+<p class="subtitle">Visualize where your HTTP request spends its time. Paste values from Chrome DevTools Network panel, curl's <code>-w</code> output, or enter them manually.</p>
+
+<div class="card">
+  <h2>⏱ Phase Durations (ms)</h2>
+  <div class="preset-row">
+    <button class="preset" data-p="20,15,40,1,180,25">Typical HTTPS</button>
+    <button class="preset" data-p="5,2,0,0,45,10">Cached/Warm</button>
+    <button class="preset" data-p="120,90,180,2,800,150">Slow Mobile</button>
+    <button class="preset" data-p="0,0,0,0,250,0">Proxy (wait only)</button>
+    <button class="preset" data-p="0,0,0,0,0,0">Clear</button>
+  </div>
+  <div class="inputs">
+    <div><label>DNS lookup</label><input id="dns" type="number" min="0" value="20"></div>
+    <div><label>TCP connect</label><input id="tcp" type="number" min="0" value="15"></div>
+    <div><label>TLS handshake</label><input id="tls" type="number" min="0" value="40"></div>
+    <div><label>Send request</label><input id="send" type="number" min="0" value="1"></div>
+    <div><label>Waiting (TTFB)</label><input id="wait" type="number" min="0" value="180"></div>
+    <div><label>Content download</label><input id="recv" type="number" min="0" value="25"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>📊 Waterfall</h2>
+  <div class="waterfall" id="waterfall"></div>
+  <div class="legend">
+    <span><i class="phase-dns"></i>DNS</span>
+    <span><i class="phase-tcp"></i>TCP</span>
+    <span><i class="phase-tls"></i>TLS</span>
+    <span><i class="phase-send"></i>Send</span>
+    <span><i class="phase-wait"></i>Wait (TTFB)</span>
+    <span><i class="phase-recv"></i>Download</span>
+  </div>
+  <div class="summary" id="summary"></div>
+</div>
+
+<div class="card">
+  <h2>🔍 Analysis</h2>
+  <ul class="analysis" id="analysis"></ul>
+</div>
+
+<div class="card">
+  <h2>📋 Paste from curl</h2>
+  <p class="subtitle" style="margin-bottom:10px">Run <code>curl -w "@curl-format.txt" -o /dev/null -s URL</code> with a format file, or paste any <code>key: value</code> pairs (seconds). Recognized keys: <code>namelookup, connect, appconnect, pretransfer, starttransfer, total</code>.</p>
+  <textarea class="curl-paste" id="curlPaste" placeholder="namelookup: 0.020&#10;connect: 0.035&#10;appconnect: 0.075&#10;pretransfer: 0.076&#10;starttransfer: 0.256&#10;total: 0.281"></textarea>
+  <div style="margin-top:10px">
+    <button class="btn btn-primary" id="parseCurl">Parse curl timings</button>
+    <button class="btn btn-secondary" id="copyFormat">Copy curl-format.txt</button>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const IDS = ['dns','tcp','tls','send','wait','recv'];
+const LABELS = {dns:'DNS',tcp:'TCP',tls:'TLS',send:'Send',wait:'Wait (TTFB)',recv:'Download'};
+
+function render() {
+  const vals = {};
+  IDS.forEach(k => vals[k] = Math.max(0, parseFloat($(k).value) || 0));
+  const total = IDS.reduce((s, k) => s + vals[k], 0);
+  const wf = $('waterfall');
+  if (total === 0) {
+    wf.innerHTML = '<div class="empty">Enter timing values above to draw the waterfall.</div>';
+    $('summary').innerHTML = '';
+    $('analysis').innerHTML = '<li class="empty">No data yet.</li>';
+    return;
+  }
+  let offset = 0;
+  wf.innerHTML = IDS.map(k => {
+    const v = vals[k];
+    const pct = (v / total) * 100;
+    const off = (offset / total) * 100;
+    offset += v;
+    return `<div class="bar-row">
+      <div class="bar-label">${LABELS[k]}</div>
+      <div class="bar-track"><div class="bar-fill phase-${k}" style="left:${off}%;width:${pct}%"></div></div>
+      <div class="bar-value">${v.toFixed(1)} ms</div>
+    </div>`;
+  }).join('');
+
+  // connect = TCP + TLS; TTFB from start = DNS+TCP+TLS+Send+Wait
+  const connect = vals.tcp + vals.tls;
+  const ttfbFromStart = vals.dns + vals.tcp + vals.tls + vals.send + vals.wait;
+  $('summary').innerHTML = `
+    <div class="stat"><span>Total</span><strong>${total.toFixed(1)} ms</strong></div>
+    <div class="stat"><span>Connect (TCP+TLS)</span><strong>${connect.toFixed(1)} ms</strong></div>
+    <div class="stat"><span>TTFB from start</span><strong>${ttfbFromStart.toFixed(1)} ms</strong></div>
+    <div class="stat"><span>Server wait only</span><strong>${vals.wait.toFixed(1)} ms</strong></div>
+  `;
+
+  // analysis
+  const notes = [];
+  const pct = k => (vals[k] / total) * 100;
+  if (pct('dns') > 15) notes.push(`DNS is <strong>${pct('dns').toFixed(0)}%</strong> of total — consider longer DNS TTLs, a faster resolver, or DNS prefetch.`);
+  if (pct('tls') > 25) notes.push(`TLS handshake is <strong>${pct('tls').toFixed(0)}%</strong> of total — enable session resumption / TLS 1.3 / 0-RTT where safe.`);
+  if (pct('wait') > 60) notes.push(`Server wait (TTFB) dominates at <strong>${pct('wait').toFixed(0)}%</strong> — the bottleneck is the origin, not the network.`);
+  if (pct('recv') > 40) notes.push(`Content download is <strong>${pct('recv').toFixed(0)}%</strong> — payload size or bandwidth is likely the issue. Enable gzip/brotli.`);
+  if (connect > 150) notes.push(`Connect time (${connect.toFixed(0)} ms) is high — use keep-alive, HTTP/2 connection reuse, or move the origin closer.`);
+  if (vals.wait > 500) notes.push(`Absolute wait of ${vals.wait.toFixed(0)} ms is slow for any synchronous path — profile the backend or add caching.`);
+  if (total < 100 && notes.length === 0) notes.push(`Total ${total.toFixed(0)} ms — this is a fast request. Focus on other bottlenecks.`);
+  if (notes.length === 0) notes.push(`Times look balanced. Focus on the biggest phase (${LABELS[IDS.reduce((a,b)=>vals[a]>vals[b]?a:b)]}) if you need to go faster.`);
+  $('analysis').innerHTML = notes.map(n => `<li>${n}</li>`).join('');
+}
+
+IDS.forEach(k => $(k).addEventListener('input', render));
+
+document.querySelectorAll('.preset').forEach(b => {
+  b.addEventListener('click', () => {
+    const parts = b.dataset.p.split(',');
+    IDS.forEach((k, i) => $(k).value = parts[i]);
+    render();
+  });
+});
+
+$('parseCurl').addEventListener('click', () => {
+  const text = $('curlPaste').value;
+  const re = /([a-zA-Z_]+)\s*[:=]\s*([\d.]+)/g;
+  const map = {};
+  let m;
+  while ((m = re.exec(text)) !== null) map[m[1].toLowerCase()] = parseFloat(m[2]);
+  // curl values are seconds (cumulative from start)
+  const toMs = s => Math.max(0, Math.round(s * 1000 * 10) / 10);
+  const nl = map.namelookup ?? 0;
+  const ct = map.connect ?? nl;
+  const app = map.appconnect ?? ct;
+  const pre = map.pretransfer ?? app;
+  const stt = map.starttransfer ?? pre;
+  const tot = map.total ?? stt;
+  $('dns').value = toMs(nl);
+  $('tcp').value = toMs(ct - nl);
+  $('tls').value = toMs(app - ct);
+  $('send').value = toMs(pre - app);
+  $('wait').value = toMs(stt - pre);
+  $('recv').value = toMs(tot - stt);
+  render();
+});
+
+$('copyFormat').addEventListener('click', () => {
+  const fmt = `time_namelookup:    %{time_namelookup}\ntime_connect:       %{time_connect}\ntime_appconnect:    %{time_appconnect}\ntime_pretransfer:   %{time_pretransfer}\ntime_starttransfer: %{time_starttransfer}\ntime_total:         %{time_total}\n`;
+  navigator.clipboard.writeText(fmt).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+});
+
+render();
+</script>
+</body>
+</html>

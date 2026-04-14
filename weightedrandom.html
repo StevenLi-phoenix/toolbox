@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weighted Random Picker — Pick Items with Custom Probabilities</title>
+<meta name="description" content="Pick from a weighted list with custom probabilities. Simulate thousands of picks, compare actual vs expected distribution, and use cryptographically secure randomness.">
+<meta name="keywords" content="weighted random, random picker, probability, distribution, cryptographically secure, random weighted choice">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/weightedrandom.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .textarea-input { width: 100%; min-height: 180px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .88rem; background: var(--bg); color: var(--text); resize: vertical; }
+  .textarea-input:focus { outline: none; border-color: var(--accent); }
+  .pick-big { text-align: center; font-size: 2.2rem; font-weight: 700; margin: 16px 0 4px; font-family: var(--mono); letter-spacing: -.02em; min-height: 3rem; }
+  .pick-meta { text-align: center; color: var(--muted); font-size: .82rem; margin-bottom: 12px; }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .sim-controls { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .sim-controls label { font-size: .82rem; color: var(--muted); font-weight: 600; }
+  .sim-controls input { width: 110px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; background: var(--bg); color: var(--text); }
+  table.dist { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  table.dist th, table.dist td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  table.dist th { font-weight: 600; color: var(--muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
+  table.dist td.num { font-family: var(--mono); text-align: right; }
+  .bar-cell { position: relative; min-width: 140px; }
+  .bar-bg { position: absolute; top: 4px; bottom: 4px; left: 0; background: var(--surface2); border-radius: 3px; width: 100%; }
+  .bar-fg { position: absolute; top: 4px; bottom: 4px; left: 0; background: var(--accent); border-radius: 3px; }
+  .bar-expected { position: absolute; top: 2px; bottom: 2px; width: 2px; background: var(--text); }
+  .delta-good { color: var(--success); }
+  .delta-warn { color: var(--error); }
+  .history { max-height: 160px; overflow: auto; font-family: var(--mono); font-size: .82rem; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+  .history span { display: inline-block; padding: 2px 8px; margin: 2px; border-radius: 10px; background: var(--surface2); }
+  .status-note { font-size: .82rem; color: var(--error); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Weighted Random Picker</h1>
+<p class="subtitle">Pick items with custom probabilities. Paste one item per line as <code>name : weight</code> (weight defaults to 1). Uses <code>crypto.getRandomValues</code>.</p>
+
+<div class="card">
+  <h2>📝 Items</h2>
+  <textarea class="textarea-input" id="items" spellcheck="false">Alice : 5
+Bob : 3
+Carol : 2
+Dave : 1
+Eve
+Frank</textarea>
+  <div class="btn-row" style="margin-top:10px">
+    <button class="btn btn-primary" id="pickBtn">Pick one</button>
+    <button class="btn btn-secondary" id="pick5">Pick 5</button>
+    <button class="btn btn-secondary" id="resetBtn">Reset history</button>
+    <label style="margin-left:auto;font-size:.82rem;color:var(--muted);display:flex;align-items:center;gap:6px">
+      <input type="checkbox" id="noRepeat"> No repeats in a batch
+    </label>
+  </div>
+  <div id="parseError" class="status-note"></div>
+</div>
+
+<div class="card">
+  <h2>🎯 Last Pick</h2>
+  <div class="pick-big" id="lastPick">—</div>
+  <div class="pick-meta" id="lastMeta"></div>
+  <div class="history" id="history"><span class="empty">No picks yet.</span></div>
+</div>
+
+<div class="card">
+  <h2>🎲 Monte Carlo Simulation</h2>
+  <div class="sim-controls">
+    <label for="iter">Iterations</label>
+    <input id="iter" type="number" value="10000" min="1" max="1000000">
+    <button class="btn btn-primary" id="simBtn">Run simulation</button>
+    <button class="btn btn-secondary" id="addBtn">Add 1000 to current</button>
+  </div>
+  <div id="distTable" style="margin-top:14px"></div>
+</div>
+
+<div class="card">
+  <h2>💡 Tips</h2>
+  <ul style="font-size:.85rem;line-height:1.7;color:var(--muted);padding-left:20px;margin:0">
+    <li>Weights don't need to sum to 1 — they're normalized automatically.</li>
+    <li>Comments starting with <code>#</code> are ignored. Blank lines too.</li>
+    <li>Separators <code>:</code>, <code>=</code>, <code>,</code>, and tab all work (<code>Alice : 5</code>, <code>Bob = 3</code>).</li>
+    <li>The black tick in each bar marks the expected probability; the blue bar is observed.</li>
+  </ul>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let history = [];
+let simCounts = {}; // name -> count
+let simTotal = 0;
+
+function parseItems(text) {
+  const items = [];
+  const errors = [];
+  text.split(/\r?\n/).forEach((raw, idx) => {
+    const line = raw.replace(/#.*$/, '').trim();
+    if (!line) return;
+    const m = line.match(/^(.*?)\s*[:=,\t]\s*([-+]?\d+(?:\.\d+)?)\s*$/);
+    let name, weight;
+    if (m) { name = m[1].trim(); weight = parseFloat(m[2]); }
+    else { name = line; weight = 1; }
+    if (!name) { errors.push(`Line ${idx+1}: missing name`); return; }
+    if (!isFinite(weight) || weight < 0) { errors.push(`Line ${idx+1}: bad weight`); return; }
+    items.push({ name, weight });
+  });
+  return { items, errors };
+}
+
+function getItems() {
+  const { items, errors } = parseItems($('items').value);
+  $('parseError').textContent = errors.join(' · ');
+  const total = items.reduce((s, i) => s + i.weight, 0);
+  return { items, total };
+}
+
+function secureFloat() {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] / 0x100000000;
+}
+
+function weightedPick(items, total, exclude) {
+  const pool = exclude ? items.filter(i => !exclude.has(i.name) && i.weight > 0) : items.filter(i => i.weight > 0);
+  if (pool.length === 0) return null;
+  const poolTotal = pool.reduce((s, i) => s + i.weight, 0);
+  const r = secureFloat() * poolTotal;
+  let acc = 0;
+  for (const it of pool) {
+    acc += it.weight;
+    if (r < acc) return it;
+  }
+  return pool[pool.length - 1];
+}
+
+function renderHistory() {
+  const box = $('history');
+  if (history.length === 0) { box.innerHTML = '<span class="empty">No picks yet.</span>'; return; }
+  box.innerHTML = history.slice(-40).map(h => `<span>${escapeHTML(h)}</span>`).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+function escapeHTML(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function pickOne() {
+  const { items, total } = getItems();
+  if (!items.length || total === 0) { $('lastPick').textContent = '—'; $('lastMeta').textContent = 'No valid items.'; return; }
+  const pick = weightedPick(items, total);
+  $('lastPick').textContent = pick.name;
+  const prob = (pick.weight / total * 100).toFixed(2);
+  $('lastMeta').textContent = `weight ${pick.weight} of ${total}  ·  ${prob}% probability`;
+  history.push(pick.name);
+  if (history.length > 200) history = history.slice(-200);
+  renderHistory();
+}
+
+function pickN(n) {
+  const { items, total } = getItems();
+  if (!items.length || total === 0) return;
+  const exclude = $('noRepeat').checked ? new Set() : null;
+  const picks = [];
+  for (let i = 0; i < n; i++) {
+    const p = weightedPick(items, total, exclude);
+    if (!p) break;
+    picks.push(p.name);
+    if (exclude) exclude.add(p.name);
+  }
+  if (picks.length === 0) return;
+  $('lastPick').textContent = picks[picks.length - 1];
+  $('lastMeta').textContent = `Picked ${picks.length} item${picks.length === 1 ? '' : 's'}`;
+  history.push(...picks);
+  if (history.length > 200) history = history.slice(-200);
+  renderHistory();
+}
+
+function runSim(n, append) {
+  const { items, total } = getItems();
+  if (!items.length || total === 0) return;
+  if (!append) { simCounts = {}; simTotal = 0; }
+  for (let i = 0; i < n; i++) {
+    const p = weightedPick(items, total);
+    simCounts[p.name] = (simCounts[p.name] || 0) + 1;
+  }
+  simTotal += n;
+  renderDist(items, total);
+}
+
+function renderDist(items, total) {
+  if (simTotal === 0) { $('distTable').innerHTML = '<div class="empty">Run a simulation to compare observed vs expected.</div>'; return; }
+  const maxPct = Math.max(0.0001, ...items.map(i => Math.max(i.weight / total, (simCounts[i.name] || 0) / simTotal)));
+  const rows = items.map(i => {
+    const expected = i.weight / total;
+    const count = simCounts[i.name] || 0;
+    const observed = count / simTotal;
+    const delta = (observed - expected) * 100;
+    const deltaClass = Math.abs(delta) < 1 ? 'delta-good' : Math.abs(delta) < 3 ? '' : 'delta-warn';
+    const obsW = (observed / maxPct * 100).toFixed(1);
+    const expL = (expected / maxPct * 100).toFixed(1);
+    return `<tr>
+      <td>${escapeHTML(i.name)}</td>
+      <td class="num">${i.weight}</td>
+      <td class="num">${(expected * 100).toFixed(2)}%</td>
+      <td class="num">${(observed * 100).toFixed(2)}%</td>
+      <td class="num ${deltaClass}">${delta >= 0 ? '+' : ''}${delta.toFixed(2)}</td>
+      <td class="num">${count}</td>
+      <td class="bar-cell">
+        <div class="bar-bg"></div>
+        <div class="bar-fg" style="width:${obsW}%"></div>
+        <div class="bar-expected" style="left:calc(${expL}% - 1px)"></div>
+      </td>
+    </tr>`;
+  }).join('');
+  $('distTable').innerHTML = `
+    <table class="dist">
+      <thead><tr><th>Item</th><th style="text-align:right">Weight</th><th style="text-align:right">Expected</th><th style="text-align:right">Observed</th><th style="text-align:right">Δ %</th><th style="text-align:right">Count</th><th>Distribution</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="pick-meta" style="margin-top:10px">${simTotal.toLocaleString()} simulated picks · black tick = expected, blue bar = observed</p>
+  `;
+}
+
+$('pickBtn').addEventListener('click', pickOne);
+$('pick5').addEventListener('click', () => pickN(5));
+$('resetBtn').addEventListener('click', () => { history = []; renderHistory(); $('lastPick').textContent = '—'; $('lastMeta').textContent = ''; });
+$('simBtn').addEventListener('click', () => {
+  const n = Math.min(1000000, Math.max(1, parseInt($('iter').value) || 0));
+  runSim(n, false);
+});
+$('addBtn').addEventListener('click', () => runSim(1000, true));
+$('items').addEventListener('input', () => {
+  simCounts = {}; simTotal = 0;
+  const { items, total } = getItems();
+  renderDist(items, total);
+});
+
+renderHistory();
+$('distTable').innerHTML = '<div class="empty">Run a simulation to compare observed vs expected.</div>';
+</script>
+</body>
+</html>
