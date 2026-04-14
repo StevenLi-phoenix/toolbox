@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bcrypt Generator & Verifier — Free Online Tool</title>
+<meta name="description" content="Generate and verify bcrypt password hashes in your browser. Choose cost factor (rounds), inspect bcrypt hash structure, and compare passwords against existing hashes.">
+<meta name="keywords" content="bcrypt, bcrypt generator, bcrypt verify, password hash, $2a$, $2b$, $2y$, salt rounds">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bcrypt.html">
+<link rel="stylesheet" href="toolbox.css">
+<script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
+<style>
+  .pw-row { display: flex; gap: 8px; align-items: center; }
+  .pw-row input { flex: 1; font-family: var(--mono); }
+  .cost-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .cost-row input[type=range] { flex: 1; min-width: 200px; }
+  .cost-label { font-family: var(--mono); font-size: .9rem; min-width: 6em; text-align: right; }
+  .hash-out {
+    font-family: var(--mono); font-size: .85rem; word-break: break-all;
+    padding: 12px; background: var(--surface2); border-radius: var(--radius);
+    border: 1px solid var(--border); margin-top: 8px; min-height: 2.4em;
+  }
+  .hash-parts { display: grid; gap: 6px; margin-top: 12px; font-family: var(--mono); font-size: .82rem; }
+  .hash-part { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: baseline; }
+  .hash-part .lbl { color: var(--muted); font-family: var(--sans); font-size: .78rem; text-transform: uppercase; }
+  .hash-part .val { word-break: break-all; }
+  .verify-banner {
+    margin-top: 12px; padding: 12px 16px; border-radius: var(--radius);
+    font-weight: 600; font-size: .95rem; text-align: center;
+  }
+  .verify-banner.valid { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .verify-banner.invalid { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .verify-banner.neutral { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+  .timing { font-size: .78rem; color: var(--muted); margin-top: 4px; }
+  .ref-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 8px; }
+  .ref-table th, .ref-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  .ref-table th { font-size: .75rem; text-transform: uppercase; color: var(--muted); }
+  .ref-table td:last-child { font-family: var(--mono); }
+  @media (max-width: 768px) {
+    .hash-part { grid-template-columns: 1fr; gap: 2px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Bcrypt Generator &amp; Verifier</h1>
+<p class="subtitle">Generate bcrypt hashes with adjustable cost factor and verify passwords against existing hashes &mdash; all in your browser using <code>bcryptjs</code>.</p>
+
+<div class="panels">
+  <div class="card">
+    <h2>Generate Hash</h2>
+    <div class="pw-row">
+      <input id="genPw" type="text" placeholder="Password to hash" autocomplete="off">
+      <button class="btn" onclick="doGenerate()">Hash</button>
+    </div>
+    <div class="cost-row">
+      <label for="cost">Cost (rounds):</label>
+      <input type="range" id="cost" min="4" max="14" value="10" oninput="updateCostLabel()">
+      <span class="cost-label" id="costLabel">10 (1024)</span>
+    </div>
+    <div class="hash-out" id="hashOut">Hash will appear here…</div>
+    <div class="timing" id="timing"></div>
+    <div class="row" style="margin-top:8px; gap:8px;">
+      <button class="btn btn-secondary" onclick="copyHash()">Copy Hash</button>
+      <button class="btn btn-secondary" onclick="copyToVerify()">Use in Verifier &darr;</button>
+    </div>
+    <div class="hash-parts" id="hashParts"></div>
+  </div>
+
+  <div class="card">
+    <h2>Verify Password</h2>
+    <label style="display:block; font-size:.82rem; color:var(--muted); margin-bottom:4px;">Password</label>
+    <input id="verifyPw" type="text" placeholder="Password to test" autocomplete="off" style="font-family:var(--mono);">
+    <label style="display:block; font-size:.82rem; color:var(--muted); margin:8px 0 4px;">Bcrypt Hash</label>
+    <input id="verifyHash" type="text" placeholder="$2b$10$..." autocomplete="off" style="font-family:var(--mono);">
+    <div style="margin-top:8px;">
+      <button class="btn" onclick="doVerify()">Verify</button>
+    </div>
+    <div class="verify-banner neutral" id="verifyBanner">Enter a password and hash to verify</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>About bcrypt</h2>
+  <p style="font-size:.88rem; color:var(--muted); line-height:1.5;">
+    Bcrypt is an adaptive password hashing function based on the Blowfish cipher. The cost factor controls how many iterations are run (2<sup>cost</sup>), letting you trade speed for resistance to brute-force attacks. A bcrypt hash always starts with a version prefix (<code>$2a$</code>, <code>$2b$</code>, or <code>$2y$</code>), followed by the cost, then a 22-character base64 salt, then a 31-character base64 digest &mdash; for a total of 60 characters.
+  </p>
+  <table class="ref-table">
+    <tr><th>Cost</th><th>Iterations</th><th>Typical use</th></tr>
+    <tr><td>4</td><td>16</td><td>Tests only</td></tr>
+    <tr><td>8</td><td>256</td><td>Old defaults</td></tr>
+    <tr><td>10</td><td>1,024</td><td>Common default</td></tr>
+    <tr><td>12</td><td>4,096</td><td>Stronger production</td></tr>
+    <tr><td>14</td><td>16,384</td><td>High-security</td></tr>
+  </table>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function updateCostLabel() {
+  const c = +$('cost').value;
+  $('costLabel').textContent = c + ' (' + (1 << c).toLocaleString() + ')';
+}
+updateCostLabel();
+
+function doGenerate() {
+  const pw = $('genPw').value;
+  if (!pw) {
+    $('hashOut').textContent = 'Enter a password to hash.';
+    $('hashParts').innerHTML = '';
+    $('timing').textContent = '';
+    return;
+  }
+  const cost = +$('cost').value;
+  $('hashOut').textContent = 'Hashing… (cost ' + cost + ')';
+  $('timing').textContent = '';
+  $('hashParts').innerHTML = '';
+  // Defer to allow UI repaint
+  setTimeout(() => {
+    const t0 = performance.now();
+    try {
+      const salt = dcodeIO.bcrypt.genSaltSync(cost);
+      const hash = dcodeIO.bcrypt.hashSync(pw, salt);
+      const t1 = performance.now();
+      $('hashOut').textContent = hash;
+      $('timing').textContent = 'Generated in ' + (t1 - t0).toFixed(1) + ' ms';
+      renderParts(hash);
+    } catch (e) {
+      $('hashOut').textContent = 'Error: ' + e.message;
+    }
+  }, 10);
+}
+
+function renderParts(hash) {
+  // $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
+  const m = /^(\$2[aby]\$)(\d{2})\$(.{22})(.{31})$/.exec(hash);
+  if (!m) { $('hashParts').innerHTML = ''; return; }
+  const [_, ver, cost, salt, digest] = m;
+  $('hashParts').innerHTML =
+    '<div class="hash-part"><span class="lbl">Version</span><span class="val">' + ver + '</span></div>' +
+    '<div class="hash-part"><span class="lbl">Cost</span><span class="val">' + cost + ' (' + (1 << +cost).toLocaleString() + ' iterations)</span></div>' +
+    '<div class="hash-part"><span class="lbl">Salt</span><span class="val">' + salt + '</span></div>' +
+    '<div class="hash-part"><span class="lbl">Digest</span><span class="val">' + digest + '</span></div>';
+}
+
+function copyHash() {
+  const h = $('hashOut').textContent.trim();
+  if (!h || h.startsWith('Hash will') || h.startsWith('Enter') || h.startsWith('Hashing')) return;
+  navigator.clipboard.writeText(h).then(showToast);
+}
+
+function copyToVerify() {
+  const h = $('hashOut').textContent.trim();
+  if (!h || h.startsWith('Hash will') || h.startsWith('Enter') || h.startsWith('Hashing')) return;
+  $('verifyHash').value = h;
+  $('verifyPw').value = $('genPw').value;
+  $('verifyPw').focus();
+}
+
+function doVerify() {
+  const pw = $('verifyPw').value;
+  const hash = $('verifyHash').value.trim();
+  const banner = $('verifyBanner');
+  if (!pw || !hash) {
+    banner.className = 'verify-banner neutral';
+    banner.textContent = 'Enter both a password and a bcrypt hash.';
+    return;
+  }
+  if (!/^\$2[aby]\$\d{2}\$.{53}$/.test(hash)) {
+    banner.className = 'verify-banner invalid';
+    banner.textContent = '\u2717 Not a valid bcrypt hash format.';
+    return;
+  }
+  banner.className = 'verify-banner neutral';
+  banner.textContent = 'Verifying…';
+  setTimeout(() => {
+    const t0 = performance.now();
+    try {
+      const ok = dcodeIO.bcrypt.compareSync(pw, hash);
+      const t1 = performance.now();
+      if (ok) {
+        banner.className = 'verify-banner valid';
+        banner.textContent = '\u2713 Match — password is valid (' + (t1 - t0).toFixed(1) + ' ms)';
+      } else {
+        banner.className = 'verify-banner invalid';
+        banner.textContent = '\u2717 No match — password does not match the hash.';
+      }
+    } catch (e) {
+      banner.className = 'verify-banner invalid';
+      banner.textContent = 'Error: ' + e.message;
+    }
+  }, 10);
+}
+
+function showToast() {
+  const t = $('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+$('genPw').addEventListener('keydown', e => { if (e.key === 'Enter') doGenerate(); });
+$('verifyPw').addEventListener('keydown', e => { if (e.key === 'Enter') doVerify(); });
+$('verifyHash').addEventListener('keydown', e => { if (e.key === 'Enter') doVerify(); });
+</script>
+</body>
+</html>

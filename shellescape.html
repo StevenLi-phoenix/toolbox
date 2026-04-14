@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shell Argument Escaper — POSIX, Bash, PowerShell, cmd</title>
+<meta name="description" content="Safely escape shell arguments for POSIX sh, Bash, Zsh, PowerShell, and Windows cmd.exe. Convert raw arguments into properly quoted command lines.">
+<meta name="keywords" content="shell escape, shellescape, posix quote, bash quote, powershell escape, cmd escape, shellquote, single quote, argument quoting">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/shellescape.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea.args { min-height: 140px; font-family: var(--mono); font-size: .9rem; }
+  .out-block { margin-top: 1rem; }
+  .out-block h3 {
+    font-size: .82rem; text-transform: uppercase; color: var(--muted);
+    margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .out-block pre {
+    font-family: var(--mono); font-size: .88rem; line-height: 1.45;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .copy-btn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    font-size: .72rem; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+    text-transform: uppercase; font-family: var(--sans);
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--border2); }
+  .mode-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .mode-row label {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: .82rem; padding: 4px 10px; border: 1px solid var(--border);
+    border-radius: 12px; cursor: pointer;
+  }
+  .mode-row input { margin: 0; }
+  .help { font-size: .82rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Shell Argument Escaper</h1>
+<p class="subtitle">Turn raw arguments into properly quoted command lines for every common shell &mdash; without worrying about spaces, quotes, or special characters.</p>
+
+<div class="card">
+  <h2>Arguments</h2>
+  <p class="help">Enter one argument per line. Empty lines are skipped. Special characters like spaces, quotes, dollar signs, and backticks will be escaped automatically.</p>
+  <textarea class="args" id="args" oninput="render()" placeholder="echo&#10;Hello, World!&#10;path with spaces/file.txt&#10;$HOME/secret"></textarea>
+  <div class="mode-row">
+    <label><input type="radio" name="mode" value="line" checked onchange="render()"> One arg per line</label>
+    <label><input type="radio" name="mode" value="space" onchange="render()"> Split on spaces (single line)</label>
+  </div>
+</div>
+
+<div id="outputs"></div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>Quoting Rules Cheat Sheet</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:.85rem;">
+    <thead>
+      <tr style="text-align:left; color:var(--muted);">
+        <th style="padding:6px 8px;">Shell</th>
+        <th style="padding:6px 8px;">Strategy</th>
+      </tr>
+    </thead>
+    <tbody style="font-family:var(--mono); font-size:.82rem;">
+      <tr><td style="padding:6px 8px;">POSIX sh / Bash</td><td style="padding:6px 8px;">Single quotes; embedded <code>'</code> becomes <code>'\''</code>.</td></tr>
+      <tr><td style="padding:6px 8px;">Bash $'…'</td><td style="padding:6px 8px;">ANSI-C quoting — escapes control chars and Unicode.</td></tr>
+      <tr><td style="padding:6px 8px;">PowerShell</td><td style="padding:6px 8px;">Single quotes; embedded <code>'</code> becomes <code>''</code>.</td></tr>
+      <tr><td style="padding:6px 8px;">Windows cmd.exe</td><td style="padding:6px 8px;">Double quotes with <code>^</code> escaping for <code>&amp; | &lt; &gt; ^ %</code>.</td></tr>
+      <tr><td style="padding:6px 8px;">JSON array</td><td style="padding:6px 8px;">For Dockerfile / GitHub Actions exec form.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function getArgs() {
+  const mode = document.querySelector('input[name=mode]:checked').value;
+  const raw = $('args').value;
+  if (mode === 'space') {
+    return raw.split(/\s+/).filter(Boolean);
+  }
+  return raw.split(/\r?\n/).filter(s => s.length > 0);
+}
+
+// POSIX sh / bash safe single-quote
+function posixQuote(s) {
+  if (s === '') return "''";
+  if (/^[A-Za-z0-9_\-./:=@%+,]+$/.test(s)) return s;
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+// Bash ANSI-C quoting $'...'
+function bashAnsiC(s) {
+  if (s === '') return "''";
+  if (/^[A-Za-z0-9_\-./:=@%+,]+$/.test(s)) return s;
+  let out = "$'";
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if (ch === "'") out += "\\'";
+    else if (ch === '\\') out += '\\\\';
+    else if (c === 0x07) out += '\\a';
+    else if (c === 0x08) out += '\\b';
+    else if (c === 0x09) out += '\\t';
+    else if (c === 0x0a) out += '\\n';
+    else if (c === 0x0b) out += '\\v';
+    else if (c === 0x0c) out += '\\f';
+    else if (c === 0x0d) out += '\\r';
+    else if (c === 0x1b) out += '\\e';
+    else if (c < 0x20 || c === 0x7f) out += '\\x' + c.toString(16).padStart(2, '0');
+    else if (c > 0x7f) out += '\\u' + c.toString(16).padStart(4, '0');
+    else out += ch;
+  }
+  return out + "'";
+}
+
+// PowerShell single-quote
+function powershellQuote(s) {
+  if (s === '') return "''";
+  if (/^[A-Za-z0-9_\-./:=@%+,]+$/.test(s)) return s;
+  return "'" + s.replace(/'/g, "''") + "'";
+}
+
+// Windows cmd.exe — double quotes, caret-escape metacharacters
+function cmdQuote(s) {
+  if (s === '') return '""';
+  // Escape backslashes preceding quotes per CommandLineToArgvW rules,
+  // then wrap in double quotes, then caret-escape cmd.exe metacharacters
+  // outside the quoted string. Simplest safe: always wrap and double internal quotes.
+  let inner = '';
+  // CommandLineToArgvW: backslashes are literal unless followed by a quote.
+  // For safe single-arg quoting: replace " with \" and double trailing backslashes.
+  let i = 0;
+  while (i < s.length) {
+    let bs = 0;
+    while (i < s.length && s[i] === '\\') { bs++; i++; }
+    if (i === s.length) { inner += '\\'.repeat(bs * 2); break; }
+    if (s[i] === '"') { inner += '\\'.repeat(bs * 2 + 1) + '"'; i++; }
+    else { inner += '\\'.repeat(bs) + s[i]; i++; }
+  }
+  let quoted = '"' + inner + '"';
+  // cmd.exe metachars: & | < > ^ % ! — escape with ^ outside quotes is unnecessary
+  // because they are inside double quotes. Only ! and % are still problematic when
+  // delayed expansion is enabled, but quoting handles the common case.
+  return quoted;
+}
+
+// JSON array form (Dockerfile CMD/ENTRYPOINT exec form)
+function jsonArrayForm(args) {
+  return '[' + args.map(a => JSON.stringify(a)).join(', ') + ']';
+}
+
+function render() {
+  const args = getArgs();
+  const out = $('outputs');
+  if (args.length === 0) {
+    out.innerHTML = '<div class="card empty">Enter at least one argument above.</div>';
+    return;
+  }
+
+  const blocks = [
+    { title: 'POSIX sh / Bash / Zsh', body: args.map(posixQuote).join(' ') },
+    { title: "Bash ANSI-C ($'…')", body: args.map(bashAnsiC).join(' ') },
+    { title: 'PowerShell', body: args.map(powershellQuote).join(' ') },
+    { title: 'Windows cmd.exe', body: args.map(cmdQuote).join(' ') },
+    { title: 'JSON exec form (Dockerfile / Actions)', body: jsonArrayForm(args) },
+  ];
+
+  out.innerHTML = blocks.map((b, i) =>
+    '<div class="card out-block">' +
+      '<h3>' + b.title +
+        '<button class="copy-btn" onclick="copyBlock(' + i + ')">Copy</button>' +
+      '</h3>' +
+      '<pre id="out' + i + '">' + escapeHtml(b.body) + '</pre>' +
+    '</div>'
+  ).join('');
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function copyBlock(i) {
+  const txt = document.getElementById('out' + i).textContent;
+  navigator.clipboard.writeText(txt).then(showToast);
+}
+
+function showToast() {
+  const t = $('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+// Seed example
+$('args').value = 'echo\nHello, World!\npath with spaces/file.txt\n$HOME/secret';
+render();
+</script>
+</body>
+</html>

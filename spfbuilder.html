@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPF Record Builder & Validator — Free Online Tool</title>
+<meta name="description" content="Build and validate SPF (Sender Policy Framework) DNS TXT records — add include, ip4, ip6, mx, a mechanisms, choose a default policy, and check the 10-DNS-lookup limit.">
+<meta name="keywords" content="SPF, SPF record, SPF builder, SPF validator, sender policy framework, email authentication, DNS, TXT record, dmarc, ~all, -all">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/spfbuilder.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .mech-row {
+    display: grid; grid-template-columns: 110px 1fr 36px;
+    gap: 8px; align-items: center; margin-bottom: 6px;
+  }
+  .mech-row select, .mech-row input { font-family: var(--mono); font-size: .88rem; }
+  .mech-row .del {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 4px; cursor: pointer; height: 32px;
+  }
+  .mech-row .del:hover { color: var(--error); border-color: var(--error); }
+  .all-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .all-row label { font-size: .85rem; display: inline-flex; align-items: center; gap: 4px; }
+  .out-record {
+    font-family: var(--mono); font-size: .95rem; word-break: break-all;
+    padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-top: 8px;
+  }
+  .stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: .85rem; }
+  .stat-row .stat { color: var(--muted); }
+  .stat-row .stat strong { color: var(--text); font-family: var(--mono); }
+  .lint { margin-top: 12px; }
+  .lint-item {
+    display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px;
+    border-radius: 4px; font-size: .85rem; margin-bottom: 4px;
+  }
+  .lint-item.ok { background: #ecfdf5; color: var(--success); }
+  .lint-item.warn { background: #fffbeb; color: var(--warning); }
+  .lint-item.err { background: #fef2f2; color: var(--error); }
+  .lint-item .icon { font-weight: 700; min-width: 1em; }
+  textarea.parse { min-height: 80px; font-family: var(--mono); font-size: .88rem; }
+  .help { font-size: .82rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>SPF Record Builder &amp; Validator</h1>
+<p class="subtitle">Construct an SPF record mechanism by mechanism, then publish the result as a single DNS TXT record. Lints for the 10-DNS-lookup limit, length, and common mistakes.</p>
+
+<div class="card">
+  <h2>Mechanisms</h2>
+  <p class="help">Each row is a mechanism evaluated left-to-right. <code>include</code>, <code>a</code>, <code>mx</code>, <code>ptr</code>, and <code>exists</code> each cost an extra DNS lookup (RFC 7208 max 10).</p>
+  <div id="mechs"></div>
+  <button class="btn btn-secondary" onclick="addMech()" style="margin-top:6px;">+ Add Mechanism</button>
+
+  <div class="all-row">
+    <strong>Default policy:</strong>
+    <label><input type="radio" name="all" value="-all" checked onchange="render()"> -all (fail)</label>
+    <label><input type="radio" name="all" value="~all" onchange="render()"> ~all (softfail)</label>
+    <label><input type="radio" name="all" value="?all" onchange="render()"> ?all (neutral)</label>
+    <label><input type="radio" name="all" value="+all" onchange="render()"> +all (pass — dangerous)</label>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>SPF Record</h2>
+  <div class="out-record" id="output">v=spf1 -all</div>
+  <div class="stat-row">
+    <span class="stat">Length: <strong id="len">0</strong> chars</span>
+    <span class="stat">DNS lookups: <strong id="lookups">0</strong> / 10</span>
+    <span class="stat">Mechanisms: <strong id="count">0</strong></span>
+  </div>
+  <div class="row" style="margin-top:8px; gap:8px;">
+    <button class="btn" onclick="copyOut()">Copy Record</button>
+    <button class="btn btn-secondary" onclick="copyDig()">Copy <code>dig</code> command</button>
+  </div>
+  <div class="lint" id="lint"></div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>Parse / Validate Existing Record</h2>
+  <p class="help">Paste an existing SPF record (e.g. from <code>dig +short TXT example.com</code>) to load it into the builder.</p>
+  <textarea class="parse" id="parseIn" placeholder='"v=spf1 include:_spf.google.com ~all"'></textarea>
+  <button class="btn btn-secondary" onclick="parseIn()" style="margin-top:6px;">Load into Builder</button>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>Mechanism Reference</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:.85rem;">
+    <thead><tr style="text-align:left; color:var(--muted);">
+      <th style="padding:6px 8px;">Mechanism</th><th style="padding:6px 8px;">Meaning</th><th style="padding:6px 8px;">DNS</th>
+    </tr></thead>
+    <tbody>
+      <tr><td style="padding:6px 8px; font-family:var(--mono);">ip4:1.2.3.4</td><td style="padding:6px 8px;">Authorize an IPv4 address or CIDR</td><td style="padding:6px 8px;">0</td></tr>
+      <tr><td style="padding:6px 8px; font-family:var(--mono);">ip6:2001:db8::/32</td><td style="padding:6px 8px;">Authorize an IPv6 address or CIDR</td><td style="padding:6px 8px;">0</td></tr>
+      <tr><td style="padding:6px 8px; font-family:var(--mono);">a / a:domain</td><td style="padding:6px 8px;">A/AAAA records of domain</td><td style="padding:6px 8px;">1</td></tr>
+      <tr><td style="padding:6px 8px; font-family:var(--mono);">mx / mx:domain</td><td style="padding:6px 8px;">MX hosts of domain</td><td style="padding:6px 8px;">1</td></tr>
+      <tr><td style="padding:6px 8px; font-family:var(--mono);">include:domain</td><td style="padding:6px 8px;">Recursively evaluate another SPF</td><td style="padding:6px 8px;">1+</td></tr>
+      <tr><td style="padding:6px 8px; font-family:var(--mono);">exists:domain</td><td style="padding:6px 8px;">Macro-expanded A lookup</td><td style="padding:6px 8px;">1</td></tr>
+      <tr><td style="padding:6px 8px; font-family:var(--mono);">ptr:domain</td><td style="padding:6px 8px;">Reverse DNS — discouraged</td><td style="padding:6px 8px;">1+</td></tr>
+      <tr><td style="padding:6px 8px; font-family:var(--mono);">redirect=domain</td><td style="padding:6px 8px;">Replace policy with another domain</td><td style="padding:6px 8px;">1+</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const TYPES = [
+  { v: 'ip4', placeholder: '192.0.2.0/24', dns: 0 },
+  { v: 'ip6', placeholder: '2001:db8::/32', dns: 0 },
+  { v: 'a', placeholder: 'example.com (or blank)', dns: 1 },
+  { v: 'mx', placeholder: 'example.com (or blank)', dns: 1 },
+  { v: 'include', placeholder: '_spf.google.com', dns: 1 },
+  { v: 'exists', placeholder: '%{i}._spf.example.com', dns: 1 },
+  { v: 'ptr', placeholder: 'example.com (or blank)', dns: 1 },
+  { v: 'redirect', placeholder: '_spf.example.com', dns: 1 },
+];
+
+let mechs = [
+  { qual: '+', type: 'include', value: '_spf.google.com' },
+];
+
+function renderMechs() {
+  const html = mechs.map((m, i) =>
+    '<div class="mech-row">' +
+      '<select onchange="updateType(' + i + ', this.value)">' +
+        TYPES.map(t => `<option value="${t.v}" ${t.v===m.type?'selected':''}>${t.v}</option>`).join('') +
+      '</select>' +
+      '<input type="text" placeholder="' + (TYPES.find(t=>t.v===m.type)?.placeholder || '') + '" value="' + escapeAttr(m.value) + '" oninput="updateValue(' + i + ', this.value)">' +
+      '<button class="del" onclick="delMech(' + i + ')" title="Remove">&times;</button>' +
+    '</div>'
+  ).join('');
+  $('mechs').innerHTML = html || '<div class="empty">No mechanisms yet — click "Add Mechanism".</div>';
+}
+
+function escapeAttr(s) { return (s||'').replace(/"/g, '&quot;'); }
+
+function addMech() {
+  mechs.push({ qual: '+', type: 'ip4', value: '' });
+  renderMechs(); render();
+}
+function delMech(i) { mechs.splice(i, 1); renderMechs(); render(); }
+function updateType(i, v) { mechs[i].type = v; renderMechs(); render(); }
+function updateValue(i, v) { mechs[i].value = v; render(); }
+
+function buildRecord() {
+  const all = document.querySelector('input[name=all]:checked').value;
+  const parts = ['v=spf1'];
+  let lookups = 0;
+  let redirectUsed = false;
+  for (const m of mechs) {
+    const val = (m.value || '').trim();
+    let token;
+    if (m.type === 'redirect') {
+      if (!val) continue;
+      token = 'redirect=' + val;
+      redirectUsed = true;
+    } else if (val) {
+      token = m.type + ':' + val;
+    } else {
+      // a, mx, ptr can be bare; ip4/ip6/include/exists need a value
+      if (['ip4','ip6','include','exists'].includes(m.type)) continue;
+      token = m.type;
+    }
+    parts.push(token);
+    const t = TYPES.find(t => t.v === m.type);
+    if (t) lookups += t.dns;
+  }
+  if (!redirectUsed) parts.push(all);
+  return { record: parts.join(' '), lookups, count: parts.length - 1 - (redirectUsed ? 0 : 1) };
+}
+
+function render() {
+  const { record, lookups, count } = buildRecord();
+  $('output').textContent = record;
+  $('len').textContent = record.length;
+  $('lookups').textContent = lookups;
+  $('count').textContent = Math.max(0, count);
+  lint(record, lookups);
+}
+
+function lint(record, lookups) {
+  const issues = [];
+  if (!record.startsWith('v=spf1')) issues.push({ k: 'err', m: 'Record must start with v=spf1.' });
+  if (record.length > 255) issues.push({ k: 'warn', m: 'Single TXT string > 255 chars — must be split into multiple quoted strings in the zone file.' });
+  if (record.length > 450) issues.push({ k: 'warn', m: 'Record is very long; consider flattening or splitting includes to stay under typical UDP DNS limits.' });
+  if (lookups > 10) issues.push({ k: 'err', m: 'Exceeds the 10-DNS-lookup limit (RFC 7208 §4.6.4) — receivers will return permerror.' });
+  else if (lookups > 7) issues.push({ k: 'warn', m: 'Approaching the 10-lookup limit (' + lookups + '/10). Plan room for nested includes.' });
+  if (/\+all\b/.test(record)) issues.push({ k: 'err', m: '+all allows ANYONE to send mail as your domain. Use -all or ~all instead.' });
+  if (/\bptr[: ]/.test(record)) issues.push({ k: 'warn', m: 'ptr is discouraged by RFC 7208 §5.5 — slow and unreliable.' });
+  if (mechs.some(m => m.type === 'include' && !m.value.trim())) issues.push({ k: 'err', m: 'An include mechanism is missing its domain.' });
+  if (mechs.some(m => m.type === 'ip4' && m.value.trim() && !/^([0-9]{1,3}\.){3}[0-9]{1,3}(\/\d{1,2})?$/.test(m.value.trim()))) {
+    issues.push({ k: 'err', m: 'An ip4 value is not a valid IPv4 address or CIDR.' });
+  }
+  if (issues.length === 0) issues.push({ k: 'ok', m: 'Looks good — record is well-formed and within limits.' });
+  $('lint').innerHTML = issues.map(i =>
+    '<div class="lint-item ' + i.k + '"><span class="icon">' +
+    (i.k === 'ok' ? '\u2713' : i.k === 'warn' ? '!' : '\u2717') +
+    '</span><span>' + escapeHtml(i.m) + '</span></div>'
+  ).join('');
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function copyOut() {
+  navigator.clipboard.writeText($('output').textContent).then(showToast);
+}
+
+function copyDig() {
+  navigator.clipboard.writeText('dig +short TXT yourdomain.com').then(showToast);
+}
+
+function parseIn() {
+  let txt = $('parseIn').value.trim();
+  // Strip surrounding quotes and concatenate split TXT strings
+  txt = txt.replace(/"\s*"/g, '').replace(/^"(.*)"$/s, '$1').trim();
+  if (!txt.startsWith('v=spf1')) {
+    alert('Not an SPF record — must start with v=spf1');
+    return;
+  }
+  const tokens = txt.split(/\s+/).slice(1);
+  mechs = [];
+  let allChosen = '-all';
+  for (const t of tokens) {
+    const m = /^(?<qual>[+\-~?])?(?<rest>.+)$/.exec(t);
+    if (!m) continue;
+    const qual = m.groups.qual || '+';
+    const rest = m.groups.rest;
+    if (rest === 'all') { allChosen = (qual === '+' ? '+' : qual) + 'all'; continue; }
+    if (rest.includes(':')) {
+      const [type, ...vparts] = rest.split(':');
+      if (TYPES.find(x => x.v === type)) {
+        mechs.push({ qual, type, value: vparts.join(':') });
+      }
+    } else if (rest.startsWith('redirect=')) {
+      mechs.push({ qual: '+', type: 'redirect', value: rest.slice('redirect='.length) });
+    } else if (TYPES.find(x => x.v === rest)) {
+      mechs.push({ qual, type: rest, value: '' });
+    }
+  }
+  document.querySelector(`input[name=all][value="${allChosen}"]`)?.click();
+  renderMechs(); render();
+}
+
+renderMechs();
+render();
+</script>
+</body>
+</html>
