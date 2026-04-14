@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hamming Distance Calculator — Free Online Tool</title>
+<meta name="description" content="Compute the Hamming distance between two strings, binary words, or hexadecimal values. Visualize mismatched positions and compare against Levenshtein distance.">
+<meta name="keywords" content="hamming distance, bit distance, string comparison, error correction, xor distance, levenshtein">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hamming.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .row-inputs label { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .row-inputs input, .row-inputs textarea {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .95rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+  }
+  .row-inputs textarea { min-height: 90px; resize: vertical; }
+  .mode-row { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; font-size: .9rem; }
+  .mode-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .verdict {
+    padding: 14px 18px; border-radius: var(--radius); font-weight: 600;
+    text-align: center; margin-top: 14px; font-size: 1.05rem;
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  }
+  .verdict.match { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .verdict.error { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+  .stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 14px; font-size: .88rem; color: var(--muted); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .viz {
+    margin-top: 14px; padding: 14px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .98rem; overflow-x: auto;
+    line-height: 1.9;
+  }
+  .viz-row { display: block; white-space: pre; }
+  .viz-row .lbl { display: inline-block; width: 34px; color: var(--muted); font-size: .8rem; }
+  .viz .diff { background: #fee2e2; color: #991b1b; padding: 0 2px; border-radius: 3px; font-weight: 700; }
+  .viz .same { color: var(--muted); }
+  .viz .marker { color: #dc2626; font-weight: 700; }
+  .positions {
+    margin-top: 12px; font-size: .85rem; font-family: var(--mono);
+    word-break: break-all; color: var(--text);
+  }
+  .positions span { color: var(--muted); margin-right: 4px; }
+  @media (max-width: 768px) {
+    .row-inputs { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Hamming Distance Calculator</h1>
+<p class="subtitle">The Hamming distance counts the number of positions at which two equal-length sequences differ. It's foundational to error-detecting codes, DNA similarity, and hashing &mdash; but unlike Levenshtein, it requires both inputs to be the same length.</p>
+
+<div class="card">
+  <div class="mode-row">
+    Mode:
+    <label><input type="radio" name="mode" value="text" checked onchange="run()"> Text</label>
+    <label><input type="radio" name="mode" value="binary" onchange="run()"> Binary</label>
+    <label><input type="radio" name="mode" value="hex" onchange="run()"> Hex</label>
+  </div>
+  <div class="row-inputs">
+    <div>
+      <label for="a">Input A</label>
+      <textarea id="a" oninput="run()" spellcheck="false">karolin</textarea>
+    </div>
+    <div>
+      <label for="b">Input B</label>
+      <textarea id="b" oninput="run()" spellcheck="false">kathrin</textarea>
+    </div>
+  </div>
+  <div id="verdict" class="verdict">—</div>
+  <div class="stats">
+    <span>length <strong id="len">0</strong></span>
+    <span>Hamming distance <strong id="dist">0</strong></span>
+    <span>similarity <strong id="sim">0%</strong></span>
+    <span>Levenshtein (for ref) <strong id="lev">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Position Diff</h2>
+  <div id="viz" class="viz"></div>
+  <div id="positions" class="positions"></div>
+</div>
+
+<div class="card">
+  <h2>About Hamming Distance</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Introduced by Richard Hamming in 1950, this metric counts mismatched positions between two equal-length sequences. For binary data it equals the number of 1-bits in <code>A&nbsp;XOR&nbsp;B</code>. A code that corrects <em>t</em> errors must have a minimum Hamming distance of at least <code>2t&nbsp;+&nbsp;1</code>. Unlike Levenshtein, it doesn't account for insertions or deletions &mdash; only substitutions &mdash; which is why both strings must have the same length.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function getMode() {
+  return document.querySelector('input[name="mode"]:checked').value;
+}
+
+function normalizeBinary(s) { return s.replace(/[^01]/g, ''); }
+function normalizeHex(s) { return s.replace(/[^0-9a-fA-F]/g, '').toLowerCase(); }
+
+function hexToBits(s) {
+  let bits = '';
+  for (const c of s) bits += parseInt(c, 16).toString(2).padStart(4, '0');
+  return bits;
+}
+
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const m = a.length, n = b.length;
+  let prev = new Array(n + 1);
+  let curr = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function run() {
+  const mode = getMode();
+  let a = $('a').value, b = $('b').value;
+  const v = $('verdict');
+  const viz = $('viz');
+  const pos = $('positions');
+
+  if (mode === 'binary') { a = normalizeBinary(a); b = normalizeBinary(b); }
+  else if (mode === 'hex') { a = hexToBits(normalizeHex(a)); b = hexToBits(normalizeHex(b)); }
+
+  if (mode !== 'text' && (a.length === 0 || b.length === 0)) {
+    v.textContent = 'Enter two ' + mode + ' values'; v.className = 'verdict';
+    viz.textContent = ''; pos.textContent = '';
+    $('len').textContent = '0'; $('dist').textContent = '0'; $('sim').textContent = '0%'; $('lev').textContent = '0';
+    return;
+  }
+
+  if (a.length !== b.length) {
+    v.textContent = '✗ Length mismatch: ' + a.length + ' vs ' + b.length + ' — Hamming distance is undefined';
+    v.className = 'verdict error';
+    viz.textContent = '';
+    pos.textContent = '';
+    $('len').textContent = '—';
+    $('dist').textContent = '—';
+    $('sim').textContent = '—';
+    $('lev').textContent = levenshtein(a, b);
+    return;
+  }
+
+  let dist = 0;
+  const diffs = [];
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) { dist++; diffs.push(i); }
+  }
+
+  $('len').textContent = a.length;
+  $('dist').textContent = dist;
+  $('sim').textContent = a.length ? ((1 - dist / a.length) * 100).toFixed(1) + '%' : '0%';
+  $('lev').textContent = levenshtein(a, b);
+
+  if (dist === 0 && a.length > 0) {
+    v.textContent = '✓ Identical — distance 0';
+    v.className = 'verdict match';
+  } else if (a.length === 0) {
+    v.textContent = 'Enter two values'; v.className = 'verdict';
+  } else {
+    v.textContent = 'Hamming distance = ' + dist + ' of ' + a.length + (mode === 'text' ? ' chars' : ' bits');
+    v.className = 'verdict';
+  }
+
+  // visualization
+  let aHtml = '<span class="lbl">A</span>';
+  let bHtml = '<span class="lbl">B</span>';
+  let mHtml = '<span class="lbl"></span>';
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === b[i]) {
+      aHtml += '<span class="same">' + escapeHtml(a[i]) + '</span>';
+      bHtml += '<span class="same">' + escapeHtml(b[i]) + '</span>';
+      mHtml += ' ';
+    } else {
+      aHtml += '<span class="diff">' + escapeHtml(a[i]) + '</span>';
+      bHtml += '<span class="diff">' + escapeHtml(b[i]) + '</span>';
+      mHtml += '<span class="marker">^</span>';
+    }
+  }
+  viz.innerHTML = '<div class="viz-row">' + aHtml + '</div>'
+                + '<div class="viz-row">' + bHtml + '</div>'
+                + '<div class="viz-row">' + mHtml + '</div>';
+
+  if (diffs.length) {
+    pos.innerHTML = '<span>mismatches at index:</span>' + diffs.join(', ');
+  } else {
+    pos.textContent = '';
+  }
+}
+
+run();
+</script>
+</body>
+</html>
