@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soundex & Metaphone Phonetic Encoder - Free Online Tool</title>
+<meta name="description" content="Encode names and words with Soundex, Metaphone, NYSIIS, and Caverphone phonetic algorithms. Compare words to find phonetic matches. 100% client-side.">
+<meta name="keywords" content="soundex, metaphone, nysiis, caverphone, phonetic, algorithm, fuzzy match">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/soundex.html">
+<meta property="og:title" content="Soundex & Metaphone Phonetic Encoder">
+<meta property="og:description" content="Encode and compare words with Soundex, Metaphone, NYSIIS, and Caverphone algorithms.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/soundex.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea, input[type=text] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: .9rem;
+    resize: vertical;
+  }
+  label { font-size: .82rem; color: var(--muted); display: block; margin: 8px 0 4px; }
+  .results {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .88rem; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--surface2); font-weight: 600; color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+  tr:last-child td { border-bottom: none; }
+  .word { color: var(--muted); }
+  .code { font-weight: 600; }
+  .match-group { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--surface2); color: var(--text); font-size: .75rem; font-family: var(--mono); }
+  .pairs {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 12px;
+    align-items: end;
+    margin-top: 12px;
+  }
+  .verdict {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .v-row { display: flex; justify-content: space-between; padding: 3px 0; font-family: var(--mono); font-size: .85rem; }
+  .match { color: var(--success); font-weight: 600; }
+  .nomatch { color: var(--error); }
+  h3 { font-size: .95rem; margin: 0 0 8px; }
+  @media (max-width: 768px) {
+    .pairs { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Soundex & Metaphone Encoder</h1>
+<p class="subtitle">Encode words with classic phonetic algorithms — Soundex, Metaphone, NYSIIS, and Caverphone — to find names that sound alike despite spelling differences. Useful for fuzzy name matching, data cleanup, and deduping contact lists.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h3>Batch Encode</h3>
+  <label for="words">Words (one per line, or comma/space separated)</label>
+  <textarea id="words" rows="5" spellcheck="false">Robert
+Rupert
+Rubin
+Smith
+Smyth
+Ashcraft
+Ashcroft
+Johnson
+Jonson
+Catherine
+Katherine</textarea>
+  <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+    <button class="btn" onclick="runBatch()">Encode</button>
+    <button class="btn btn-secondary" onclick="clearBatch()">Clear</button>
+    <button class="btn btn-secondary" onclick="copyTable()">Copy TSV</button>
+  </div>
+  <div class="results" id="results"></div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h3>Compare Two Words</h3>
+  <div class="pairs">
+    <div>
+      <label for="w1">Word A</label>
+      <input type="text" id="w1" value="Robert" spellcheck="false">
+    </div>
+    <div>
+      <label for="w2">Word B</label>
+      <input type="text" id="w2" value="Rupert" spellcheck="false">
+    </div>
+    <button class="btn" onclick="runCompare()" style="margin-bottom:1px;">Compare</button>
+  </div>
+  <div class="verdict" id="verdict"></div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h3>About the Algorithms</h3>
+  <p style="font-size:.82rem;color:var(--muted);line-height:1.6;">
+    <strong>Soundex</strong> (1918, US Census) produces a 4-character code: the first letter plus three digits encoding consonant groups. Vowels and H/W are usually dropped.<br>
+    <strong>Metaphone</strong> (1990, Lawrence Philips) produces variable-length codes that better capture English pronunciation, handling digraphs like <code>PH</code>, <code>GH</code>, <code>SCH</code>.<br>
+    <strong>NYSIIS</strong> (New York State Identification and Intelligence System) is a fixed-length variant tuned for American surname matching.<br>
+    <strong>Caverphone</strong> (2002, New Zealand) was designed to match names regardless of spelling in electoral rolls.
+  </p>
+</div>
+
+<footer style="margin-top:24px;">Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* ---------- Soundex ---------- */
+function soundex(s) {
+  s = (s || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (!s) return '';
+  const map = { B:1,F:1,P:1,V:1, C:2,G:2,J:2,K:2,Q:2,S:2,X:2,Z:2, D:3,T:3, L:4, M:5,N:5, R:6 };
+  let out = s[0];
+  let prev = map[s[0]] || 0;
+  for (let i = 1; i < s.length && out.length < 4; i++) {
+    const ch = s[i];
+    if (ch === 'H' || ch === 'W') continue;
+    const code = map[ch] || 0;
+    if (code !== 0 && code !== prev) out += code;
+    if (!'AEIOUY'.includes(ch)) prev = code;
+  }
+  return (out + '000').slice(0, 4);
+}
+
+/* ---------- Metaphone ---------- */
+function metaphone(s) {
+  s = (s || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (!s) return '';
+  const vowel = c => 'AEIOU'.includes(c);
+
+  // Prefix normalizations
+  if (/^(AE|GN|KN|PN|WR)/.test(s)) s = s.slice(1);
+  if (s.startsWith('X')) s = 'S' + s.slice(1);
+  if (s.startsWith('WH')) s = 'W' + s.slice(2);
+
+  let out = '';
+  const at = (i) => s[i] || '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    const next = at(i + 1);
+    const prev = at(i - 1);
+    if (c === prev && c !== 'C') continue;
+
+    if (vowel(c)) { if (i === 0) out += c; continue; }
+
+    switch (c) {
+      case 'B': out += 'B'; if (i === s.length - 1 && prev === 'M') out = out.slice(0, -1); break;
+      case 'C':
+        if (next === 'I' && at(i + 2) === 'A') out += 'X';
+        else if (next === 'H') out += (prev === 'S' ? 'K' : 'X');
+        else if ('IEY'.includes(next)) out += 'S';
+        else out += 'K';
+        break;
+      case 'D':
+        if (next === 'G' && 'IEY'.includes(at(i + 2))) { out += 'J'; i++; }
+        else out += 'T';
+        break;
+      case 'F': out += 'F'; break;
+      case 'G':
+        if (next === 'H') {
+          if (i + 2 < s.length && !vowel(at(i + 2))) { /* silent */ }
+          else out += 'F';
+          i++;
+        } else if (next === 'N') { /* silent */ }
+        else if ('IEY'.includes(next)) out += 'J';
+        else out += 'K';
+        break;
+      case 'H': if (!vowel(next) || !vowel(prev)) { /* silent */ } else out += 'H'; break;
+      case 'J': out += 'J'; break;
+      case 'K': if (prev !== 'C') out += 'K'; break;
+      case 'L': out += 'L'; break;
+      case 'M': out += 'M'; break;
+      case 'N': out += 'N'; break;
+      case 'P': if (next === 'H') { out += 'F'; i++; } else out += 'P'; break;
+      case 'Q': out += 'K'; break;
+      case 'R': out += 'R'; break;
+      case 'S':
+        if (next === 'H') { out += 'X'; i++; }
+        else if (next === 'I' && 'OA'.includes(at(i + 2))) out += 'X';
+        else out += 'S';
+        break;
+      case 'T':
+        if (next === 'H') { out += '0'; i++; }
+        else if (next === 'I' && 'OA'.includes(at(i + 2))) out += 'X';
+        else out += 'T';
+        break;
+      case 'V': out += 'F'; break;
+      case 'W': if (vowel(next)) out += 'W'; break;
+      case 'X': out += 'KS'; break;
+      case 'Y': if (vowel(next)) out += 'Y'; break;
+      case 'Z': out += 'S'; break;
+    }
+  }
+  return out;
+}
+
+/* ---------- NYSIIS ---------- */
+function nysiis(s) {
+  s = (s || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (!s) return '';
+  s = s.replace(/^MAC/, 'MCC').replace(/^KN/, 'NN').replace(/^K/, 'C').replace(/^(PH|PF)/, 'FF').replace(/^SCH/, 'SSS');
+  s = s.replace(/(EE|IE)$/, 'Y').replace(/(DT|RT|RD|NT|ND)$/, 'D');
+
+  let out = s[0];
+  let rest = s.slice(1);
+  rest = rest
+    .replace(/EV/g, 'AF')
+    .replace(/[AEIOU]/g, 'A')
+    .replace(/Q/g, 'G')
+    .replace(/Z/g, 'S')
+    .replace(/M/g, 'N')
+    .replace(/KN/g, 'N')
+    .replace(/K/g, 'C')
+    .replace(/SCH/g, 'SSS')
+    .replace(/PH/g, 'FF');
+
+  let r = '';
+  for (let i = 0; i < rest.length; i++) {
+    const ch = rest[i];
+    if (ch === 'H' && (!'AEIOU'.includes(rest[i - 1] || '') || !'AEIOU'.includes(rest[i + 1] || ''))) continue;
+    if (ch === 'W' && 'AEIOU'.includes(rest[i - 1] || '')) continue;
+    if (r[r.length - 1] !== ch) r += ch;
+  }
+  let result = out + r;
+  result = result.replace(/S$/, '').replace(/AY$/, 'Y').replace(/A$/, '');
+  return result.slice(0, 6);
+}
+
+/* ---------- Caverphone 2 (simplified) ---------- */
+function caverphone(s) {
+  let t = (s || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (!t) return '';
+  t = t.replace(/e$/, '');
+  t = t.replace(/^cough/, 'cou2f').replace(/^rough/, 'rou2f').replace(/^tough/, 'tou2f').replace(/^enough/, 'enou2f').replace(/^trough/, 'trou2f');
+  t = t.replace(/^gn/, '2n').replace(/mb$/, 'm2');
+  t = t.replace(/cq/g, '2q').replace(/ci/g, 'si').replace(/ce/g, 'se').replace(/cy/g, 'sy').replace(/tch/g, '2ch').replace(/c/g, 'k');
+  t = t.replace(/q/g, 'k').replace(/x/g, 'k').replace(/v/g, 'f').replace(/dg/g, '2g').replace(/tio/g, 'sio').replace(/tia/g, 'sia').replace(/d/g, 't').replace(/ph/g, 'fh').replace(/b/g, 'p').replace(/sh/g, 's2').replace(/z/g, 's');
+  t = t.replace(/^[aeiou]/, 'A').replace(/[aeiou]/g, '3');
+  t = t.replace(/j/g, 'y').replace(/^y3/, 'Y3').replace(/^y/, 'A').replace(/y/g, '3');
+  t = t.replace(/3gh3/g, '3kh3').replace(/gh/g, '22').replace(/g/g, 'k');
+  t = t.replace(/s+/g, 'S').replace(/t+/g, 'T').replace(/p+/g, 'P').replace(/k+/g, 'K').replace(/f+/g, 'F').replace(/m+/g, 'M').replace(/n+/g, 'N');
+  t = t.replace(/w3/g, 'W3').replace(/wh3/g, 'Wh3').replace(/w$/, '3').replace(/w/g, '2');
+  t = t.replace(/^h/, 'A').replace(/h/g, '2');
+  t = t.replace(/r3/g, 'R3').replace(/r$/, '3').replace(/r/g, '2');
+  t = t.replace(/l3/g, 'L3').replace(/l$/, '3').replace(/l/g, '2');
+  t = t.replace(/2/g, '').replace(/3$/, 'A').replace(/3/g, '');
+  return (t + '1111111111').slice(0, 10);
+}
+
+/* ---------- Batch ---------- */
+function parseWords(text) {
+  return text.split(/[\s,]+/).map(w => w.trim()).filter(Boolean);
+}
+
+function runBatch() {
+  const words = parseWords($('words').value);
+  if (words.length === 0) { $('results').innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:var(--muted);">Enter one or more words above.</div>'; return; }
+  const rows = words.map(w => ({
+    word: w,
+    soundex: soundex(w),
+    metaphone: metaphone(w),
+    nysiis: nysiis(w),
+    caverphone: caverphone(w),
+  }));
+  // Group by soundex for match badges
+  const groups = {};
+  rows.forEach((r, i) => { (groups[r.soundex] ||= []).push(i); });
+  const groupColors = {};
+  let gi = 0;
+  for (const key of Object.keys(groups)) {
+    if (groups[key].length > 1) groupColors[key] = ++gi;
+  }
+  const html = [
+    '<table><thead><tr>',
+    '<th>Word</th><th>Soundex</th><th>Metaphone</th><th>NYSIIS</th><th>Caverphone</th><th>Group</th>',
+    '</tr></thead><tbody>',
+    ...rows.map(r => {
+      const g = groupColors[r.soundex];
+      return `<tr>
+        <td class="word">${escapeHtml(r.word)}</td>
+        <td class="code">${r.soundex}</td>
+        <td class="code">${r.metaphone}</td>
+        <td class="code">${r.nysiis}</td>
+        <td class="code">${r.caverphone}</td>
+        <td>${g ? `<span class="match-group">#${g}</span>` : ''}</td>
+      </tr>`;
+    }),
+    '</tbody></table>',
+  ].join('');
+  $('results').innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function clearBatch() {
+  $('words').value = '';
+  $('results').innerHTML = '';
+}
+
+function copyTable() {
+  const words = parseWords($('words').value);
+  if (words.length === 0) return;
+  const lines = ['word\tsoundex\tmetaphone\tnysiis\tcaverphone'];
+  for (const w of words) lines.push([w, soundex(w), metaphone(w), nysiis(w), caverphone(w)].join('\t'));
+  navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    const t = $('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+/* ---------- Compare ---------- */
+function runCompare() {
+  const a = $('w1').value.trim();
+  const b = $('w2').value.trim();
+  if (!a || !b) { $('verdict').innerHTML = '<em style="color:var(--muted);">Enter two words to compare.</em>'; return; }
+  const algos = [
+    ['Soundex', soundex],
+    ['Metaphone', metaphone],
+    ['NYSIIS', nysiis],
+    ['Caverphone', caverphone],
+  ];
+  const rows = algos.map(([name, fn]) => {
+    const ca = fn(a), cb = fn(b);
+    const same = ca === cb;
+    return `<div class="v-row"><span>${name}</span><span>${escapeHtml(ca)} ${same ? '<span class="match">≡</span>' : '<span class="nomatch">≠</span>'} ${escapeHtml(cb)}</span></div>`;
+  });
+  const hits = algos.filter(([, fn]) => fn(a) === fn(b)).length;
+  const summary = `<div style="font-size:.85rem;color:var(--muted);margin-bottom:6px;"><strong style="color:var(--text);">${hits}/4</strong> algorithms say <em>${escapeHtml(a)}</em> and <em>${escapeHtml(b)}</em> sound alike</div>`;
+  $('verdict').innerHTML = summary + rows.join('');
+}
+
+$('words').addEventListener('input', () => { /* live disabled to keep it explicit */ });
+['w1','w2'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runCompare(); }));
+
+runBatch();
+runCompare();
+</script>
+</body>
+</html>
