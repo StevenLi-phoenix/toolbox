@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HOTP Counter-Based OTP Generator - Free Online Tool</title>
+<meta name="description" content="Generate HMAC-based one-time passwords (HOTP, RFC 4226) from a Base32 secret and counter. Produce a window of codes for Yubikey, hardware tokens, and HOTP testing. 100% client-side.">
+<meta name="keywords" content="hotp, rfc 4226, otp, one time password, counter, hmac, 2fa, hardware token, yubikey">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hotp.html">
+<meta property="og:title" content="HOTP Counter-Based OTP Generator">
+<meta property="og:description" content="Generate HMAC-based one-time passwords (HOTP, RFC 4226) in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/hotp.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
+  .secret-input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .95rem; background: var(--bg); color: var(--text); }
+  select, input[type=number] { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; background: var(--bg); color: var(--text); }
+  label { font-size: .82rem; color: var(--muted); display: block; margin-bottom: 4px; }
+  .codes { display: grid; gap: 0; margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .code-row { display: grid; grid-template-columns: 80px 1fr auto; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: .95rem; gap: 12px; }
+  .code-row:last-child { border-bottom: none; }
+  .code-row.current { background: var(--surface2); font-weight: 600; }
+  .code-row .counter { color: var(--muted); font-size: .82rem; }
+  .code-row .value { letter-spacing: .15em; }
+  .code-row button { padding: 3px 10px; font-size: .72rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; font-family: var(--sans); }
+  .code-row button:hover { background: var(--surface2); color: var(--text); }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; }
+  @media (max-width: 768px) { .code-row { grid-template-columns: 60px 1fr auto; font-size: .85rem; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HOTP Generator</h1>
+<p class="subtitle">Generate counter-based one-time passwords per RFC 4226 (HOTP). Enter a Base32 shared secret, pick a starting counter, and get a window of codes — useful for provisioning hardware tokens, testing resync flows, or verifying server implementations.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <label for="secret">Shared Secret (Base32)</label>
+  <input class="secret-input" id="secret" placeholder="e.g. JBSWY3DPEHPK3PXP" autocomplete="off" spellcheck="false">
+  <div class="field-row">
+    <div>
+      <label for="counter">Starting Counter</label>
+      <input id="counter" type="number" min="0" value="0">
+    </div>
+    <div>
+      <label for="window">Window Size</label>
+      <input id="window" type="number" min="1" max="100" value="10">
+    </div>
+    <div>
+      <label for="digits">Digits</label>
+      <select id="digits">
+        <option value="6" selected>6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+      </select>
+    </div>
+    <div>
+      <label for="algo">Algorithm</label>
+      <select id="algo">
+        <option value="SHA-1" selected>SHA-1 (RFC 4226)</option>
+        <option value="SHA-256">SHA-256</option>
+        <option value="SHA-512">SHA-512</option>
+      </select>
+    </div>
+  </div>
+  <div class="btn-row" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-primary" onclick="generate()">Generate Codes</button>
+    <button class="btn btn-secondary" onclick="randomSecret()">Random Secret</button>
+    <button class="btn btn-secondary" onclick="loadRFC()">RFC 4226 Test Vector</button>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="codes" id="codes"></div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h2 style="font-size:.95rem;margin-bottom:8px;">About HOTP</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+    HOTP (RFC 4226) uses an incrementing counter rather than time as the HMAC message. The same secret and counter always produce the same code — the server and token advance the counter after each successful verification. Drift is handled with a look-ahead window.
+    <br><br>
+    <strong>RFC 4226 test vectors</strong> (secret <code>12345678901234567890</code>, i.e. Base32 <code>GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ</code>):
+    counter 0 → <code>755224</code>, 1 → <code>287082</code>, 2 → <code>359152</code>, 3 → <code>969429</code>.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function base32Decode(str) {
+  const alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  str = str.replace(/[\s=\-]/g, '').toUpperCase();
+  if (!str) throw new Error('Secret is empty');
+  let bits = '';
+  for (const c of str) {
+    const v = alpha.indexOf(c);
+    if (v < 0) throw new Error('Invalid Base32 character: ' + c);
+    bits += v.toString(2).padStart(5, '0');
+  }
+  const bytes = new Uint8Array(Math.floor(bits.length / 8));
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+  }
+  return bytes;
+}
+
+async function hotp(secretBytes, counter, algo, digits) {
+  const msg = new Uint8Array(8);
+  // BigInt counter so values above 2^32 work
+  let c = BigInt(counter);
+  for (let i = 7; i >= 0; i--) {
+    msg[i] = Number(c & 0xffn);
+    c >>= 8n;
+  }
+  const key = await crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: algo }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg));
+  const offset = sig[sig.length - 1] & 0x0f;
+  const bin =
+    ((sig[offset] & 0x7f) << 24) |
+    ((sig[offset + 1] & 0xff) << 16) |
+    ((sig[offset + 2] & 0xff) << 8) |
+    (sig[offset + 3] & 0xff);
+  const code = bin % Math.pow(10, digits);
+  return code.toString().padStart(digits, '0');
+}
+
+async function generate() {
+  $('err').textContent = '';
+  $('codes').innerHTML = '';
+  const secretStr = $('secret').value.trim();
+  if (!secretStr) { $('err').textContent = 'Enter a Base32 secret to begin.'; return; }
+  let keyBytes;
+  try { keyBytes = base32Decode(secretStr); }
+  catch (e) { $('err').textContent = e.message; return; }
+
+  const start = BigInt($('counter').value || '0');
+  const window = parseInt($('window').value, 10) || 10;
+  const digits = parseInt($('digits').value, 10);
+  const algo = $('algo').value;
+
+  const rows = [];
+  for (let i = 0; i < window; i++) {
+    const c = start + BigInt(i);
+    const code = await hotp(keyBytes, c, algo, digits);
+    rows.push({ c: c.toString(), code, current: i === 0 });
+  }
+  $('codes').innerHTML = rows.map(r =>
+    `<div class="code-row${r.current ? ' current' : ''}"><span class="counter">C=${r.c}</span><span class="value">${r.code}</span><button onclick="copyVal('${r.code}')">Copy</button></div>`
+  ).join('');
+}
+
+function randomSecret() {
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  const alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  bytes.forEach(b => bits += b.toString(2).padStart(8, '0'));
+  let out = '';
+  for (let i = 0; i + 5 <= bits.length; i += 5) out += alpha[parseInt(bits.slice(i, i + 5), 2)];
+  $('secret').value = out;
+  generate();
+}
+
+function loadRFC() {
+  $('secret').value = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  $('counter').value = 0;
+  $('window').value = 10;
+  $('digits').value = 6;
+  $('algo').value = 'SHA-1';
+  generate();
+}
+
+function copyVal(v) {
+  navigator.clipboard.writeText(v).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+// Auto-regenerate on Enter in inputs
+['secret', 'counter', 'window'].forEach(id => {
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
+});
+['digits', 'algo'].forEach(id => $(id).addEventListener('change', () => { if ($('secret').value.trim()) generate(); }));
+</script>
+</body>
+</html>

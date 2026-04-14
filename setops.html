@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Line-Based Set Operations - Free Online Tool</title>
+<meta name="description" content="Compute union, intersection, difference, and symmetric difference between two lists of lines. Case-sensitive and whitespace options. 100% client-side.">
+<meta name="keywords" content="set operations, union, intersection, difference, symmetric difference, lines, diff, comm, compare lists">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/setops.html">
+<meta property="og:title" content="Line-Based Set Operations">
+<meta property="og:description" content="Compute union, intersection, and difference between two line-based lists in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/setops.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  textarea { width: 100%; min-height: 220px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .88rem; background: var(--bg); color: var(--text); resize: vertical; }
+  .opts { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 12px 0; font-size: .85rem; }
+  .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .ops { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-top: 8px; }
+  .op-btn { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; font-size: .82rem; text-align: left; }
+  .op-btn:hover { background: var(--surface2); }
+  .op-btn.active { background: var(--surface2); border-color: var(--text); font-weight: 600; }
+  .op-btn .small { display: block; color: var(--muted); font-size: .72rem; margin-top: 2px; font-family: var(--mono); }
+  .result-head { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; margin-bottom: 6px; }
+  .result-head h2 { font-size: .95rem; }
+  .result-head .count { font-size: .82rem; color: var(--muted); font-family: var(--mono); }
+  .result-head button { padding: 4px 12px; font-size: .78rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; }
+  .result-head button:hover { background: var(--surface2); color: var(--text); }
+  #result { width: 100%; min-height: 180px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .88rem; background: var(--bg); color: var(--text); white-space: pre; overflow: auto; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Set Operations on Lines</h1>
+<p class="subtitle">Treat two text blocks as sets of lines and compute their union, intersection, or difference — the browser-based equivalent of <code>comm</code>, <code>sort -u</code>, and <code>grep -Fx</code> pipelines for quick diffing of IP lists, keys, filenames, and more.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="panels">
+    <div>
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:4px;">Set A</label>
+      <textarea id="a" spellcheck="false" placeholder="one line per entry"></textarea>
+    </div>
+    <div>
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:4px;">Set B</label>
+      <textarea id="b" spellcheck="false" placeholder="one line per entry"></textarea>
+    </div>
+  </div>
+
+  <div class="opts">
+    <label><input type="checkbox" id="trim" checked> Trim whitespace</label>
+    <label><input type="checkbox" id="casei"> Case-insensitive</label>
+    <label><input type="checkbox" id="empty"> Keep empty lines</label>
+    <label><input type="checkbox" id="sort"> Sort output</label>
+    <label><input type="checkbox" id="preserve" checked> Preserve input order</label>
+  </div>
+
+  <div class="ops">
+    <button class="op-btn active" data-op="union">A ∪ B (Union) <span class="small">all unique lines</span></button>
+    <button class="op-btn" data-op="intersection">A ∩ B (Intersection) <span class="small">lines in both</span></button>
+    <button class="op-btn" data-op="diffab">A \ B (A only) <span class="small">in A but not B</span></button>
+    <button class="op-btn" data-op="diffba">B \ A (B only) <span class="small">in B but not A</span></button>
+    <button class="op-btn" data-op="symdiff">A △ B (Symmetric) <span class="small">in one, not both</span></button>
+    <button class="op-btn" data-op="duplicates">Duplicates in A <span class="small">lines repeated in A</span></button>
+  </div>
+
+  <div class="result-head">
+    <h2>Result</h2>
+    <span class="count" id="count"></span>
+    <button onclick="copyResult()">Copy</button>
+  </div>
+  <pre id="result"></pre>
+  <div class="btn-row" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+    <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    <button class="btn btn-secondary" onclick="swap()">Swap A ↔ B</button>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let currentOp = 'union';
+
+function parseLines(text) {
+  const trim = $('trim').checked;
+  const keepEmpty = $('empty').checked;
+  const casei = $('casei').checked;
+  let lines = text.split(/\r?\n/);
+  if (trim) lines = lines.map(l => l.trim());
+  if (!keepEmpty) lines = lines.filter(l => l.length > 0);
+  // Return [{display, key}] so we keep original case in output while comparing by key
+  return lines.map(l => ({ display: l, key: casei ? l.toLowerCase() : l }));
+}
+
+function unique(items) {
+  const seen = new Set();
+  const out = [];
+  for (const it of items) {
+    if (!seen.has(it.key)) { seen.add(it.key); out.push(it); }
+  }
+  return out;
+}
+
+function compute() {
+  const aRaw = parseLines($('a').value);
+  const bRaw = parseLines($('b').value);
+  const aSet = new Set(aRaw.map(x => x.key));
+  const bSet = new Set(bRaw.map(x => x.key));
+  const aU = unique(aRaw);
+  const bU = unique(bRaw);
+
+  let result = [];
+  switch (currentOp) {
+    case 'union': {
+      const seen = new Set();
+      for (const it of [...aU, ...bU]) if (!seen.has(it.key)) { seen.add(it.key); result.push(it); }
+      break;
+    }
+    case 'intersection':
+      result = aU.filter(x => bSet.has(x.key));
+      break;
+    case 'diffab':
+      result = aU.filter(x => !bSet.has(x.key));
+      break;
+    case 'diffba':
+      result = bU.filter(x => !aSet.has(x.key));
+      break;
+    case 'symdiff':
+      result = [
+        ...aU.filter(x => !bSet.has(x.key)),
+        ...bU.filter(x => !aSet.has(x.key)),
+      ];
+      break;
+    case 'duplicates': {
+      const counts = new Map();
+      for (const it of aRaw) counts.set(it.key, (counts.get(it.key) || 0) + 1);
+      const added = new Set();
+      for (const it of aRaw) {
+        if (counts.get(it.key) > 1 && !added.has(it.key)) { added.add(it.key); result.push(it); }
+      }
+      break;
+    }
+  }
+
+  const out = result.map(x => x.display);
+  if ($('sort').checked) out.sort();
+  else if (!$('preserve').checked) { /* still keep natural */ }
+  $('result').textContent = out.join('\n');
+  $('count').textContent = `${out.length} line${out.length === 1 ? '' : 's'}`;
+}
+
+document.querySelectorAll('.op-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.op-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentOp = btn.dataset.op;
+    compute();
+  });
+});
+
+['a', 'b'].forEach(id => $(id).addEventListener('input', compute));
+['trim', 'casei', 'empty', 'sort', 'preserve'].forEach(id => $(id).addEventListener('change', compute));
+
+function copyResult() {
+  navigator.clipboard.writeText($('result').textContent).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function loadSample() {
+  $('a').value = 'alice\nbob\ncarol\ndave\neve\nfrank';
+  $('b').value = 'bob\ncarol\nERIC\neve\ngrace\nheidi';
+  compute();
+}
+
+function clearAll() {
+  $('a').value = '';
+  $('b').value = '';
+  compute();
+}
+
+function swap() {
+  const t = $('a').value;
+  $('a').value = $('b').value;
+  $('b').value = t;
+  compute();
+}
+
+compute();
+</script>
+</body>
+</html>

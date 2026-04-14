@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modular Arithmetic Calculator - Free Online Tool</title>
+<meta name="description" content="Compute GCD, LCM, modular inverse, modular exponentiation, extended Euclidean algorithm, and CRT with arbitrary-precision BigInt. Useful for cryptography and number theory. 100% client-side.">
+<meta name="keywords" content="modular arithmetic, gcd, lcm, modular inverse, mod exp, extended euclidean, crt, chinese remainder, number theory, bigint, cryptography">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/modmath.html">
+<meta property="og:title" content="Modular Arithmetic Calculator">
+<meta property="og:description" content="GCD, LCM, modular inverse, modular exponentiation, and more — arbitrary-precision, in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/modmath.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .op-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .op-pill { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); cursor: pointer; font-size: .82rem; }
+  .op-pill:hover { background: var(--surface2); color: var(--text); }
+  .op-pill.active { background: var(--surface2); color: var(--text); border-color: var(--text); font-weight: 600; }
+  .inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .inputs label { font-size: .82rem; color: var(--muted); display: block; margin-bottom: 4px; }
+  .inputs input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .9rem; background: var(--bg); color: var(--text); }
+  .desc { font-size: .82rem; color: var(--muted); margin: 10px 0; line-height: 1.5; }
+  .desc code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; }
+  .results { display: grid; gap: 8px; margin-top: 12px; }
+  .res-row { padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .res-row .label { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+  .res-row .label button { padding: 2px 10px; font-size: .7rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; font-family: var(--sans); text-transform: none; letter-spacing: 0; }
+  .res-row .label button:hover { background: var(--surface2); color: var(--text); }
+  .res-row .val { font-family: var(--mono); font-size: .95rem; color: var(--text); word-break: break-all; }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Modular Arithmetic Calculator</h1>
+<p class="subtitle">Arbitrary-precision integer tools used throughout cryptography and number theory — GCD, LCM, modular inverse, modular exponentiation, the extended Euclidean algorithm, and the Chinese Remainder Theorem. Powered by BigInt, so inputs of thousands of digits work fine.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="op-picker" id="ops">
+    <button class="op-pill active" data-op="gcd">GCD / LCM</button>
+    <button class="op-pill" data-op="extgcd">Extended GCD</button>
+    <button class="op-pill" data-op="modinv">Modular Inverse</button>
+    <button class="op-pill" data-op="modpow">Modular Exponentiation</button>
+    <button class="op-pill" data-op="modmul">Modular Multiply</button>
+    <button class="op-pill" data-op="crt">Chinese Remainder</button>
+  </div>
+
+  <div class="desc" id="desc"></div>
+  <div class="inputs" id="inputs"></div>
+
+  <div class="btn-row" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-primary" onclick="run()">Compute</button>
+    <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="results" id="results"></div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h2 style="font-size:.95rem;margin-bottom:8px;">Notes</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+    All inputs accept arbitrary-precision decimal integers (optionally <code>0x…</code> for hex, <code>0b…</code> for binary). Negative numbers are supported where mathematically meaningful; modular inverse requires <code>gcd(a, m) = 1</code>. Chinese Remainder accepts comma-separated residues and moduli and requires pairwise coprime moduli.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const OPS = {
+  gcd: {
+    desc: 'Greatest common divisor and least common multiple of two integers.',
+    fields: [['a', 'a'], ['b', 'b']],
+    sample: { a: '252', b: '105' },
+    run: ({ a, b }) => {
+      const g = gcd(abs(a), abs(b));
+      const l = g === 0n ? 0n : (abs(a) / g) * abs(b);
+      return [['GCD', g], ['LCM', l]];
+    }
+  },
+  extgcd: {
+    desc: 'Extended Euclidean: find integers x, y such that a·x + b·y = gcd(a, b).',
+    fields: [['a', 'a'], ['b', 'b']],
+    sample: { a: '240', b: '46' },
+    run: ({ a, b }) => {
+      const [g, x, y] = extgcd(a, b);
+      return [['gcd(a, b)', g], ['x', x], ['y', y], ['Verification', `${a}·${x} + ${b}·${y} = ${a*x + b*y}`]];
+    }
+  },
+  modinv: {
+    desc: 'Modular inverse a⁻¹ (mod m). Exists iff gcd(a, m) = 1.',
+    fields: [['a', 'a'], ['m', 'm']],
+    sample: { a: '3', m: '11' },
+    run: ({ a, m }) => {
+      if (m <= 0n) throw new Error('Modulus must be positive');
+      const inv = modInverse(a, m);
+      return [['a⁻¹ mod m', inv], ['Check', `${a} · ${inv} mod ${m} = ${mod(a * inv, m)}`]];
+    }
+  },
+  modpow: {
+    desc: 'Modular exponentiation: base^exp (mod m). Fast square-and-multiply.',
+    fields: [['base', 'base'], ['exp', 'exp'], ['m', 'm']],
+    sample: { base: '5', exp: '117', m: '19' },
+    run: ({ base, exp, m }) => {
+      if (m <= 0n) throw new Error('Modulus must be positive');
+      return [['Result', modPow(base, exp, m)]];
+    }
+  },
+  modmul: {
+    desc: 'Modular multiplication a · b (mod m) for arbitrary-precision values.',
+    fields: [['a', 'a'], ['b', 'b'], ['m', 'm']],
+    sample: { a: '123456789012345', b: '987654321098765', m: '1000000007' },
+    run: ({ a, b, m }) => {
+      if (m <= 0n) throw new Error('Modulus must be positive');
+      return [['(a · b) mod m', mod(a * b, m)], ['(a + b) mod m', mod(a + b, m)], ['(a − b) mod m', mod(a - b, m)]];
+    }
+  },
+  crt: {
+    desc: 'Chinese Remainder: find x such that x ≡ aᵢ (mod mᵢ). Comma-separated lists of equal length; moduli must be pairwise coprime.',
+    fields: [['residues', 'a₁, a₂, a₃, …'], ['moduli', 'm₁, m₂, m₃, …']],
+    sample: { residues: '2, 3, 2', moduli: '3, 5, 7' },
+    run: ({ residues, moduli }) => {
+      const as = parseList(residues);
+      const ms = parseList(moduli);
+      if (as.length !== ms.length) throw new Error('Residue and moduli lists must have equal length');
+      if (as.length === 0) throw new Error('Need at least one pair');
+      const { x, M } = crt(as, ms);
+      return [['x mod M', x], ['M (product)', M]];
+    }
+  }
+};
+
+let currentOp = 'gcd';
+
+function abs(n) { return n < 0n ? -n : n; }
+function mod(a, m) { const r = a % m; return r < 0n ? r + m : r; }
+function gcd(a, b) { while (b !== 0n) { [a, b] = [b, a % b]; } return a; }
+function extgcd(a, b) {
+  if (b === 0n) return [a, 1n, 0n];
+  const [g, x1, y1] = extgcd(b, a % b);
+  return [g, y1, x1 - (a / b) * y1];
+}
+function modInverse(a, m) {
+  const [g, x] = extgcd(mod(a, m), m);
+  if (g !== 1n && g !== -1n) throw new Error(`No inverse: gcd(a, m) = ${g}`);
+  return mod(x, m);
+}
+function modPow(base, exp, m) {
+  if (m === 1n) return 0n;
+  let result = 1n;
+  base = mod(base, m);
+  let e = exp;
+  if (e < 0n) {
+    base = modInverse(base, m);
+    e = -e;
+  }
+  while (e > 0n) {
+    if (e & 1n) result = mod(result * base, m);
+    e >>= 1n;
+    base = mod(base * base, m);
+  }
+  return result;
+}
+function crt(as, ms) {
+  let x = 0n;
+  let M = 1n;
+  for (const m of ms) M *= m;
+  for (let i = 0; i < as.length; i++) {
+    const Mi = M / ms[i];
+    const yi = modInverse(mod(Mi, ms[i]), ms[i]);
+    x = mod(x + as[i] * Mi * yi, M);
+  }
+  return { x, M };
+}
+
+function parseInt2(s) {
+  s = s.trim();
+  if (!s) throw new Error('Empty input');
+  try {
+    if (/^-?0x/i.test(s)) return BigInt((s.startsWith('-') ? '-' : '') + '0x' + s.replace(/^-?0x/i, ''));
+    if (/^-?0b/i.test(s)) return BigInt((s.startsWith('-') ? '-' : '') + '0b' + s.replace(/^-?0b/i, ''));
+    return BigInt(s);
+  } catch (e) {
+    throw new Error(`Invalid integer: "${s}"`);
+  }
+}
+
+function parseList(s) { return s.split(',').map(t => parseInt2(t)); }
+
+function render() {
+  const op = OPS[currentOp];
+  $('desc').textContent = op.desc;
+  $('inputs').innerHTML = op.fields.map(([name, placeholder]) =>
+    `<div><label for="in_${name}">${name}</label><input id="in_${name}" placeholder="${placeholder}" spellcheck="false" autocomplete="off"></div>`
+  ).join('');
+  $('results').innerHTML = '';
+  $('err').textContent = '';
+}
+
+function run() {
+  $('err').textContent = '';
+  $('results').innerHTML = '';
+  const op = OPS[currentOp];
+  const vals = {};
+  try {
+    for (const [name] of op.fields) {
+      const raw = $('in_' + name).value;
+      vals[name] = op.fields.length > 0 && (name === 'residues' || name === 'moduli') ? raw : parseInt2(raw);
+    }
+    const rows = op.run(vals);
+    $('results').innerHTML = rows.map(([label, val]) =>
+      `<div class="res-row"><div class="label"><span>${label}</span><button onclick="copyVal(${JSON.stringify(String(val))})">Copy</button></div><div class="val">${escapeHtml(String(val))}</div></div>`
+    ).join('');
+  } catch (e) {
+    $('err').textContent = e.message;
+  }
+}
+
+function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function loadSample() {
+  const op = OPS[currentOp];
+  for (const [name] of op.fields) $('in_' + name).value = op.sample[name];
+  run();
+}
+
+function copyVal(v) {
+  navigator.clipboard.writeText(v).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+document.querySelectorAll('.op-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.op-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentOp = btn.dataset.op;
+    render();
+  });
+});
+
+render();
+</script>
+</body>
+</html>
