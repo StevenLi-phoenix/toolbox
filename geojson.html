@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoJSON Viewer & Validator — Free Online Tool</title>
+<meta name="description" content="Validate, inspect, and analyze GeoJSON documents — check structure against RFC 7946, count features, summarize geometry types, and compute the bounding box. 100% client-side.">
+<meta name="keywords" content="GeoJSON, validator, RFC 7946, FeatureCollection, geometry, bbox, bounding box, geo, mapping">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/geojson.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea { font-family: var(--mono); font-size: .85rem; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; width: 100%; box-sizing: border-box; min-height: 360px; resize: vertical; line-height: 1.5; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
+  .stat { padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .stat .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .stat .val { font-family: var(--mono); font-size: 1.05rem; color: var(--text); margin-top: 2px; word-break: break-all; }
+  .lint-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px; border-radius: 4px; font-size: .85rem; margin-bottom: 4px; }
+  .lint-item.ok { background: #ecfdf5; color: var(--success); }
+  .lint-item.warn { background: #fffbeb; color: #b45309; }
+  .lint-item.err { background: #fef2f2; color: var(--error); }
+  .lint-item .icon { font-weight: 700; min-width: 1em; }
+  .geom-row { display: flex; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid var(--border); font-size: .85rem; font-family: var(--mono); }
+  .geom-row:last-child { border-bottom: 0; }
+  .geom-row .name { color: var(--text); }
+  .geom-row .count { color: var(--muted); }
+  .map-wrap { margin-top: 10px; }
+  svg.map { width: 100%; height: 280px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  svg.map path, svg.map circle, svg.map polyline { stroke: var(--accent, #2563eb); fill: rgba(37, 99, 235, .18); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .help { font-size: .82rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>GeoJSON Viewer &amp; Validator</h1>
+<p class="subtitle">Inspect a GeoJSON document against <a href="https://datatracker.ietf.org/doc/html/rfc7946" style="color:var(--accent);">RFC 7946</a> — count features, summarize geometry types, compute the bounding box, and preview the shapes on an equirectangular minimap. Everything runs in your browser.</p>
+
+<div class="panels" style="margin-top:16px;">
+  <div class="card" style="padding:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:10px;">Input</h2>
+    <textarea id="input" spellcheck="false" placeholder='{"type":"FeatureCollection","features":[...]}'></textarea>
+    <div class="row">
+      <button class="btn" onclick="loadSample()">Load sample</button>
+      <button class="btn btn-secondary" onclick="formatInput()">Pretty-print</button>
+      <button class="btn btn-secondary" onclick="minifyInput()">Minify</button>
+      <button class="btn btn-secondary" onclick="copyOut()">Copy</button>
+    </div>
+    <div class="help">Drop a <code>.geojson</code> file anywhere on the page to load it.</div>
+  </div>
+
+  <div class="card" style="padding:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:10px;">Validation</h2>
+    <div id="lint"></div>
+    <h2 style="font-size:.95rem;margin:14px 0 6px;">Summary</h2>
+    <div class="stat-grid" id="stats"></div>
+    <h2 style="font-size:.95rem;margin:14px 0 6px;">Geometry types</h2>
+    <div id="geomList"></div>
+    <div class="map-wrap">
+      <h2 style="font-size:.95rem;margin:14px 0 6px;">Preview</h2>
+      <svg class="map" id="map" viewBox="0 0 720 280" preserveAspectRatio="xMidYMid meet" aria-label="GeoJSON preview"></svg>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with &#9749; by Steven Li &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const VALID_GEOM = ['Point','MultiPoint','LineString','MultiLineString','Polygon','MultiPolygon','GeometryCollection'];
+const TOP_TYPES = ['FeatureCollection','Feature', ...VALID_GEOM];
+
+function showToast(msg) {
+  const t = $('toast');
+  if (msg) t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+function copyOut() {
+  navigator.clipboard.writeText($('input').value).then(() => showToast('Copied!'));
+}
+
+function loadSample() {
+  $('input').value = JSON.stringify(SAMPLE, null, 2);
+  run();
+}
+
+function formatInput() {
+  try {
+    $('input').value = JSON.stringify(JSON.parse($('input').value), null, 2);
+    run();
+  } catch (e) { showToast('Invalid JSON'); }
+}
+
+function minifyInput() {
+  try {
+    $('input').value = JSON.stringify(JSON.parse($('input').value));
+    run();
+  } catch (e) { showToast('Invalid JSON'); }
+}
+
+function setLint(items) {
+  $('lint').innerHTML = items.map(i =>
+    `<div class="lint-item ${i.k}"><span class="icon">${i.k==='ok'?'\u2713':i.k==='warn'?'!':'\u2717'}</span><span>${escapeHtml(i.m)}</span></div>`
+  ).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function statHtml(label, value) {
+  return `<div class="stat"><div class="lbl">${escapeHtml(label)}</div><div class="val">${escapeHtml(value)}</div></div>`;
+}
+
+function isFiniteNum(n) { return typeof n === 'number' && Number.isFinite(n); }
+
+function validateCoord(c, dim, ctx, errs) {
+  if (!Array.isArray(c) || c.length < 2 || c.length > 3) {
+    errs.push({ k: 'err', m: `${ctx}: coordinate must be [lon, lat] or [lon, lat, alt]` });
+    return null;
+  }
+  if (!isFiniteNum(c[0]) || !isFiniteNum(c[1])) {
+    errs.push({ k: 'err', m: `${ctx}: coordinate values must be numbers` });
+    return null;
+  }
+  if (c[0] < -180 || c[0] > 180) errs.push({ k: 'warn', m: `${ctx}: longitude ${c[0]} outside [-180, 180]` });
+  if (c[1] < -90 || c[1] > 90) errs.push({ k: 'warn', m: `${ctx}: latitude ${c[1]} outside [-90, 90]` });
+  return c;
+}
+
+function walkCoords(coords, depth, ctx, errs, points) {
+  // depth: 1 = single coord, 2 = list of coords, etc.
+  if (depth === 1) {
+    const v = validateCoord(coords, 1, ctx, errs);
+    if (v) points.push(v);
+    return;
+  }
+  if (!Array.isArray(coords)) {
+    errs.push({ k: 'err', m: `${ctx}: expected array at depth ${depth}` });
+    return;
+  }
+  coords.forEach((c, i) => walkCoords(c, depth - 1, `${ctx}[${i}]`, errs, points));
+}
+
+const GEOM_DEPTH = {
+  'Point': 1,
+  'MultiPoint': 2,
+  'LineString': 2,
+  'MultiLineString': 3,
+  'Polygon': 3,
+  'MultiPolygon': 4,
+};
+
+function validateGeometry(g, ctx, errs, points, geomCounts) {
+  if (!g || typeof g !== 'object') { errs.push({ k: 'err', m: `${ctx}: geometry is not an object` }); return; }
+  if (!VALID_GEOM.includes(g.type)) { errs.push({ k: 'err', m: `${ctx}: unknown geometry type "${g.type}"` }); return; }
+  geomCounts[g.type] = (geomCounts[g.type] || 0) + 1;
+  if (g.type === 'GeometryCollection') {
+    if (!Array.isArray(g.geometries)) { errs.push({ k: 'err', m: `${ctx}: GeometryCollection.geometries must be array` }); return; }
+    g.geometries.forEach((sub, i) => validateGeometry(sub, `${ctx}.geometries[${i}]`, errs, points, geomCounts));
+    return;
+  }
+  if (!('coordinates' in g)) { errs.push({ k: 'err', m: `${ctx}: missing coordinates` }); return; }
+  walkCoords(g.coordinates, GEOM_DEPTH[g.type], `${ctx}.coordinates`, errs, points);
+
+  // Polygon ring validation
+  if (g.type === 'Polygon' && Array.isArray(g.coordinates)) {
+    g.coordinates.forEach((ring, i) => checkRing(ring, `${ctx}.coordinates[${i}]`, errs));
+  }
+  if (g.type === 'MultiPolygon' && Array.isArray(g.coordinates)) {
+    g.coordinates.forEach((poly, j) => Array.isArray(poly) && poly.forEach((ring, i) => checkRing(ring, `${ctx}.coordinates[${j}][${i}]`, errs)));
+  }
+}
+
+function checkRing(ring, ctx, errs) {
+  if (!Array.isArray(ring) || ring.length < 4) {
+    errs.push({ k: 'err', m: `${ctx}: linear ring needs ≥ 4 positions` });
+    return;
+  }
+  const a = ring[0], b = ring[ring.length - 1];
+  if (!Array.isArray(a) || !Array.isArray(b) || a[0] !== b[0] || a[1] !== b[1]) {
+    errs.push({ k: 'err', m: `${ctx}: linear ring is not closed (first ≠ last position)` });
+  }
+}
+
+function bbox(points) {
+  if (!points.length) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p[0] < minX) minX = p[0];
+    if (p[0] > maxX) maxX = p[0];
+    if (p[1] < minY) minY = p[1];
+    if (p[1] > maxY) maxY = p[1];
+  }
+  return [minX, minY, maxX, maxY];
+}
+
+function projectAll(points) {
+  // Equirectangular into 720x280
+  return points.map(p => [(p[0] + 180) / 360 * 720, (90 - p[1]) / 180 * 280]);
+}
+
+function renderMap(geom) {
+  const svg = $('map');
+  // Clear previous overlays except a base graticule outline
+  svg.innerHTML = '<rect x="0" y="0" width="720" height="280" fill="transparent"/>' +
+    '<line x1="0" y1="140" x2="720" y2="140" stroke="var(--border)" stroke-dasharray="2 4"/>' +
+    '<line x1="360" y1="0" x2="360" y2="280" stroke="var(--border)" stroke-dasharray="2 4"/>';
+  if (!geom) return;
+  const ns = 'http://www.w3.org/2000/svg';
+  function project([lon, lat]) { return [(lon + 180) / 360 * 720, (90 - lat) / 180 * 280]; }
+  function drawGeom(g) {
+    if (!g) return;
+    if (g.type === 'GeometryCollection') { (g.geometries || []).forEach(drawGeom); return; }
+    if (g.type === 'Point') {
+      const [x, y] = project(g.coordinates);
+      const c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 2.5);
+      svg.appendChild(c);
+    } else if (g.type === 'MultiPoint') {
+      g.coordinates.forEach(p => drawGeom({ type: 'Point', coordinates: p }));
+    } else if (g.type === 'LineString') {
+      const pts = g.coordinates.map(project).map(p => p.join(',')).join(' ');
+      const el = document.createElementNS(ns, 'polyline');
+      el.setAttribute('points', pts); el.setAttribute('fill', 'none');
+      svg.appendChild(el);
+    } else if (g.type === 'MultiLineString') {
+      g.coordinates.forEach(line => drawGeom({ type: 'LineString', coordinates: line }));
+    } else if (g.type === 'Polygon') {
+      const d = g.coordinates.map(ring =>
+        ring.map((p, i) => (i ? 'L' : 'M') + project(p).join(' ')).join(' ') + ' Z'
+      ).join(' ');
+      const el = document.createElementNS(ns, 'path');
+      el.setAttribute('d', d);
+      svg.appendChild(el);
+    } else if (g.type === 'MultiPolygon') {
+      g.coordinates.forEach(poly => drawGeom({ type: 'Polygon', coordinates: poly }));
+    }
+  }
+  function fromAny(node) {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'FeatureCollection') (node.features || []).forEach(f => f && drawGeom(f.geometry));
+    else if (node.type === 'Feature') drawGeom(node.geometry);
+    else if (VALID_GEOM.includes(node.type)) drawGeom(node);
+  }
+  fromAny(geom);
+}
+
+function run() {
+  const txt = $('input').value.trim();
+  if (!txt) {
+    setLint([{ k: 'warn', m: 'Paste a GeoJSON document to validate it.' }]);
+    $('stats').innerHTML = '';
+    $('geomList').innerHTML = '';
+    renderMap(null);
+    return;
+  }
+  let doc;
+  try {
+    doc = JSON.parse(txt);
+  } catch (e) {
+    setLint([{ k: 'err', m: 'JSON parse error: ' + e.message }]);
+    $('stats').innerHTML = '';
+    $('geomList').innerHTML = '';
+    renderMap(null);
+    return;
+  }
+
+  const errs = [];
+  const points = [];
+  const geomCounts = {};
+  let featureCount = 0;
+  let propsCount = 0;
+
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    errs.push({ k: 'err', m: 'Top-level value must be a GeoJSON object.' });
+  } else if (!TOP_TYPES.includes(doc.type)) {
+    errs.push({ k: 'err', m: `Unknown top-level type "${doc.type}". Expected one of: ${TOP_TYPES.join(', ')}.` });
+  } else {
+    if (doc.type === 'FeatureCollection') {
+      if (!Array.isArray(doc.features)) errs.push({ k: 'err', m: 'FeatureCollection.features must be an array' });
+      else {
+        featureCount = doc.features.length;
+        doc.features.forEach((f, i) => {
+          if (!f || f.type !== 'Feature') { errs.push({ k: 'err', m: `features[${i}]: not a Feature` }); return; }
+          if (f.properties && typeof f.properties === 'object') propsCount++;
+          if (f.geometry === null) return;
+          validateGeometry(f.geometry, `features[${i}].geometry`, errs, points, geomCounts);
+        });
+      }
+    } else if (doc.type === 'Feature') {
+      featureCount = 1;
+      if (doc.properties && typeof doc.properties === 'object') propsCount++;
+      if (doc.geometry !== null) validateGeometry(doc.geometry, 'geometry', errs, points, geomCounts);
+    } else {
+      validateGeometry(doc, '$', errs, points, geomCounts);
+    }
+  }
+
+  if (errs.filter(e => e.k === 'err').length === 0) {
+    errs.unshift({ k: 'ok', m: 'GeoJSON is structurally valid.' });
+  }
+  setLint(errs.slice(0, 50));
+
+  const bb = bbox(points);
+  const stats = [];
+  stats.push(statHtml('Top type', doc?.type || '—'));
+  stats.push(statHtml('Features', String(featureCount)));
+  stats.push(statHtml('With properties', String(propsCount)));
+  stats.push(statHtml('Positions', String(points.length)));
+  if (bb) {
+    stats.push(statHtml('BBox W,S', `${bb[0].toFixed(4)}, ${bb[1].toFixed(4)}`));
+    stats.push(statHtml('BBox E,N', `${bb[2].toFixed(4)}, ${bb[3].toFixed(4)}`));
+    stats.push(statHtml('Span lon', (bb[2] - bb[0]).toFixed(4) + '\u00b0'));
+    stats.push(statHtml('Span lat', (bb[3] - bb[1]).toFixed(4) + '\u00b0'));
+  }
+  $('stats').innerHTML = stats.join('');
+
+  const geomEntries = Object.entries(geomCounts).sort((a, b) => b[1] - a[1]);
+  $('geomList').innerHTML = geomEntries.length
+    ? geomEntries.map(([k, v]) => `<div class="geom-row"><span class="name">${escapeHtml(k)}</span><span class="count">${v}</span></div>`).join('')
+    : '<div class="empty">No geometries found.</div>';
+
+  try { renderMap(doc); } catch (e) { /* ignore render errors */ }
+}
+
+const SAMPLE = {
+  type: 'FeatureCollection',
+  features: [
+    { type: 'Feature', properties: { name: 'Null Island' }, geometry: { type: 'Point', coordinates: [0, 0] } },
+    { type: 'Feature', properties: { name: 'Equator' }, geometry: { type: 'LineString', coordinates: [[-180, 0], [180, 0]] } },
+    { type: 'Feature', properties: { name: 'Box' }, geometry: { type: 'Polygon', coordinates: [[[-30, -20], [30, -20], [30, 20], [-30, 20], [-30, -20]]] } }
+  ]
+};
+
+$('input').addEventListener('input', run);
+
+// Drag & drop file
+window.addEventListener('dragover', e => { e.preventDefault(); });
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { $('input').value = r.result; run(); };
+  r.readAsText(f);
+});
+
+loadSample();
+</script>
+</body>
+</html>

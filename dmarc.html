@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DMARC Record Builder & Parser — Free Online Tool</title>
+<meta name="description" content="Build and parse DMARC (RFC 7489) DNS TXT records. Set policy, subdomain policy, percentage, rua/ruf aggregate reports, alignment modes, and validate the result tag by tag.">
+<meta name="keywords" content="DMARC, DMARC builder, DMARC parser, RFC 7489, email authentication, SPF, DKIM, rua, ruf, DNS TXT">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dmarc.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-row { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .form-row label { font-size: .85rem; color: var(--muted); }
+  .form-row input, .form-row select { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-family: var(--mono); font-size: .85rem; box-sizing: border-box; }
+  .out-record { font-family: var(--mono); font-size: .9rem; word-break: break-all; padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); margin-top: 6px; }
+  textarea { width: 100%; font-family: var(--mono); font-size: .85rem; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); box-sizing: border-box; min-height: 80px; resize: vertical; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .lint-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px; border-radius: 4px; font-size: .85rem; margin-bottom: 4px; }
+  .lint-item.ok { background: #ecfdf5; color: var(--success); }
+  .lint-item.warn { background: #fffbeb; color: #b45309; }
+  .lint-item.err { background: #fef2f2; color: var(--error); }
+  .lint-item .icon { font-weight: 700; min-width: 1em; }
+  .tag-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 6px; }
+  .tag-table th, .tag-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+  .tag-table th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; }
+  .tag-table td.k { font-family: var(--mono); color: var(--accent); width: 90px; }
+  .tag-table td.v { font-family: var(--mono); word-break: break-all; }
+  .help { font-size: .82rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  @media (max-width: 768px) { .grid2 { grid-template-columns: 1fr; } .form-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>DMARC Record Builder &amp; Parser</h1>
+<p class="subtitle">Assemble a <a href="https://datatracker.ietf.org/doc/html/rfc7489" style="color:var(--accent);">RFC 7489</a> DMARC policy record for your <code>_dmarc</code> TXT entry, or paste an existing record to decode each tag and lint for common mistakes.</p>
+
+<div class="grid2" style="margin-top:16px;">
+  <div class="card">
+    <h2>Builder</h2>
+    <div class="form-row"><label>p (policy)</label>
+      <select id="p">
+        <option value="none">none — monitor only</option>
+        <option value="quarantine">quarantine — send to spam</option>
+        <option value="reject" selected>reject — block</option>
+      </select>
+    </div>
+    <div class="form-row"><label>sp (subdomain)</label>
+      <select id="sp">
+        <option value="">(inherit from p)</option>
+        <option value="none">none</option>
+        <option value="quarantine">quarantine</option>
+        <option value="reject">reject</option>
+      </select>
+    </div>
+    <div class="form-row"><label>pct</label><input type="number" id="pct" min="0" max="100" value="100"></div>
+    <div class="form-row"><label>adkim (DKIM align)</label>
+      <select id="adkim">
+        <option value="">(default: r — relaxed)</option>
+        <option value="r">r — relaxed</option>
+        <option value="s">s — strict</option>
+      </select>
+    </div>
+    <div class="form-row"><label>aspf (SPF align)</label>
+      <select id="aspf">
+        <option value="">(default: r — relaxed)</option>
+        <option value="r">r — relaxed</option>
+        <option value="s">s — strict</option>
+      </select>
+    </div>
+    <div class="form-row"><label>rua (aggregate)</label><input type="text" id="rua" placeholder="mailto:dmarc@example.com"></div>
+    <div class="form-row"><label>ruf (forensic)</label><input type="text" id="ruf" placeholder="mailto:forensic@example.com"></div>
+    <div class="form-row"><label>ri (interval s)</label><input type="number" id="ri" min="0" placeholder="86400 (default)"></div>
+    <div class="form-row"><label>fo (failure opts)</label>
+      <select id="fo">
+        <option value="">(default: 0)</option>
+        <option value="0">0 — both SPF &amp; DKIM fail</option>
+        <option value="1">1 — either SPF or DKIM fail</option>
+        <option value="d">d — DKIM fails</option>
+        <option value="s">s — SPF fails</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Result</h2>
+    <div class="out-record" id="output">v=DMARC1; p=reject; pct=100</div>
+    <div class="row">
+      <button class="btn" onclick="copyOut()">Copy record</button>
+      <button class="btn btn-secondary" onclick="copyHost()">Copy host (_dmarc.domain)</button>
+    </div>
+    <h2 style="margin-top:14px;">Lint</h2>
+    <div id="lint"></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>Parse existing record</h2>
+  <p class="help">Paste a DMARC record you retrieved from DNS (e.g., <code>dig +short TXT _dmarc.example.com</code>).</p>
+  <textarea id="parseIn" placeholder='"v=DMARC1; p=reject; rua=mailto:dmarc@example.com; pct=100; adkim=s; aspf=s"'></textarea>
+  <div class="row">
+    <button class="btn" onclick="parseRec()">Parse &amp; load into builder</button>
+  </div>
+  <div id="parsedTable"></div>
+</div>
+
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with &#9749; by Steven Li &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const TAG_DOCS = {
+  v: 'Version — must be DMARC1 and appear first.',
+  p: 'Requested policy for the domain (none, quarantine, reject).',
+  sp: 'Policy for subdomains (defaults to p when omitted).',
+  pct: 'Percentage of messages the policy is applied to (0–100).',
+  rua: 'Comma-separated mailto: URIs for aggregate reports.',
+  ruf: 'Comma-separated mailto: URIs for forensic/failure reports.',
+  adkim: 'DKIM identifier alignment — r (relaxed, default) or s (strict).',
+  aspf: 'SPF identifier alignment — r (relaxed, default) or s (strict).',
+  fo: 'Failure reporting options (0, 1, d, s — colon-separated).',
+  ri: 'Reporting interval in seconds (default 86400).',
+  rf: 'Report format — defaults to afrf (Aggregate Failure Reporting Format).',
+};
+
+function showToast(msg) {
+  const t = $('toast');
+  if (msg) t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1400);
+}
+function copyOut() { navigator.clipboard.writeText($('output').textContent).then(() => showToast('Copied!')); }
+function copyHost() { navigator.clipboard.writeText('_dmarc.yourdomain.com').then(() => showToast('Host copied')); }
+
+function escapeHtml(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function build() {
+  const parts = ['v=DMARC1'];
+  const p = $('p').value;
+  parts.push('p=' + p);
+  const sp = $('sp').value;
+  if (sp) parts.push('sp=' + sp);
+  const pct = $('pct').value;
+  if (pct !== '' && pct !== '100') parts.push('pct=' + pct);
+  else if (pct === '100') parts.push('pct=100');
+  const adkim = $('adkim').value; if (adkim) parts.push('adkim=' + adkim);
+  const aspf = $('aspf').value; if (aspf) parts.push('aspf=' + aspf);
+  const rua = $('rua').value.trim(); if (rua) parts.push('rua=' + rua);
+  const ruf = $('ruf').value.trim(); if (ruf) parts.push('ruf=' + ruf);
+  const ri = $('ri').value; if (ri) parts.push('ri=' + ri);
+  const fo = $('fo').value; if (fo) parts.push('fo=' + fo);
+  return parts.join('; ');
+}
+
+function validateUriList(list, tag) {
+  const errs = [];
+  list.split(',').map(s => s.trim()).filter(Boolean).forEach(u => {
+    if (!/^mailto:[^@\s]+@[^@\s]+\.[^@\s]+/.test(u) && !/^https?:\/\//.test(u)) {
+      errs.push({ k: 'err', m: `${tag}: "${u}" is not a valid mailto: or URI.` });
+    }
+  });
+  return errs;
+}
+
+function lintRecord(rec, tags) {
+  const issues = [];
+  if (!rec.startsWith('v=DMARC1')) issues.push({ k: 'err', m: 'Record must begin with v=DMARC1.' });
+  if (!tags.p) issues.push({ k: 'err', m: 'Missing required p= policy tag.' });
+  else if (!['none','quarantine','reject'].includes(tags.p)) issues.push({ k: 'err', m: `Invalid p=${tags.p} — must be none, quarantine, or reject.` });
+  if (tags.p === 'none') issues.push({ k: 'warn', m: 'p=none only monitors — it does not protect against spoofing. Graduate to quarantine/reject after reviewing aggregate reports.' });
+  if (tags.sp && !['none','quarantine','reject'].includes(tags.sp)) issues.push({ k: 'err', m: `Invalid sp=${tags.sp}.` });
+  if (tags.pct !== undefined) {
+    const n = parseInt(tags.pct, 10);
+    if (!Number.isInteger(n) || n < 0 || n > 100) issues.push({ k: 'err', m: `Invalid pct=${tags.pct}; must be integer 0–100.` });
+    else if (n < 100 && tags.p !== 'none') issues.push({ k: 'warn', m: `pct=${n} means the policy only applies to ${n}% of messages — useful for rollout, but finish the transition.` });
+  }
+  if (tags.adkim && !['r','s'].includes(tags.adkim)) issues.push({ k: 'err', m: `Invalid adkim=${tags.adkim}.` });
+  if (tags.aspf && !['r','s'].includes(tags.aspf)) issues.push({ k: 'err', m: `Invalid aspf=${tags.aspf}.` });
+  if (tags.rua) issues.push(...validateUriList(tags.rua, 'rua'));
+  if (tags.ruf) issues.push(...validateUriList(tags.ruf, 'ruf'));
+  if (tags.ri && !/^\d+$/.test(tags.ri)) issues.push({ k: 'err', m: `Invalid ri=${tags.ri}; must be a positive integer (seconds).` });
+  if (tags.fo) {
+    const bad = tags.fo.split(':').filter(x => !['0','1','d','s'].includes(x));
+    if (bad.length) issues.push({ k: 'err', m: `Invalid fo value(s): ${bad.join(', ')}.` });
+  }
+  if (!tags.rua) issues.push({ k: 'warn', m: 'No rua= — you will not receive aggregate reports. Add a mailto: to monitor authentication results.' });
+  if (rec.length > 255) issues.push({ k: 'warn', m: 'Record > 255 characters; split into multiple quoted strings in the zone file.' });
+  if (issues.filter(i => i.k === 'err').length === 0) issues.unshift({ k: 'ok', m: 'Record is syntactically valid.' });
+  return issues;
+}
+
+function parseTags(rec) {
+  const out = {};
+  rec.replace(/^"/, '').replace(/"$/, '').split(';').map(s => s.trim()).filter(Boolean).forEach(pair => {
+    const eq = pair.indexOf('=');
+    if (eq === -1) return;
+    const k = pair.slice(0, eq).trim().toLowerCase();
+    const v = pair.slice(eq + 1).trim();
+    out[k] = v;
+  });
+  return out;
+}
+
+function render() {
+  const rec = build();
+  $('output').textContent = rec;
+  const tags = parseTags(rec);
+  $('lint').innerHTML = lintRecord(rec, tags).map(i =>
+    `<div class="lint-item ${i.k}"><span class="icon">${i.k==='ok'?'\u2713':i.k==='warn'?'!':'\u2717'}</span><span>${escapeHtml(i.m)}</span></div>`
+  ).join('');
+}
+
+function parseRec() {
+  let txt = $('parseIn').value.trim();
+  txt = txt.replace(/"\s*"/g, '').replace(/^"(.*)"$/s, '$1').trim();
+  if (!txt) return;
+  const tags = parseTags(txt);
+  // load fields
+  if (tags.p) $('p').value = tags.p;
+  $('sp').value = tags.sp || '';
+  $('pct').value = tags.pct !== undefined ? tags.pct : '100';
+  $('adkim').value = tags.adkim || '';
+  $('aspf').value = tags.aspf || '';
+  $('rua').value = tags.rua || '';
+  $('ruf').value = tags.ruf || '';
+  $('ri').value = tags.ri || '';
+  $('fo').value = tags.fo || '';
+  render();
+  // render tag table
+  const rows = Object.keys(tags).map(k =>
+    `<tr><td class="k">${escapeHtml(k)}</td><td class="v">${escapeHtml(tags[k])}</td><td>${escapeHtml(TAG_DOCS[k] || '—')}</td></tr>`
+  ).join('');
+  $('parsedTable').innerHTML = rows
+    ? `<table class="tag-table"><thead><tr><th>Tag</th><th>Value</th><th>Meaning</th></tr></thead><tbody>${rows}</tbody></table>`
+    : '<div class="empty">No tags parsed.</div>';
+}
+
+['p','sp','pct','adkim','aspf','rua','ruf','ri','fo'].forEach(id => $(id).addEventListener('input', render));
+['p','sp','adkim','aspf','fo'].forEach(id => $(id).addEventListener('change', render));
+
+render();
+</script>
+</body>
+</html>
