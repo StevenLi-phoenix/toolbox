@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Size Profiler - Free Online Tool</title>
+<meta name="description" content="Profile a JSON payload to find which keys and paths consume the most bytes. Identify bloat, heavy arrays, and redundant fields before shipping an API response.">
+<meta name="keywords" content="json size profiler, json bytes, json bloat, json heavy keys, payload size, api response size">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonsizeprofiler.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea{font-family:var(--mono);font-size:.82rem;min-height:260px;width:100%}
+  .stats{display:flex;flex-wrap:wrap;gap:16px;font-size:.85rem;color:var(--muted);margin:8px 0}
+  .stats b{color:var(--text);font-size:.95rem}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.8rem}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+  th{background:var(--surface2);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);position:sticky;top:0}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  td.path{word-break:break-all;max-width:420px}
+  .bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-top:3px}
+  .bar>div{height:100%;background:var(--text)}
+  .type-tag{display:inline-block;padding:1px 6px;border-radius:99px;font-size:.7rem;border:1px solid var(--border);color:var(--muted);background:var(--surface2)}
+  .tabs{margin-bottom:10px}
+  @media(max-width:768px){.panels{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON Size Profiler</h1>
+<p class="subtitle">Find the keys and paths hogging your payload. See which fields you can drop, compress, or paginate.</p>
+
+<div class="panels">
+<div class="card">
+<h2>📥 JSON payload</h2>
+<textarea id="input" placeholder='{"users":[{"id":1,"name":"Alice","bio":"..."}]}' oninput="run()"></textarea>
+<div class="row" style="margin-top:8px">
+  <button class="btn btn-secondary" onclick="loadExample()">Load example</button>
+  <button class="btn btn-secondary" onclick="document.getElementById('input').value='';run()">Clear</button>
+</div>
+<div class="stats" id="stats"></div>
+<div id="err" style="color:var(--error);font-size:.82rem;min-height:1.2em"></div>
+</div>
+
+<div class="card">
+<h2>📊 Heaviest paths</h2>
+<div class="row" style="margin-bottom:8px;gap:8px">
+  <label style="font-size:.82rem">Group mode:
+    <select id="mode" onchange="render()">
+      <option value="path">Full path</option>
+      <option value="key">By key name</option>
+      <option value="top">Top-level only</option>
+    </select>
+  </label>
+  <label style="font-size:.82rem">Show top:
+    <select id="limit" onchange="render()">
+      <option>10</option><option selected>25</option><option>50</option><option>100</option>
+    </select>
+  </label>
+</div>
+<div style="max-height:460px;overflow:auto">
+<table>
+  <thead><tr><th>Path</th><th>Type</th><th class="num">Size</th><th class="num">%</th></tr></thead>
+  <tbody id="out"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div class="card">
+<h2>How it works</h2>
+<p class="subtitle">The profiler walks your JSON and measures each node's serialized byte cost (UTF-8, using <code>JSON.stringify</code>). You can group costs by full path, by key name (to spot repeated heavy fields like <code>avatar_url</code>), or see just the top-level share. Everything is computed locally.</p>
+</div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+let nodes = []; // { path, key, type, bytes }
+let totalBytes = 0;
+
+function byteLen(s){return new TextEncoder().encode(s).length}
+
+function typeOf(v){
+  if(v===null) return 'null';
+  if(Array.isArray(v)) return 'array';
+  return typeof v;
+}
+
+function walk(val, path, key){
+  const serialized = JSON.stringify(val);
+  const bytes = serialized===undefined?0:byteLen(serialized);
+  const t = typeOf(val);
+  nodes.push({path: path||'$', key: key||'$', type:t, bytes});
+  if(t==='object'){
+    for(const k of Object.keys(val)){
+      walk(val[k], path?`${path}.${k}`:k, k);
+    }
+  } else if(t==='array'){
+    val.forEach((item,i)=>{
+      walk(item, `${path||'$'}[${i}]`, `[${i}]`);
+    });
+  }
+}
+
+function run(){
+  const raw = document.getElementById('input').value.trim();
+  const err = document.getElementById('err');
+  const stats = document.getElementById('stats');
+  err.textContent='';
+  if(!raw){nodes=[];totalBytes=0;stats.innerHTML='';render();return}
+  try{
+    const parsed = JSON.parse(raw);
+    nodes = [];
+    walk(parsed,'','');
+    totalBytes = nodes[0]?.bytes || 0;
+    const pretty = JSON.stringify(parsed,null,2);
+    const mini = JSON.stringify(parsed);
+    stats.innerHTML =
+      `<span>Minified: <b>${fmt(byteLen(mini))}</b></span>`+
+      `<span>Pretty: <b>${fmt(byteLen(pretty))}</b></span>`+
+      `<span>Nodes: <b>${nodes.length}</b></span>`+
+      `<span>Depth: <b>${maxDepth(parsed)}</b></span>`;
+    render();
+  }catch(e){
+    err.textContent = 'Invalid JSON: '+e.message;
+    nodes=[];totalBytes=0;stats.innerHTML='';render();
+  }
+}
+
+function maxDepth(v,d=0){
+  if(v===null||typeof v!=='object') return d;
+  let max=d;
+  for(const k of Object.keys(v)) max=Math.max(max,maxDepth(v[k],d+1));
+  return max;
+}
+
+function fmt(n){
+  if(n<1024) return n+' B';
+  if(n<1024*1024) return (n/1024).toFixed(1)+' KB';
+  return (n/1024/1024).toFixed(2)+' MB';
+}
+
+function render(){
+  const out = document.getElementById('out');
+  if(!nodes.length){out.innerHTML='<tr><td colspan="4" style="color:var(--muted)"><em>Paste JSON on the left…</em></td></tr>';return}
+  const mode = document.getElementById('mode').value;
+  const limit = parseInt(document.getElementById('limit').value,10);
+
+  let rows;
+  if(mode==='path'){
+    // All non-root nodes, sorted by bytes desc
+    rows = nodes.slice(1).map(n=>({label:n.path,type:n.type,bytes:n.bytes}));
+  } else if(mode==='key'){
+    const m = new Map();
+    nodes.slice(1).forEach(n=>{
+      const k = n.key;
+      if(!m.has(k)) m.set(k,{label:k,type:n.type,bytes:0,count:0});
+      const r = m.get(k);
+      r.bytes += n.bytes;
+      r.count++;
+      if(r.type!==n.type) r.type='mixed';
+    });
+    rows = Array.from(m.values()).map(r=>({...r,label:`${r.label}  ×${r.count}`}));
+  } else { // top
+    rows = nodes.filter(n=>{
+      if(n.path==='$') return false;
+      return !n.path.includes('.') && !n.path.includes('[');
+    }).map(n=>({label:n.path,type:n.type,bytes:n.bytes}));
+  }
+
+  rows.sort((a,b)=>b.bytes-a.bytes);
+  rows = rows.slice(0,limit);
+  const html = rows.map(r=>{
+    const pct = totalBytes>0 ? (r.bytes/totalBytes*100) : 0;
+    return `<tr>
+      <td class="path">${escape(r.label)}<div class="bar"><div style="width:${pct.toFixed(1)}%"></div></div></td>
+      <td><span class="type-tag">${r.type}</span></td>
+      <td class="num">${fmt(r.bytes)}</td>
+      <td class="num">${pct.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+  out.innerHTML = html || '<tr><td colspan="4" style="color:var(--muted)">No matching nodes.</td></tr>';
+}
+
+function escape(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function loadExample(){
+  document.getElementById('input').value = JSON.stringify({
+    meta:{request_id:"r_9f2bc",version:"2024-05-01",server:"api-3"},
+    pagination:{next_cursor:"eyJvZmZzZXQiOjEwMH0",has_more:true,total:4821},
+    users:[
+      {id:1,name:"Alice",email:"alice@example.com",avatar_url:"https://cdn.example.com/avatars/alice-2048x2048-full-hd-rendered.png",bio:"Loves building tools. ".repeat(8),tags:["admin","ops","on-call","mentor"]},
+      {id:2,name:"Bob",email:"bob@example.com",avatar_url:"https://cdn.example.com/avatars/bob-2048x2048-full-hd-rendered.png",bio:"Backend engineer. ".repeat(6),tags:["backend"]},
+      {id:3,name:"Carol",email:"carol@example.com",avatar_url:"https://cdn.example.com/avatars/carol-2048x2048-full-hd-rendered.png",bio:"Designer. ".repeat(10),tags:["design","ux"]}
+    ]
+  },null,2);
+  run();
+}
+
+loadExample();
+</script>
+</body>
+</html>

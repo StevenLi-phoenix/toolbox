@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP Header Diff - Free Online Tool</title>
+<meta name="description" content="Paste two sets of HTTP headers and see what was added, removed, or changed. Case-insensitive, handles multi-value headers, great for debugging caching, CDNs, and API regressions.">
+<meta name="keywords" content="http header diff, compare headers, response headers, request headers, cdn diff, cache diff">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/headerdiff.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea{font-family:var(--mono);font-size:.8rem;min-height:240px;width:100%}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.8rem}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;word-break:break-word}
+  th{background:var(--surface2);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);position:sticky;top:0}
+  tr.added{background:rgba(26,140,63,.08)}
+  tr.removed{background:rgba(196,30,30,.08)}
+  tr.changed{background:rgba(154,103,0,.08)}
+  .tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .tag.add{background:var(--success);color:#fff}
+  .tag.del{background:var(--error);color:#fff}
+  .tag.chg{background:var(--warning);color:#fff}
+  .tag.eq{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
+  .stats{display:flex;flex-wrap:wrap;gap:16px;font-size:.85rem;color:var(--muted);margin:8px 0}
+  .stats b{color:var(--text)}
+  del{text-decoration:line-through;color:var(--error);background:rgba(196,30,30,.08);padding:0 2px}
+  ins{text-decoration:none;color:var(--success);background:rgba(26,140,63,.08);padding:0 2px}
+  .filter-row{display:flex;gap:12px;flex-wrap:wrap;font-size:.82rem;margin-bottom:8px}
+  @media(max-width:768px){.panels{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HTTP Header Diff</h1>
+<p class="subtitle">Compare two sets of HTTP headers. Spot added, removed, and changed entries at a glance — perfect for debugging CDN, cache, or API regressions.</p>
+
+<div class="panels">
+<div class="card">
+<h2>A · before</h2>
+<textarea id="a" oninput="run()" spellcheck="false"></textarea>
+</div>
+<div class="card">
+<h2>B · after</h2>
+<textarea id="b" oninput="run()" spellcheck="false"></textarea>
+</div>
+</div>
+
+<div class="card">
+<div class="row" style="justify-content:space-between">
+  <div class="row" style="gap:8px">
+    <button class="btn btn-secondary" onclick="loadExample()">Load example</button>
+    <button class="btn btn-secondary" onclick="swap()">🔄 Swap A ↔ B</button>
+    <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+  </div>
+  <div class="filter-row">
+    <label><input type="checkbox" id="showEq" onchange="render()"> Show equal</label>
+    <label><input type="checkbox" id="ignoreCase" checked onchange="run()"> Case-insensitive names</label>
+    <label><input type="checkbox" id="splitList" checked onchange="run()"> Split list-valued headers</label>
+  </div>
+</div>
+<div class="stats" id="stats"></div>
+<div style="max-height:500px;overflow:auto">
+<table>
+  <thead><tr><th style="width:70px">Status</th><th style="width:210px">Header</th><th>A</th><th>B</th></tr></thead>
+  <tbody id="out"></tbody>
+</table>
+</div>
+</div>
+
+<div class="card">
+<h2>Input format</h2>
+<p class="subtitle">Paste raw header blocks as you'd see them in DevTools or a <code>curl -i</code> response. Lines like <code>Header-Name: value</code>. HTTP status lines (<code>HTTP/1.1 200 OK</code>) are ignored automatically. Repeated headers (like <code>Set-Cookie</code>) are preserved and compared as multi-value.</p>
+</div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+// List-valued headers per RFC 7230 §3.2.2 (subset of common ones)
+const LIST_HEADERS = new Set([
+  'accept','accept-charset','accept-encoding','accept-language','accept-patch','accept-ranges',
+  'allow','cache-control','connection','content-encoding','content-language','expect',
+  'forwarded','if-match','if-none-match','link','pragma','proxy-authenticate','te','trailer',
+  'transfer-encoding','upgrade','vary','via','warning','www-authenticate','x-forwarded-for',
+  'access-control-allow-methods','access-control-allow-headers','access-control-expose-headers',
+  'access-control-request-headers'
+]);
+
+let diff = [];
+
+function parseHeaders(text){
+  // Returns Map<name, string[]>  (name preserves original casing of first occurrence)
+  const ic = document.getElementById('ignoreCase').checked;
+  const split = document.getElementById('splitList').checked;
+  const map = new Map();
+  const orderedNames = new Map(); // key -> display name
+  const lines = text.split(/\r?\n/);
+  let buf = '';
+  const flush = ()=>{
+    if(!buf) return;
+    if(/^HTTP\/\d/i.test(buf)){buf='';return}
+    const idx = buf.indexOf(':');
+    if(idx<0){buf='';return}
+    let name = buf.slice(0,idx).trim();
+    let value = buf.slice(idx+1).trim();
+    const key = ic ? name.toLowerCase() : name;
+    if(!orderedNames.has(key)) orderedNames.set(key,name);
+    const arr = map.get(key) || [];
+    if(split && LIST_HEADERS.has(name.toLowerCase())){
+      // split by comma but keep quoted strings intact
+      const parts = splitList(value);
+      parts.forEach(p=>arr.push(p.trim()));
+    }else{
+      arr.push(value);
+    }
+    map.set(key,arr);
+    buf='';
+  };
+  for(const line of lines){
+    if(/^[\t ]/.test(line) && buf){
+      // continuation
+      buf += ' '+line.trim();
+    }else{
+      flush();
+      buf = line;
+    }
+  }
+  flush();
+  return {map,names:orderedNames};
+}
+
+function splitList(s){
+  const out=[]; let cur=''; let q=false;
+  for(let i=0;i<s.length;i++){
+    const c=s[i];
+    if(c==='"'){q=!q;cur+=c;continue}
+    if(c===','&&!q){out.push(cur);cur='';continue}
+    cur+=c;
+  }
+  if(cur.trim()) out.push(cur);
+  return out;
+}
+
+function run(){
+  const a = parseHeaders(document.getElementById('a').value);
+  const b = parseHeaders(document.getElementById('b').value);
+  const keys = new Set([...a.map.keys(), ...b.map.keys()]);
+  diff = [];
+  let added=0,removed=0,changed=0,equal=0;
+  Array.from(keys).sort().forEach(k=>{
+    const av = a.map.get(k);
+    const bv = b.map.get(k);
+    const name = b.names.get(k) || a.names.get(k) || k;
+    if(!av && bv){added++;diff.push({status:'added',name,a:null,b:bv})}
+    else if(av && !bv){removed++;diff.push({status:'removed',name,a:av,b:null})}
+    else {
+      const eqVals = sameMulti(av,bv);
+      if(eqVals){equal++;diff.push({status:'equal',name,a:av,b:bv})}
+      else {changed++;diff.push({status:'changed',name,a:av,b:bv})}
+    }
+  });
+  document.getElementById('stats').innerHTML =
+    `<span>Added: <b style="color:var(--success)">${added}</b></span>`+
+    `<span>Removed: <b style="color:var(--error)">${removed}</b></span>`+
+    `<span>Changed: <b style="color:var(--warning)">${changed}</b></span>`+
+    `<span>Equal: <b>${equal}</b></span>`;
+  render();
+}
+
+function sameMulti(x,y){
+  if(x.length!==y.length) return false;
+  const xs=[...x].sort(), ys=[...y].sort();
+  return xs.every((v,i)=>v===ys[i]);
+}
+
+function render(){
+  const out = document.getElementById('out');
+  const showEq = document.getElementById('showEq').checked;
+  if(!diff.length){out.innerHTML='<tr><td colspan="4" style="color:var(--muted)"><em>Paste header blocks above to diff.</em></td></tr>';return}
+  const rows = diff.filter(d=>showEq||d.status!=='equal').map(d=>{
+    const tag = {added:'<span class="tag add">Add</span>',removed:'<span class="tag del">Del</span>',changed:'<span class="tag chg">Δ</span>',equal:'<span class="tag eq">=</span>'}[d.status];
+    return `<tr class="${d.status}">
+      <td>${tag}</td>
+      <td><b>${escape(d.name)}</b></td>
+      <td>${renderVals(d.a,d.b,d.status,'a')}</td>
+      <td>${renderVals(d.b,d.a,d.status,'b')}</td>
+    </tr>`;
+  }).join('');
+  out.innerHTML = rows || '<tr><td colspan="4" style="color:var(--muted)">No differences. Toggle “Show equal” to see matching headers.</td></tr>';
+}
+
+function renderVals(vals,other,status,side){
+  if(!vals) return '<em style="color:var(--muted)">—</em>';
+  if(status==='equal') return vals.map(escape).join('<br>');
+  if(status==='added'||status==='removed'){
+    const wrap = status==='added' && side==='b' ? 'ins' : (status==='removed' && side==='a' ? 'del' : 'span');
+    return vals.map(v=>`<${wrap}>${escape(v)}</${wrap}>`).join('<br>');
+  }
+  // changed: mark values that don't appear on the other side
+  const otherSet = new Set(other||[]);
+  return vals.map(v=>{
+    if(otherSet.has(v)) return escape(v);
+    const tag = side==='a'?'del':'ins';
+    return `<${tag}>${escape(v)}</${tag}>`;
+  }).join('<br>');
+}
+
+function escape(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function swap(){
+  const a=document.getElementById('a'),b=document.getElementById('b');
+  [a.value,b.value]=[b.value,a.value];
+  run();
+}
+function clearAll(){
+  document.getElementById('a').value='';
+  document.getElementById('b').value='';
+  run();
+}
+function loadExample(){
+  document.getElementById('a').value=
+`HTTP/1.1 200 OK
+Date: Mon, 01 Jan 2024 12:00:00 GMT
+Server: nginx/1.24.0
+Content-Type: application/json; charset=utf-8
+Content-Length: 1423
+Cache-Control: public, max-age=300
+X-Cache: MISS
+Vary: Accept-Encoding
+Set-Cookie: sid=abc; Path=/; HttpOnly
+Set-Cookie: theme=dark; Path=/`;
+  document.getElementById('b').value=
+`HTTP/2 200
+date: Mon, 01 Jan 2024 12:00:05 GMT
+server: cloudflare
+content-type: application/json; charset=utf-8
+content-length: 1511
+cache-control: public, max-age=60, s-maxage=300
+x-cache: HIT
+vary: Accept-Encoding, Accept-Language
+cf-ray: 7a2e9c1f8e3b
+set-cookie: sid=abc; Path=/; HttpOnly; Secure
+set-cookie: theme=dark; Path=/`;
+  run();
+}
+
+loadExample();
+</script>
+</body>
+</html>

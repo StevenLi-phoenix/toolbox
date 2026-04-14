@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TLD & Domain Parser - Free Online Tool</title>
+<meta name="description" content="Split a URL or hostname into subdomain, registered domain (eTLD+1), and public suffix (TLD) using a built-in public-suffix list.">
+<meta name="keywords" content="tld extractor, public suffix list, etld+1, registered domain, subdomain parser, hostname parser">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tldextract.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea{font-family:var(--mono);font-size:.85rem;min-height:200px;width:100%}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.82rem}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top;word-break:break-all}
+  th{background:var(--surface2);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  td.sub{color:var(--muted)}
+  td.reg{color:var(--success);font-weight:600}
+  td.tld{color:var(--warning)}
+  td.err{color:var(--error)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--muted);margin-top:8px}
+  .legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  .legend .s1::before{background:var(--muted)}
+  .legend .s2::before{background:var(--success)}
+  .legend .s3::before{background:var(--warning)}
+  .stats{display:flex;flex-wrap:wrap;gap:16px;font-size:.82rem;color:var(--muted);margin-top:8px}
+  .stats b{color:var(--text)}
+  @media(max-width:768px){.panels{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>TLD & Domain Parser</h1>
+<p class="subtitle">Split hostnames into subdomain, registered domain (eTLD+1), and public suffix — fully offline.</p>
+
+<div class="panels">
+<div class="card">
+<h2>📥 URLs or hostnames (one per line)</h2>
+<textarea id="input" placeholder="https://www.example.com/path&#10;blog.co.uk&#10;a.b.c.github.io&#10;user@mail.example.org" oninput="parseAll()"></textarea>
+<div class="row" style="margin-top:8px">
+  <button class="btn btn-secondary" onclick="loadExample()">Load example</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+  <button class="btn btn-secondary" onclick="copyCSV()">📋 Copy as CSV</button>
+</div>
+<div class="stats" id="stats"></div>
+</div>
+
+<div class="card">
+<h2>📤 Parsed components</h2>
+<div style="overflow:auto;max-height:480px">
+<table>
+  <thead><tr><th>Input</th><th>Subdomain</th><th>Registered (eTLD+1)</th><th>Public suffix</th></tr></thead>
+  <tbody id="out"></tbody>
+</table>
+</div>
+<div class="legend">
+  <span class="s1">Subdomain</span>
+  <span class="s2">Registered domain</span>
+  <span class="s3">Public suffix (TLD)</span>
+</div>
+</div>
+</div>
+
+<div class="card">
+<h2>About</h2>
+<p class="subtitle" style="margin-bottom:8px">This tool uses a compact, curated slice of the <a href="https://publicsuffix.org/" target="_blank" rel="noopener">Public Suffix List</a> covering common gTLDs, ccTLDs, and multi-label suffixes (e.g. <code>co.uk</code>, <code>github.io</code>, <code>com.au</code>). Unknown or new TLDs fall back to the final label. Everything runs in your browser — no network lookups.</p>
+</div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+// Compact curated Public Suffix List (ICANN + private common).
+// Rules: normal rule = suffix, "*.foo" wildcard, "!foo" exception.
+const PSL_RAW = `
+ac ad ae aero af ag ai al am ao aq ar arpa as asia at au aw ax az
+ba bb bd be bf bg bh bi biz bj bm bn bo br bs bt bw by bz
+ca cat cc cd cf cg ch ci ck cl cm cn co com coop cr cu cv cw cx cy cz
+de dj dk dm do dz
+ec edu ee eg es eu
+fi fj fk fm fo fr
+ga gd ge gf gg gh gi gl gm gn gov gp gq gr gs gt gu gw gy
+hk hm hn hr ht hu
+id ie il im in info int io iq ir is it
+je jm jo jobs jp
+ke kg kh ki km kn kp kr kw ky kz
+la lb lc li lk lr ls lt lu lv ly
+ma mc md me mg mh mil mk ml mm mn mo mobi mp mq mr ms mt mu museum mv mw mx my mz
+na name nc ne net nf ng ni nl no np nr nu nz
+om org
+pa pe pf pg ph pk pl pm pn post pr pro ps pt pw py
+qa
+re ro rs ru rw
+sa sb sc sd se sg sh si sk sl sm sn so sr ss st su sv sx sy sz
+tc td tel tf tg th tj tk tl tm tn to tr tt tv tw tz
+ua ug uk us uy uz
+va vc ve vg vi vn vu
+wf ws
+xxx
+ye yt
+za zm zw
+co.uk org.uk ac.uk gov.uk net.uk sch.uk me.uk ltd.uk plc.uk
+co.jp or.jp ne.jp ac.jp go.jp ad.jp ed.jp gr.jp lg.jp
+com.au net.au org.au edu.au gov.au asn.au id.au
+com.br net.br org.br gov.br edu.br
+com.cn net.cn org.cn gov.cn edu.cn ac.cn
+co.in net.in org.in gen.in firm.in ind.in ac.in edu.in gov.in
+co.nz net.nz org.nz govt.nz ac.nz school.nz
+co.za net.za org.za gov.za ac.za
+com.mx org.mx gob.mx edu.mx
+com.sg edu.sg gov.sg net.sg org.sg per.sg
+com.hk edu.hk gov.hk idv.hk net.hk org.hk
+com.tw edu.tw gov.tw net.tw org.tw
+com.tr net.tr org.tr gov.tr edu.tr
+com.ar net.ar org.ar gov.ar edu.ar
+co.kr or.kr ne.kr re.kr pe.kr go.kr ac.kr
+github.io gitlab.io netlify.app netlify.com vercel.app pages.dev workers.dev
+herokuapp.com firebaseapp.com web.app cloudfront.net r2.dev
+s3.amazonaws.com appspot.com azurewebsites.net azureedge.net
+blogspot.com blogspot.co.uk blogspot.de blogspot.fr blogspot.jp
+readthedocs.io readthedocs.org wordpress.com tumblr.com
+googleapis.com googleusercontent.com
+ngrok.io ngrok.app ngrok-free.app trycloudflare.com
+`;
+const rules = new Set();
+const excRules = new Set();
+const wildRules = new Set();
+PSL_RAW.split(/\s+/).filter(Boolean).forEach(r=>{
+  if(r.startsWith('!')) excRules.add(r.slice(1));
+  else if(r.startsWith('*.')) wildRules.add(r.slice(2));
+  else rules.add(r);
+});
+
+function extractHostname(input){
+  let s = input.trim();
+  if(!s) return '';
+  // strip scheme
+  s = s.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//,'');
+  // strip user@
+  s = s.replace(/^[^/@]*@/,'');
+  // stop at /, ?, #
+  s = s.split(/[/?#]/)[0];
+  // strip port
+  s = s.replace(/:\d+$/,'');
+  // strip trailing dot
+  s = s.replace(/\.$/,'');
+  // unicode → lower
+  s = s.toLowerCase();
+  // try IDN? leave raw; punycode is better but optional
+  return s;
+}
+
+function isIP(h){
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || /^\[?[0-9a-f:]+\]?$/i.test(h) && h.includes(':');
+}
+
+function parse(input){
+  const host = extractHostname(input);
+  if(!host) return {err:'empty'};
+  if(isIP(host)) return {host,err:'IP address',sub:'',reg:host,tld:''};
+  if(!host.includes('.')) return {host,err:'single label',sub:'',reg:host,tld:''};
+  const labels = host.split('.');
+  // Find longest matching suffix
+  let suffixLen = 1; // default: last label
+  for(let i=0;i<labels.length;i++){
+    const candidate = labels.slice(i).join('.');
+    if(excRules.has(candidate)){
+      suffixLen = labels.length - i - 1;
+      break;
+    }
+    if(rules.has(candidate)){
+      suffixLen = Math.max(suffixLen, labels.length - i);
+    }
+    // wildcard: *.foo means anything.foo counts — so check parent match
+    const parent = labels.slice(i+1).join('.');
+    if(wildRules.has(parent)){
+      suffixLen = Math.max(suffixLen, labels.length - i);
+    }
+  }
+  if(suffixLen >= labels.length){
+    // entire host is public suffix — no registered domain
+    return {host,sub:'',reg:'',tld:host,err:'host is a public suffix'};
+  }
+  const tld = labels.slice(labels.length - suffixLen).join('.');
+  const reg = labels.slice(labels.length - suffixLen - 1).join('.');
+  const sub = labels.slice(0, labels.length - suffixLen - 1).join('.');
+  return {host,sub,reg,tld};
+}
+
+function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function parseAll(){
+  const lines = document.getElementById('input').value.split(/\r?\n/);
+  const out = document.getElementById('out');
+  const stats = document.getElementById('stats');
+  let ok=0,err=0;
+  const rows = lines.map(line=>{
+    const t = line.trim();
+    if(!t) return '';
+    const r = parse(t);
+    if(r.err && !r.reg){
+      err++;
+      return `<tr><td>${esc(t)}</td><td colspan="3" class="err">${esc(r.err)}</td></tr>`;
+    }
+    ok++;
+    return `<tr><td>${esc(t)}</td><td class="sub">${esc(r.sub)||'<em style="color:var(--muted)">—</em>'}</td><td class="reg">${esc(r.reg)}</td><td class="tld">${esc(r.tld)}</td></tr>`;
+  }).filter(Boolean);
+  out.innerHTML = rows.join('') || '<tr><td colspan="4" class="sub"><em>Enter one URL or hostname per line…</em></td></tr>';
+  stats.innerHTML = `<span>Parsed: <b>${ok}</b></span><span>Errors: <b>${err}</b></span><span>Rules loaded: <b>${rules.size+wildRules.size}</b></span>`;
+}
+
+function loadExample(){
+  document.getElementById('input').value =
+`https://www.example.com/path?x=1
+blog.co.uk
+a.b.c.github.io
+user@mail.example.org
+http://localhost:3000
+192.168.1.1
+stevenli-phoenix.github.io
+api.v2.internal.example.museum
+xn--p1ai
+fonts.googleapis.com`;
+  parseAll();
+}
+function clearAll(){document.getElementById('input').value='';parseAll()}
+function copyCSV(){
+  const lines = document.getElementById('input').value.split(/\r?\n/);
+  const rows = [['input','subdomain','registered','suffix']];
+  lines.forEach(l=>{
+    const t=l.trim();if(!t)return;
+    const r=parse(t);
+    rows.push([t,r.sub||'',r.reg||'',r.tld||'']);
+  });
+  const csv = rows.map(r=>r.map(c=>/[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c).join(',')).join('\n');
+  navigator.clipboard.writeText(csv).then(()=>{
+    const t=document.getElementById('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+  });
+}
+
+loadExample();
+</script>
+</body>
+</html>
