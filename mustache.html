@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mustache Template Tester — Free Online Tool</title>
+<meta name="description" content="Render Mustache templates in your browser. Supports sections, inverted sections, iteration, partials, HTML escaping, and custom delimiters. No data leaves your browser.">
+<meta name="keywords" content="mustache, template, handlebars, logic-less, partials, sections, tester, renderer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mustache.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  textarea { width: 100%; padding: 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; background: var(--bg); color: var(--text); line-height: 1.55; }
+  #template, #data { min-height: 260px; }
+  #output { min-height: 200px; background: var(--surface2); white-space: pre-wrap; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; color: var(--text); overflow: auto; }
+  .panel h3 { font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; align-items: center; }
+  .status { padding: 8px 12px; border-radius: var(--radius); font-size: .82rem; font-family: var(--mono); margin-top: 8px; display: none; }
+  .status.ok { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); border: 1px solid var(--success); display: block; }
+  .status.err { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); border: 1px solid var(--error); display: block; }
+  .toggle-row { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); }
+  details.partials { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; background: var(--surface2); }
+  details.partials summary { cursor: pointer; font-size: .82rem; color: var(--muted); font-weight: 600; }
+  details.partials textarea { min-height: 80px; margin-top: 8px; }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+  .legend code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🥸 Mustache Template Tester</h1>
+<p class="subtitle">Render logic-less Mustache templates against JSON context. Supports <code>{{var}}</code>, <code>{{{raw}}}</code>, <code>{{#section}}</code>, <code>{{^inverted}}</code>, <code>{{&gt;partial}}</code>, and dot notation.</p>
+
+<div class="controls">
+  <button class="btn" id="render">Render</button>
+  <button class="btn btn-secondary" id="sample">Load sample</button>
+  <button class="btn btn-secondary" id="clear">Clear</button>
+  <label class="toggle-row"><input type="checkbox" id="autoRender" checked> Auto-render on change</label>
+  <label class="toggle-row"><input type="checkbox" id="htmlEscape" checked> HTML-escape <code>{{var}}</code></label>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h3>Template</h3>
+    <textarea id="template" spellcheck="false" placeholder="Hello {{name}}!"></textarea>
+    <details class="partials">
+      <summary>Partials (optional JSON map: <code>{ "header": "...", "row": "..." }</code>)</summary>
+      <textarea id="partials" spellcheck="false" placeholder='{ "greet": "Hi {{name}}!" }'></textarea>
+    </details>
+  </div>
+  <div class="panel">
+    <h3>Context (JSON)</h3>
+    <textarea id="data" spellcheck="false" placeholder='{ "name": "World" }'></textarea>
+  </div>
+</div>
+
+<div style="margin-top:14px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <h3 style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0">Rendered output</h3>
+    <button class="btn btn-secondary" id="copy">Copy</button>
+  </div>
+  <pre id="output"></pre>
+  <div id="status" class="status"></div>
+</div>
+
+<div class="legend">
+  <strong>Syntax reference</strong><br>
+  <code>{{name}}</code> HTML-escaped variable · <code>{{{name}}}</code> or <code>{{&amp;name}}</code> unescaped ·
+  <code>{{#items}}…{{/items}}</code> section (iterates arrays, renders on truthy) ·
+  <code>{{^items}}…{{/items}}</code> inverted (renders on empty/falsy) ·
+  <code>{{.}}</code> current value in array loop ·
+  <code>{{a.b.c}}</code> dot notation ·
+  <code>{{! comment }}</code> comments ·
+  <code>{{&gt;partialName}}</code> partial lookup ·
+  <code>{{=&lt;% %&gt;=}}</code> set delimiters.
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function htmlEscape(s) {
+  return String(s).replace(/[&<>"'`]/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;'
+  }[c]));
+}
+
+function lookup(ctxStack, name) {
+  if (name === '.') return ctxStack[ctxStack.length - 1];
+  const parts = name.split('.');
+  for (let i = ctxStack.length - 1; i >= 0; i--) {
+    let v = ctxStack[i];
+    if (v == null || typeof v !== 'object') continue;
+    if (!(parts[0] in v)) continue;
+    for (const p of parts) {
+      if (v == null || typeof v !== 'object' || !(p in v)) { v = undefined; break; }
+      v = v[p];
+    }
+    if (v !== undefined) return v;
+  }
+  return undefined;
+}
+
+function isTruthy(v) {
+  if (v == null || v === false) return false;
+  if (Array.isArray(v)) return v.length > 0;
+  return true;
+}
+
+// Tokenizer supporting custom delimiters
+function tokenize(tpl) {
+  const tokens = [];
+  let open = '{{', close = '}}';
+  let i = 0;
+  while (i < tpl.length) {
+    const o = tpl.indexOf(open, i);
+    if (o === -1) { tokens.push({ t: 'text', v: tpl.slice(i) }); break; }
+    if (o > i) tokens.push({ t: 'text', v: tpl.slice(i, o) });
+    let tagOpen = open, tagClose = close;
+    let c;
+    // Triple mustache for unescaped
+    if (tpl[o + open.length] === '{' && open === '{{') {
+      c = tpl.indexOf('}}}', o + 3);
+      if (c === -1) throw new Error('Unclosed triple mustache at pos ' + o);
+      const name = tpl.slice(o + 3, c).trim();
+      tokens.push({ t: 'unescaped', v: name });
+      i = c + 3;
+      continue;
+    }
+    c = tpl.indexOf(close, o + open.length);
+    if (c === -1) throw new Error('Unclosed tag at pos ' + o);
+    const raw = tpl.slice(o + open.length, c).trim();
+    if (raw.startsWith('#')) tokens.push({ t: 'section', v: raw.slice(1).trim() });
+    else if (raw.startsWith('^')) tokens.push({ t: 'inverted', v: raw.slice(1).trim() });
+    else if (raw.startsWith('/')) tokens.push({ t: 'end', v: raw.slice(1).trim() });
+    else if (raw.startsWith('!')) { /* comment, skip */ }
+    else if (raw.startsWith('>')) tokens.push({ t: 'partial', v: raw.slice(1).trim() });
+    else if (raw.startsWith('&')) tokens.push({ t: 'unescaped', v: raw.slice(1).trim() });
+    else if (raw.startsWith('=') && raw.endsWith('=')) {
+      const delims = raw.slice(1, -1).trim().split(/\s+/);
+      if (delims.length === 2) { open = delims[0]; close = delims[1]; }
+    }
+    else tokens.push({ t: 'var', v: raw });
+    i = c + close.length;
+  }
+  return tokens;
+}
+
+// Build tree from flat tokens
+function parse(tokens) {
+  const root = { t: 'root', children: [] };
+  const stack = [root];
+  for (const tok of tokens) {
+    const top = stack[stack.length - 1];
+    if (tok.t === 'section' || tok.t === 'inverted') {
+      const node = { t: tok.t, v: tok.v, children: [] };
+      top.children.push(node);
+      stack.push(node);
+    } else if (tok.t === 'end') {
+      if (stack.length < 2 || top.v !== tok.v) throw new Error('Mismatched section: ' + tok.v);
+      stack.pop();
+    } else {
+      top.children.push(tok);
+    }
+  }
+  if (stack.length !== 1) throw new Error('Unclosed section: ' + stack[stack.length - 1].v);
+  return root;
+}
+
+function render(node, ctxStack, partials, escapeOn) {
+  let out = '';
+  for (const n of node.children) {
+    if (n.t === 'text') out += n.v;
+    else if (n.t === 'var') {
+      const v = lookup(ctxStack, n.v);
+      if (v != null) out += escapeOn ? htmlEscape(v) : String(v);
+    } else if (n.t === 'unescaped') {
+      const v = lookup(ctxStack, n.v);
+      if (v != null) out += String(v);
+    } else if (n.t === 'section') {
+      const v = lookup(ctxStack, n.v);
+      if (Array.isArray(v)) {
+        for (const item of v) out += render(n, [...ctxStack, item], partials, escapeOn);
+      } else if (isTruthy(v)) {
+        if (typeof v === 'object') out += render(n, [...ctxStack, v], partials, escapeOn);
+        else out += render(n, ctxStack, partials, escapeOn);
+      }
+    } else if (n.t === 'inverted') {
+      const v = lookup(ctxStack, n.v);
+      if (!isTruthy(v)) out += render(n, ctxStack, partials, escapeOn);
+    } else if (n.t === 'partial') {
+      const p = partials[n.v];
+      if (p != null) {
+        const tree = parse(tokenize(String(p)));
+        out += render(tree, ctxStack, partials, escapeOn);
+      }
+    }
+  }
+  return out;
+}
+
+function showStatus(msg, ok) {
+  const s = $('status');
+  s.textContent = msg;
+  s.className = 'status ' + (ok ? 'ok' : 'err');
+}
+
+function doRender() {
+  try {
+    const tpl = $('template').value;
+    let data = {};
+    const dataText = $('data').value.trim();
+    if (dataText) data = JSON.parse(dataText);
+    let partials = {};
+    const partText = $('partials').value.trim();
+    if (partText) partials = JSON.parse(partText);
+    const escapeOn = $('htmlEscape').checked;
+    const tree = parse(tokenize(tpl));
+    const out = render(tree, [data], partials, escapeOn);
+    $('output').textContent = out;
+    showStatus('Rendered · ' + out.length + ' characters', true);
+  } catch (e) {
+    showStatus('Error: ' + e.message, false);
+  }
+}
+
+$('render').addEventListener('click', doRender);
+
+$('sample').addEventListener('click', () => {
+  $('template').value = `{{>header}}
+
+Hello {{name}}!
+
+{{#items}}
+  - {{title}} ({{price}} {{currency}})
+{{/items}}
+
+{{^items}}
+  No items.
+{{/items}}
+
+Total: {{total}}
+Tags: {{#tags}}{{.}} {{/tags}}
+
+{{! this is a comment }}
+{{=<% %>=}}
+Raw block: <%raw%>
+<%={{ }}=%>
+Footer: {{{footerHtml}}}`;
+  $('data').value = JSON.stringify({
+    name: "<World>",
+    items: [
+      { title: "Widget", price: 9.99, currency: "USD" },
+      { title: "Gadget", price: 14.5, currency: "USD" }
+    ],
+    total: 24.49,
+    tags: ["new", "sale", "featured"],
+    raw: "no escaping here: <b>bold</b>",
+    footerHtml: "<em>Thanks!</em>"
+  }, null, 2);
+  $('partials').value = JSON.stringify({
+    header: "=== Invoice for {{name}} ==="
+  }, null, 2);
+  doRender();
+});
+
+$('clear').addEventListener('click', () => {
+  $('template').value = '';
+  $('data').value = '';
+  $('partials').value = '';
+  $('output').textContent = '';
+  $('status').className = 'status';
+  $('status').textContent = '';
+});
+
+$('copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('output').textContent);
+    showStatus('Copied to clipboard.', true);
+  } catch { showStatus('Copy failed.', false); }
+});
+
+['template', 'data', 'partials', 'htmlEscape'].forEach(id => {
+  $(id).addEventListener('input', () => { if ($('autoRender').checked) doRender(); });
+  $(id).addEventListener('change', () => { if ($('autoRender').checked) doRender(); });
+});
+
+// Initial
+$('template').value = 'Hello {{name}}!\n\n{{#friends}}\n- {{.}}\n{{/friends}}';
+$('data').value = '{\n  "name": "Ada",\n  "friends": ["Grace", "Linus", "Ken"]\n}';
+doRender();
+</script>
+</body>
+</html>

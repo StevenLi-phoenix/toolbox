@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Number Sequence Generator — Free Online Tool</title>
+<meta name="description" content="Generate classic integer sequences: Fibonacci, Lucas, primes, triangular, square, Catalan, Pell, Tribonacci, Collatz, Padovan, and more. BigInt-safe, copy as CSV or JSON.">
+<meta name="keywords" content="sequence, fibonacci, lucas, primes, catalan, triangular, collatz, pell, tribonacci, math">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sequences.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; margin-top: 14px; align-items: end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  input, select {
+    padding: 8px 10px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text);
+  }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .output-box {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; font-family: var(--mono); font-size: .85rem; color: var(--text);
+    white-space: pre-wrap; word-break: break-all; line-height: 1.55; min-height: 120px;
+    max-height: 500px; overflow: auto;
+  }
+  .stats { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; font-size: .82rem; color: var(--muted); font-family: var(--mono); }
+  .desc { font-size: .82rem; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .out-head { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+  .out-head h3 { font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0; }
+  .format-btns { display: flex; gap: 6px; }
+  @media (max-width: 768px) { .form-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔢 Number Sequence Generator</h1>
+<p class="subtitle">Generate classic integer sequences with arbitrary precision (BigInt). Copy as a list, CSV, JSON array, or Python/JS literal.</p>
+
+<div class="form-grid">
+  <div class="field">
+    <label>Sequence</label>
+    <select id="seq">
+      <option value="fib">Fibonacci</option>
+      <option value="lucas">Lucas</option>
+      <option value="trib">Tribonacci</option>
+      <option value="padovan">Padovan</option>
+      <option value="pell">Pell</option>
+      <option value="catalan">Catalan</option>
+      <option value="primes">Primes</option>
+      <option value="composites">Composites</option>
+      <option value="triangular">Triangular</option>
+      <option value="square">Squares</option>
+      <option value="cube">Cubes</option>
+      <option value="tetra">Tetrahedral</option>
+      <option value="factorial">Factorials</option>
+      <option value="power2">Powers of 2</option>
+      <option value="power10">Powers of 10</option>
+      <option value="collatz">Collatz from N</option>
+      <option value="perfect">Perfect numbers</option>
+      <option value="mersenne">Mersenne (2ⁿ−1)</option>
+      <option value="abundant">Abundant numbers</option>
+      <option value="deficient">Deficient numbers</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Count</label>
+    <input type="number" id="count" value="20" min="1" max="1000">
+  </div>
+  <div class="field">
+    <label>Start index</label>
+    <input type="number" id="start" value="0" min="0">
+  </div>
+  <div class="field" id="param-wrap" style="display:none">
+    <label id="param-label">N</label>
+    <input type="number" id="param" value="27" min="1">
+  </div>
+</div>
+<div class="desc" id="desc"></div>
+
+<div class="controls">
+  <button class="btn" id="gen">Generate</button>
+  <button class="btn btn-secondary" id="clear">Clear</button>
+</div>
+
+<div class="out-head">
+  <h3>Result</h3>
+  <div class="format-btns">
+    <button class="btn btn-secondary" data-fmt="lines">Lines</button>
+    <button class="btn btn-secondary" data-fmt="csv">CSV</button>
+    <button class="btn btn-secondary" data-fmt="json">JSON</button>
+    <button class="btn btn-secondary" data-fmt="python">Python</button>
+    <button class="btn btn-secondary" data-fmt="js">JS</button>
+    <button class="btn btn-secondary" id="copy">Copy</button>
+  </div>
+</div>
+<pre id="output" class="output-box"></pre>
+<div class="stats" id="stats"></div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let current = [];
+let format = 'lines';
+
+const DESCRIPTIONS = {
+  fib: 'F(0)=0, F(1)=1, F(n)=F(n−1)+F(n−2)',
+  lucas: 'L(0)=2, L(1)=1, L(n)=L(n−1)+L(n−2)',
+  trib: 'T(0)=0, T(1)=0, T(2)=1, T(n)=T(n−1)+T(n−2)+T(n−3)',
+  padovan: 'P(0)=1, P(1)=1, P(2)=1, P(n)=P(n−2)+P(n−3)',
+  pell: 'Pell(n)=2·Pell(n−1)+Pell(n−2); 0,1,2,5,12,29…',
+  catalan: 'C(n)=(2n)! / ((n+1)! n!); 1,1,2,5,14,42…',
+  primes: 'Numbers only divisible by 1 and themselves',
+  composites: 'Integers with divisors other than 1 and themselves',
+  triangular: 'T(n)=n(n+1)/2; 1,3,6,10,15,21…',
+  square: 'n²; 1,4,9,16,25…',
+  cube: 'n³; 1,8,27,64,125…',
+  tetra: 'n(n+1)(n+2)/6; 1,4,10,20,35…',
+  factorial: 'n!; 1,1,2,6,24,120…',
+  power2: '2ⁿ',
+  power10: '10ⁿ',
+  collatz: 'Collatz (3n+1) trajectory starting at N (stops at 1)',
+  perfect: 'n equals sum of its proper divisors; 6,28,496,8128…',
+  mersenne: '2ⁿ−1 for n=1,2,3…',
+  abundant: 'Sum of proper divisors > n',
+  deficient: 'Sum of proper divisors < n',
+};
+
+function updateParamField() {
+  const s = $('seq').value;
+  const wrap = $('param-wrap');
+  const label = $('param-label');
+  if (s === 'collatz') { wrap.style.display = ''; label.textContent = 'Starting N'; }
+  else wrap.style.display = 'none';
+  $('desc').textContent = DESCRIPTIONS[s] || '';
+}
+$('seq').addEventListener('change', updateParamField);
+updateParamField();
+
+function fib(count, start) {
+  const out = [];
+  let a = 0n, b = 1n;
+  let i = 0;
+  while (out.length < count) {
+    if (i >= start) out.push(a);
+    [a, b] = [b, a + b];
+    i++;
+  }
+  return out;
+}
+function lucas(count, start) {
+  const out = [];
+  let a = 2n, b = 1n;
+  let i = 0;
+  while (out.length < count) {
+    if (i >= start) out.push(a);
+    [a, b] = [b, a + b];
+    i++;
+  }
+  return out;
+}
+function trib(count, start) {
+  const out = [];
+  let a = 0n, b = 0n, c = 1n;
+  let i = 0;
+  while (out.length < count) {
+    if (i >= start) out.push(a);
+    [a, b, c] = [b, c, a + b + c];
+    i++;
+  }
+  return out;
+}
+function padovan(count, start) {
+  const out = [];
+  let a = 1n, b = 1n, c = 1n;
+  let i = 0;
+  while (out.length < count) {
+    if (i >= start) out.push(a);
+    [a, b, c] = [b, c, a + b];
+    i++;
+  }
+  return out;
+}
+function pell(count, start) {
+  const out = [];
+  let a = 0n, b = 1n;
+  let i = 0;
+  while (out.length < count) {
+    if (i >= start) out.push(a);
+    [a, b] = [b, 2n * b + a];
+    i++;
+  }
+  return out;
+}
+function catalan(count, start) {
+  // C(n) = C(n-1) * 2(2n-1)/(n+1)
+  const out = [];
+  let c = 1n;
+  let i = 0;
+  while (out.length < count) {
+    if (i >= start) out.push(c);
+    const n = BigInt(i + 1);
+    c = c * (2n * (2n * n - 1n)) / (n + 1n);
+    i++;
+  }
+  return out;
+}
+function isPrime(n) {
+  if (n < 2n) return false;
+  if (n < 4n) return true;
+  if (n % 2n === 0n) return false;
+  if (n % 3n === 0n) return false;
+  for (let i = 5n; i * i <= n; i += 6n) {
+    if (n % i === 0n) return false;
+    if (n % (i + 2n) === 0n) return false;
+  }
+  return true;
+}
+function primes(count, start) {
+  const out = [];
+  let n = 2n, idx = 0;
+  while (out.length < count) {
+    if (isPrime(n)) {
+      if (idx >= start) out.push(n);
+      idx++;
+    }
+    n++;
+  }
+  return out;
+}
+function composites(count, start) {
+  const out = [];
+  let n = 4n, idx = 0;
+  while (out.length < count) {
+    if (!isPrime(n) && n > 1n) {
+      if (idx >= start) out.push(n);
+      idx++;
+    }
+    n++;
+  }
+  return out;
+}
+function triangular(count, start) {
+  const out = [];
+  for (let i = start; i < start + count; i++) {
+    const n = BigInt(i + 1);
+    out.push(n * (n + 1n) / 2n);
+  }
+  return out;
+}
+function square(count, start) {
+  const out = [];
+  for (let i = start; i < start + count; i++) {
+    const n = BigInt(i + 1);
+    out.push(n * n);
+  }
+  return out;
+}
+function cube(count, start) {
+  const out = [];
+  for (let i = start; i < start + count; i++) {
+    const n = BigInt(i + 1);
+    out.push(n * n * n);
+  }
+  return out;
+}
+function tetra(count, start) {
+  const out = [];
+  for (let i = start; i < start + count; i++) {
+    const n = BigInt(i + 1);
+    out.push(n * (n + 1n) * (n + 2n) / 6n);
+  }
+  return out;
+}
+function factorial(count, start) {
+  const out = [];
+  let f = 1n;
+  for (let i = 0; i < start + count; i++) {
+    if (i === 0) f = 1n;
+    else f = f * BigInt(i);
+    if (i >= start) out.push(f);
+  }
+  return out;
+}
+function power2(count, start) {
+  const out = [];
+  for (let i = start; i < start + count; i++) out.push(1n << BigInt(i));
+  return out;
+}
+function power10(count, start) {
+  const out = [];
+  for (let i = start; i < start + count; i++) {
+    let v = 1n;
+    for (let j = 0; j < i; j++) v *= 10n;
+    out.push(v);
+  }
+  return out;
+}
+function collatz(n) {
+  const out = [];
+  let x = BigInt(n);
+  out.push(x);
+  let safety = 0;
+  while (x !== 1n && safety++ < 100000) {
+    x = (x % 2n === 0n) ? x / 2n : 3n * x + 1n;
+    out.push(x);
+  }
+  return out;
+}
+function sumProperDivisors(n) {
+  if (n < 2n) return 0n;
+  let sum = 1n;
+  for (let i = 2n; i * i <= n; i++) {
+    if (n % i === 0n) {
+      sum += i;
+      const p = n / i;
+      if (p !== i) sum += p;
+    }
+  }
+  return sum;
+}
+function perfect(count, start) {
+  const out = [];
+  let n = 2n, idx = 0;
+  while (out.length < count && n < 100000000n) {
+    if (sumProperDivisors(n) === n) {
+      if (idx >= start) out.push(n);
+      idx++;
+    }
+    n++;
+  }
+  return out;
+}
+function mersenne(count, start) {
+  const out = [];
+  for (let i = start; i < start + count; i++) {
+    out.push((1n << BigInt(i + 1)) - 1n);
+  }
+  return out;
+}
+function abundant(count, start) {
+  const out = [];
+  let n = 2n, idx = 0;
+  while (out.length < count) {
+    if (sumProperDivisors(n) > n) {
+      if (idx >= start) out.push(n);
+      idx++;
+    }
+    n++;
+  }
+  return out;
+}
+function deficient(count, start) {
+  const out = [];
+  let n = 1n, idx = 0;
+  while (out.length < count) {
+    if (sumProperDivisors(n) < n) {
+      if (idx >= start) out.push(n);
+      idx++;
+    }
+    n++;
+  }
+  return out;
+}
+
+const GEN = {
+  fib, lucas, trib, padovan, pell, catalan, primes, composites,
+  triangular, square, cube, tetra, factorial, power2, power10,
+  perfect, mersenne, abundant, deficient
+};
+
+function render() {
+  const nums = current.map(x => x.toString());
+  let text;
+  switch (format) {
+    case 'csv': text = nums.join(','); break;
+    case 'json': text = '[' + nums.join(', ') + ']'; break;
+    case 'python': text = '[' + nums.join(', ') + ']'; break;
+    case 'js':
+      text = '[' + nums.map(n => n.length > 15 ? n + 'n' : n).join(', ') + ']';
+      break;
+    default: text = nums.join('\n');
+  }
+  $('output').textContent = text;
+  const bigCount = current.length;
+  const last = current[current.length - 1];
+  const maxDigits = last ? last.toString().length : 0;
+  $('stats').innerHTML = bigCount
+    ? `<span>Terms: ${bigCount}</span><span>Max digits: ${maxDigits}</span><span>Format: ${format}</span>`
+    : '';
+}
+
+function generate() {
+  const seq = $('seq').value;
+  const count = Math.max(1, Math.min(1000, parseInt($('count').value) || 20));
+  const start = Math.max(0, parseInt($('start').value) || 0);
+  try {
+    if (seq === 'collatz') {
+      const n = Math.max(1, parseInt($('param').value) || 1);
+      current = collatz(n);
+    } else if (GEN[seq]) {
+      current = GEN[seq](count, start);
+    } else current = [];
+    render();
+  } catch (e) {
+    $('output').textContent = 'Error: ' + e.message;
+    $('stats').textContent = '';
+  }
+}
+
+$('gen').addEventListener('click', generate);
+$('clear').addEventListener('click', () => { current = []; $('output').textContent = ''; $('stats').textContent = ''; });
+document.querySelectorAll('[data-fmt]').forEach(b => b.addEventListener('click', () => {
+  format = b.dataset.fmt;
+  render();
+}));
+$('copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('output').textContent);
+    const o = $('copy').textContent;
+    $('copy').textContent = 'Copied!';
+    setTimeout(() => $('copy').textContent = o, 1200);
+  } catch {}
+});
+['seq', 'count', 'start', 'param'].forEach(id => $(id).addEventListener('change', generate));
+
+generate();
+</script>
+</body>
+</html>
