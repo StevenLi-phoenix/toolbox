@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentry DSN Parser & Builder — Inspect DSN and Ingest URL</title>
+<meta name="description" content="Parse and build Sentry DSN strings. Extract public key, project ID, host, and generate the store/envelope ingest URLs and X-Sentry-Auth header. 100% client-side.">
+<meta name="keywords" content="sentry dsn, sentry parser, sentry ingest url, x-sentry-auth, sentry project id, error tracking, dsn builder">
+<meta name="author" content="Steven Li">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sentrydsn.html">
+<meta property="og:title" content="Sentry DSN Parser & Builder">
+<meta property="og:description" content="Parse Sentry DSN strings into parts and generate ingest URLs, the X-Sentry-Auth header, and ready-to-use SDK init snippets.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .field { display: grid; gap: 6px; margin-bottom: 12px; }
+  .field label { font-size: .85rem; font-weight: 600; }
+  .field .hint { color: var(--muted); font-size: .78rem; font-weight: 400; }
+  .mono-in { width: 100%; padding: 10px 12px; font-family: var(--mono); font-size: .88rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .mono-in:focus { outline: none; border-color: var(--accent); }
+  .parsed-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--border); font-size: .85rem; align-items: baseline; }
+  .parsed-row:last-child { border-bottom: none; }
+  .parsed-row .k { color: var(--muted); font-weight: 600; flex-shrink: 0; }
+  .parsed-row .v { font-family: var(--mono); text-align: right; word-break: break-all; }
+  .code { font-family: var(--mono); font-size: .82rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; white-space: pre-wrap; word-break: break-all; }
+  .badge-ok { display: inline-block; padding: 2px 8px; font-size: .75rem; border-radius: 999px; background: color-mix(in srgb, var(--success) 20%, transparent); color: var(--success); border: 1px solid var(--success); }
+  .badge-err { display: inline-block; padding: 2px 8px; font-size: .75rem; border-radius: 999px; background: color-mix(in srgb, var(--error) 20%, transparent); color: var(--error); border: 1px solid var(--error); }
+  .badge-warn { display: inline-block; padding: 2px 8px; font-size: .75rem; border-radius: 999px; background: color-mix(in srgb, #f59e0b 20%, transparent); color: #f59e0b; border: 1px solid #f59e0b; }
+  h3 { font-size: .9rem; font-weight: 600; margin: 14px 0 6px; }
+  .tab-nav { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .tab-nav button { background: none; border: none; color: var(--muted); font-size: .82rem; font-weight: 600; padding: 8px 12px; cursor: pointer; border-bottom: 2px solid transparent; font-family: var(--sans); }
+  .tab-nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn-row button { font-size: .78rem; padding: 5px 10px; }
+  @media (max-width: 768px) { .layout-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Sentry DSN Parser & Builder</h1>
+<p class="subtitle">Parse <a href="https://develop.sentry.dev/sdk/overview/#parsing-the-dsn" target="_blank" rel="noopener">Sentry DSNs</a> into parts (public key, host, project ID), build the corresponding ingest URLs, and generate the <code>X-Sentry-Auth</code> header. Everything runs locally — no requests are made, keys never leave your browser.</p>
+
+<div class="layout-grid">
+  <div class="card" style="padding:16px;">
+    <h2 style="font-size:1rem;margin-bottom:10px;">DSN</h2>
+    <div class="field">
+      <label for="dsnIn">Paste a Sentry DSN</label>
+      <input type="text" id="dsnIn" class="mono-in" placeholder="https://abc123def456@o12345.ingest.sentry.io/6789">
+      <span class="hint">Format: <code>&lt;scheme&gt;://&lt;public-key&gt;[:&lt;secret&gt;]@&lt;host&gt;[:&lt;port&gt;]/&lt;project-id&gt;</code></span>
+    </div>
+    <div id="dsnStatus" style="margin-bottom:10px;"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" data-sample="https://abc123def456789@o12345.ingest.sentry.io/6789">Sample (SaaS)</button>
+      <button class="btn btn-secondary" data-sample="https://pubkey@sentry.example.com/42">Self-hosted</button>
+      <button class="btn btn-secondary" data-sample="http://pub:sec@localhost:9000/1">Legacy w/secret</button>
+    </div>
+
+    <h3>Parsed parts</h3>
+    <div id="parsedBody"></div>
+  </div>
+
+  <div class="card" style="padding:16px;">
+    <h2 style="font-size:1rem;margin-bottom:10px;">Ingest URLs & headers</h2>
+    <div class="tab-nav" id="tabNav">
+      <button class="active" data-tab="urls">URLs</button>
+      <button data-tab="auth">X-Sentry-Auth</button>
+      <button data-tab="curl">curl</button>
+      <button data-tab="sdk">SDK init</button>
+    </div>
+
+    <div class="tab-pane active" id="tab-urls">
+      <h3>Envelope endpoint</h3>
+      <div class="code" id="envelopeUrl">—</div>
+      <h3>Store endpoint (legacy)</h3>
+      <div class="code" id="storeUrl">—</div>
+      <h3>Security (CSP) endpoint</h3>
+      <div class="code" id="cspUrl">—</div>
+      <h3>Minidump endpoint</h3>
+      <div class="code" id="minidumpUrl">—</div>
+      <h3>Tunnel path (relay)</h3>
+      <div class="code" id="tunnelPath">—</div>
+    </div>
+
+    <div class="tab-pane" id="tab-auth">
+      <h3>X-Sentry-Auth header</h3>
+      <div class="code" id="authHeader">—</div>
+      <p class="hint" style="font-size:.78rem;color:var(--muted);margin-top:6px;">Included on every request to the ingest API. <code>sentry_version=7</code> is the current default. The secret key is optional for modern SDKs.</p>
+    </div>
+
+    <div class="tab-pane" id="tab-curl">
+      <h3>Store event via curl</h3>
+      <div class="code" id="curlCmd">—</div>
+      <p class="hint" style="font-size:.78rem;color:var(--muted);margin-top:6px;">Sends a single minimal event envelope. Useful for health-checking a DSN.</p>
+    </div>
+
+    <div class="tab-pane" id="tab-sdk">
+      <h3>JavaScript</h3>
+      <div class="code" id="sdkJs">—</div>
+      <h3>Python</h3>
+      <div class="code" id="sdkPy">—</div>
+      <h3>Go</h3>
+      <div class="code" id="sdkGo">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="padding:14px;margin-top:16px;">
+  <h3 style="margin-top:0;">Notes</h3>
+  <ul style="font-size:.82rem;color:var(--muted);line-height:1.6;padding-left:20px;margin:6px 0;">
+    <li>DSN contains a <strong>public key</strong> — it's safe to embed in client code but still best practice to keep it out of public repos.</li>
+    <li>Secret keys (<code>:secret</code>) were deprecated in Sentry 9+ and are no longer used by modern SDKs.</li>
+    <li>The <strong>envelope endpoint</strong> is the modern ingest format that carries events, transactions, attachments, and sessions.</li>
+    <li>For <strong>self-hosted</strong> deployments, the host portion will be your Sentry domain (e.g. <code>sentry.example.com</code>).</li>
+  </ul>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function parseDsn(input) {
+  if (!input) return { ok: false, err: 'Empty input.' };
+  let url;
+  try { url = new URL(input.trim()); }
+  catch { return { ok: false, err: 'Not a valid URL.' }; }
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    return { ok: false, err: 'Scheme must be http or https.' };
+  }
+  if (!url.username) {
+    return { ok: false, err: 'Missing public key (userinfo).' };
+  }
+  const path = url.pathname.replace(/^\/+/, '');
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length === 0) {
+    return { ok: false, err: 'Missing project ID in path.' };
+  }
+  const projectId = segments[segments.length - 1];
+  if (!/^\d+$/.test(projectId)) {
+    return { ok: false, err: 'Project ID must be numeric (got: ' + projectId + ').' };
+  }
+  const pathPrefix = segments.slice(0, -1).join('/');
+
+  return {
+    ok: true,
+    scheme: url.protocol.replace(':', ''),
+    publicKey: url.username,
+    secretKey: url.password || '',
+    host: url.hostname,
+    port: url.port || '',
+    pathPrefix,
+    projectId,
+    raw: input.trim()
+  };
+}
+
+function buildBase(p) {
+  let base = `${p.scheme}://${p.host}`;
+  if (p.port) base += ':' + p.port;
+  if (p.pathPrefix) base += '/' + p.pathPrefix;
+  return base;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function row(k, v, mono = true) {
+  return `<div class="parsed-row"><span class="k">${escapeHtml(k)}</span><span class="v">${mono ? escapeHtml(v) : v}</span></div>`;
+}
+
+function render() {
+  const input = $('dsnIn').value;
+  const p = parseDsn(input);
+
+  if (!p.ok) {
+    $('dsnStatus').innerHTML = `<span class="badge-err">${escapeHtml(p.err)}</span>`;
+    $('parsedBody').innerHTML = '';
+    ['envelopeUrl','storeUrl','cspUrl','minidumpUrl','tunnelPath','authHeader','curlCmd','sdkJs','sdkPy','sdkGo'].forEach(id => $(id).textContent = '—');
+    return;
+  }
+
+  const warnings = [];
+  if (p.secretKey) warnings.push('Uses deprecated secret key');
+  if (p.scheme === 'http' && !['localhost', '127.0.0.1'].includes(p.host)) warnings.push('HTTP over non-localhost host');
+
+  let status = '<span class="badge-ok">Valid DSN</span>';
+  warnings.forEach(w => status += ' <span class="badge-warn">' + escapeHtml(w) + '</span>');
+  $('dsnStatus').innerHTML = status;
+
+  let html = '';
+  html += row('Scheme', p.scheme);
+  html += row('Public key', p.publicKey);
+  if (p.secretKey) html += row('Secret key', p.secretKey);
+  html += row('Host', p.host);
+  if (p.port) html += row('Port', p.port);
+  if (p.pathPrefix) html += row('Path prefix', '/' + p.pathPrefix);
+  html += row('Project ID', p.projectId);
+  $('parsedBody').innerHTML = html;
+
+  const base = buildBase(p);
+  const envelope = `${base}/api/${p.projectId}/envelope/`;
+  const store = `${base}/api/${p.projectId}/store/`;
+  const csp = `${base}/api/${p.projectId}/security/?sentry_key=${p.publicKey}`;
+  const minidump = `${base}/api/${p.projectId}/minidump/?sentry_key=${p.publicKey}`;
+  const tunnel = `/tunnel?dsn=${encodeURIComponent(p.raw)}`;
+
+  $('envelopeUrl').textContent = envelope;
+  $('storeUrl').textContent = store;
+  $('cspUrl').textContent = csp;
+  $('minidumpUrl').textContent = minidump;
+  $('tunnelPath').textContent = tunnel;
+
+  const ts = Math.floor(Date.now() / 1000);
+  const authParts = [
+    'Sentry sentry_version=7',
+    'sentry_client=toolbox-dsn-parser/1.0',
+    `sentry_timestamp=${ts}`,
+    `sentry_key=${p.publicKey}`
+  ];
+  if (p.secretKey) authParts.push(`sentry_secret=${p.secretKey}`);
+  const auth = authParts.join(', ');
+  $('authHeader').textContent = 'X-Sentry-Auth: ' + auth;
+
+  const body = `{"event_id":"$(cat /proc/sys/kernel/random/uuid | tr -d '-')","timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","platform":"other","message":{"message":"Hello from curl"}}`;
+  $('curlCmd').textContent = `curl -X POST ${store} \\\n  -H 'Content-Type: application/json' \\\n  -H '${auth}' \\\n  -d '${body}'`;
+
+  $('sdkJs').textContent = `import * as Sentry from "@sentry/browser";\n\nSentry.init({\n  dsn: ${JSON.stringify(p.raw)},\n  tracesSampleRate: 0.1,\n});`;
+  $('sdkPy').textContent = `import sentry_sdk\n\nsentry_sdk.init(\n    dsn=${JSON.stringify(p.raw)},\n    traces_sample_rate=0.1,\n)`;
+  $('sdkGo').textContent = `import "github.com/getsentry/sentry-go"\n\nsentry.Init(sentry.ClientOptions{\n    Dsn: ${JSON.stringify(p.raw)},\n    TracesSampleRate: 0.1,\n})`;
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+// Tab switching
+document.querySelectorAll('#tabNav button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#tabNav button').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    $('tab-' + b.dataset.tab).classList.add('active');
+  });
+});
+
+// Click-to-copy on any .code block
+document.addEventListener('click', async (e) => {
+  const el = e.target.closest('.code');
+  if (!el || el.textContent === '—') return;
+  try { await navigator.clipboard.writeText(el.textContent); toast('Copied!'); }
+  catch { toast('Copy failed'); }
+});
+
+document.querySelectorAll('[data-sample]').forEach(b => {
+  b.addEventListener('click', () => { $('dsnIn').value = b.dataset.sample; render(); });
+});
+
+$('dsnIn').addEventListener('input', render);
+
+// Init
+$('dsnIn').value = 'https://abc123def456789@o12345.ingest.sentry.io/6789';
+render();
+</script>
+</body>
+</html>

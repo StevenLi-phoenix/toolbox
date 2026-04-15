@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Access Log Parser — Apache / Nginx Combined Log Format</title>
+<meta name="description" content="Parse Apache Common &amp; Combined Log Format and Nginx access logs. Extract IP, timestamp, method, status, bytes, referer, user agent. Summarize traffic and detect errors. 100% client-side.">
+<meta name="keywords" content="access log parser, combined log format, CLF, apache log, nginx log, log analyzer, access.log, status code analyzer">
+<meta name="author" content="Steven Li">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/clflog.html">
+<meta property="og:title" content="Access Log Parser — Apache / Nginx Combined Log Format">
+<meta property="og:description" content="Parse Apache/Nginx access log lines into structured fields with traffic summary, top paths, status code breakdown, and error highlighting.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .log-in { width: 100%; min-height: 200px; padding: 10px 12px; font-family: var(--mono); font-size: .82rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; }
+  .log-in:focus { outline: none; border-color: var(--accent); }
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+  .stat .value { font-size: 1.25rem; font-weight: 700; margin-top: 3px; font-family: var(--mono); }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th { text-align: left; padding: 8px 10px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); vertical-align: top; word-break: break-all; }
+  td.status-2xx { color: var(--success); }
+  td.status-3xx { color: #f59e0b; }
+  td.status-4xx { color: var(--error); }
+  td.status-5xx { color: var(--error); font-weight: 700; }
+  .parse-err { color: var(--muted); font-style: italic; }
+  .scroll { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .panels { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+  .mini-table table { font-size: .78rem; }
+  .mini-table td { border-bottom: 1px dashed var(--border); padding: 4px 8px; }
+  .mini-table td:last-child { text-align: right; color: var(--muted); }
+  .badge { display: inline-block; padding: 2px 7px; font-size: .72rem; border-radius: 999px; border: 1px solid var(--border); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  h3 { font-size: .92rem; font-weight: 600; margin: 10px 0 6px; }
+  @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } .summary-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Access Log Parser</h1>
+<p class="subtitle">Parse Apache/Nginx access logs in <strong>Common</strong> or <strong>Combined</strong> Log Format. Get a traffic summary, status code breakdown, top paths, top IPs, and error highlighting. Paste up to thousands of lines — nothing leaves your browser.</p>
+
+<div class="card" style="padding:16px;margin-bottom:16px;">
+  <div class="btn-row">
+    <button class="btn btn-secondary" id="sampleBtn">Load sample</button>
+    <button class="btn btn-secondary" id="clearBtn">Clear</button>
+    <label style="margin-left:auto;font-size:.82rem;display:flex;align-items:center;gap:6px;">
+      <input type="checkbox" id="errOnly"> Only show 4xx/5xx
+    </label>
+  </div>
+  <textarea id="logIn" class="log-in" placeholder='127.0.0.1 - frank [10/Oct/2023:13:55:36 -0700] "GET /apache_pb.gif HTTP/1.0" 200 2326 "http://www.example.com/start.html" "Mozilla/5.0"'></textarea>
+</div>
+
+<div class="summary-grid" id="stats"></div>
+
+<div class="panels">
+  <div class="card" style="padding:14px;">
+    <h3>Parsed lines <span class="badge" id="lineBadge">0</span></h3>
+    <div class="scroll">
+      <table id="logTable">
+        <thead><tr><th>#</th><th>IP</th><th>Time</th><th>Method</th><th>Path</th><th>Status</th><th>Bytes</th><th>UA</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card mini-table" style="padding:14px;">
+    <h3>Status codes</h3>
+    <table id="statusTable"><tbody></tbody></table>
+    <h3 style="margin-top:14px;">Methods</h3>
+    <table id="methodTable"><tbody></tbody></table>
+  </div>
+  <div class="card mini-table" style="padding:14px;">
+    <h3>Top paths</h3>
+    <table id="pathTable"><tbody></tbody></table>
+    <h3 style="margin-top:14px;">Top IPs</h3>
+    <table id="ipTable"><tbody></tbody></table>
+  </div>
+</div>
+
+<div class="card" style="padding:14px;margin-top:16px;">
+  <h3>Format reference</h3>
+  <p style="font-size:.82rem;color:var(--muted);line-height:1.5;">
+    <strong>Common Log Format (CLF):</strong> <code>%h %l %u %t "%r" %>s %b</code><br>
+    <strong>Combined:</strong> adds <code>"%{Referer}i" "%{User-Agent}i"</code><br>
+    <strong>Example:</strong> <code>127.0.0.1 - frank [10/Oct/2000:13:55:36 -0700] "GET /apache_pb.gif HTTP/1.0" 200 2326 "http://example.com/start.html" "Mozilla/4.08"</code>
+  </p>
+</div>
+
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Regex for Combined Log Format (also matches CLF since referer/ua are optional)
+const LOG_RE = /^(\S+) (\S+) (\S+) \[([^\]]+)\] "([^"\\]*(?:\\.[^"\\]*)*)" (\d{3}|-) (\d+|-)(?: "([^"\\]*(?:\\.[^"\\]*)*)" "([^"\\]*(?:\\.[^"\\]*)*)")?\s*$/;
+
+function parseLine(line) {
+  const m = LOG_RE.exec(line);
+  if (!m) return null;
+  const [, ip, , user, time, request, status, bytes, referer, ua] = m;
+  const reqParts = request.split(' ');
+  const method = reqParts[0] || '';
+  const path = reqParts.slice(1, -1).join(' ') || reqParts[1] || '';
+  const protocol = reqParts.length > 2 ? reqParts[reqParts.length - 1] : '';
+  return {
+    ip,
+    user: user === '-' ? '' : user,
+    time,
+    method,
+    path,
+    protocol,
+    status: status === '-' ? 0 : parseInt(status, 10),
+    bytes: bytes === '-' ? 0 : parseInt(bytes, 10),
+    referer: referer && referer !== '-' ? referer : '',
+    ua: ua || ''
+  };
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function fmtBytes(n) {
+  if (!n) return '0';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' K';
+  if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' M';
+  return (n / 1024 / 1024 / 1024).toFixed(2) + ' G';
+}
+
+function statusClass(s) {
+  if (s >= 500) return 'status-5xx';
+  if (s >= 400) return 'status-4xx';
+  if (s >= 300) return 'status-3xx';
+  if (s >= 200) return 'status-2xx';
+  return '';
+}
+
+function topN(map, n) {
+  return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
+function render() {
+  const lines = $('logIn').value.split(/\r?\n/).filter(l => l.trim());
+  const errOnly = $('errOnly').checked;
+  const parsed = [];
+  let failed = 0;
+  const statusMap = {}, methodMap = {}, pathMap = {}, ipMap = {};
+  let totalBytes = 0;
+
+  for (const line of lines) {
+    const p = parseLine(line);
+    if (!p) { failed++; continue; }
+    parsed.push(p);
+    statusMap[p.status] = (statusMap[p.status] || 0) + 1;
+    methodMap[p.method] = (methodMap[p.method] || 0) + 1;
+    pathMap[p.path] = (pathMap[p.path] || 0) + 1;
+    ipMap[p.ip] = (ipMap[p.ip] || 0) + 1;
+    totalBytes += p.bytes;
+  }
+
+  // Stats
+  const errCount = parsed.filter(p => p.status >= 400).length;
+  const uniqueIps = Object.keys(ipMap).length;
+  const statsHtml = `
+    <div class="stat"><div class="label">Parsed</div><div class="value">${parsed.length.toLocaleString()}</div></div>
+    <div class="stat"><div class="label">Unparsed</div><div class="value" style="color:${failed ? 'var(--error)' : 'var(--muted)'}">${failed}</div></div>
+    <div class="stat"><div class="label">Errors 4xx/5xx</div><div class="value" style="color:${errCount ? 'var(--error)' : 'var(--success)'}">${errCount}</div></div>
+    <div class="stat"><div class="label">Unique IPs</div><div class="value">${uniqueIps}</div></div>
+    <div class="stat"><div class="label">Total bytes</div><div class="value">${fmtBytes(totalBytes)}</div></div>
+    <div class="stat"><div class="label">Avg bytes</div><div class="value">${parsed.length ? fmtBytes(Math.round(totalBytes / parsed.length)) : '—'}</div></div>
+    <div class="stat"><div class="label">Top status</div><div class="value">${topN(statusMap, 1)[0] ? topN(statusMap, 1)[0][0] : '—'}</div></div>
+    <div class="stat"><div class="label">Top method</div><div class="value">${topN(methodMap, 1)[0] ? topN(methodMap, 1)[0][0] : '—'}</div></div>
+  `;
+  $('stats').innerHTML = statsHtml;
+
+  // Table
+  const rows = parsed
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => !errOnly || p.status >= 400);
+  const tbody = rows.map(({ p, i }) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${escapeHtml(p.ip)}</td>
+      <td>${escapeHtml(p.time)}</td>
+      <td>${escapeHtml(p.method)}</td>
+      <td>${escapeHtml(p.path)}</td>
+      <td class="${statusClass(p.status)}">${p.status}</td>
+      <td>${fmtBytes(p.bytes)}</td>
+      <td title="${escapeHtml(p.ua)}">${escapeHtml(p.ua.slice(0, 40))}${p.ua.length > 40 ? '…' : ''}</td>
+    </tr>
+  `).join('');
+  $('logTable').querySelector('tbody').innerHTML = tbody || '<tr><td colspan="8" class="parse-err">No lines to show.</td></tr>';
+  $('lineBadge').textContent = rows.length;
+
+  // Breakdowns
+  const statusRows = Object.entries(statusMap).sort((a, b) => a[0] - b[0])
+    .map(([k, v]) => `<tr><td class="${statusClass(+k)}">${k}</td><td>${v}</td></tr>`).join('');
+  $('statusTable').querySelector('tbody').innerHTML = statusRows || '<tr><td colspan="2" class="parse-err">—</td></tr>';
+
+  const methodRows = topN(methodMap, 10)
+    .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${v}</td></tr>`).join('');
+  $('methodTable').querySelector('tbody').innerHTML = methodRows || '<tr><td colspan="2" class="parse-err">—</td></tr>';
+
+  const pathRows = topN(pathMap, 15)
+    .map(([k, v]) => `<tr><td title="${escapeHtml(k)}">${escapeHtml(k.length > 45 ? k.slice(0, 45) + '…' : k)}</td><td>${v}</td></tr>`).join('');
+  $('pathTable').querySelector('tbody').innerHTML = pathRows || '<tr><td colspan="2" class="parse-err">—</td></tr>';
+
+  const ipRows = topN(ipMap, 10)
+    .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${v}</td></tr>`).join('');
+  $('ipTable').querySelector('tbody').innerHTML = ipRows || '<tr><td colspan="2" class="parse-err">—</td></tr>';
+}
+
+const SAMPLE = `127.0.0.1 - - [14/Apr/2026:10:15:01 +0000] "GET / HTTP/1.1" 200 1024 "-" "Mozilla/5.0 (X11; Linux x86_64)"
+192.168.1.42 - alice [14/Apr/2026:10:15:02 +0000] "GET /api/users HTTP/1.1" 200 2560 "https://example.com/" "Mozilla/5.0 (Macintosh)"
+10.0.0.5 - - [14/Apr/2026:10:15:04 +0000] "POST /api/login HTTP/1.1" 401 120 "https://example.com/login" "curl/8.5.0"
+192.168.1.42 - alice [14/Apr/2026:10:15:06 +0000] "GET /favicon.ico HTTP/1.1" 404 201 "-" "Mozilla/5.0 (Macintosh)"
+203.0.113.7 - - [14/Apr/2026:10:15:09 +0000] "GET /wp-admin HTTP/1.1" 403 162 "-" "sqlmap/1.7"
+127.0.0.1 - - [14/Apr/2026:10:15:12 +0000] "GET /api/items?page=2 HTTP/1.1" 500 580 "-" "Go-http-client/1.1"
+10.0.0.5 - - [14/Apr/2026:10:15:14 +0000] "GET /assets/app.js HTTP/2.0" 200 45120 "https://example.com/" "Mozilla/5.0"
+192.168.1.42 - - [14/Apr/2026:10:15:16 +0000] "DELETE /api/items/42 HTTP/1.1" 204 0 "-" "PostmanRuntime/7.36.0"
+203.0.113.7 - - [14/Apr/2026:10:15:18 +0000] "GET /.env HTTP/1.1" 404 162 "-" "Nmap Scripting Engine"
+10.0.0.5 - - [14/Apr/2026:10:15:22 +0000] "GET /api/items HTTP/1.1" 200 8912 "-" "Go-http-client/1.1"`;
+
+$('sampleBtn').addEventListener('click', () => { $('logIn').value = SAMPLE; render(); });
+$('clearBtn').addEventListener('click', () => { $('logIn').value = ''; render(); });
+$('logIn').addEventListener('input', render);
+$('errOnly').addEventListener('change', render);
+
+// Auto-load sample
+$('logIn').value = SAMPLE;
+render();
+</script>
+</body>
+</html>
