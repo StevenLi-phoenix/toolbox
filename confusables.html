@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unicode Confusables / Homoglyph Detector - Free Online Tool</title>
+<meta name="description" content="Detect Unicode confusable and homoglyph characters hiding in strings, URLs, or identifiers. Highlights look-alikes, offers ASCII skeletons, and scores spoofing risk. 100% client-side.">
+<meta name="keywords" content="unicode confusables, homoglyph, idn spoofing, look-alike characters, skeleton, mixed script, phishing">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/confusables.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .result-line { font-family: var(--mono); font-size: 1.15rem; padding: .75rem; background: var(--surface2); border-radius: var(--radius); word-break: break-all; line-height: 1.6; }
+  .char { padding: 1px 2px; border-radius: 3px; position: relative; }
+  .char.ascii { }
+  .char.suspect { background: #fef08a; color: #854d0e; cursor: help; }
+  .char.invisible { background: #fca5a5; color: #7f1d1d; outline: 1px dashed #dc2626; min-width: .6em; display: inline-block; text-align: center; }
+  .char.non-ascii { background: #dbeafe; color: #1e3a8a; }
+  .legend { display: flex; flex-wrap: wrap; gap: .75rem; margin: .5rem 0; font-size: .82rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: .3rem; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+  .stat-row { display: flex; flex-wrap: wrap; gap: .4rem; margin: .75rem 0; }
+  .stat { font-size: .78rem; padding: .25rem .6rem; background: var(--surface2); border-radius: var(--radius); color: var(--muted); font-family: var(--mono); }
+  .stat strong { color: var(--text); }
+  .stat.bad strong { color: var(--error); }
+  .stat.good strong { color: var(--success); }
+  .msg { padding: .6rem .85rem; border-radius: var(--radius); font-size: .85rem; margin-top: .5rem; }
+  .msg.ok { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .msg.warn { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+  .msg.err { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .detail-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .82rem; }
+  .detail-table th, .detail-table td { padding: .35rem .5rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .detail-table th { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .detail-table .glyph { font-size: 1.2rem; text-align: center; }
+  .detail-table .suspect { color: var(--error); }
+  .script-pill { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .7rem; background: var(--surface2); color: var(--muted); margin-right: .25rem; margin-bottom: .2rem; }
+  .risk-box { padding: .75rem 1rem; border-radius: var(--radius); font-weight: 600; font-size: .95rem; margin: .5rem 0; }
+  .risk-low { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .risk-med { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+  .risk-high { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .skeleton { font-family: var(--mono); font-size: 1rem; padding: .5rem .75rem; background: var(--surface2); border-radius: var(--radius); word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Unicode Confusables Detector</h1>
+<p class="subtitle">Spot homoglyphs, invisible characters, and mixed-script spoofing in domains, identifiers, or copied text. Uses a subset of Unicode's confusables table to compute an ASCII-like <em>skeleton</em> and flag visual look-alikes. Runs entirely in your browser.</p>
+
+<div class="card">
+<h2>Input</h2>
+<textarea id="input" rows="3" oninput="analyze()" placeholder="Paste a string, URL, or identifier. Example: раypal.com"></textarea>
+<div class="btn-row" style="margin-top:.5rem">
+  <button class="btn btn-secondary" onclick="loadEx('раypal.com')">Fake Paypal</button>
+  <button class="btn btn-secondary" onclick="loadEx('gооgle.com')">Fake Google</button>
+  <button class="btn btn-secondary" onclick="loadEx('Αpple')">Greek Alpha</button>
+  <button class="btn btn-secondary" onclick="loadEx('admin\u200Buser')">Zero-width</button>
+  <button class="btn btn-secondary" onclick="loadEx('hello')">Clean</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Visual Scan</h2>
+<div class="result-line" id="visual"><span class="empty">Type something to see per-character analysis.</span></div>
+<div class="legend">
+  <span><i style="background:transparent;border:1px solid var(--border)"></i> ASCII</span>
+  <span><i style="background:#dbeafe"></i> Non-ASCII (safe)</span>
+  <span><i style="background:#fef08a"></i> Confusable</span>
+  <span><i style="background:#fca5a5"></i> Invisible / control</span>
+</div>
+<div class="stat-row" id="stats"></div>
+<div id="risk"></div>
+</div>
+
+<div class="card">
+<h2>ASCII Skeleton</h2>
+<p class="subtitle">Each confusable is replaced with its closest ASCII look-alike — two different Unicode strings collapse to the same skeleton when they look identical.</p>
+<div class="skeleton" id="skel"><span class="empty">—</span></div>
+<div class="btn-row" style="margin-top:.5rem">
+  <button class="btn btn-secondary" onclick="copy($('skel').innerText)">Copy Skeleton</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Compare Two Strings</h2>
+<p class="subtitle">Paste two strings. Tool reports whether they look identical even if the bytes differ.</p>
+<div class="panels" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+  <div><label>String A</label><input id="cmpA" oninput="compareStrings()"></div>
+  <div><label>String B</label><input id="cmpB" oninput="compareStrings()"></div>
+</div>
+<div id="cmpResult" style="margin-top:.5rem"></div>
+</div>
+
+<div class="card">
+<h2>Character Details</h2>
+<div id="tableWrap" class="empty">No input.</div>
+</div>
+
+<div class="card">
+<h2>About</h2>
+<ul style="font-size:.88rem;line-height:1.6;color:var(--muted);margin:0;padding-left:1.2rem">
+  <li>Based on a subset of <a href="https://www.unicode.org/Public/security/latest/confusables.txt">Unicode confusables.txt</a> covering Cyrillic, Greek, Latin extended, full-width, and math look-alikes for the Basic Latin block.</li>
+  <li>Two strings with the same <em>skeleton</em> are visually confusable. This is the primary defense used by IDN-aware browsers.</li>
+  <li>Flagged invisible characters include zero-width joiners/non-joiners, directional marks, and byte-order marks.</li>
+  <li>Mixed-script strings (e.g. Latin + Cyrillic) raise the risk score — most legitimate identifiers stay within a single script.</li>
+</ul>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+function toast(m){const t=$('toast');t.textContent=m||'✓ Copied!';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function copy(t){navigator.clipboard.writeText(t).then(()=>toast());}
+
+// Confusables table: codepoint -> ASCII target
+// Subset covering the most common spoofing vectors against Basic Latin.
+const CONFUSABLES={
+  // Cyrillic
+  0x0430:'a',0x0410:'A',0x0435:'e',0x0415:'E',0x043E:'o',0x041E:'O',0x0440:'p',0x0420:'P',0x0441:'c',0x0421:'C',
+  0x0445:'x',0x0425:'X',0x0443:'y',0x04AF:'y',0x04B0:'Y',0x0456:'i',0x0406:'I',0x0458:'j',0x0408:'J',
+  0x04BB:'h',0x0501:'d',0x051C:'w',0x051D:'w',0x0455:'s',0x0405:'S',0x043A:'k',0x041A:'K',0x04CF:'l',
+  0x0432:'v',0x0412:'B',0x0442:'T',0x043D:'H',0x0433:'r',0x043C:'m',0x043F:'n',0x0444:'f',
+  // Greek
+  0x0391:'A',0x0392:'B',0x0395:'E',0x0396:'Z',0x0397:'H',0x0399:'I',0x039A:'K',0x039C:'M',0x039D:'N',
+  0x039F:'O',0x03A1:'P',0x03A4:'T',0x03A5:'Y',0x03A7:'X',0x03B1:'a',0x03B2:'b',0x03B5:'e',0x03B7:'n',
+  0x03B9:'i',0x03BA:'k',0x03BD:'v',0x03BF:'o',0x03C0:'n',0x03C1:'p',0x03C3:'o',0x03C4:'t',0x03C5:'u',
+  0x03C7:'x',0x03D5:'ph',
+  // Armenian
+  0x0570:'h',0x0578:'n',0x057D:'u',0x0581:'g',0x0585:'o',
+  // Latin extended
+  0x00E0:'a',0x00E1:'a',0x00E2:'a',0x00E3:'a',0x00E4:'a',0x00E5:'a',0x00E7:'c',0x00E8:'e',0x00E9:'e',
+  0x00EA:'e',0x00EB:'e',0x00EC:'i',0x00ED:'i',0x00EE:'i',0x00EF:'i',0x00F0:'d',0x00F1:'n',0x00F2:'o',
+  0x00F3:'o',0x00F4:'o',0x00F5:'o',0x00F6:'o',0x00F9:'u',0x00FA:'u',0x00FB:'u',0x00FC:'u',0x00FD:'y',0x00FF:'y',
+  0x0131:'i',0x0142:'l',0x0153:'oe',0x0161:'s',0x017E:'z',
+  // Fullwidth (U+FF00 block) handled algorithmically below
+  // Mathematical (U+1D400 block) also handled below
+  // Digits look-alikes
+  0x0660:'0',0x0664:'4',0x0668:'8',
+};
+
+const INVISIBLE=new Set([0x00AD,0x034F,0x061C,0x115F,0x1160,0x17B4,0x17B5,0x180B,0x180C,0x180D,0x180E,
+  0x200B,0x200C,0x200D,0x200E,0x200F,0x202A,0x202B,0x202C,0x202D,0x202E,0x2060,0x2061,0x2062,0x2063,0x2064,
+  0x206A,0x206B,0x206C,0x206D,0x206E,0x206F,0x3164,0xFEFF,0xFFA0]);
+
+function getSkeleton(cp){
+  // Fullwidth Basic Latin U+FF01..U+FF5E -> U+21..U+7E
+  if(cp>=0xFF01&&cp<=0xFF5E) return String.fromCharCode(cp-0xFF00+0x20);
+  // Mathematical Alphanumeric Symbols U+1D400..U+1D7FF
+  if(cp>=0x1D400&&cp<=0x1D7FF){
+    // Heuristic: fall back to the modulo-26 letter; 0..9 for digits
+    if(cp>=0x1D7CE) return String((cp-0x1D7CE)%10);
+    const off=(cp-0x1D400)%52;
+    return off<26?String.fromCharCode(65+off):String.fromCharCode(97+off-26);
+  }
+  if(CONFUSABLES[cp]!==undefined) return CONFUSABLES[cp];
+  return null;
+}
+
+// Script detection
+function scriptOf(cp){
+  if(cp<=0x007F) return 'Latin';
+  if(cp>=0x0080&&cp<=0x024F) return 'Latin';
+  if(cp>=0x0370&&cp<=0x03FF) return 'Greek';
+  if(cp>=0x0400&&cp<=0x04FF) return 'Cyrillic';
+  if(cp>=0x0500&&cp<=0x052F) return 'Cyrillic';
+  if(cp>=0x0530&&cp<=0x058F) return 'Armenian';
+  if(cp>=0x0590&&cp<=0x05FF) return 'Hebrew';
+  if(cp>=0x0600&&cp<=0x06FF) return 'Arabic';
+  if(cp>=0x3040&&cp<=0x309F) return 'Hiragana';
+  if(cp>=0x30A0&&cp<=0x30FF) return 'Katakana';
+  if(cp>=0x4E00&&cp<=0x9FFF) return 'Han';
+  if(cp>=0xAC00&&cp<=0xD7AF) return 'Hangul';
+  return 'Other';
+}
+
+function hex(cp){return 'U+'+cp.toString(16).toUpperCase().padStart(4,'0');}
+function nameLike(cp){
+  if(cp<0x20||cp===0x7F) return 'control';
+  if(INVISIBLE.has(cp)) return 'invisible';
+  return scriptOf(cp);
+}
+
+function analyze(){
+  const s=$('input').value;
+  if(!s){
+    $('visual').innerHTML='<span class="empty">Type something to see per-character analysis.</span>';
+    $('stats').innerHTML='';
+    $('skel').textContent='—';
+    $('tableWrap').innerHTML='<div class="empty">No input.</div>';
+    $('risk').innerHTML='';
+    return;
+  }
+  const cps=[...s].map(c=>c.codePointAt(0));
+  let suspectCount=0,invisibleCount=0,nonAscii=0;
+  const scriptSet=new Set();
+  let visual='',skel='';
+  const rows=[];
+  for(const cp of cps){
+    const ch=String.fromCodePoint(cp);
+    const sk=getSkeleton(cp);
+    const script=scriptOf(cp);
+    if(cp>0x7F) nonAscii++;
+    if(cp>0x7F&&script!=='Other') scriptSet.add(script);
+    else if(cp<=0x7F) scriptSet.add('Latin');
+    let cls='ascii',label=nameLike(cp),note='';
+    const isInvisible=INVISIBLE.has(cp)||cp<0x20||cp===0x7F;
+    if(isInvisible){cls='invisible';invisibleCount++;note='invisible';}
+    else if(cp<=0x7F){cls='ascii';}
+    else if(sk){cls='suspect';suspectCount++;note='confusable → '+sk;}
+    else {cls='non-ascii';}
+    const title=`${hex(cp)} ${label}${note?' · '+note:''}`;
+    const display=isInvisible?'•':escapeHtml(ch);
+    visual+=`<span class="char ${cls}" title="${escapeHtml(title)}">${display}</span>`;
+    skel+=sk!==null?sk:(cp<=0x7F?ch:ch);
+    rows.push({cp,ch,sk,script,isInvisible,suspect:!!sk&&!isInvisible});
+  }
+  $('visual').innerHTML=visual;
+  $('skel').textContent=skel;
+
+  const scripts=[...scriptSet].filter(s=>s!=='Other');
+  const mixed=scripts.length>1;
+  const stats=[];
+  stats.push(`<span class="stat"><strong>${cps.length}</strong> chars</span>`);
+  stats.push(`<span class="stat"><strong>${nonAscii}</strong> non-ASCII</span>`);
+  stats.push(`<span class="stat ${suspectCount?'bad':'good'}"><strong>${suspectCount}</strong> confusable</span>`);
+  stats.push(`<span class="stat ${invisibleCount?'bad':'good'}"><strong>${invisibleCount}</strong> invisible</span>`);
+  stats.push(`<span class="stat"><strong>${scripts.length}</strong> script${scripts.length===1?'':'s'}: ${scripts.join(', ')||'—'}</span>`);
+  $('stats').innerHTML=stats.join('');
+
+  // Risk scoring
+  let risk=0;
+  if(suspectCount>0) risk+=2;
+  if(invisibleCount>0) risk+=3;
+  if(mixed) risk+=2;
+  if(nonAscii>0&&!suspectCount&&!mixed) risk+=0;
+  let cls='risk-low',msg='Looks clean. No confusables or invisible characters detected.';
+  if(risk>=4){cls='risk-high';msg='🚨 High spoofing risk — contains invisible characters, look-alikes, or mixed scripts.';}
+  else if(risk>=2){cls='risk-med';msg='⚠ Medium risk — some characters could be visually confused.';}
+  $('risk').innerHTML=`<div class="risk-box ${cls}">${msg}</div>`;
+
+  // Table
+  const suspiciousRows=rows.filter(r=>r.suspect||r.isInvisible||r.cp>0x7F);
+  if(!suspiciousRows.length){
+    $('tableWrap').innerHTML='<div class="empty">All characters are plain ASCII.</div>';
+  }else{
+    const html=[`<table class="detail-table"><thead><tr><th>#</th><th>Glyph</th><th>Code</th><th>Script</th><th>Skeleton</th><th>Issue</th></tr></thead><tbody>`];
+    suspiciousRows.forEach((r,i)=>{
+      const glyph=r.isInvisible?'•':escapeHtml(r.ch);
+      let issue='';
+      if(r.isInvisible) issue='<span class="suspect">invisible</span>';
+      else if(r.suspect) issue='<span class="suspect">confusable</span>';
+      else issue='non-ASCII';
+      html.push(`<tr><td>${i+1}</td><td class="glyph">${glyph}</td><td>${hex(r.cp)}</td><td>${r.script}</td><td>${r.sk?escapeHtml(r.sk):'—'}</td><td>${issue}</td></tr>`);
+    });
+    html.push('</tbody></table>');
+    $('tableWrap').innerHTML=html.join('');
+  }
+
+  compareStrings();
+}
+
+function skeletonize(str){
+  return [...str].map(c=>{
+    const cp=c.codePointAt(0);
+    if(INVISIBLE.has(cp)) return '';
+    const sk=getSkeleton(cp);
+    return sk!==null?sk:c;
+  }).join('');
+}
+
+function compareStrings(){
+  const a=$('cmpA').value,b=$('cmpB').value;
+  if(!a&&!b){$('cmpResult').innerHTML='';return;}
+  const sa=skeletonize(a).toLowerCase(),sb=skeletonize(b).toLowerCase();
+  if(a===b){
+    $('cmpResult').innerHTML='<div class="msg ok">✓ Strings are byte-identical.</div>';
+  }else if(sa===sb){
+    $('cmpResult').innerHTML=`<div class="msg err">🚨 Visual collision — different bytes but the same skeleton: <code>${escapeHtml(sa)}</code></div>`;
+  }else{
+    $('cmpResult').innerHTML=`<div class="msg ok">✓ Distinct skeletons. A: <code>${escapeHtml(sa)}</code>, B: <code>${escapeHtml(sb)}</code></div>`;
+  }
+}
+
+function loadEx(s){$('input').value=s;analyze();}
+function clearAll(){$('input').value='';analyze();}
+window.analyze=analyze;window.loadEx=loadEx;window.clearAll=clearAll;window.copy=copy;window.compareStrings=compareStrings;
+
+analyze();
+</script>
+</body>
+</html>

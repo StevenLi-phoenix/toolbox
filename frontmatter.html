@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown Frontmatter Extractor - Free Online Tool</title>
+<meta name="description" content="Extract, parse, edit, and rewrite YAML, TOML, or JSON frontmatter from Markdown files. Preview parsed fields, validate syntax, and round-trip. 100% client-side.">
+<meta name="keywords" content="frontmatter, yaml, toml, json, markdown, static site, jekyll, hugo, gatsby, astro, obsidian, parser">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/frontmatter.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .stat-row { display: flex; gap: .4rem; flex-wrap: wrap; margin: .5rem 0; }
+  .stat { font-size: .78rem; padding: .25rem .6rem; background: var(--surface2); border-radius: var(--radius); color: var(--muted); font-family: var(--mono); }
+  .stat strong { color: var(--text); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .3rem .8rem; font-size: .85rem; }
+  .kv dt { color: var(--muted); font-family: var(--mono); font-size: .78rem; padding-top: .15rem; }
+  .kv dd { margin: 0; font-family: var(--mono); word-break: break-word; }
+  .kv .type { display: inline-block; padding: 0 .4rem; border-radius: var(--radius); background: var(--surface2); color: var(--muted); font-size: .7rem; margin-left: .35rem; }
+  .msg { padding: .5rem .75rem; border-radius: var(--radius); font-size: .85rem; }
+  .msg.ok { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .msg.err { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .msg.warn { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+  .format-chip { display: inline-block; padding: .2rem .6rem; border-radius: 999px; background: var(--surface2); font-family: var(--mono); font-size: .72rem; margin-right: .3rem; color: var(--muted); }
+  .format-chip.active { background: var(--text); color: var(--bg); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } .kv { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Markdown Frontmatter Extractor</h1>
+<p class="subtitle">Split Markdown documents into frontmatter + body. Supports <strong>YAML</strong> (<code>---</code>), <strong>TOML</strong> (<code>+++</code>), and <strong>JSON</strong> (<code>;;;</code> / <code>{ }</code>) blocks used by Jekyll, Hugo, Gatsby, Astro, Obsidian, and 11ty.</p>
+
+<div class="card">
+<h2>Input Markdown</h2>
+<textarea id="input" rows="14" oninput="run()" placeholder="---
+title: Hello World
+tags: [intro, demo]
+published: true
+---
+
+# Body goes here"></textarea>
+<div class="btn-row" style="margin-top:.5rem">
+  <button class="btn btn-secondary" onclick="loadYaml()">YAML Example</button>
+  <button class="btn btn-secondary" onclick="loadToml()">TOML Example</button>
+  <button class="btn btn-secondary" onclick="loadJson()">JSON Example</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+<div class="stat-row" id="stats"></div>
+<div id="status"></div>
+</div>
+
+<div class="panels">
+  <div class="card">
+    <h2>Parsed Frontmatter</h2>
+    <div id="formatChip"></div>
+    <dl class="kv" id="parsed"></dl>
+    <div id="parsedEmpty" class="empty">No frontmatter detected.</div>
+    <h3 style="font-size:.85rem;margin:.8rem 0 .3rem">As JSON</h3>
+    <textarea id="asJson" rows="6" readonly></textarea>
+    <div class="btn-row" style="margin-top:.4rem">
+      <button class="btn btn-secondary" onclick="copy('asJson')">Copy JSON</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Body</h2>
+    <textarea id="bodyOut" rows="14" readonly></textarea>
+    <div class="btn-row" style="margin-top:.4rem">
+      <button class="btn btn-secondary" onclick="copy('bodyOut')">Copy Body</button>
+      <button class="btn btn-secondary" onclick="download('body.md', $('bodyOut').value)">Download</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+<h2>Rewrite / Inject</h2>
+<p class="subtitle" style="margin-bottom:.5rem">Edit the JSON to the left, then rebuild the full document with frontmatter in your chosen format.</p>
+<div class="btn-row" style="margin-bottom:.5rem">
+  <label style="font-size:.85rem"><input type="radio" name="outfmt" value="yaml" checked onchange="rebuild()"> YAML</label>
+  <label style="font-size:.85rem"><input type="radio" name="outfmt" value="toml" onchange="rebuild()"> TOML</label>
+  <label style="font-size:.85rem"><input type="radio" name="outfmt" value="json" onchange="rebuild()"> JSON</label>
+</div>
+<textarea id="editJson" rows="6" placeholder="{ }" oninput="rebuild()"></textarea>
+<h3 style="font-size:.85rem;margin:.8rem 0 .3rem">Rebuilt Markdown</h3>
+<textarea id="rebuilt" rows="8" readonly></textarea>
+<div class="btn-row" style="margin-top:.4rem">
+  <button class="btn btn-secondary" onclick="copy('rebuilt')">Copy Output</button>
+  <button class="btn btn-secondary" onclick="download('output.md', $('rebuilt').value)">Download .md</button>
+  <button class="btn btn-secondary" onclick="pullToInput()">Send to Input</button>
+</div>
+<div id="rebuildStatus" style="margin-top:.5rem"></div>
+</div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+function toast(m){const t=$('toast');t.textContent=m||'✓ Copied!';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function copy(id){const v=$(id).value;if(!v){toast('Empty');return;}navigator.clipboard.writeText(v).then(()=>toast());}
+function download(name,content){const b=new Blob([content||''],{type:'text/markdown'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
+
+// --- Splitter -----------------------------------------------------
+function split(src){
+  src=src.replace(/^\uFEFF/,'');
+  const patterns=[
+    {fmt:'yaml',re:/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/},
+    {fmt:'toml',re:/^\+\+\+\r?\n([\s\S]*?)\r?\n\+\+\+\r?\n?/},
+    {fmt:'json',re:/^;;;\r?\n([\s\S]*?)\r?\n;;;\r?\n?/},
+  ];
+  for(const p of patterns){
+    const m=src.match(p.re);
+    if(m) return {format:p.fmt,raw:m[1],body:src.slice(m[0].length)};
+  }
+  // JSON object at start (Gatsby-style)
+  if(src.trimStart().startsWith('{')){
+    let depth=0,inStr=false,esc=false,start=src.indexOf('{'),end=-1;
+    for(let i=start;i<src.length;i++){
+      const c=src[i];
+      if(esc){esc=false;continue;}
+      if(c==='\\'&&inStr){esc=true;continue;}
+      if(c==='"'){inStr=!inStr;continue;}
+      if(inStr) continue;
+      if(c==='{')depth++;
+      else if(c==='}'){depth--;if(depth===0){end=i+1;break;}}
+    }
+    if(end>0){
+      try{JSON.parse(src.slice(start,end));return{format:'json-obj',raw:src.slice(start,end),body:src.slice(end).replace(/^\r?\n/,'')};}catch(e){}
+    }
+  }
+  return {format:null,raw:'',body:src};
+}
+
+// --- YAML parser (simple subset) ----------------------------------
+function parseYAML(text){
+  // Support scalars, lists, nested maps via indentation; values: str, num, bool, null, date-like, arrays [..], flow {}
+  const lines=text.replace(/\r\n/g,'\n').split('\n').filter(l=>!/^\s*#/.test(l)&&l.trim()!=='');
+  let i=0;
+  function parseBlock(indent){
+    const node={};
+    let arr=null;
+    while(i<lines.length){
+      const line=lines[i];
+      const m=line.match(/^(\s*)(.*)$/);
+      const ind=m[1].length;
+      if(ind<indent) break;
+      if(ind>indent){i++;continue;}
+      const content=m[2];
+      if(content.startsWith('- ')||content==='-'){
+        if(arr===null) arr=[];
+        const rest=content.slice(2);
+        i++;
+        if(rest===''){
+          // nested block
+          const nextIndent=(lines[i]||'').match(/^(\s*)/)[1].length;
+          if(nextIndent>indent) arr.push(parseBlock(nextIndent));
+          else arr.push(null);
+        }else if(rest.includes(':')&&!rest.match(/^["'[{]/)){
+          // inline list item that's a map: - key: val
+          const km=rest.match(/^([^:]+):\s*(.*)$/);
+          const obj={};
+          obj[km[1].trim()]=parseScalar(km[2]);
+          // any further indented keys belong to this item
+          const childIndent=indent+2;
+          while(i<lines.length){
+            const nl=lines[i];
+            const ni=nl.match(/^(\s*)/)[1].length;
+            if(ni<childIndent) break;
+            if(ni===childIndent&&!nl.slice(childIndent).startsWith('- ')){
+              const nm=nl.slice(childIndent).match(/^([^:]+):\s*(.*)$/);
+              if(nm){obj[nm[1].trim()]=parseScalar(nm[2]);i++;continue;}
+            }
+            break;
+          }
+          arr.push(obj);
+        }else{
+          arr.push(parseScalar(rest));
+        }
+        continue;
+      }
+      const kv=content.match(/^([^:]+):\s*(.*)$/);
+      if(!kv){i++;continue;}
+      const key=kv[1].trim().replace(/^["'](.*)["']$/,'$1');
+      const rest=kv[2];
+      i++;
+      if(rest===''){
+        // nested
+        const nextIndent=(lines[i]||'').match(/^(\s*)/)[1].length;
+        if(i<lines.length&&nextIndent>indent){
+          // peek: list or map
+          const peek=(lines[i]||'').trim();
+          if(peek.startsWith('- ')||peek==='-') node[key]=parseBlock(nextIndent);
+          else node[key]=parseBlock(nextIndent);
+        }else node[key]=null;
+      }else{
+        node[key]=parseScalar(rest);
+      }
+    }
+    return arr!==null?arr:node;
+  }
+  function parseScalar(s){
+    s=s.trim().replace(/\s+#.*$/,'');
+    if(s==='')return null;
+    if(s==='null'||s==='~')return null;
+    if(s==='true'||s==='True'||s==='TRUE')return true;
+    if(s==='false'||s==='False'||s==='FALSE')return false;
+    if(/^-?\d+$/.test(s))return parseInt(s,10);
+    if(/^-?\d*\.\d+([eE][-+]?\d+)?$/.test(s))return parseFloat(s);
+    if(/^["'](.*)["']$/.test(s))return s.slice(1,-1);
+    if(s.startsWith('[')&&s.endsWith(']')){
+      const inner=s.slice(1,-1).trim();
+      if(!inner) return [];
+      return splitFlow(inner).map(parseScalar);
+    }
+    if(s.startsWith('{')&&s.endsWith('}')){
+      const inner=s.slice(1,-1).trim();
+      const obj={};
+      if(!inner) return obj;
+      for(const part of splitFlow(inner)){
+        const m=part.match(/^([^:]+):\s*(.*)$/);
+        if(m) obj[m[1].trim().replace(/^["'](.*)["']$/,'$1')]=parseScalar(m[2]);
+      }
+      return obj;
+    }
+    return s;
+  }
+  function splitFlow(s){
+    const out=[];let depth=0,cur='',inStr=false,q='';
+    for(const c of s){
+      if(inStr){cur+=c;if(c===q) inStr=false;continue;}
+      if(c==='"'||c==="'"){inStr=true;q=c;cur+=c;continue;}
+      if(c==='['||c==='{') depth++;
+      else if(c===']'||c==='}') depth--;
+      else if(c===','&&depth===0){out.push(cur.trim());cur='';continue;}
+      cur+=c;
+    }
+    if(cur.trim()!=='') out.push(cur.trim());
+    return out;
+  }
+  return parseBlock(0);
+}
+
+// --- TOML parser (minimal subset) ---------------------------------
+function parseTOML(text){
+  const out={};
+  let current=out;
+  const lines=text.replace(/\r\n/g,'\n').split('\n');
+  for(let raw of lines){
+    const line=raw.replace(/\s*#.*$/,'').trim();
+    if(!line) continue;
+    const tm=line.match(/^\[([^\]]+)\]$/);
+    if(tm){
+      const parts=tm[1].split('.').map(s=>s.trim());
+      let obj=out;
+      for(const p of parts){obj[p]=obj[p]||{};obj=obj[p];}
+      current=obj;
+      continue;
+    }
+    const kv=line.match(/^([A-Za-z0-9_\-."]+)\s*=\s*(.*)$/);
+    if(!kv) continue;
+    const key=kv[1].replace(/^"(.*)"$/,'$1');
+    current[key]=parseTomlValue(kv[2]);
+  }
+  return out;
+}
+function parseTomlValue(s){
+  s=s.trim();
+  if(/^".*"$/.test(s)) return s.slice(1,-1).replace(/\\"/g,'"');
+  if(/^'.*'$/.test(s)) return s.slice(1,-1);
+  if(s==='true') return true;
+  if(s==='false') return false;
+  if(/^-?\d+$/.test(s)) return parseInt(s,10);
+  if(/^-?\d*\.\d+$/.test(s)) return parseFloat(s);
+  if(s.startsWith('[')&&s.endsWith(']')){
+    const inner=s.slice(1,-1).trim();
+    if(!inner) return [];
+    return inner.split(',').map(p=>parseTomlValue(p.trim()));
+  }
+  return s;
+}
+
+// --- Stringifiers -------------------------------------------------
+function toYAML(obj,indent=0){
+  const pad=' '.repeat(indent);
+  if(obj===null||obj===undefined) return 'null';
+  if(typeof obj!=='object') return yamlScalar(obj);
+  if(Array.isArray(obj)){
+    if(!obj.length) return '[]';
+    return obj.map(v=>{
+      if(v!==null&&typeof v==='object'&&!Array.isArray(v)){
+        const entries=Object.entries(v);
+        if(!entries.length) return pad+'- {}';
+        return pad+'- '+entries.map(([k,vv],i)=>`${i===0?'':pad+'  '}${k}: ${typeof vv==='object'?'\n'+toYAML(vv,indent+4):yamlScalar(vv)}`).join('\n');
+      }
+      return pad+'- '+(typeof v==='object'?'\n'+toYAML(v,indent+2):yamlScalar(v));
+    }).join('\n');
+  }
+  const entries=Object.entries(obj);
+  if(!entries.length) return '{}';
+  return entries.map(([k,v])=>{
+    if(v!==null&&typeof v==='object'){
+      const sub=toYAML(v,indent+2);
+      if(sub==='[]'||sub==='{}') return `${pad}${k}: ${sub}`;
+      return `${pad}${k}:\n${sub}`;
+    }
+    return `${pad}${k}: ${yamlScalar(v)}`;
+  }).join('\n');
+}
+function yamlScalar(v){
+  if(v===null||v===undefined) return 'null';
+  if(typeof v==='boolean') return v?'true':'false';
+  if(typeof v==='number') return String(v);
+  const s=String(v);
+  if(s===''||/[:#\-?&*!|>'"%@`,\[\]{}]/.test(s)||/^\s|\s$/.test(s)) return JSON.stringify(s);
+  return s;
+}
+function toTOML(obj){
+  // Flat keys first, then tables
+  const flats=[],tables=[];
+  for(const [k,v] of Object.entries(obj)){
+    if(v!==null&&typeof v==='object'&&!Array.isArray(v)) tables.push([k,v]);
+    else flats.push([k,v]);
+  }
+  const out=flats.map(([k,v])=>`${k} = ${tomlValue(v)}`);
+  for(const [k,v] of tables){
+    out.push('');out.push(`[${k}]`);
+    for(const [kk,vv] of Object.entries(v)) out.push(`${kk} = ${tomlValue(vv)}`);
+  }
+  return out.join('\n');
+}
+function tomlValue(v){
+  if(v===null||v===undefined) return '""';
+  if(typeof v==='boolean') return v?'true':'false';
+  if(typeof v==='number') return String(v);
+  if(Array.isArray(v)) return '['+v.map(tomlValue).join(', ')+']';
+  if(typeof v==='object') return JSON.stringify(v);
+  return '"'+String(v).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';
+}
+
+// --- Main flow ----------------------------------------------------
+let parsedObj={};
+function run(){
+  const src=$('input').value;
+  const {format,raw,body}=split(src);
+  $('bodyOut').value=body;
+  const stats=[];
+  stats.push(`<span class="stat"><strong>${src.length}</strong> chars</span>`);
+  stats.push(`<span class="stat"><strong>${src.split('\n').length}</strong> lines</span>`);
+  stats.push(`<span class="stat">Body: <strong>${body.split('\n').length}</strong> lines</span>`);
+  $('stats').innerHTML=stats.join('');
+  if(!format){
+    $('formatChip').innerHTML='<span class="format-chip">none</span>';
+    $('parsed').innerHTML='';
+    $('parsedEmpty').style.display='block';
+    $('asJson').value='';
+    $('status').innerHTML='<div class="msg warn">No frontmatter block detected. Try wrapping YAML keys in <code>---</code> fences.</div>';
+    $('editJson').value='{}';
+    parsedObj={};
+    rebuild();
+    return;
+  }
+  $('formatChip').innerHTML=`<span class="format-chip active">${format.toUpperCase()}</span><span class="stat">${raw.split('\n').length} lines of frontmatter</span>`;
+  let obj={},err=null;
+  try{
+    if(format==='yaml') obj=parseYAML(raw);
+    else if(format==='toml') obj=parseTOML(raw);
+    else if(format==='json') obj=JSON.parse(raw);
+    else if(format==='json-obj') obj=JSON.parse(raw);
+  }catch(e){err=e.message;}
+  if(err){
+    $('status').innerHTML=`<div class="msg err">✕ Parse error: ${escapeHtml(err)}</div>`;
+    $('parsed').innerHTML='';
+    $('parsedEmpty').style.display='block';
+    $('asJson').value='';
+    return;
+  }
+  parsedObj=obj||{};
+  const entries=Object.entries(parsedObj);
+  $('parsedEmpty').style.display=entries.length?'none':'block';
+  $('parsed').innerHTML=entries.map(([k,v])=>{
+    const t=Array.isArray(v)?'array':v===null?'null':typeof v;
+    let display='';
+    if(v===null) display='<span class="empty">null</span>';
+    else if(typeof v==='object') display=escapeHtml(JSON.stringify(v));
+    else display=escapeHtml(String(v));
+    return `<dt>${escapeHtml(k)}<span class="type">${t}</span></dt><dd>${display}</dd>`;
+  }).join('');
+  $('asJson').value=JSON.stringify(parsedObj,null,2);
+  $('editJson').value=$('asJson').value;
+  $('status').innerHTML=`<div class="msg ok">✓ Parsed ${entries.length} top-level key${entries.length===1?'':'s'} from ${format.toUpperCase()} frontmatter.</div>`;
+  rebuild();
+}
+
+function rebuild(){
+  const fmt=document.querySelector('input[name=outfmt]:checked').value;
+  let obj;
+  try{obj=JSON.parse($('editJson').value||'{}');}
+  catch(e){
+    $('rebuildStatus').innerHTML=`<div class="msg err">✕ Invalid JSON: ${escapeHtml(e.message)}</div>`;
+    $('rebuilt').value='';
+    return;
+  }
+  $('rebuildStatus').innerHTML='';
+  let fm='',fence='';
+  if(fmt==='yaml'){fence='---';fm=toYAML(obj);}
+  else if(fmt==='toml'){fence='+++';fm=toTOML(obj);}
+  else{fence=';;;';fm=JSON.stringify(obj,null,2);}
+  const body=$('bodyOut').value;
+  const out=`${fence}\n${fm}\n${fence}\n${body?'\n'+body:''}`;
+  $('rebuilt').value=out;
+}
+
+function pullToInput(){$('input').value=$('rebuilt').value;run();window.scrollTo({top:0,behavior:'smooth'});}
+
+function loadYaml(){
+  $('input').value=`---
+title: Welcome to My Blog
+description: A hand-typed post
+date: 2025-10-24
+tags: [personal, intro, meta]
+draft: false
+author:
+  name: Ada Lovelace
+  email: ada@example.com
+---
+
+# Hello World
+
+This is the body of the post.`;
+  run();
+}
+function loadToml(){
+  $('input').value=`+++
+title = "Welcome to Hugo"
+date = "2025-10-24"
+draft = false
+tags = ["intro", "hugo"]
+
+[author]
+name = "Ada Lovelace"
+email = "ada@example.com"
++++
+
+# Hugo body content`;
+  run();
+}
+function loadJson(){
+  $('input').value=`;;;
+{
+  "title": "Gatsby Post",
+  "date": "2025-10-24",
+  "tags": ["gatsby","intro"],
+  "published": true
+}
+;;;
+
+# Body content`;
+  run();
+}
+function clearAll(){$('input').value='';run();}
+window.run=run;window.loadYaml=loadYaml;window.loadToml=loadToml;window.loadJson=loadJson;window.clearAll=clearAll;window.rebuild=rebuild;window.pullToInput=pullToInput;window.copy=copy;window.download=download;
+
+run();
+</script>
+</body>
+</html>

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Magnet Link Parser &amp; Builder - Free Online Tool</title>
+<meta name="description" content="Parse and build BitTorrent magnet: URIs. Extract info hash, display name, trackers, web seeds, and peer addresses. 100% client-side.">
+<meta name="keywords" content="magnet link, magnet uri, bittorrent, infohash, xt, tr, tracker, parser, builder">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/magnet.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .4rem .8rem; font-size: .88rem; }
+  .kv dt { color: var(--muted); font-family: var(--mono); font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; padding-top: .2rem; }
+  .kv dd { margin: 0; font-family: var(--mono); word-break: break-all; }
+  .tag { display: inline-block; padding: .1rem .5rem; border-radius: var(--radius); background: var(--surface2); color: var(--muted); font-family: var(--mono); font-size: .72rem; margin-right: .3rem; margin-bottom: .25rem; }
+  .pill { display: inline-block; padding: .2rem .55rem; border-radius: 999px; background: var(--surface2); color: var(--text); font-size: .75rem; margin-right: .35rem; font-family: var(--mono); }
+  .good { color: var(--success); }
+  .bad { color: var(--error); }
+  .warn { color: #d97706; }
+  .tracker-list { list-style: none; padding: 0; margin: 0; }
+  .tracker-list li { padding: .45rem .65rem; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: .3rem; font-family: var(--mono); font-size: .82rem; word-break: break-all; display: flex; justify-content: space-between; gap: .5rem; align-items: center; }
+  .tracker-list .scheme { color: var(--muted); font-size: .72rem; }
+  .row2 { display: grid; grid-template-columns: max-content 1fr; gap: .5rem; align-items: center; margin-bottom: .5rem; }
+  .row2 label { color: var(--muted); font-size: .82rem; font-family: var(--mono); }
+  .row2 input { width: 100%; }
+  .hash-panel { background: var(--surface2); border-radius: var(--radius); padding: .75rem; font-family: var(--mono); font-size: .82rem; word-break: break-all; }
+  .hash-panel strong { display: block; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .2rem; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } .kv { grid-template-columns: 1fr; } .kv dt { padding-top: .6rem; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Magnet Link Parser &amp; Builder</h1>
+<p class="subtitle">Parse BitTorrent <code>magnet:</code> URIs or build one from parts. Extracts info hash (v1/v2), display name, trackers, web seeds, acceptable sources &amp; peer addresses — all locally in your browser.</p>
+
+<div class="card">
+<h2>Parse a Magnet URI</h2>
+<textarea id="input" rows="4" placeholder="magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&amp;dn=debian-12.5.0-amd64-netinst.iso&amp;tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337"></textarea>
+<div class="btn-row" style="margin-top:.5rem">
+  <button class="btn" onclick="parseInput()">Parse</button>
+  <button class="btn btn-secondary" onclick="loadSample()">Load Example</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+<div id="parseError" style="margin-top:.5rem"></div>
+</div>
+
+<div id="output" style="display:none">
+<div class="card">
+<h2>Overview</h2>
+<dl class="kv" id="overview"></dl>
+</div>
+
+<div class="card">
+<h2>Info Hashes</h2>
+<div id="hashes"></div>
+</div>
+
+<div class="card">
+<h2>Trackers <span id="trackerCount" class="tag"></span></h2>
+<ul class="tracker-list" id="trackers"></ul>
+<div id="noTrackers" class="empty" style="display:none">No trackers specified.</div>
+</div>
+
+<div class="card">
+<h2>Web Seeds, Peers &amp; Extras</h2>
+<dl class="kv" id="extras"></dl>
+</div>
+
+<div class="card">
+<h2>All Parameters (raw)</h2>
+<dl class="kv" id="raw"></dl>
+</div>
+</div>
+
+<div class="card">
+<h2>Builder</h2>
+<p class="subtitle" style="margin-bottom:.75rem">Assemble a new magnet URI. Leave fields blank to omit them.</p>
+<div class="row2"><label for="bInfoHash">xt (infohash)</label><input id="bInfoHash" placeholder="40-char hex or 32-char base32 BTIH" oninput="buildMagnet()"></div>
+<div class="row2"><label for="bName">dn (display name)</label><input id="bName" placeholder="Debian 12 Netinst" oninput="buildMagnet()"></div>
+<div class="row2"><label for="bSize">xl (size bytes)</label><input id="bSize" type="number" min="0" placeholder="420478976" oninput="buildMagnet()"></div>
+<div class="row2"><label for="bTrackers">tr (trackers)</label><textarea id="bTrackers" rows="3" placeholder="one per line&#10;udp://tracker.opentrackr.org:1337&#10;udp://tracker.openbittorrent.com:6969" oninput="buildMagnet()"></textarea></div>
+<div class="row2"><label for="bWebseeds">ws (web seeds)</label><textarea id="bWebseeds" rows="2" placeholder="one per line&#10;https://example.com/path/file.iso" oninput="buildMagnet()"></textarea></div>
+<div class="row2"><label for="bSources">as (sources)</label><textarea id="bSources" rows="2" placeholder="one per line" oninput="buildMagnet()"></textarea></div>
+<div class="row2"><label for="bPeers">x.pe (peers)</label><textarea id="bPeers" rows="2" placeholder="host:port per line" oninput="buildMagnet()"></textarea></div>
+<h3 style="font-size:.9rem;margin:.6rem 0 .3rem">Result</h3>
+<textarea id="builderOut" rows="3" readonly></textarea>
+<div class="btn-row" style="margin-top:.5rem">
+  <button class="btn" onclick="copyBuilt()">Copy Magnet Link</button>
+  <button class="btn btn-secondary" onclick="useAsInput()">Parse This</button>
+</div>
+</div>
+
+<div class="card">
+<h2>About magnet URIs</h2>
+<ul style="font-size:.88rem;line-height:1.6;color:var(--muted);margin:0;padding-left:1.2rem">
+  <li><code>xt</code> (exact topic) is required — usually <code>urn:btih:&lt;hash&gt;</code> for BitTorrent v1 or <code>urn:btmh:1220&lt;hash&gt;</code> for BitTorrent v2 (multihash, SHA-256).</li>
+  <li><code>dn</code> is the display name. <code>xl</code> is the exact length in bytes.</li>
+  <li><code>tr</code> lists trackers, <code>ws</code> lists HTTP/FTP web seeds (BEP-19), <code>as</code> lists acceptable source URLs.</li>
+  <li><code>x.pe</code> lists known peers, <code>so</code> (select-only) selects files in a multi-file torrent.</li>
+  <li>Multiple values of the same key are allowed. All values are percent-encoded.</li>
+</ul>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+const BASE32_ALPHABET='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+function base32ToHex(s){
+  s=s.toUpperCase().replace(/=+$/,'');
+  let bits='';
+  for(const c of s){
+    const idx=BASE32_ALPHABET.indexOf(c);
+    if(idx<0) return null;
+    bits+=idx.toString(2).padStart(5,'0');
+  }
+  let hex='';
+  for(let i=0;i+4<=bits.length;i+=4) hex+=parseInt(bits.slice(i,i+4),2).toString(16);
+  return hex;
+}
+function hexToBase32(hex){
+  let bits='';
+  for(const c of hex) bits+=parseInt(c,16).toString(2).padStart(4,'0');
+  while(bits.length%5) bits+='0';
+  let out='';
+  for(let i=0;i<bits.length;i+=5) out+=BASE32_ALPHABET[parseInt(bits.slice(i,i+5),2)];
+  return out;
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function toast(m){const t=$('toast');t.textContent=m||'✓ Copied!';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);}
+
+function parseMagnet(uri){
+  uri=uri.trim();
+  if(!uri) throw new Error('Empty input');
+  if(!/^magnet:\?/i.test(uri)) throw new Error('Not a magnet URI — must start with "magnet:?"');
+  const query=uri.replace(/^magnet:\?/i,'');
+  const params=[];
+  for(const pair of query.split('&')){
+    if(!pair) continue;
+    const eq=pair.indexOf('=');
+    let k,v;
+    if(eq<0){k=pair;v='';}
+    else{k=pair.slice(0,eq);v=pair.slice(eq+1);}
+    try{v=decodeURIComponent(v.replace(/\+/g,' '));}catch(e){/* keep raw */}
+    params.push([k,v]);
+  }
+  const get=k=>params.filter(p=>p[0]===k).map(p=>p[1]);
+  const xt=get('xt');
+  const hashes=[];
+  for(const x of xt){
+    const m1=x.match(/^urn:btih:([A-Fa-f0-9]{40})$/);
+    if(m1){hashes.push({version:1,algo:'SHA-1',hex:m1[1].toLowerCase(),base32:hexToBase32(m1[1].toLowerCase()).slice(0,32),raw:x});continue;}
+    const m2=x.match(/^urn:btih:([A-Za-z2-7]{32})=*$/);
+    if(m2){const hex=base32ToHex(m2[1]);if(hex&&hex.length===40){hashes.push({version:1,algo:'SHA-1',hex,base32:m2[1].toUpperCase(),raw:x});continue;}}
+    const m3=x.match(/^urn:btmh:1220([A-Fa-f0-9]{64})$/i);
+    if(m3){hashes.push({version:2,algo:'SHA-256 (multihash 0x12)',hex:m3[1].toLowerCase(),base32:null,raw:x});continue;}
+    hashes.push({version:0,algo:'Unknown URN',hex:null,raw:x});
+  }
+  return {
+    raw:uri,
+    params,
+    hashes,
+    name:get('dn')[0]||null,
+    size:get('xl')[0]||null,
+    trackers:get('tr'),
+    webseeds:get('ws'),
+    sources:get('as'),
+    peers:get('x.pe'),
+    keywords:get('kt'),
+    mimeType:get('mt')[0]||null,
+    selectOnly:get('so'),
+    get
+  };
+}
+
+function humanSize(bytes){
+  const n=Number(bytes);
+  if(!isFinite(n)||n<=0) return bytes;
+  const units=['B','KB','MB','GB','TB','PB'];
+  let i=0,v=n;
+  while(v>=1024&&i<units.length-1){v/=1024;i++;}
+  return `${v.toFixed(v>=100||i===0?0:v>=10?1:2)} ${units[i]} (${n.toLocaleString()})`;
+}
+
+function parseInput(){
+  $('parseError').innerHTML='';
+  try{
+    const info=parseMagnet($('input').value);
+    render(info);
+    $('output').style.display='block';
+  }catch(e){
+    $('output').style.display='none';
+    $('parseError').innerHTML=`<div class="verify-result nomatch" style="padding:.5rem .75rem;border:1px solid #fecaca;background:#fef2f2;color:var(--error);border-radius:var(--radius);font-size:.85rem">✕ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function render(info){
+  // Overview
+  const o=[];
+  o.push(['Display Name', info.name? escapeHtml(info.name):'<span class="empty">—</span>']);
+  o.push(['Size', info.size? humanSize(info.size):'<span class="empty">—</span>']);
+  o.push(['BitTorrent Version', info.hashes.length? info.hashes.map(h=>`<span class="pill">v${h.version||'?'}</span>`).join(''):'<span class="empty">—</span>']);
+  o.push(['Total Params', `${info.params.length}`]);
+  if(info.mimeType) o.push(['MIME Type', escapeHtml(info.mimeType)]);
+  if(info.keywords.length) o.push(['Keywords', info.keywords.map(k=>`<span class="tag">${escapeHtml(k)}</span>`).join('')]);
+  if(info.selectOnly.length) o.push(['Select-only', info.selectOnly.map(s=>`<span class="tag">${escapeHtml(s)}</span>`).join('')]);
+  $('overview').innerHTML=o.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('');
+
+  // Hashes
+  if(!info.hashes.length){
+    $('hashes').innerHTML='<div class="empty">No <code>xt</code> parameter with urn:btih or urn:btmh found.</div>';
+  }else{
+    $('hashes').innerHTML=info.hashes.map(h=>{
+      let content=`<strong>${escapeHtml(h.raw)}</strong>`;
+      if(h.hex){
+        content+=`<div style="margin-top:.3rem"><span class="tag">${escapeHtml(h.algo)}</span></div>`;
+        content+=`<div style="margin-top:.3rem">hex: ${h.hex}</div>`;
+        if(h.base32) content+=`<div>base32: ${h.base32}</div>`;
+      }else{
+        content+='<div class="warn" style="margin-top:.3rem">Unrecognised URN form.</div>';
+      }
+      return `<div class="hash-panel" style="margin-bottom:.5rem">${content}</div>`;
+    }).join('');
+  }
+
+  // Trackers
+  $('trackerCount').textContent=info.trackers.length;
+  if(!info.trackers.length){
+    $('trackers').innerHTML='';$('noTrackers').style.display='block';
+  }else{
+    $('noTrackers').style.display='none';
+    $('trackers').innerHTML=info.trackers.map((t,i)=>{
+      let scheme='?';
+      try{scheme=new URL(t).protocol.replace(':','');}catch(e){}
+      const cls=['udp','http','https','wss','ws'].includes(scheme)?'good':'warn';
+      return `<li><span><span class="scheme ${cls}">${scheme}</span> ${escapeHtml(t)}</span><button class="btn btn-secondary" style="padding:.2rem .55rem;font-size:.72rem" onclick="cp(${JSON.stringify(t).replace(/"/g,'&quot;')})">Copy</button></li>`;
+    }).join('');
+  }
+
+  // Extras
+  const ex=[];
+  if(info.webseeds.length) ex.push(['Web Seeds (ws)', info.webseeds.map(w=>`<div>${escapeHtml(w)}</div>`).join('')]);
+  if(info.sources.length) ex.push(['Sources (as)', info.sources.map(w=>`<div>${escapeHtml(w)}</div>`).join('')]);
+  if(info.peers.length) ex.push(['Peers (x.pe)', info.peers.map(w=>`<div>${escapeHtml(w)}</div>`).join('')]);
+  $('extras').innerHTML=ex.length? ex.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join(''):'<dt>—</dt><dd class="empty">No web seeds, sources, or peer addresses.</dd>';
+
+  // Raw
+  $('raw').innerHTML=info.params.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)||'<span class="empty">(empty)</span>'}</dd>`).join('');
+}
+
+function loadSample(){
+  $('input').value='magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&dn=debian-12.5.0-amd64-netinst.iso&xl=661651456&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A6969&tr=https%3A%2F%2Ftracker.gbitt.info%3A443%2Fannounce&ws=https%3A%2F%2Fcdimage.debian.org%2Fdebian-cd%2Fcurrent%2Famd64%2Fiso-cd%2Fdebian-12.5.0-amd64-netinst.iso';
+  parseInput();
+}
+
+function clearAll(){
+  $('input').value='';
+  $('output').style.display='none';
+  $('parseError').innerHTML='';
+}
+
+function buildMagnet(){
+  const parts=[];
+  const xt=$('bInfoHash').value.trim();
+  if(xt){
+    let val=xt.replace(/^urn:btih:/i,'').replace(/^urn:btmh:1220/i,'');
+    if(/^[A-Fa-f0-9]{40}$/.test(val)) parts.push('xt='+encodeURIComponent('urn:btih:'+val.toLowerCase()));
+    else if(/^[A-Za-z2-7]{32}=*$/.test(val)) parts.push('xt='+encodeURIComponent('urn:btih:'+val.toUpperCase()));
+    else if(/^[A-Fa-f0-9]{64}$/.test(val)) parts.push('xt='+encodeURIComponent('urn:btmh:1220'+val.toLowerCase()));
+    else parts.push('xt='+encodeURIComponent(xt));
+  }
+  const dn=$('bName').value.trim();
+  if(dn) parts.push('dn='+encodeURIComponent(dn));
+  const xl=$('bSize').value.trim();
+  if(xl) parts.push('xl='+encodeURIComponent(xl));
+  const trs=$('bTrackers').value.split('\n').map(t=>t.trim()).filter(Boolean);
+  for(const t of trs) parts.push('tr='+encodeURIComponent(t));
+  const wss=$('bWebseeds').value.split('\n').map(t=>t.trim()).filter(Boolean);
+  for(const t of wss) parts.push('ws='+encodeURIComponent(t));
+  const ass=$('bSources').value.split('\n').map(t=>t.trim()).filter(Boolean);
+  for(const t of ass) parts.push('as='+encodeURIComponent(t));
+  const pes=$('bPeers').value.split('\n').map(t=>t.trim()).filter(Boolean);
+  for(const t of pes) parts.push('x.pe='+encodeURIComponent(t));
+  $('builderOut').value=parts.length?'magnet:?'+parts.join('&'):'';
+}
+
+function copyBuilt(){
+  const v=$('builderOut').value;
+  if(!v){toast('Nothing to copy');return;}
+  navigator.clipboard.writeText(v).then(()=>toast('✓ Copied magnet link!'));
+}
+function useAsInput(){
+  const v=$('builderOut').value;
+  if(!v) return;
+  $('input').value=v;
+  parseInput();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function cp(t){navigator.clipboard.writeText(t).then(()=>toast());}
+window.cp=cp;window.parseInput=parseInput;window.loadSample=loadSample;window.clearAll=clearAll;window.buildMagnet=buildMagnet;window.copyBuilt=copyBuilt;window.useAsInput=useAsInput;
+</script>
+</body>
+</html>
