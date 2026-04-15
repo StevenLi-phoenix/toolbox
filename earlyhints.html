@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP 103 Early Hints Builder — Preload &amp; Preconnect Preview</title>
+<meta name="description" content="Build HTTP 103 Early Hints responses with Link: rel=preload and rel=preconnect headers. Preview server snippets for Node, Nginx, and Cloudflare Workers. 100% client-side.">
+<meta name="keywords" content="HTTP 103, Early Hints, Link preload, rel=preconnect, RFC 8297, performance, server push alternative, web vitals">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/earlyhints.html">
+<meta property="og:title" content="HTTP 103 Early Hints Builder">
+<meta property="og:description" content="Plan 103 Early Hints responses with preload and preconnect Link headers \u2014 great for TTFB and LCP wins.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/earlyhints.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .hint-row { display: grid; grid-template-columns: 90px 2fr 1fr 1fr auto; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .hint-row input, .hint-row select { font-family: var(--mono); font-size: .82rem; }
+  .hint-row .rm { padding: 4px 10px; background: transparent; border: 1px solid var(--border); color: var(--muted); font-size: .75rem; }
+  .hint-row .rm:hover { background: var(--surface2); color: var(--error); border-color: var(--error); }
+  .hints-header { display: grid; grid-template-columns: 90px 2fr 1fr 1fr auto; gap: 8px; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; padding: 0 2px; }
+  .response-box { font-family: var(--mono); font-size: .82rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; white-space: pre-wrap; word-break: break-all; min-height: 100px; }
+  .snippets { display: grid; gap: 12px; margin-top: 14px; }
+  .snippet strong { display: block; font-size: .8rem; margin-bottom: 4px; }
+  .snippet pre { font-family: var(--mono); font-size: .78rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; white-space: pre-wrap; word-break: break-all; }
+  h3 { font-size: .9rem; font-weight: 600; margin: 16px 0 8px; }
+  .notes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .waterfall { display: grid; gap: 6px; margin-top: 10px; }
+  .wf-row { display: grid; grid-template-columns: 140px 1fr 70px; gap: 8px; align-items: center; font-size: .78rem; font-family: var(--mono); }
+  .wf-bar { height: 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 99px; position: relative; overflow: hidden; }
+  .wf-fill { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: inherit; }
+  .wf-fill.early { background: var(--success); }
+  @media (max-width: 768px) {
+    .hint-row, .hints-header { grid-template-columns: 1fr; }
+    .hints-header { display: none; }
+    .wf-row { grid-template-columns: 110px 1fr 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HTTP 103 Early Hints Builder</h1>
+<p class="subtitle">Build <a href="https://www.rfc-editor.org/rfc/rfc8297" target="_blank" rel="noopener">RFC 8297</a> <code>103 Early Hints</code> responses with <code>Link: rel=preload</code> and <code>rel=preconnect</code> headers. Tells browsers to start fetching critical assets before your backend finishes rendering the final response — a clean alternative to HTTP/2 Server Push.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Hints</h2>
+  <div class="hints-header">
+    <span>Rel</span><span>URL</span><span>as / type</span><span>crossorigin</span><span></span>
+  </div>
+  <div id="hints"></div>
+  <div class="btn-row" style="margin-top:6px;">
+    <button class="btn-secondary" id="addBtn">+ Add hint</button>
+    <button class="btn-secondary" id="sampleBtn">Load LCP example</button>
+    <button class="btn-secondary" id="clearBtn">Clear</button>
+  </div>
+
+  <h3>103 Early Hints response</h3>
+  <div class="response-box" id="earlyOut"></div>
+
+  <h3>Final 200 response headers (mirror the hints)</h3>
+  <div class="response-box" id="finalOut"></div>
+
+  <div class="notes" id="notes"></div>
+
+  <div class="btn-row" style="margin-top:14px;">
+    <button class="btn-primary" id="copyEarlyBtn">Copy 103 response</button>
+    <button class="btn-secondary" id="copyLinkBtn">Copy Link header value</button>
+  </div>
+
+  <h3>Timing illustration</h3>
+  <div class="waterfall" id="waterfall"></div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Server snippets</h2>
+  <div class="snippets">
+    <div class="snippet"><strong>Node.js (Express + writeEarlyHints)</strong><pre id="snNode"></pre></div>
+    <div class="snippet"><strong>Nginx (ngx_http_v2 + add_header)</strong><pre id="snNginx"></pre></div>
+    <div class="snippet"><strong>Cloudflare Workers</strong><pre id="snWorker"></pre></div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const REL_OPTIONS = [
+  { v: 'preload', label: 'preload' },
+  { v: 'preconnect', label: 'preconnect' },
+  { v: 'dns-prefetch', label: 'dns-prefetch' },
+  { v: 'modulepreload', label: 'modulepreload' },
+  { v: 'prefetch', label: 'prefetch' }
+];
+const AS_OPTIONS = ['', 'style', 'script', 'image', 'font', 'fetch', 'document', 'audio', 'video', 'worker'];
+
+let hints = [];
+
+function makeRow(h, idx) {
+  const row = document.createElement('div');
+  row.className = 'hint-row';
+  row.innerHTML = `
+    <select data-k="rel">${REL_OPTIONS.map(o => `<option value="${o.v}"${o.v === h.rel ? ' selected' : ''}>${o.label}</option>`).join('')}</select>
+    <input type="text" data-k="url" value="${escapeAttr(h.url)}" placeholder="/static/app.css">
+    <select data-k="as">${AS_OPTIONS.map(o => `<option value="${o}"${o === (h.as||'') ? ' selected' : ''}>${o || '— none —'}</option>`).join('')}</select>
+    <select data-k="cross"><option value=""${!h.cross ? ' selected' : ''}>—</option><option value="anonymous"${h.cross === 'anonymous' ? ' selected' : ''}>anonymous</option><option value="use-credentials"${h.cross === 'use-credentials' ? ' selected' : ''}>use-credentials</option></select>
+    <button class="rm" data-rm="${idx}">Remove</button>
+  `;
+  row.querySelectorAll('[data-k]').forEach(el => {
+    el.addEventListener('input', () => {
+      h[el.dataset.k] = el.value;
+      render();
+    });
+    el.addEventListener('change', () => {
+      h[el.dataset.k] = el.value;
+      render();
+    });
+  });
+  row.querySelector('[data-rm]').addEventListener('click', () => {
+    hints.splice(idx, 1);
+    render();
+  });
+  return row;
+}
+
+function escapeAttr(s) {
+  return String(s || '').replace(/"/g, '&quot;');
+}
+
+function linkValue(h) {
+  const parts = [`<${h.url}>`, `rel=${h.rel}`];
+  if (h.as) parts.push(`as=${h.as}`);
+  if (h.cross) parts.push(`crossorigin${h.cross === 'anonymous' ? '' : '=' + h.cross}`);
+  return parts.join('; ');
+}
+
+function allLinkHeader() {
+  return hints.filter(h => h.url).map(linkValue).join(', ');
+}
+
+function render() {
+  const container = $('hints');
+  container.innerHTML = '';
+  hints.forEach((h, i) => container.appendChild(makeRow(h, i)));
+
+  const link = allLinkHeader();
+  const headerLines = hints.filter(h => h.url).map(h => `Link: ${linkValue(h)}`).join('\n');
+  const early = `HTTP/1.1 103 Early Hints\n${headerLines || 'Link: (no hints yet)'}\n`;
+  const final = `HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\n${headerLines}\n`;
+  $('earlyOut').textContent = early;
+  $('finalOut').textContent = final;
+
+  // Notes
+  const notes = [];
+  if (!hints.length) notes.push({ t: 'No hints configured', cls: 'warn' });
+  if (hints.some(h => h.rel === 'preload' && !h.as)) notes.push({ t: 'preload without `as=` may be ignored', cls: 'warn' });
+  if (hints.some(h => h.rel === 'preload' && h.as === 'font' && !h.cross)) notes.push({ t: 'font preload needs crossorigin', cls: 'warn' });
+  if (hints.some(h => h.rel === 'preconnect' && /^https?:\/\//i.test(h.url) === false && h.url)) notes.push({ t: 'preconnect should be an absolute origin', cls: 'warn' });
+  if (hints.filter(h => h.rel === 'preload').length > 6) notes.push({ t: 'Many preloads — risk of bandwidth contention', cls: 'warn' });
+  if (hints.length && notes.length === 0) notes.push({ t: 'Looks reasonable', cls: 'good' });
+  $('notes').innerHTML = notes.map(n => `<span class="badge ${n.cls}">${escapeHtml(n.t)}</span>`).join('');
+
+  // Waterfall
+  const preloadCount = hints.filter(h => h.rel === 'preload' || h.rel === 'modulepreload').length;
+  const preconnectCount = hints.filter(h => h.rel === 'preconnect').length;
+  const serverMs = 450;
+  const fetchStartWith = 40;
+  const fetchStartWithout = serverMs;
+  const assetMs = 220;
+  const total = serverMs + assetMs + 50;
+  const bar = (start, dur, cls = '') => {
+    const left = (start / total * 100).toFixed(1);
+    const width = (dur / total * 100).toFixed(1);
+    return `<div class="wf-bar"><div class="wf-fill ${cls}" style="left:${left}%;width:${width}%"></div></div>`;
+  };
+  $('waterfall').innerHTML = `
+    <div class="wf-row"><div>Server (HTML)</div>${bar(0, serverMs)}<div>${serverMs}ms</div></div>
+    <div class="wf-row"><div>Asset (no 103)</div>${bar(fetchStartWithout, assetMs)}<div>${fetchStartWithout + assetMs}ms</div></div>
+    <div class="wf-row"><div>Asset (with 103)</div>${bar(fetchStartWith, assetMs, 'early')}<div>${fetchStartWith + assetMs}ms</div></div>
+    <div class="wf-row muted"><div></div><div style="font-size:.7rem;padding-left:4px;">Green = started early from 103 hint (${preloadCount} preload, ${preconnectCount} preconnect)</div><div></div></div>
+  `;
+
+  // Snippets
+  const nodeLinks = JSON.stringify(hints.filter(h => h.url).map(linkValue));
+  $('snNode').textContent = `// Express (Node 18.11+)\napp.get('/page', (req, res) => {\n  res.writeEarlyHints({ link: ${nodeLinks} });\n  // ... expensive rendering ...\n  res.setHeader('Link', ${JSON.stringify(link)});\n  res.send(html);\n});`;
+  $('snNginx').textContent = `location /page {\n  add_header Link ${JSON.stringify(link)} always;\n  http2_push_preload on;  # or rely on client Link hints\n  proxy_pass http://backend;\n}`;
+  $('snWorker').textContent = `export default {\n  async fetch(request, env, ctx) {\n    const res = await env.ORIGIN.fetch(request);\n    const headers = new Headers(res.headers);\n    headers.set('Link', ${JSON.stringify(link)});\n    return new Response(res.body, { status: res.status, headers });\n  }\n};`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast('Copied!'); }
+  catch { toast('Copy failed'); }
+}
+
+$('addBtn').addEventListener('click', () => {
+  hints.push({ rel: 'preload', url: '', as: '', cross: '' });
+  render();
+});
+$('clearBtn').addEventListener('click', () => { hints = []; render(); });
+$('sampleBtn').addEventListener('click', () => {
+  hints = [
+    { rel: 'preload', url: '/static/app.css', as: 'style', cross: '' },
+    { rel: 'preload', url: '/static/hero.avif', as: 'image', cross: '' },
+    { rel: 'preload', url: '/fonts/Inter.woff2', as: 'font', cross: 'anonymous' },
+    { rel: 'preconnect', url: 'https://cdn.example.com', as: '', cross: '' }
+  ];
+  render();
+});
+
+$('copyEarlyBtn').addEventListener('click', () => copy($('earlyOut').textContent));
+$('copyLinkBtn').addEventListener('click', () => copy(allLinkHeader()));
+
+// Init
+hints = [
+  { rel: 'preload', url: '/static/app.css', as: 'style', cross: '' },
+  { rel: 'preconnect', url: 'https://cdn.example.com', as: '', cross: '' }
+];
+render();
+</script>
+</body>
+</html>

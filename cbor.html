@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBOR Encoder / Decoder — Inspect RFC 8949 Binary Data</title>
+<meta name="description" content="Encode JSON to CBOR and decode CBOR back to JSON. Inspect byte-level CBOR structure (RFC 8949) with a hex dump and annotated diagnostic view. 100% client-side.">
+<meta name="keywords" content="CBOR, RFC 8949, binary encoding, JSON to CBOR, CBOR decoder, cbor diagnostic, msgpack alternative, IoT format">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cbor.html">
+<meta property="og:title" content="CBOR Encoder / Decoder">
+<meta property="og:description" content="Convert between JSON and CBOR with diagnostic notation, hex dump, and size comparison.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/cbor.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .io { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .io textarea { min-height: 220px; font-family: var(--mono); font-size: .85rem; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: .82rem; color: var(--muted); }
+  .hex { font-family: var(--mono); font-size: .82rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto; }
+  .diag { font-family: var(--mono); font-size: .82rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; white-space: pre; overflow: auto; max-height: 260px; }
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+  .stat { padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); text-align: center; background: var(--surface2); }
+  .stat .n { font-size: 1.1rem; font-weight: 600; font-family: var(--mono); }
+  .stat .l { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-top: 3px; }
+  .tabs { margin-top: 18px; }
+  .tab-panel { margin-top: 12px; }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; min-height: 1em; }
+  h3 { font-size: .9rem; font-weight: 600; margin: 14px 0 6px; }
+  @media (max-width: 768px) {
+    .io { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CBOR Encoder &amp; Decoder</h1>
+<p class="subtitle">Convert between JSON and <a href="https://www.rfc-editor.org/rfc/rfc8949" target="_blank" rel="noopener">RFC 8949 CBOR</a> (Concise Binary Object Representation). Inspect CBOR bytes as hex, decode back to JSON, and see a diagnostic view of major types — all running locally in your browser.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="encode">JSON → CBOR</button>
+    <button class="tab" data-tab="decode">CBOR → JSON</button>
+  </div>
+
+  <div class="tab-panel active" data-panel="encode">
+    <div class="io">
+      <div>
+        <div class="panel-head"><span>JSON input</span><span id="jsonBytes">0 bytes</span></div>
+        <textarea id="jsonIn" spellcheck="false" placeholder='{"name":"alice","ts":1713196800,"tags":["cbor","rfc8949"],"active":true}'></textarea>
+      </div>
+      <div>
+        <div class="panel-head"><span>CBOR output (hex)</span><span id="cborBytes">0 bytes</span></div>
+        <div class="hex" id="cborHex">–</div>
+      </div>
+    </div>
+    <div class="err" id="encodeErr"></div>
+    <div class="btn-row">
+      <button class="btn-primary" id="encodeBtn">Encode</button>
+      <button class="btn-secondary" id="copyHex">Copy hex</button>
+      <button class="btn-secondary" id="copyB64">Copy base64</button>
+      <button class="btn-secondary" id="downloadBtn">Download .cbor</button>
+      <button class="btn-secondary" id="sampleBtn">Load sample</button>
+    </div>
+    <h3>Diagnostic view</h3>
+    <div class="diag" id="diagOut">–</div>
+  </div>
+
+  <div class="tab-panel" data-panel="decode">
+    <div class="panel-head"><span>CBOR input (hex or base64)</span></div>
+    <textarea id="cborIn" spellcheck="false" placeholder="a4 64 6e 61 6d 65 65 61 6c 69 63 65 ..."></textarea>
+    <div class="err" id="decodeErr"></div>
+    <div class="btn-row">
+      <button class="btn-primary" id="decodeBtn">Decode</button>
+      <button class="btn-secondary" id="copyJson">Copy JSON</button>
+    </div>
+    <h3>Decoded JSON</h3>
+    <div class="hex" id="jsonOut">–</div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat"><div class="n" id="sJson">0</div><div class="l">JSON bytes</div></div>
+    <div class="stat"><div class="n" id="sCbor">0</div><div class="l">CBOR bytes</div></div>
+    <div class="stat"><div class="n" id="sRatio">–</div><div class="l">Size ratio</div></div>
+    <div class="stat"><div class="n" id="sSaved">–</div><div class="l">Space saved</div></div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+/* Minimal CBOR encoder / decoder (RFC 8949).
+   Supports unsigned/negative ints, byte strings, text strings, arrays, maps,
+   simple values (false, true, null, undefined), half/single/double floats. */
+
+const $ = id => document.getElementById(id);
+
+// ---------- Encoder ----------
+function encodeCBOR(value) {
+  const out = [];
+  const write = b => { if (b instanceof Uint8Array) for (const x of b) out.push(x); else out.push(b); };
+
+  function writeType(major, n) {
+    const m = major << 5;
+    if (n < 24) write(m | n);
+    else if (n < 0x100) { write(m | 24); write(n); }
+    else if (n < 0x10000) { write(m | 25); write((n >> 8) & 0xff); write(n & 0xff); }
+    else if (n < 0x100000000) {
+      write(m | 26);
+      write((n >>> 24) & 0xff); write((n >>> 16) & 0xff); write((n >>> 8) & 0xff); write(n & 0xff);
+    } else {
+      write(m | 27);
+      const big = BigInt(n);
+      for (let i = 7; i >= 0; i--) write(Number((big >> BigInt(i * 8)) & 0xffn));
+    }
+  }
+
+  function enc(v) {
+    if (v === null) { write(0xf6); return; }
+    if (v === undefined) { write(0xf7); return; }
+    if (typeof v === 'boolean') { write(v ? 0xf5 : 0xf4); return; }
+    if (typeof v === 'number') {
+      if (Number.isInteger(v) && Math.abs(v) < 2 ** 53) {
+        if (v >= 0) writeType(0, v);
+        else writeType(1, -v - 1);
+      } else {
+        // float64
+        write(0xfb);
+        const buf = new ArrayBuffer(8);
+        new DataView(buf).setFloat64(0, v, false);
+        for (const b of new Uint8Array(buf)) write(b);
+      }
+      return;
+    }
+    if (typeof v === 'bigint') {
+      if (v >= 0n) writeType(0, Number(v));
+      else writeType(1, Number(-v - 1n));
+      return;
+    }
+    if (typeof v === 'string') {
+      const bytes = new TextEncoder().encode(v);
+      writeType(3, bytes.length);
+      for (const b of bytes) write(b);
+      return;
+    }
+    if (v instanceof Uint8Array) {
+      writeType(2, v.length);
+      for (const b of v) write(b);
+      return;
+    }
+    if (Array.isArray(v)) {
+      writeType(4, v.length);
+      for (const it of v) enc(it);
+      return;
+    }
+    if (typeof v === 'object') {
+      const keys = Object.keys(v);
+      writeType(5, keys.length);
+      for (const k of keys) { enc(k); enc(v[k]); }
+      return;
+    }
+    throw new Error('Cannot encode value of type ' + typeof v);
+  }
+
+  enc(value);
+  return new Uint8Array(out);
+}
+
+// ---------- Decoder ----------
+function decodeCBOR(bytes) {
+  let i = 0;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+  function readLen(info) {
+    if (info < 24) return info;
+    if (info === 24) { const v = bytes[i++]; return v; }
+    if (info === 25) { const v = view.getUint16(i, false); i += 2; return v; }
+    if (info === 26) { const v = view.getUint32(i, false); i += 4; return v; }
+    if (info === 27) {
+      const hi = view.getUint32(i, false); i += 4;
+      const lo = view.getUint32(i, false); i += 4;
+      if (hi === 0) return lo;
+      return BigInt(hi) * 0x100000000n + BigInt(lo);
+    }
+    if (info === 31) return -1; // indefinite
+    throw new Error('Unsupported length info ' + info);
+  }
+
+  function dec() {
+    if (i >= bytes.length) throw new Error('Unexpected end of CBOR data');
+    const ib = bytes[i++];
+    const major = ib >> 5;
+    const info = ib & 0x1f;
+
+    if (major === 0) return readLen(info);
+    if (major === 1) {
+      const n = readLen(info);
+      if (typeof n === 'bigint') return -(n + 1n);
+      return -1 - n;
+    }
+    if (major === 2) {
+      const n = readLen(info);
+      if (n === -1) throw new Error('Indefinite byte strings not supported');
+      const out = bytes.slice(i, i + Number(n)); i += Number(n);
+      return out;
+    }
+    if (major === 3) {
+      const n = readLen(info);
+      if (n === -1) throw new Error('Indefinite text strings not supported');
+      const slice = bytes.slice(i, i + Number(n)); i += Number(n);
+      return new TextDecoder().decode(slice);
+    }
+    if (major === 4) {
+      const n = readLen(info);
+      if (n === -1) {
+        const arr = [];
+        while (bytes[i] !== 0xff) arr.push(dec());
+        i++; return arr;
+      }
+      const arr = [];
+      for (let k = 0; k < Number(n); k++) arr.push(dec());
+      return arr;
+    }
+    if (major === 5) {
+      const n = readLen(info);
+      const obj = {};
+      if (n === -1) {
+        while (bytes[i] !== 0xff) { const k = dec(); obj[String(k)] = dec(); }
+        i++; return obj;
+      }
+      for (let k = 0; k < Number(n); k++) {
+        const key = dec(); obj[String(key)] = dec();
+      }
+      return obj;
+    }
+    if (major === 6) {
+      readLen(info); // skip tag
+      return dec();
+    }
+    if (major === 7) {
+      if (info === 20) return false;
+      if (info === 21) return true;
+      if (info === 22) return null;
+      if (info === 23) return undefined;
+      if (info === 24) return { simple: bytes[i++] };
+      if (info === 25) {
+        // half float
+        const h = view.getUint16(i, false); i += 2;
+        return decodeHalf(h);
+      }
+      if (info === 26) { const f = view.getFloat32(i, false); i += 4; return f; }
+      if (info === 27) { const f = view.getFloat64(i, false); i += 8; return f; }
+      if (info === 31) return '__break__';
+      throw new Error('Unsupported simple info ' + info);
+    }
+    throw new Error('Unsupported major type ' + major);
+  }
+
+  function decodeHalf(h) {
+    const s = (h & 0x8000) >> 15;
+    const e = (h & 0x7c00) >> 10;
+    const m = h & 0x03ff;
+    if (e === 0) return (s ? -1 : 1) * Math.pow(2, -14) * (m / 1024);
+    if (e === 0x1f) return m ? NaN : (s ? -Infinity : Infinity);
+    return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + m / 1024);
+  }
+
+  const result = dec();
+  return { value: result, bytesRead: i };
+}
+
+// ---------- Hex helpers ----------
+function bytesToHex(bytes) {
+  return [...bytes].map(b => b.toString(16).padStart(2, '0')).join(' ');
+}
+function bytesToBase64(bytes) {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s);
+}
+function parseBinaryInput(text) {
+  text = text.trim();
+  if (!text) return new Uint8Array();
+  const cleaned = text.replace(/0x/gi, '').replace(/[,;\s]/g, '');
+  if (/^[0-9a-f]+$/i.test(cleaned) && cleaned.length % 2 === 0) {
+    const out = new Uint8Array(cleaned.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(cleaned.slice(i*2, i*2+2), 16);
+    return out;
+  }
+  // try base64
+  try {
+    const bin = atob(text.replace(/\s+/g, ''));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch {}
+  throw new Error('Not recognizable hex or base64');
+}
+
+// ---------- Diagnostic view (subset) ----------
+function diagnose(bytes) {
+  let i = 0;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  function indent(n) { return '  '.repeat(n); }
+  function readLen(info) {
+    if (info < 24) return info;
+    if (info === 24) return bytes[i++];
+    if (info === 25) { const v = view.getUint16(i, false); i += 2; return v; }
+    if (info === 26) { const v = view.getUint32(i, false); i += 4; return v; }
+    if (info === 27) {
+      const hi = view.getUint32(i, false); i += 4;
+      const lo = view.getUint32(i, false); i += 4;
+      return hi === 0 ? lo : BigInt(hi) * 0x100000000n + BigInt(lo);
+    }
+    return 0;
+  }
+  function rec(depth) {
+    if (i >= bytes.length) return '';
+    const ib = bytes[i++];
+    const major = ib >> 5;
+    const info = ib & 0x1f;
+    const pad = indent(depth);
+    if (major === 0) return `${pad}unsigned(${readLen(info)})`;
+    if (major === 1) { const n = readLen(info); return `${pad}negative(${-1 - Number(n)})`; }
+    if (major === 2) { const n = Number(readLen(info)); const s = bytesToHex(bytes.slice(i, i + n)); i += n; return `${pad}bytes(${n})  h'${s.replace(/ /g,'')}'`; }
+    if (major === 3) { const n = Number(readLen(info)); const s = new TextDecoder().decode(bytes.slice(i, i + n)); i += n; return `${pad}text(${n}) "${s}"`; }
+    if (major === 4) {
+      const n = Number(readLen(info));
+      const lines = [`${pad}array(${n}) [`];
+      for (let k = 0; k < n; k++) lines.push(rec(depth + 1));
+      lines.push(`${pad}]`);
+      return lines.join('\n');
+    }
+    if (major === 5) {
+      const n = Number(readLen(info));
+      const lines = [`${pad}map(${n}) {`];
+      for (let k = 0; k < n; k++) {
+        const keyLine = rec(depth + 1);
+        const valLine = rec(depth + 1);
+        lines.push(keyLine + ' =>');
+        lines.push(valLine);
+      }
+      lines.push(`${pad}}`);
+      return lines.join('\n');
+    }
+    if (major === 6) { const tag = readLen(info); return `${pad}tag(${tag})\n${rec(depth + 1)}`; }
+    if (major === 7) {
+      if (info === 20) return `${pad}false`;
+      if (info === 21) return `${pad}true`;
+      if (info === 22) return `${pad}null`;
+      if (info === 23) return `${pad}undefined`;
+      if (info === 26) { const f = view.getFloat32(i, false); i += 4; return `${pad}float32(${f})`; }
+      if (info === 27) { const f = view.getFloat64(i, false); i += 8; return `${pad}float64(${f})`; }
+      return `${pad}simple(${info})`;
+    }
+    return `${pad}?`;
+  }
+  const lines = [];
+  while (i < bytes.length) lines.push(rec(0));
+  return lines.join('\n');
+}
+
+// ---------- UI ----------
+document.querySelectorAll('#tabs .tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelector(`.tab-panel[data-panel="${btn.dataset.tab}"]`).classList.add('active');
+  });
+});
+
+let lastEncoded = null;
+
+function doEncode() {
+  const txt = $('jsonIn').value.trim();
+  $('encodeErr').textContent = '';
+  if (!txt) {
+    $('cborHex').textContent = '–';
+    $('diagOut').textContent = '–';
+    updateStats(0, 0);
+    return;
+  }
+  try {
+    const parsed = JSON.parse(txt);
+    const bytes = encodeCBOR(parsed);
+    lastEncoded = bytes;
+    $('cborHex').textContent = bytesToHex(bytes);
+    $('diagOut').textContent = diagnose(bytes);
+    $('jsonBytes').textContent = new TextEncoder().encode(txt).length + ' bytes';
+    $('cborBytes').textContent = bytes.length + ' bytes';
+    updateStats(new TextEncoder().encode(txt).length, bytes.length);
+  } catch (e) {
+    $('encodeErr').textContent = 'Error: ' + e.message;
+  }
+}
+
+function doDecode() {
+  const txt = $('cborIn').value;
+  $('decodeErr').textContent = '';
+  if (!txt.trim()) { $('jsonOut').textContent = '–'; return; }
+  try {
+    const bytes = parseBinaryInput(txt);
+    const { value } = decodeCBOR(bytes);
+    const json = JSON.stringify(value, (k, v) => {
+      if (v instanceof Uint8Array) return '0x' + bytesToHex(v).replace(/ /g,'');
+      if (typeof v === 'bigint') return v.toString() + 'n';
+      return v;
+    }, 2);
+    $('jsonOut').textContent = json;
+  } catch (e) {
+    $('decodeErr').textContent = 'Error: ' + e.message;
+  }
+}
+
+function updateStats(jsonLen, cborLen) {
+  $('sJson').textContent = jsonLen;
+  $('sCbor').textContent = cborLen;
+  if (jsonLen && cborLen) {
+    const ratio = (cborLen / jsonLen * 100).toFixed(0) + '%';
+    const saved = jsonLen > cborLen ? '−' + (jsonLen - cborLen) + 'B' : '+' + (cborLen - jsonLen) + 'B';
+    $('sRatio').textContent = ratio;
+    $('sSaved').textContent = saved;
+  } else {
+    $('sRatio').textContent = '–';
+    $('sSaved').textContent = '–';
+  }
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast('Copied!'); }
+  catch { toast('Copy failed'); }
+}
+
+$('encodeBtn').addEventListener('click', doEncode);
+$('decodeBtn').addEventListener('click', doDecode);
+$('jsonIn').addEventListener('input', doEncode);
+$('cborIn').addEventListener('input', doDecode);
+
+$('copyHex').addEventListener('click', () => lastEncoded && copy(bytesToHex(lastEncoded).replace(/ /g,'')));
+$('copyB64').addEventListener('click', () => lastEncoded && copy(bytesToBase64(lastEncoded)));
+$('copyJson').addEventListener('click', () => copy($('jsonOut').textContent));
+$('downloadBtn').addEventListener('click', () => {
+  if (!lastEncoded) return;
+  const blob = new Blob([lastEncoded], { type: 'application/cbor' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'data.cbor';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 500);
+});
+$('sampleBtn').addEventListener('click', () => {
+  $('jsonIn').value = JSON.stringify({
+    device: "sensor-42",
+    readings: [21.5, 22.1, 22.0],
+    online: true,
+    meta: { fw: "1.2.3", site: null }
+  }, null, 2);
+  doEncode();
+});
+
+// Init
+$('jsonIn').value = JSON.stringify({ name: "alice", ts: 1713196800, tags: ["cbor","rfc8949"], active: true }, null, 2);
+doEncode();
+</script>
+</body>
+</html>

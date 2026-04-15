@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retry-After Header Builder — HTTP 429 &amp; 503 Backoff Planner</title>
+<meta name="description" content="Build and parse HTTP Retry-After headers. Use delta-seconds or HTTP-date, preview 429 and 503 responses, and plan client backoff policies. 100% client-side.">
+<meta name="keywords" content="Retry-After, HTTP 429, HTTP 503, backoff, rate limit, retry header, HTTP-date, delta-seconds, rate limiting">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/retryafter.html">
+<meta property="og:title" content="Retry-After Header Builder">
+<meta property="og:description" content="Build &amp; parse Retry-After headers for 429 and 503 responses with HTTP-date or seconds and client backoff previews.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/retryafter.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .field { display: grid; gap: 6px; margin-bottom: 12px; }
+  .field label { font-size: .85rem; font-weight: 600; }
+  .field .hint { color: var(--muted); font-size: .78rem; font-weight: 400; }
+  .mode-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .mode-pills .pill { font-size: .78rem; padding: 5px 10px; }
+  .code { font-family: var(--mono); font-size: .85rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; white-space: pre-wrap; word-break: break-all; min-height: 40px; }
+  .response-box { font-family: var(--mono); font-size: .82rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; white-space: pre-wrap; }
+  h3 { font-size: .9rem; font-weight: 600; margin: 14px 0 6px; }
+  .backoff-table table { font-size: .82rem; }
+  .backoff-table td, .backoff-table th { padding: 6px 10px; }
+  .backoff-table td:nth-child(n+2) { font-family: var(--mono); text-align: right; }
+  .snippets { display: grid; gap: 12px; }
+  .snippet strong { display: block; font-size: .8rem; margin-bottom: 4px; }
+  .snippet pre { font-family: var(--mono); font-size: .78rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; white-space: pre-wrap; }
+  .parse-row input { font-family: var(--mono); }
+  .badge-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  @media (max-width: 768px) { .layout-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Retry-After Header Builder</h1>
+<p class="subtitle">Build and parse HTTP <code>Retry-After</code> headers for <code>429 Too Many Requests</code> and <code>503 Service Unavailable</code> responses. Supports both delta-seconds and RFC 7231 HTTP-date forms, with client backoff previews and ready-to-copy server snippets.</p>
+
+<div class="layout-grid">
+  <div class="card" style="padding:16px;">
+    <h2 style="font-size:1rem;margin-bottom:10px;">Build header</h2>
+
+    <div class="field">
+      <label>Response status</label>
+      <div class="mode-pills" id="statusPills">
+        <button class="pill active" data-status="429">429 Too Many Requests</button>
+        <button class="pill" data-status="503">503 Service Unavailable</button>
+        <button class="pill" data-status="301">301 Moved Permanently</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Value format</label>
+      <div class="mode-pills" id="modePills">
+        <button class="pill active" data-mode="seconds">Delta-seconds</button>
+        <button class="pill" data-mode="date">HTTP-date</button>
+      </div>
+      <span class="hint">Both forms are valid per RFC 7231. Seconds is easier for clients to parse.</span>
+    </div>
+
+    <div class="field" id="secondsField">
+      <label for="secs">Seconds to wait</label>
+      <input type="number" id="secs" value="60" min="0" step="1">
+      <div class="mode-pills" style="margin-top:6px;">
+        <button class="pill" data-preset="5">5s</button>
+        <button class="pill" data-preset="30">30s</button>
+        <button class="pill" data-preset="60">1m</button>
+        <button class="pill" data-preset="300">5m</button>
+        <button class="pill" data-preset="3600">1h</button>
+        <button class="pill" data-preset="86400">1d</button>
+      </div>
+    </div>
+
+    <div class="field" id="dateField" style="display:none;">
+      <label for="date">Retry after this moment</label>
+      <input type="datetime-local" id="date">
+      <span class="hint">Will be formatted as IMF-fixdate (GMT) in the header.</span>
+    </div>
+
+    <div class="field">
+      <label for="contentType">Optional body content</label>
+      <select id="contentType">
+        <option value="none">No body</option>
+        <option value="json" selected>application/json</option>
+        <option value="text">text/plain</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="reason">Reason (for body)</label>
+      <input type="text" id="reason" value="Rate limit exceeded. Please retry later.">
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="copyHeader">Copy header</button>
+      <button class="btn-secondary" id="copyResponse">Copy response</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px;">
+    <h2 style="font-size:1rem;margin-bottom:10px;">Preview</h2>
+    <h3>Header line</h3>
+    <div class="code" id="headerOut">Retry-After: 60</div>
+
+    <h3>Full response</h3>
+    <div class="response-box" id="responseOut"></div>
+
+    <h3>Notes</h3>
+    <div class="badge-list" id="notes"></div>
+  </div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Parse an existing Retry-After header</h2>
+  <div class="field parse-row">
+    <label for="parseIn">Paste header value or full header line</label>
+    <input type="text" id="parseIn" placeholder="Retry-After: 120   or   Wed, 21 Oct 2026 07:28:00 GMT">
+  </div>
+  <div class="code" id="parseOut" style="min-height:50px;">—</div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Client backoff preview</h2>
+  <p class="hint" style="font-size:.82rem;">If the server says "wait N seconds", how should a sensible client retry? These are rough guides — combine with jitter for production.</p>
+  <div class="backoff-table">
+    <table>
+      <thead><tr><th>Attempt</th><th>Server hint respected</th><th>Exp. backoff (×2)</th><th>With ±25% jitter</th></tr></thead>
+      <tbody id="backoffBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Server snippets</h2>
+  <div class="snippets">
+    <div class="snippet"><strong>Node / Express</strong><pre id="snNode"></pre></div>
+    <div class="snippet"><strong>Python / Flask</strong><pre id="snFlask"></pre></div>
+    <div class="snippet"><strong>Nginx (limit_req_zone)</strong><pre id="snNginx"></pre></div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let status = 429;
+let mode = 'seconds';
+
+const STATUS_TEXT = {
+  429: '429 Too Many Requests',
+  503: '503 Service Unavailable',
+  301: '301 Moved Permanently'
+};
+
+function fmtIMF(date) {
+  // IMF-fixdate, e.g. Sun, 06 Nov 1994 08:49:37 GMT
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const d = new Date(date.getTime());
+  const pad = n => String(n).padStart(2, '0');
+  return `${days[d.getUTCDay()]}, ${pad(d.getUTCDate())} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} GMT`;
+}
+
+function getValue() {
+  if (mode === 'seconds') {
+    const s = Math.max(0, parseInt($('secs').value, 10) || 0);
+    return { raw: String(s), seconds: s, display: humanSeconds(s) };
+  } else {
+    const v = $('date').value;
+    const d = v ? new Date(v) : new Date(Date.now() + 60000);
+    const seconds = Math.max(0, Math.round((d.getTime() - Date.now()) / 1000));
+    return { raw: fmtIMF(d), seconds, display: fmtIMF(d) };
+  }
+}
+
+function humanSeconds(s) {
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.round(s / 60) + 'm';
+  if (s < 86400) return (s / 3600).toFixed(1).replace(/\.0$/, '') + 'h';
+  return (s / 86400).toFixed(1).replace(/\.0$/, '') + 'd';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function render() {
+  const val = getValue();
+  const headerLine = `Retry-After: ${val.raw}`;
+  $('headerOut').textContent = headerLine;
+
+  // Body
+  const reason = $('reason').value || '';
+  const ct = $('contentType').value;
+  let body = '';
+  let ctHeader = '';
+  if (ct === 'json') {
+    body = JSON.stringify({ error: STATUS_TEXT[status].split(' ').slice(1).join(' '), retry_after_seconds: val.seconds, message: reason }, null, 2);
+    ctHeader = 'Content-Type: application/json\n';
+  } else if (ct === 'text') {
+    body = `${STATUS_TEXT[status]}\n${reason}\nRetry after: ${val.display}`;
+    ctHeader = 'Content-Type: text/plain; charset=utf-8\n';
+  }
+
+  const lenHeader = body ? `Content-Length: ${new TextEncoder().encode(body).length}\n` : '';
+  const response = `HTTP/1.1 ${STATUS_TEXT[status]}\n${headerLine}\n${ctHeader}${lenHeader}${body ? '\n' + body : ''}`;
+  $('responseOut').textContent = response;
+
+  // Notes
+  const notes = [];
+  if (val.seconds === 0) notes.push({ t: 'Immediate retry', cls: 'warn' });
+  if (val.seconds > 86400) notes.push({ t: 'Very long wait (>1d)', cls: 'warn' });
+  if (status === 301) notes.push({ t: 'Used with redirects (uncommon)', cls: 'warn' });
+  if (mode === 'date') notes.push({ t: 'HTTP-date form — clock-skew sensitive', cls: 'warn' });
+  if (mode === 'seconds' && val.seconds <= 86400 && val.seconds > 0) notes.push({ t: 'Sensible backoff window', cls: 'good' });
+  if (ct === 'json') notes.push({ t: 'Machine-readable body', cls: 'good' });
+  $('notes').innerHTML = notes.map(n => `<span class="badge ${n.cls}">${escapeHtml(n.t)}</span>`).join('') || '<span class="muted">No warnings.</span>';
+
+  // Backoff preview
+  const baseSec = val.seconds || 1;
+  const rows = [];
+  for (let i = 1; i <= 5; i++) {
+    const exp = baseSec * Math.pow(2, i - 1);
+    const jitterMin = (exp * 0.75).toFixed(1);
+    const jitterMax = (exp * 1.25).toFixed(1);
+    rows.push(`<tr><td>${i}</td><td>${humanSeconds(Math.round(baseSec))}</td><td>${humanSeconds(Math.round(exp))}</td><td>${humanSeconds(Math.round(exp * 0.75))} – ${humanSeconds(Math.round(exp * 1.25))}</td></tr>`);
+  }
+  $('backoffBody').innerHTML = rows.join('');
+
+  // Snippets
+  const sVal = val.raw;
+  $('snNode').textContent = `res.status(${status}).set({\n  'Retry-After': ${JSON.stringify(sVal)}${ct === 'json' ? ",\n  'Content-Type': 'application/json'" : ''}\n})${ct === 'json' ? `.json({ retry_after_seconds: ${val.seconds}, message: ${JSON.stringify(reason)} })` : ct === 'text' ? `.send(${JSON.stringify(reason)})` : '.end()'};`;
+  $('snFlask').textContent = `from flask import make_response, jsonify\n\n${ct === 'json' ? `resp = make_response(jsonify(retry_after_seconds=${val.seconds}, message=${JSON.stringify(reason)}), ${status})` : `resp = make_response(${JSON.stringify(reason || '')}, ${status})`}\nresp.headers['Retry-After'] = ${JSON.stringify(sVal)}\nreturn resp`;
+  $('snNginx').textContent = `limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;\n\nserver {\n  location /api/ {\n    limit_req zone=api burst=20 nodelay;\n    limit_req_status ${status};\n    add_header Retry-After ${JSON.stringify(sVal)} always;\n  }\n}`;
+}
+
+function parseHeader(input) {
+  let v = input.trim();
+  const m = v.match(/^retry-after\s*:\s*(.+)$/i);
+  if (m) v = m[1].trim();
+  if (!v) return '—';
+
+  // Try delta-seconds
+  if (/^\d+$/.test(v)) {
+    const s = parseInt(v, 10);
+    const when = new Date(Date.now() + s * 1000);
+    return `Format: delta-seconds\nSeconds: ${s} (${humanSeconds(s)})\nRetry at (local): ${when.toLocaleString()}`;
+  }
+
+  // Try HTTP-date
+  const d = new Date(v);
+  if (!isNaN(d.getTime())) {
+    const s = Math.round((d.getTime() - Date.now()) / 1000);
+    return `Format: HTTP-date\nParsed: ${d.toUTCString()}\nDelta: ${s >= 0 ? '+' + humanSeconds(s) : humanSeconds(s) + ' (in the past!)'}\nRetry at (local): ${d.toLocaleString()}`;
+  }
+
+  return 'Could not parse as delta-seconds or HTTP-date.';
+}
+
+document.querySelectorAll('#statusPills .pill').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#statusPills .pill').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    status = parseInt(b.dataset.status, 10);
+    render();
+  });
+});
+document.querySelectorAll('#modePills .pill').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#modePills .pill').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    mode = b.dataset.mode;
+    $('secondsField').style.display = mode === 'seconds' ? '' : 'none';
+    $('dateField').style.display = mode === 'date' ? '' : 'none';
+    render();
+  });
+});
+document.querySelectorAll('[data-preset]').forEach(b => {
+  b.addEventListener('click', () => { $('secs').value = b.dataset.preset; render(); });
+});
+
+['secs','date','reason','contentType'].forEach(id => $(id).addEventListener('input', render));
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast('Copied!'); }
+  catch { toast('Copy failed'); }
+}
+
+$('copyHeader').addEventListener('click', () => copy($('headerOut').textContent));
+$('copyResponse').addEventListener('click', () => copy($('responseOut').textContent));
+
+$('parseIn').addEventListener('input', () => {
+  $('parseOut').textContent = parseHeader($('parseIn').value) || '—';
+});
+
+// Initialize date field to now + 5 minutes
+const initDate = new Date(Date.now() + 5 * 60000);
+const pad = n => String(n).padStart(2, '0');
+$('date').value = `${initDate.getFullYear()}-${pad(initDate.getMonth()+1)}-${pad(initDate.getDate())}T${pad(initDate.getHours())}:${pad(initDate.getMinutes())}`;
+
+render();
+</script>
+</body>
+</html>
