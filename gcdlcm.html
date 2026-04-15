@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GCD &amp; LCM Calculator — Greatest Common Divisor and Least Common Multiple</title>
+<meta name="description" content="Free online GCD and LCM calculator. Enter any number of integers to compute their greatest common divisor and least common multiple, with full Euclidean algorithm steps.">
+<meta name="keywords" content="gcd calculator, lcm calculator, greatest common divisor, least common multiple, euclidean algorithm, number theory">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/gcdlcm.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; min-height: 90px; padding: 12px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .95rem; resize: vertical;
+  }
+  .results { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 16px; }
+  .result-card {
+    padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2);
+  }
+  .result-card .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .result-card .v { font-family: var(--mono); font-size: 1.7rem; font-weight: 700; color: var(--text); margin-top: 6px; word-break: break-all; }
+  .steps { font-family: var(--mono); font-size: .85rem; background: var(--surface2);
+    padding: 12px; border-radius: var(--radius); border: 1px solid var(--border);
+    max-height: 320px; overflow: auto; white-space: pre; }
+  .factors { font-family: var(--mono); font-size: .9rem; }
+  .factors span { display: inline-block; padding: 2px 8px; margin: 2px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; }
+  @media (max-width: 768px) { .results { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔢 GCD &amp; LCM Calculator</h1>
+<p class="subtitle">Compute the greatest common divisor (GCD) and least common multiple (LCM) of two or more positive integers. Supports BigInt for arbitrarily large numbers and shows the full Euclidean algorithm trace plus prime factorizations.</p>
+
+<div class="card" style="padding: 20px;">
+  <label for="nums" style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:6px;">Numbers (separated by spaces, commas, or newlines)</label>
+  <textarea id="nums" placeholder="12 18 24" spellcheck="false">48 60 36</textarea>
+  <div id="err" class="err"></div>
+  <div class="results">
+    <div class="result-card"><div class="k">GCD (gcd)</div><div class="v" id="gcd">—</div></div>
+    <div class="result-card"><div class="k">LCM (lcm)</div><div class="v" id="lcm">—</div></div>
+  </div>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Euclidean Algorithm Steps</h2>
+  <div class="steps" id="steps">Enter at least two numbers.</div>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Prime Factorizations</h2>
+  <div id="factors" class="factors">—</div>
+</div>
+
+</div>
+
+<footer style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem;">
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const numsEl = document.getElementById('nums');
+const errEl = document.getElementById('err');
+const gcdEl = document.getElementById('gcd');
+const lcmEl = document.getElementById('lcm');
+const stepsEl = document.getElementById('steps');
+const factorsEl = document.getElementById('factors');
+
+function parseInputs(s) {
+  const tokens = s.split(/[\s,;]+/).filter(Boolean);
+  const out = [];
+  for (const t of tokens) {
+    if (!/^\d+$/.test(t)) throw new Error(`"${t}" is not a positive integer`);
+    out.push(BigInt(t));
+  }
+  return out;
+}
+
+function gcdPair(a, b, steps) {
+  while (b !== 0n) {
+    const q = a / b;
+    const r = a % b;
+    if (steps) steps.push(`${a} = ${b} × ${q} + ${r}`);
+    a = b;
+    b = r;
+  }
+  return a;
+}
+
+function gcdAll(arr, steps) {
+  let g = arr[0];
+  for (let i = 1; i < arr.length; i++) {
+    if (steps) steps.push(`gcd(${g}, ${arr[i]}):`);
+    g = gcdPair(g, arr[i], steps);
+    if (steps) steps.push(`= ${g}\n`);
+  }
+  return g;
+}
+
+function lcmAll(arr) {
+  let l = arr[0];
+  for (let i = 1; i < arr.length; i++) {
+    const g = gcdPair(l, arr[i]);
+    l = (l / g) * arr[i];
+  }
+  return l;
+}
+
+function primeFactors(n) {
+  const out = {};
+  let x = n;
+  for (let p = 2n; p * p <= x; p++) {
+    while (x % p === 0n) {
+      out[p] = (out[p] || 0) + 1;
+      x /= p;
+    }
+  }
+  if (x > 1n) out[x] = (out[x] || 0) + 1;
+  return out;
+}
+
+function formatFactors(f) {
+  const keys = Object.keys(f);
+  if (keys.length === 0) return '1';
+  return keys.map(k => f[k] === 1 ? k : `${k}<sup>${f[k]}</sup>`).join(' × ');
+}
+
+function update() {
+  errEl.textContent = '';
+  let arr;
+  try {
+    arr = parseInputs(numsEl.value);
+  } catch (e) {
+    errEl.textContent = e.message;
+    gcdEl.textContent = '—';
+    lcmEl.textContent = '—';
+    stepsEl.textContent = '';
+    factorsEl.innerHTML = '—';
+    return;
+  }
+  if (arr.length < 2) {
+    errEl.textContent = 'Enter at least two integers.';
+    gcdEl.textContent = '—';
+    lcmEl.textContent = '—';
+    stepsEl.textContent = '';
+    factorsEl.innerHTML = '—';
+    return;
+  }
+  if (arr.some(n => n === 0n)) {
+    errEl.textContent = 'All numbers must be greater than zero.';
+    return;
+  }
+
+  const steps = [];
+  const g = gcdAll(arr, steps);
+  const l = lcmAll(arr);
+
+  gcdEl.textContent = g.toString();
+  lcmEl.textContent = l.toString();
+  stepsEl.textContent = steps.join('\n');
+
+  factorsEl.innerHTML = arr.map(n => {
+    if (n > 1000000000000n) return `<div><strong>${n}</strong> = (too large to factor quickly)</div>`;
+    const f = primeFactors(n);
+    return `<div><strong>${n}</strong> = ${formatFactors(f)}</div>`;
+  }).join('');
+}
+
+numsEl.addEventListener('input', update);
+update();
+</script>
+</body>
+</html>

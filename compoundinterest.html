@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compound Interest Calculator — Investment Growth Over Time</title>
+<meta name="description" content="Free online compound interest calculator. Project savings and investment growth with monthly contributions, custom compounding frequency, and a full year-by-year breakdown.">
+<meta name="keywords" content="compound interest calculator, investment calculator, savings calculator, future value, retirement planner">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/compoundinterest.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .form-grid label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .95rem;
+  }
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+  .stat-card {
+    padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2);
+  }
+  .stat-card .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-card .v { font-family: var(--mono); font-size: 1.35rem; font-weight: 700; color: var(--text); margin-top: 4px; }
+  .stat-card.accent .v { color: var(--success); }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 8px; }
+  th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  th { font-weight: 600; color: var(--muted); font-size: .72rem; text-transform: uppercase; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: .8rem; }
+  .bar { flex: 1; height: 18px; border-radius: 4px; background: var(--surface2); overflow: hidden; display: flex; }
+  .bar .principal { background: #94a3b8; }
+  .bar .contrib { background: #60a5fa; }
+  .bar .interest { background: #34d399; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+  @media (max-width: 768px) {
+    .form-grid, .summary { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📈 Compound Interest Calculator</h1>
+<p class="subtitle">Project how an investment grows with compound interest. Enter the starting balance, expected return, and monthly contributions to see the future value, total contributions, and interest earned year by year.</p>
+
+<div class="card" style="padding: 20px;">
+  <div class="form-grid">
+    <div>
+      <label for="principal">Starting amount</label>
+      <input type="number" id="principal" value="10000" min="0" step="100">
+    </div>
+    <div>
+      <label for="contribution">Monthly contribution</label>
+      <input type="number" id="contribution" value="500" min="0" step="50">
+    </div>
+    <div>
+      <label for="rate">Annual interest rate (%)</label>
+      <input type="number" id="rate" value="7" min="0" step="0.1">
+    </div>
+    <div>
+      <label for="years">Years</label>
+      <input type="number" id="years" value="20" min="1" max="100" step="1">
+    </div>
+    <div>
+      <label for="freq">Compounding frequency</label>
+      <select id="freq">
+        <option value="1">Annually</option>
+        <option value="2">Semi-annually</option>
+        <option value="4">Quarterly</option>
+        <option value="12" selected>Monthly</option>
+        <option value="365">Daily</option>
+      </select>
+    </div>
+    <div>
+      <label for="currency">Currency symbol</label>
+      <input type="text" id="currency" value="$" maxlength="3">
+    </div>
+  </div>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Summary</h2>
+  <div class="summary">
+    <div class="stat-card"><div class="k">Total contributions</div><div class="v" id="sumContrib">—</div></div>
+    <div class="stat-card"><div class="k">Total interest earned</div><div class="v" id="sumInterest">—</div></div>
+    <div class="stat-card accent"><div class="k">Future value</div><div class="v" id="sumFuture">—</div></div>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:#94a3b8"></i> Principal</span>
+    <span><i class="swatch" style="background:#60a5fa"></i> Contributions</span>
+    <span><i class="swatch" style="background:#34d399"></i> Interest</span>
+  </div>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Year-by-year breakdown</h2>
+  <div id="bars"></div>
+  <table>
+    <thead>
+      <tr><th>Year</th><th>Contributions</th><th>Interest</th><th>Balance</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+</div>
+
+<footer style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem;">
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const ids = ['principal', 'contribution', 'rate', 'years', 'freq', 'currency'];
+ids.forEach(id => document.getElementById(id).addEventListener('input', calc));
+
+function fmt(n, sym) {
+  const s = (Math.round(n * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return sym + s;
+}
+
+function calc() {
+  const P = parseFloat(document.getElementById('principal').value) || 0;
+  const PMT = parseFloat(document.getElementById('contribution').value) || 0;
+  const r = (parseFloat(document.getElementById('rate').value) || 0) / 100;
+  const t = parseInt(document.getElementById('years').value) || 0;
+  const n = parseInt(document.getElementById('freq').value) || 12;
+  const sym = document.getElementById('currency').value || '';
+
+  let balance = P;
+  let totalContrib = 0;
+  const rows = [];
+  const monthlyRate = r / 12;
+  const periodRate = r / n;
+
+  for (let year = 1; year <= t; year++) {
+    const startBalance = balance;
+    let yearInterest = 0;
+    let yearContrib = 0;
+    for (let month = 1; month <= 12; month++) {
+      // Add contribution at start of month
+      balance += PMT;
+      yearContrib += PMT;
+      totalContrib += PMT;
+      // Apply interest based on compounding frequency
+      // Approximate by applying periodRate proportionally each month
+      const periodsThisMonth = n / 12;
+      for (let p = 0; p < Math.max(1, Math.floor(periodsThisMonth)); p++) {
+        const i = balance * periodRate;
+        balance += i;
+        yearInterest += i;
+      }
+      // Handle fractional periods (e.g. annual = 1/12 per month)
+      if (periodsThisMonth < 1) {
+        // accrue but only "credit" at the right months — simplified: add fractional interest
+        const i = balance * periodRate * periodsThisMonth;
+        // Already accounted for in floor loop when >=1; for <1 the loop ran 0 times
+        balance += i;
+        yearInterest += i;
+      }
+    }
+    rows.push({ year, balance, yearInterest, yearContrib, startBalance });
+  }
+
+  const totalInterest = balance - P - totalContrib;
+  document.getElementById('sumContrib').textContent = fmt(P + totalContrib, sym);
+  document.getElementById('sumInterest').textContent = fmt(totalInterest, sym);
+  document.getElementById('sumFuture').textContent = fmt(balance, sym);
+
+  const tbody = document.getElementById('rows');
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td>${r.year}</td>
+    <td>${fmt(r.yearContrib, sym)}</td>
+    <td>${fmt(r.yearInterest, sym)}</td>
+    <td>${fmt(r.balance, sym)}</td>
+  </tr>`).join('');
+
+  // Bars
+  const max = Math.max(...rows.map(r => r.balance), 1);
+  const bars = document.getElementById('bars');
+  bars.innerHTML = rows.map(r => {
+    const pPct = (P / max) * 100;
+    const cPct = ((P + totalContrib * (r.year / t) - P) / max) * 100;
+    // simpler: split per year proportionally
+    const cumContrib = P + (totalContrib * r.year / t);
+    const cumInterest = r.balance - cumContrib;
+    const w = (r.balance / max) * 100;
+    const principalW = (P / r.balance) * w;
+    const contribW = ((cumContrib - P) / r.balance) * w;
+    const interestW = (cumInterest / r.balance) * w;
+    return `<div class="bar-row">
+      <span style="width:30px">Y${r.year}</span>
+      <div class="bar">
+        <div class="principal" style="width:${principalW}%"></div>
+        <div class="contrib" style="width:${contribW}%"></div>
+        <div class="interest" style="width:${interestW}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+calc();
+</script>
+</body>
+</html>
