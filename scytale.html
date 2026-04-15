@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scytale Cipher Encoder / Decoder — Free Online Tool</title>
+<meta name="description" content="Encrypt and decrypt text with the ancient Spartan Scytale transposition cipher. Visualize the cylinder wrap, pick any rod diameter, and brute-force all diameters.">
+<meta name="keywords" content="scytale cipher, spartan cipher, transposition cipher, classical cryptography, rod cipher">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/scytale.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 150px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 14px; align-items: end; margin-bottom: 14px; }
+  .controls input, .controls select {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .95rem; width: 100%; box-sizing: border-box;
+  }
+  .wrap-grid { display: grid; gap: 2px; font-family: var(--mono); font-size: .88rem; margin-top: 6px; }
+  .wrap-row { display: flex; gap: 4px; }
+  .wrap-cell {
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 4px;
+  }
+  .wrap-cell.pad { color: var(--muted); background: var(--bg); }
+  .brute { font-family: var(--mono); font-size: .82rem; max-height: 260px; overflow: auto;
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; background: var(--surface2); }
+  .brute-row { display: grid; grid-template-columns: 80px 1fr; gap: 10px; padding: 3px 6px; border-radius: 3px; }
+  .brute-row:hover { background: var(--bg); cursor: pointer; }
+  .brute-row code { color: var(--muted); }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  @media (max-width: 768px) {
+    .panels, .controls { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Scytale Cipher</h1>
+<p class="subtitle">The Scytale (σκυτάλη) was used by Spartan generals around 400 BC. A parchment strip was wound around a rod of a specific diameter, the message was written along the rod, and when unwound the letters appeared in a scrambled order. Decryption required a rod of the <em>same</em> diameter. It is a pure transposition cipher: the ciphertext is a permutation of the plaintext letters. Only the number of letters that fit per turn (the <code>diameter</code>) is the key.</p>
+
+<div class="card">
+  <div class="controls">
+    <div>
+      <label class="head" for="diameter">Diameter (letters per turn)</label>
+      <input type="number" id="diameter" min="2" max="50" value="4" oninput="run('plain')">
+    </div>
+    <div>
+      <label class="head" for="padChar">Padding char</label>
+      <select id="padChar" onchange="run('plain')">
+        <option value=" ">space</option>
+        <option value="X" selected>X</option>
+        <option value="_">_</option>
+        <option value="">(none)</option>
+      </select>
+    </div>
+    <div>
+      <label class="head">Keep case</label>
+      <button class="btn btn-secondary" id="caseBtn" onclick="toggleCase()">ON</button>
+    </div>
+    <div>
+      <button class="btn btn-secondary" onclick="swap()">⇄ Swap</button>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div>
+      <label class="head" for="plain">Plain text</label>
+      <textarea id="plain" oninput="run('plain')" spellcheck="false">HELP ME I AM UNDER ATTACK</textarea>
+    </div>
+    <div>
+      <label class="head" for="cipher">Scytale cipher</label>
+      <textarea id="cipher" oninput="run('cipher')" spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="stats">
+    <span>letters <strong id="lenLetters">0</strong></span>
+    <span>rows <strong id="statRows">0</strong></span>
+    <span>padding added <strong id="statPad">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Rod Wrap Diagram</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">Plaintext written around a rod of diameter <code id="diaLbl">4</code>. Read down each column to get the ciphertext.</p>
+  <div id="wrap" class="wrap-grid"></div>
+</div>
+
+<div class="card">
+  <h2>Brute Force All Diameters</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">Try every possible diameter from 2 up to the ciphertext length. Click any row to apply that diameter.</p>
+  <div id="brute" class="brute"></div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let keepCase = true;
+
+function prepare(text) {
+  // remove newlines, collapse. Keep letters only? For scytale all chars transpose.
+  // We'll strip whitespace to match classical usage.
+  let t = text.replace(/\s+/g, '');
+  if (!keepCase) t = t.toUpperCase();
+  return t;
+}
+
+function encrypt(text, d) {
+  const pad = $('padChar').value;
+  let t = prepare(text);
+  let added = 0;
+  if (pad) {
+    while (t.length % d !== 0) { t += pad; added++; }
+  }
+  // Write row by row, read column by column
+  const rows = Math.ceil(t.length / d);
+  let out = '';
+  for (let c = 0; c < d; c++) {
+    for (let r = 0; r < rows; r++) {
+      const i = r * d + c;
+      if (i < t.length) out += t[i];
+    }
+  }
+  return { out, rows, added, prepared: t };
+}
+
+function decrypt(text, d) {
+  const t = prepare(text);
+  const n = t.length;
+  const rows = Math.ceil(n / d);
+  // Build array row-major, reading source column-major
+  const arr = new Array(rows * d).fill('');
+  let i = 0;
+  const full = n % d; // columns that are full-height
+  const shortRows = full === 0 ? rows : rows;
+  // All columns have either rows or rows-1 chars
+  // Number of columns that have `rows` chars = (n - (rows-1)*d) if n%d!=0 else d
+  let longCols = n % d === 0 ? d : n - (rows - 1) * d;
+  // When padding is used at encrypt, n is a multiple of d, so longCols = d
+  for (let c = 0; c < d; c++) {
+    const colLen = c < longCols ? rows : rows - 1;
+    for (let r = 0; r < colLen; r++) {
+      arr[r * d + c] = t[i++];
+    }
+  }
+  let out = arr.join('');
+  // strip trailing padding
+  const pad = $('padChar').value;
+  if (pad) out = out.replace(new RegExp(pad + '+$'), '');
+  return { out, rows };
+}
+
+function run(source) {
+  source = source || 'plain';
+  const d = Math.max(2, parseInt($('diameter').value, 10) || 2);
+  $('diameter').value = d;
+  $('diaLbl').textContent = d;
+
+  if (source === 'plain') {
+    const r = encrypt($('plain').value, d);
+    $('cipher').value = r.out;
+    $('lenLetters').textContent = r.prepared.length - r.added;
+    $('statRows').textContent = r.rows;
+    $('statPad').textContent = r.added;
+    renderWrap(r.prepared, d);
+  } else {
+    const r = decrypt($('cipher').value, d);
+    $('plain').value = r.out;
+    $('lenLetters').textContent = r.out.length;
+    $('statRows').textContent = r.rows;
+    $('statPad').textContent = 0;
+    renderWrap(prepare($('plain').value), d);
+  }
+  renderBrute();
+}
+
+function renderWrap(text, d) {
+  const box = $('wrap');
+  box.innerHTML = '';
+  const rows = Math.ceil(text.length / d);
+  for (let r = 0; r < rows; r++) {
+    const row = document.createElement('div');
+    row.className = 'wrap-row';
+    for (let c = 0; c < d; c++) {
+      const i = r * d + c;
+      const cell = document.createElement('div');
+      const ch = text[i];
+      cell.className = 'wrap-cell' + (ch === undefined ? ' pad' : '');
+      cell.textContent = ch === undefined ? '·' : ch;
+      row.appendChild(cell);
+    }
+    box.appendChild(row);
+  }
+}
+
+function renderBrute() {
+  const box = $('brute');
+  const ct = $('cipher').value;
+  if (!ct.trim()) { box.innerHTML = '<span class="empty">Enter ciphertext to brute force.</span>'; return; }
+  const sample = ct.length > 200 ? ct.slice(0, 200) : ct;
+  box.innerHTML = '';
+  const maxD = Math.min(30, sample.replace(/\s/g, '').length - 1);
+  for (let d = 2; d <= maxD; d++) {
+    const dec = decrypt(sample, d).out;
+    const row = document.createElement('div');
+    row.className = 'brute-row';
+    row.innerHTML = '<code>d = ' + d + '</code><span>' + dec.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</span>';
+    row.onclick = () => { $('diameter').value = d; run('cipher'); };
+    box.appendChild(row);
+  }
+}
+
+function toggleCase() {
+  keepCase = !keepCase;
+  $('caseBtn').textContent = keepCase ? 'ON' : 'OFF';
+  run('plain');
+}
+
+function swap() {
+  const p = $('plain').value, c = $('cipher').value;
+  $('plain').value = c;
+  $('cipher').value = p;
+  run('plain');
+}
+
+run('plain');
+</script>
+</body>
+</html>

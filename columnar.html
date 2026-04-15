@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Columnar Transposition Cipher — Free Online Tool</title>
+<meta name="description" content="Encrypt and decrypt text with the Columnar Transposition cipher using a keyword. Supports both complete and incomplete (irregular) columnar modes with a live grid visualization.">
+<meta name="keywords" content="columnar transposition cipher, keyword transposition, classical cryptography, incomplete columnar">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/columnar.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 150px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: grid; grid-template-columns: 1fr auto auto auto; gap: 14px; align-items: end; margin-bottom: 14px; }
+  .controls input, .controls select {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .95rem; width: 100%; box-sizing: border-box;
+  }
+  .gridviz { font-family: var(--mono); font-size: .9rem; overflow-x: auto; }
+  .gridviz table { border-collapse: collapse; }
+  .gridviz th, .gridviz td {
+    width: 32px; height: 32px; text-align: center; border: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .gridviz th { background: var(--bg); color: var(--muted); font-weight: 600; font-size: .82rem; }
+  .gridviz th .ord { display: block; color: var(--text); font-size: .7rem; }
+  .gridviz td.pad { color: var(--muted); background: var(--bg); }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .read-order { font-family: var(--mono); font-size: .82rem; color: var(--muted); margin-top: 10px; }
+  .read-order b { color: var(--text); }
+  @media (max-width: 768px) {
+    .panels, .controls { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Columnar Transposition Cipher</h1>
+<p class="subtitle">Columnar transposition writes the plaintext into a grid row-by-row under a keyword, then reads the columns off in the alphabetical order of the keyword's letters. It's a classical transposition cipher used extensively in WWI and WWII (and as the basis for the double-transposition cipher and ADFGVX). In <em>complete</em> mode the grid is padded; in <em>incomplete</em> mode short columns are read first, making decryption trickier.</p>
+
+<div class="card">
+  <div class="controls">
+    <div>
+      <label class="head" for="key">Keyword</label>
+      <input type="text" id="key" value="ZEBRAS" oninput="run('plain')">
+    </div>
+    <div>
+      <label class="head" for="mode">Mode</label>
+      <select id="mode" onchange="run('plain')">
+        <option value="incomplete" selected>Incomplete (classical)</option>
+        <option value="complete">Complete (padded)</option>
+      </select>
+    </div>
+    <div>
+      <label class="head" for="padChar">Pad char</label>
+      <select id="padChar" onchange="run('plain')">
+        <option value="X" selected>X</option>
+        <option value="Q">Q</option>
+        <option value="Z">Z</option>
+        <option value="_">_</option>
+      </select>
+    </div>
+    <div>
+      <button class="btn btn-secondary" onclick="swap()">⇄ Swap</button>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div>
+      <label class="head" for="plain">Plain text</label>
+      <textarea id="plain" oninput="run('plain')" spellcheck="false">WE ARE DISCOVERED FLEE AT ONCE</textarea>
+    </div>
+    <div>
+      <label class="head" for="cipher">Columnar cipher</label>
+      <textarea id="cipher" oninput="run('cipher')" spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="stats">
+    <span>letters <strong id="statLetters">0</strong></span>
+    <span>rows <strong id="statRows">0</strong></span>
+    <span>columns <strong id="statCols">0</strong></span>
+    <span>key order <strong id="statOrder">-</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Grid Visualization</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">The grid below shows the plaintext written row-by-row. Columns are read in the order given by the keyword's alphabetical ranks (shown under each letter).</p>
+  <div id="gridviz" class="gridviz"></div>
+  <div class="read-order" id="readOrder"></div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function prepare(text) {
+  return text.replace(/\s+/g, '').toUpperCase();
+}
+
+function keyOrder(key) {
+  // Return array where order[i] = the read-rank (0-based) of column i.
+  const chars = key.split('').map((c, i) => ({ c, i }));
+  chars.sort((a, b) => a.c === b.c ? a.i - b.i : a.c.localeCompare(b.c));
+  const order = new Array(key.length);
+  chars.forEach((ch, rank) => { order[ch.i] = rank; });
+  return order;
+}
+
+function encrypt(text, key, mode) {
+  const t0 = prepare(text);
+  if (!key) return { out: t0, rows: 0, cols: 0, grid: [], order: [], prepared: t0, padded: 0 };
+  const cols = key.length;
+  let t = t0;
+  let padded = 0;
+  if (mode === 'complete') {
+    const pad = $('padChar').value;
+    while (t.length % cols !== 0) { t += pad; padded++; }
+  }
+  const rows = Math.ceil(t.length / cols);
+  const grid = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      row.push(i < t.length ? t[i] : null);
+    }
+    grid.push(row);
+  }
+  const order = keyOrder(key);
+  // For each read-rank, find the column index, then read down.
+  let out = '';
+  for (let rank = 0; rank < cols; rank++) {
+    const c = order.indexOf(rank);
+    for (let r = 0; r < rows; r++) {
+      if (grid[r][c] !== null) out += grid[r][c];
+    }
+  }
+  return { out, rows, cols, grid, order, prepared: t, padded };
+}
+
+function decrypt(text, key, mode) {
+  const t = prepare(text);
+  if (!key || !t) return { out: '', rows: 0, cols: 0, grid: [], order: [] };
+  const cols = key.length;
+  const rows = Math.ceil(t.length / cols);
+  const order = keyOrder(key);
+  // Determine column lengths
+  const lengths = new Array(cols).fill(rows);
+  if (mode === 'incomplete') {
+    const short = rows * cols - t.length; // number of short columns (bottom-right)
+    for (let c = cols - short; c < cols; c++) lengths[c] = rows - 1;
+  }
+  // In incomplete mode, short columns are the last few rightmost columns of the grid.
+  // Fill grid by reading column-by-column in rank order.
+  const grid = Array.from({ length: rows }, () => new Array(cols).fill(null));
+  let i = 0;
+  for (let rank = 0; rank < cols; rank++) {
+    const c = order.indexOf(rank);
+    const len = lengths[c];
+    for (let r = 0; r < len; r++) {
+      grid[r][c] = t[i++];
+    }
+  }
+  let out = '';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c] !== null) out += grid[r][c];
+    }
+  }
+  if (mode === 'complete') {
+    const pad = $('padChar').value;
+    out = out.replace(new RegExp(pad + '+$'), '');
+  }
+  return { out, rows, cols, grid, order };
+}
+
+function run(source) {
+  source = source || 'plain';
+  const key = $('key').value.toUpperCase().replace(/[^A-Z]/g, '');
+  const mode = $('mode').value;
+
+  if (!key) {
+    $('gridviz').innerHTML = '<span class="empty">Enter a keyword.</span>';
+    $('readOrder').textContent = '';
+    return;
+  }
+
+  let res;
+  if (source === 'plain') {
+    res = encrypt($('plain').value, key, mode);
+    $('cipher').value = res.out;
+  } else {
+    res = decrypt($('cipher').value, key, mode);
+    $('plain').value = res.out;
+    // Now re-encrypt to render the grid from the decrypted plaintext
+    res = encrypt($('plain').value, key, mode);
+  }
+
+  $('statLetters').textContent = res.prepared ? res.prepared.length - (res.padded || 0) : 0;
+  $('statRows').textContent = res.rows;
+  $('statCols').textContent = res.cols;
+  $('statOrder').textContent = res.order.map(o => o + 1).join(' ');
+  renderGrid(key, res.grid, res.order);
+}
+
+function renderGrid(key, grid, order) {
+  const box = $('gridviz');
+  if (!grid.length) { box.innerHTML = '<span class="empty">No grid.</span>'; return; }
+  let html = '<table><thead><tr>';
+  for (let c = 0; c < key.length; c++) {
+    html += '<th>' + key[c] + '<span class="ord">' + (order[c] + 1) + '</span></th>';
+  }
+  html += '</tr></thead><tbody>';
+  for (const row of grid) {
+    html += '<tr>';
+    for (const ch of row) {
+      html += ch === null ? '<td class="pad">·</td>' : '<td>' + ch + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  box.innerHTML = html;
+
+  const readOrder = [];
+  for (let rank = 0; rank < key.length; rank++) {
+    const c = order.indexOf(rank);
+    readOrder.push(key[c]);
+  }
+  $('readOrder').innerHTML = 'Read order: <b>' + readOrder.join(' → ') + '</b>';
+}
+
+function swap() {
+  const p = $('plain').value, c = $('cipher').value;
+  $('plain').value = c;
+  $('cipher').value = p;
+  run('plain');
+}
+
+run('plain');
+</script>
+</body>
+</html>

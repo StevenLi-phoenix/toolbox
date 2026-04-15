@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bifid Cipher Encoder / Decoder — Free Online Tool</title>
+<meta name="description" content="Encrypt and decrypt text with the Bifid cipher — Felix Delastelle's fractionation cipher that combines a 5×5 Polybius square with transposition. Adjustable period and live key square.">
+<meta name="keywords" content="bifid cipher, delastelle cipher, polybius square, fractionation cipher, classical cryptography">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bifid.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 150px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: grid; grid-template-columns: 1fr 120px 100px auto; gap: 14px; align-items: end; margin-bottom: 14px; }
+  .controls input, .controls select {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .95rem; width: 100%; box-sizing: border-box;
+  }
+  .square { display: inline-grid; grid-template-columns: repeat(6, 34px); gap: 3px; font-family: var(--mono); font-size: 1rem; }
+  .square .hdr { text-align: center; color: var(--muted); font-size: .78rem; padding: 4px 0; }
+  .square .cell {
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); background: var(--surface2); border-radius: 4px;
+    font-weight: 600;
+  }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .fract { font-family: var(--mono); font-size: .85rem; overflow-x: auto; white-space: pre; padding: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  @media (max-width: 768px) {
+    .panels, .controls { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Bifid Cipher</h1>
+<p class="subtitle">Invented by Felix Delastelle around 1901, the Bifid cipher fractionates plaintext letters into two digits each using a 5×5 Polybius square, then rearranges the digits before recombining them into letters. The key parameters are the square (usually built from a keyword) and the <em>period</em> — the block size over which the transposition happens. Because J is merged with I, the alphabet fits into 25 cells.</p>
+
+<div class="card">
+  <div class="controls">
+    <div>
+      <label class="head" for="key">Polybius keyword (I/J merged)</label>
+      <input type="text" id="key" value="BGWKZQPNDSIOAXEFCLUMTHYVR" oninput="run('plain')">
+    </div>
+    <div>
+      <label class="head" for="period">Period</label>
+      <input type="number" id="period" min="1" max="99" value="5" oninput="run('plain')">
+    </div>
+    <div>
+      <label class="head">J → I</label>
+      <button class="btn btn-secondary" id="jtoi" onclick="toggleJ()">ON</button>
+    </div>
+    <div>
+      <button class="btn btn-secondary" onclick="swap()">⇄ Swap</button>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div>
+      <label class="head" for="plain">Plain text</label>
+      <textarea id="plain" oninput="run('plain')" spellcheck="false">FLEEATONCE</textarea>
+    </div>
+    <div>
+      <label class="head" for="cipher">Bifid cipher</label>
+      <textarea id="cipher" oninput="run('cipher')" spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="stats">
+    <span>letters <strong id="statLetters">0</strong></span>
+    <span>blocks <strong id="statBlocks">0</strong></span>
+    <span>period <strong id="statPeriod">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Polybius Key Square</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">Rows and columns are numbered 1–5. Each letter maps to a (row, column) pair. You can edit the keyword above to rearrange the square.</p>
+  <div id="square" class="square"></div>
+</div>
+
+<div class="card">
+  <h2>Fractionation Breakdown</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">For the current plaintext: each letter is replaced by its row/column digits, rows are listed then columns, and the digits are re-paired to form the ciphertext letters.</p>
+  <div id="fract" class="fract"></div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let jToI = true;
+
+function buildSquare(keyword) {
+  const seen = new Set();
+  const letters = [];
+  const kw = (keyword || '').toUpperCase().replace(/J/g, 'I').replace(/[^A-Z]/g, '');
+  for (const ch of kw) {
+    if (!seen.has(ch)) { seen.add(ch); letters.push(ch); }
+  }
+  for (let c = 65; c <= 90; c++) {
+    const ch = String.fromCharCode(c);
+    if (ch === 'J') continue;
+    if (!seen.has(ch)) { seen.add(ch); letters.push(ch); }
+  }
+  // 5x5
+  const grid = [];
+  const map = {};
+  for (let r = 0; r < 5; r++) {
+    grid.push([]);
+    for (let c = 0; c < 5; c++) {
+      const ch = letters[r * 5 + c];
+      grid[r].push(ch);
+      map[ch] = [r + 1, c + 1];
+    }
+  }
+  return { grid, map };
+}
+
+function prepare(text) {
+  let t = text.toUpperCase().replace(/[^A-Z]/g, '');
+  if (jToI) t = t.replace(/J/g, 'I');
+  return t;
+}
+
+function encrypt(text, sq, period) {
+  const t = prepare(text);
+  let out = '';
+  for (let i = 0; i < t.length; i += period) {
+    const block = t.slice(i, i + period);
+    const rows = [], cols = [];
+    for (const ch of block) {
+      const rc = sq.map[ch];
+      if (!rc) continue;
+      rows.push(rc[0]);
+      cols.push(rc[1]);
+    }
+    const digits = rows.concat(cols);
+    // reverse lookup: build (row,col) -> letter
+    const inv = {};
+    for (const k in sq.map) inv[sq.map[k].join(',')] = k;
+    for (let j = 0; j < digits.length; j += 2) {
+      const pair = digits[j] + ',' + digits[j + 1];
+      out += inv[pair] || '';
+    }
+  }
+  return out;
+}
+
+function decrypt(text, sq, period) {
+  const t = prepare(text);
+  let out = '';
+  for (let i = 0; i < t.length; i += period) {
+    const block = t.slice(i, i + period);
+    const digits = [];
+    for (const ch of block) {
+      const rc = sq.map[ch];
+      if (!rc) continue;
+      digits.push(rc[0], rc[1]);
+    }
+    const half = digits.length / 2;
+    const inv = {};
+    for (const k in sq.map) inv[sq.map[k].join(',')] = k;
+    for (let j = 0; j < half; j++) {
+      const pair = digits[j] + ',' + digits[j + half];
+      out += inv[pair] || '';
+    }
+  }
+  return out;
+}
+
+function run(source) {
+  source = source || 'plain';
+  const sq = buildSquare($('key').value);
+  const period = Math.max(1, parseInt($('period').value, 10) || 5);
+  $('period').value = period;
+
+  if (source === 'plain') {
+    const c = encrypt($('plain').value, sq, period);
+    $('cipher').value = c;
+  } else {
+    const p = decrypt($('cipher').value, sq, period);
+    $('plain').value = p;
+  }
+
+  const prepared = prepare($('plain').value);
+  $('statLetters').textContent = prepared.length;
+  $('statBlocks').textContent = Math.ceil(prepared.length / period);
+  $('statPeriod').textContent = period;
+
+  renderSquare(sq);
+  renderFract(prepared, sq, period);
+}
+
+function renderSquare(sq) {
+  const box = $('square');
+  let html = '<div class="hdr"></div>';
+  for (let c = 1; c <= 5; c++) html += '<div class="hdr">' + c + '</div>';
+  for (let r = 0; r < 5; r++) {
+    html += '<div class="hdr">' + (r + 1) + '</div>';
+    for (let c = 0; c < 5; c++) {
+      html += '<div class="cell">' + sq.grid[r][c] + '</div>';
+    }
+  }
+  box.innerHTML = html;
+}
+
+function renderFract(text, sq, period) {
+  if (!text) { $('fract').textContent = '(empty)'; return; }
+  let html = '';
+  for (let i = 0; i < text.length; i += period) {
+    const block = text.slice(i, i + period);
+    const rows = [], cols = [];
+    for (const ch of block) {
+      const rc = sq.map[ch]; if (!rc) continue;
+      rows.push(rc[0]); cols.push(rc[1]);
+    }
+    const plainLine = block.split('').join(' ');
+    const rowsLine = rows.join(' ');
+    const colsLine = cols.join(' ');
+    const digits = rows.concat(cols);
+    const inv = {};
+    for (const k in sq.map) inv[sq.map[k].join(',')] = k;
+    const outChars = [];
+    for (let j = 0; j < digits.length; j += 2) {
+      outChars.push(inv[digits[j] + ',' + digits[j + 1]] || '?');
+    }
+    html += 'block ' + (i / period + 1) + ':\n';
+    html += '  plain : ' + plainLine + '\n';
+    html += '  rows  : ' + rowsLine + '\n';
+    html += '  cols  : ' + colsLine + '\n';
+    html += '  → ' + digits.join('') + '\n';
+    html += '  cipher: ' + outChars.join(' ') + '\n\n';
+  }
+  $('fract').textContent = html.trimEnd();
+}
+
+function toggleJ() {
+  jToI = !jToI;
+  $('jtoi').textContent = jToI ? 'ON' : 'OFF';
+  run('plain');
+}
+
+function swap() {
+  const p = $('plain').value, c = $('cipher').value;
+  $('plain').value = c;
+  $('cipher').value = p;
+  run('plain');
+}
+
+run('plain');
+</script>
+</body>
+</html>
