@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Countdown Timer — Live Date Countdown | Free Online Tool</title>
+<meta name="description" content="Free online countdown timer. Set a target date and time and watch a live countdown in days, hours, minutes, and seconds. Shareable URL, title and background options.">
+<meta name="keywords" content="countdown timer, date countdown, event countdown, launch timer, release countdown">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/countdown.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .controls label { display: flex; flex-direction: column; font-size: .78rem; color: var(--muted); gap: 4px; }
+  .controls input, .controls select {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .display {
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 20px;
+    background: var(--surface2); text-align: center; margin-bottom: 16px;
+  }
+  .title { font-size: 1.3rem; font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+  .target-label { color: var(--muted); font-size: .85rem; margin-bottom: 20px; }
+  .timer { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+  .unit {
+    min-width: 100px; padding: 16px 10px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .unit .value { font-family: var(--mono); font-size: 2.6rem; font-weight: 700; color: var(--text); line-height: 1; }
+  .unit .label { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-top: 6px; }
+  .progress-wrap { margin-top: 20px; }
+  .progress-bar { height: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); transition: width .3s; }
+  .progress-text { font-size: .75rem; color: var(--muted); margin-top: 6px; }
+  .finished { color: var(--success); font-size: 1.2rem; font-weight: 600; margin-top: 10px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .preset { font-size: .75rem; padding: 4px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; color: var(--text); }
+  .preset:hover { border-color: var(--accent); }
+  .extra-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 14px; }
+  .extra { padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); font-size: .78rem; }
+  .extra strong { display: block; color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+  .extra .v { font-family: var(--mono); color: var(--text); }
+  @media (max-width: 640px) {
+    .controls { grid-template-columns: 1fr; }
+    .unit { min-width: 72px; padding: 12px 6px; }
+    .unit .value { font-size: 1.9rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>⏳ Countdown Timer</h1>
+<p class="subtitle">Pick a date and watch the live countdown. Share the URL to send a countdown link that remembers everything.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Event name
+      <input type="text" id="title" placeholder="New Year's Day" maxlength="80">
+    </label>
+    <label>Target date & time
+      <input type="datetime-local" id="target">
+    </label>
+  </div>
+
+  <div class="presets">
+    <span class="preset" data-preset="end-of-day">End of today</span>
+    <span class="preset" data-preset="tomorrow">Tomorrow 9am</span>
+    <span class="preset" data-preset="next-week">+1 week</span>
+    <span class="preset" data-preset="next-month">+1 month</span>
+    <span class="preset" data-preset="new-year">Next New Year</span>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="startBtn">Start / Update</button>
+    <button class="btn btn-secondary" id="shareBtn">Copy share link</button>
+    <button class="btn btn-secondary" id="resetBtn">Reset</button>
+  </div>
+
+  <div class="display" id="display" hidden>
+    <div class="title" id="dTitle"></div>
+    <div class="target-label" id="dTarget"></div>
+    <div class="timer" id="dTimer"></div>
+    <div class="finished" id="dFinished" hidden>🎉 Time's up!</div>
+    <div class="progress-wrap" id="progressWrap" hidden>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+    <div class="extra-info" id="extraInfo"></div>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let targetTs = null;
+let startTs = null;
+let title = '';
+let tickHandle = null;
+
+function pad(n, w = 2) { return String(n).padStart(w, '0'); }
+
+function toLocalInput(date) {
+  const tz = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - tz).toISOString().slice(0, 16);
+}
+
+function parseLocalInput(s) {
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d) ? null : d.getTime();
+}
+
+function loadFromUrl() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const t = params.get('t');
+  const n = params.get('n');
+  if (t && !isNaN(+t)) {
+    targetTs = +t;
+    $('target').value = toLocalInput(new Date(targetTs));
+  }
+  if (n) {
+    title = n;
+    $('title').value = n;
+  }
+  if (targetTs) startCountdown();
+}
+
+function updateUrl() {
+  if (!targetTs) return;
+  const params = new URLSearchParams();
+  params.set('t', String(targetTs));
+  if (title) params.set('n', title);
+  history.replaceState(null, '', '#' + params.toString());
+}
+
+function startCountdown() {
+  const v = $('target').value;
+  const t = parseLocalInput(v);
+  if (!t) {
+    alert('Pick a valid target date and time.');
+    return;
+  }
+  title = $('title').value.trim();
+  targetTs = t;
+  startTs = Date.now();
+  $('display').hidden = false;
+  $('dTitle').textContent = title || 'Countdown';
+  const d = new Date(targetTs);
+  $('dTarget').textContent = 'Target: ' + d.toLocaleString();
+  updateUrl();
+  tick();
+  if (tickHandle) clearInterval(tickHandle);
+  tickHandle = setInterval(tick, 1000);
+}
+
+function tick() {
+  if (!targetTs) return;
+  const now = Date.now();
+  let diff = targetTs - now;
+  const finished = diff <= 0;
+  if (finished) diff = 0;
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+
+  $('dTimer').innerHTML = `
+    <div class="unit"><div class="value">${pad(days, 2)}</div><div class="label">Days</div></div>
+    <div class="unit"><div class="value">${pad(hours, 2)}</div><div class="label">Hours</div></div>
+    <div class="unit"><div class="value">${pad(minutes, 2)}</div><div class="label">Minutes</div></div>
+    <div class="unit"><div class="value">${pad(seconds, 2)}</div><div class="label">Seconds</div></div>
+  `;
+
+  $('dFinished').hidden = !finished;
+  if (finished) {
+    $('progressWrap').hidden = true;
+    if (tickHandle) { clearInterval(tickHandle); tickHandle = null; }
+  } else if (startTs && startTs < targetTs) {
+    const total = targetTs - startTs;
+    const elapsed = now - startTs;
+    const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+    $('progressWrap').hidden = false;
+    $('progressFill').style.width = pct.toFixed(2) + '%';
+    $('progressText').textContent = pct.toFixed(1) + '% elapsed since countdown began';
+  }
+
+  const totalMs = targetTs - now;
+  const totalSec = Math.max(0, Math.floor(totalMs / 1000));
+  $('extraInfo').innerHTML = `
+    <div class="extra"><strong>Total seconds</strong><span class="v">${totalSec.toLocaleString()}</span></div>
+    <div class="extra"><strong>Total minutes</strong><span class="v">${Math.floor(totalSec / 60).toLocaleString()}</span></div>
+    <div class="extra"><strong>Total hours</strong><span class="v">${Math.floor(totalSec / 3600).toLocaleString()}</span></div>
+    <div class="extra"><strong>Weeks</strong><span class="v">${(totalSec / 604800).toFixed(2)}</span></div>
+  `;
+}
+
+function applyPreset(p) {
+  const now = new Date();
+  let d;
+  switch (p) {
+    case 'end-of-day':
+      d = new Date(now); d.setHours(23, 59, 0, 0); break;
+    case 'tomorrow':
+      d = new Date(now); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); break;
+    case 'next-week':
+      d = new Date(now); d.setDate(d.getDate() + 7); break;
+    case 'next-month':
+      d = new Date(now); d.setMonth(d.getMonth() + 1); break;
+    case 'new-year':
+      d = new Date(now.getFullYear() + 1, 0, 1, 0, 0, 0, 0); break;
+  }
+  if (d) $('target').value = toLocalInput(d);
+}
+
+$('startBtn').addEventListener('click', startCountdown);
+$('shareBtn').addEventListener('click', () => {
+  if (!targetTs) { alert('Start a countdown first.'); return; }
+  updateUrl();
+  navigator.clipboard.writeText(location.href);
+  const toast = $('toast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1500);
+});
+$('resetBtn').addEventListener('click', () => {
+  if (tickHandle) { clearInterval(tickHandle); tickHandle = null; }
+  targetTs = null; startTs = null; title = '';
+  $('display').hidden = true;
+  $('title').value = '';
+  $('target').value = '';
+  history.replaceState(null, '', location.pathname);
+});
+document.querySelectorAll('.preset').forEach(el => {
+  el.addEventListener('click', () => applyPreset(el.dataset.preset));
+});
+
+// default: set to tomorrow at 9am on first load
+if (!location.hash) {
+  applyPreset('tomorrow');
+}
+loadFromUrl();
+</script>
+</body>
+</html>
