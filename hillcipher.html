@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hill Cipher Encoder / Decoder — Free Online Tool</title>
+<meta name="description" content="Encrypt and decrypt text with the Hill cipher — a classical linear-algebra cipher using a 2×2 or 3×3 invertible key matrix mod 26, with automatic inverse computation.">
+<meta name="keywords" content="hill cipher, matrix cipher, classical cipher, linear algebra, cryptography, encode, decode, modular inverse">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hillcipher.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 160px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 4px; font-size: .88rem; color: var(--text); align-items: center; }
+  .matrix-grid {
+    display: inline-grid; gap: 6px; margin: 8px 0;
+  }
+  .matrix-grid input {
+    width: 56px; height: 44px; text-align: center;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: 1rem;
+  }
+  .matrix-display {
+    display: inline-grid; gap: 4px; margin: 8px 12px 8px 0;
+    font-family: var(--mono); font-size: .9rem;
+  }
+  .matrix-display .cell {
+    min-width: 36px; padding: 6px 8px; text-align: center;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface2);
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .row > div { display: flex; flex-direction: column; }
+  .row > div > .head { margin-bottom: 4px; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .err { color: var(--error); font-size: .85rem; margin-top: 6px; }
+  .ok { color: var(--success); font-size: .85rem; margin-top: 6px; }
+  button.preset {
+    padding: 4px 10px; font-size: .8rem;
+  }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .matrix-grid input { width: 44px; height: 38px; font-size: .9rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Hill Cipher</h1>
+<p class="subtitle">The Hill cipher (Lester S. Hill, 1929) treats blocks of letters as vectors and multiplies them by an invertible key matrix modulo 26. This tool supports 2&times;2 and 3&times;3 keys, automatically computes the modular inverse for decryption, and pads input as needed.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Block size
+      <select id="size" onchange="resizeMatrix()">
+        <option value="2" selected>2×2</option>
+        <option value="3">3×3</option>
+      </select>
+    </label>
+    <label>Padding letter
+      <select id="pad" onchange="run('plain')">
+        <option value="X" selected>X</option>
+        <option value="Z">Z</option>
+        <option value="Q">Q</option>
+      </select>
+    </label>
+    <button class="btn btn-secondary preset" onclick="preset('classic')">Classic [3 3 / 2 5]</button>
+    <button class="btn btn-secondary preset" onclick="preset('hill3')">3×3 [6 24 1 / 13 16 10 / 20 17 15]</button>
+    <button class="btn btn-secondary preset" onclick="preset('random')">Random invertible</button>
+  </div>
+  <div class="row">
+    <div>
+      <span class="head">Key matrix K</span>
+      <div id="matrix" class="matrix-grid"></div>
+      <div id="status" class="err"></div>
+    </div>
+    <div>
+      <span class="head">Determinant (mod 26)</span>
+      <div id="detBox" class="matrix-display"><div class="cell">—</div></div>
+    </div>
+    <div>
+      <span class="head">Inverse K⁻¹ (mod 26)</span>
+      <div id="invBox" class="matrix-display"></div>
+    </div>
+  </div>
+  <div class="panels" style="margin-top:10px">
+    <div>
+      <label class="head" for="plain">Plain text</label>
+      <textarea id="plain" oninput="run('plain')" spellcheck="false">HELLO WORLD</textarea>
+    </div>
+    <div>
+      <label class="head" for="cipher">Cipher text</label>
+      <textarea id="cipher" oninput="run('cipher')" spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="stats">
+    <span>plain length <strong id="lenP">0</strong></span>
+    <span>blocks <strong id="lenB">0</strong></span>
+    <span>padded chars <strong id="lenPad">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How It Works</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Each letter A–Z is mapped to 0–25. Plaintext is split into vectors of length <em>n</em> (the block size) and multiplied by an <em>n&times;n</em> key matrix mod 26. To decrypt, multiply by the matrix inverse mod 26 — which exists only when <code>gcd(det(K), 26) = 1</code>, i.e. the determinant is coprime to 26 (so it must be odd and not a multiple of 13). The Hill cipher is one of the earliest practical polygraphic ciphers and was the first to use linear algebra; however, it falls quickly to a known-plaintext attack since enough pairs of plain/cipher blocks let an attacker solve for the key.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let N = 2;
+let K = [[3,3],[2,5]];
+
+function mod(a, m) { return ((a % m) + m) % m; }
+function modInverse(a, m) {
+  a = mod(a, m);
+  for (let x = 1; x < m; x++) if (mod(a * x, m) === 1) return x;
+  return null;
+}
+
+function det(M) {
+  if (M.length === 2) return M[0][0]*M[1][1] - M[0][1]*M[1][0];
+  let d = 0;
+  for (let c = 0; c < 3; c++) {
+    const minor = [[M[1][(c+1)%3], M[1][(c+2)%3]], [M[2][(c+1)%3], M[2][(c+2)%3]]];
+    d += M[0][c] * (minor[0][0]*minor[1][1] - minor[0][1]*minor[1][0]);
+  }
+  return d;
+}
+
+function adjugate(M) {
+  if (M.length === 2) return [[M[1][1], -M[0][1]], [-M[1][0], M[0][0]]];
+  const adj = [[0,0,0],[0,0,0],[0,0,0]];
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const minor = [];
+      for (let i = 0; i < 3; i++) {
+        if (i === r) continue;
+        const row = [];
+        for (let j = 0; j < 3; j++) {
+          if (j === c) continue;
+          row.push(M[i][j]);
+        }
+        minor.push(row);
+      }
+      const m = minor[0][0]*minor[1][1] - minor[0][1]*minor[1][0];
+      adj[c][r] = ((r + c) % 2 === 0 ? 1 : -1) * m;
+    }
+  }
+  return adj;
+}
+
+function inverseMod26(M) {
+  const d = mod(det(M), 26);
+  const di = modInverse(d, 26);
+  if (di === null) return null;
+  const adj = adjugate(M);
+  const inv = [];
+  for (let r = 0; r < M.length; r++) {
+    const row = [];
+    for (let c = 0; c < M.length; c++) row.push(mod(adj[r][c] * di, 26));
+    inv.push(row);
+  }
+  return inv;
+}
+
+function multiply(M, v) {
+  const out = [];
+  for (let r = 0; r < M.length; r++) {
+    let s = 0;
+    for (let c = 0; c < M.length; c++) s += M[r][c] * v[c];
+    out.push(mod(s, 26));
+  }
+  return out;
+}
+
+function buildMatrixUI() {
+  const box = $('matrix');
+  box.innerHTML = '';
+  box.style.gridTemplateColumns = 'repeat(' + N + ', auto)';
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.value = K[r][c];
+      inp.dataset.r = r;
+      inp.dataset.c = c;
+      inp.oninput = readMatrix;
+      box.appendChild(inp);
+    }
+  }
+}
+
+function readMatrix() {
+  const inputs = $('matrix').querySelectorAll('input');
+  inputs.forEach(inp => {
+    const r = +inp.dataset.r, c = +inp.dataset.c;
+    K[r][c] = mod(parseInt(inp.value, 10) || 0, 26);
+  });
+  refresh();
+}
+
+function resizeMatrix() {
+  N = parseInt($('size').value, 10);
+  K = Array.from({length: N}, (_, r) => Array.from({length: N}, (_, c) => r === c ? 1 : 0));
+  if (N === 2) K = [[3,3],[2,5]];
+  else K = [[6,24,1],[13,16,10],[20,17,15]];
+  buildMatrixUI();
+  refresh();
+}
+
+function preset(name) {
+  if (name === 'classic') { N = 2; $('size').value = '2'; K = [[3,3],[2,5]]; }
+  else if (name === 'hill3') { N = 3; $('size').value = '3'; K = [[6,24,1],[13,16,10],[20,17,15]]; }
+  else if (name === 'random') {
+    N = parseInt($('size').value, 10);
+    for (let tries = 0; tries < 200; tries++) {
+      K = Array.from({length: N}, () => Array.from({length: N}, () => Math.floor(Math.random() * 26)));
+      const d = mod(det(K), 26);
+      if (modInverse(d, 26) !== null) break;
+    }
+  }
+  buildMatrixUI();
+  refresh();
+}
+
+function showMatrix(box, M) {
+  box.innerHTML = '';
+  if (!M) { box.innerHTML = '<div class="cell">—</div>'; return; }
+  box.style.gridTemplateColumns = 'repeat(' + M.length + ', auto)';
+  for (let r = 0; r < M.length; r++) {
+    for (let c = 0; c < M.length; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.textContent = M[r][c];
+      box.appendChild(cell);
+    }
+  }
+}
+
+function refresh() {
+  const d = mod(det(K), 26);
+  $('detBox').innerHTML = '<div class="cell">' + d + '</div>';
+  const inv = inverseMod26(K);
+  if (!inv) {
+    $('invBox').innerHTML = '<div class="cell">none</div>';
+    $('status').className = 'err';
+    $('status').textContent = 'det(K) = ' + d + ' is not coprime to 26 — matrix is not invertible mod 26. Pick another key.';
+  } else {
+    showMatrix($('invBox'), inv);
+    $('status').className = 'ok';
+    $('status').textContent = '✓ invertible mod 26';
+  }
+  run('plain');
+}
+
+function clean(text) {
+  return text.toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+function encode(text) {
+  const cleaned = clean(text);
+  const padCh = $('pad').value;
+  let padded = cleaned;
+  let padCount = 0;
+  while (padded.length % N !== 0) { padded += padCh; padCount++; }
+  let out = '';
+  for (let i = 0; i < padded.length; i += N) {
+    const v = [];
+    for (let j = 0; j < N; j++) v.push(padded.charCodeAt(i + j) - 65);
+    const r = multiply(K, v);
+    for (const x of r) out += String.fromCharCode(65 + x);
+  }
+  return { out, blocks: padded.length / N, padCount, len: cleaned.length };
+}
+
+function decode(text) {
+  const inv = inverseMod26(K);
+  if (!inv) return { out: '(matrix not invertible)', blocks: 0, padCount: 0, len: 0 };
+  const cleaned = clean(text);
+  if (cleaned.length % N !== 0) return { out: '(cipher length must be multiple of ' + N + ')', blocks: 0, padCount: 0, len: cleaned.length };
+  let out = '';
+  for (let i = 0; i < cleaned.length; i += N) {
+    const v = [];
+    for (let j = 0; j < N; j++) v.push(cleaned.charCodeAt(i + j) - 65);
+    const r = multiply(inv, v);
+    for (const x of r) out += String.fromCharCode(65 + x);
+  }
+  return { out, blocks: cleaned.length / N, padCount: 0, len: cleaned.length };
+}
+
+function run(source) {
+  source = source || 'plain';
+  if (source === 'plain') {
+    const r = encode($('plain').value);
+    $('cipher').value = r.out;
+    $('lenP').textContent = r.len;
+    $('lenB').textContent = r.blocks;
+    $('lenPad').textContent = r.padCount;
+  } else {
+    const r = decode($('cipher').value);
+    $('plain').value = r.out;
+    $('lenP').textContent = r.len;
+    $('lenB').textContent = r.blocks;
+    $('lenPad').textContent = r.padCount;
+  }
+}
+
+buildMatrixUI();
+refresh();
+</script>
+</body>
+</html>

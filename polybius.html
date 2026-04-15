@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polybius Square Cipher Encoder / Decoder — Free Online Tool</title>
+<meta name="description" content="Encode and decode text using the Polybius square cipher — the ancient Greek 5×5 grid cipher with optional keyed alphabet, ADFGX variant, and live square preview.">
+<meta name="keywords" content="polybius square, polybius cipher, ADFGX, classical cipher, cryptography, encode, decode">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/polybius.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 160px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 4px; font-size: .88rem; color: var(--text); align-items: center; }
+  .controls input[type=text] {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-family: var(--mono);
+    font-size: .88rem; width: 180px;
+  }
+  .controls select {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-size: .88rem;
+  }
+  .square {
+    display: inline-grid; gap: 4px;
+    margin-top: 12px; font-family: var(--mono); font-size: .9rem;
+  }
+  .sq-cell {
+    width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--surface2);
+    font-weight: 600;
+  }
+  .sq-cell.head { background: transparent; border: none; color: var(--muted); font-weight: 400; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .sq-cell { width: 32px; height: 32px; font-size: .8rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Polybius Square Cipher</h1>
+<p class="subtitle">The Polybius square encodes each letter of the alphabet as a pair of digits (or letters) representing its row and column in a 5&times;5 grid. Optionally seed the grid with a keyword to scramble the alphabet, or switch to the ADFGX variant used by the German army in WWI.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Variant
+      <select id="variant" onchange="rebuild()">
+        <option value="55">5×5 (I/J merged)</option>
+        <option value="66">6×6 (A–Z + 0–9)</option>
+        <option value="adfgx">ADFGX (5×5)</option>
+      </select>
+    </label>
+    <label>Keyword <input type="text" id="keyword" oninput="rebuild()" placeholder="(optional)" spellcheck="false"></label>
+    <label>Pair separator
+      <select id="sep" onchange="run('plain')">
+        <option value="">none</option>
+        <option value=" " selected>space</option>
+        <option value="-">dash</option>
+      </select>
+    </label>
+  </div>
+  <div class="panels">
+    <div>
+      <label class="head" for="plain">Plain text</label>
+      <textarea id="plain" oninput="run('plain')" spellcheck="false">The quick brown fox jumps over the lazy dog</textarea>
+    </div>
+    <div>
+      <label class="head" for="cipher">Cipher text</label>
+      <textarea id="cipher" oninput="run('cipher')" spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="stats">
+    <span>plain <strong id="lenIn">0</strong> chars</span>
+    <span>encoded symbols <strong id="symCount">0</strong></span>
+    <span>alphabet <strong id="alphaSize">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Polybius Square</h2>
+  <div id="square" class="square"></div>
+  <p style="font-size:.82rem;color:var(--muted);margin-top:10px">
+    Read the row label first, then the column label. With a keyword, unique letters of the keyword fill the grid first, followed by the remaining alphabet.
+  </p>
+</div>
+
+<div class="card">
+  <h2>About the Polybius Square</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Devised by the Greek historian Polybius in the 2nd century BCE, the square was originally a way to transmit messages with torches: two groups of torches, the count in each indicating row and column. As a substitution cipher it offers no real security, but it forms the basis of more sophisticated systems like the Nihilist cipher, the Bifid cipher, and the WWI-era ADFGX/ADFGVX field ciphers used by the German army.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let SIZE = 5, ALPHA = '', LABELS = '12345', GRID = [], FWD = {}, REV = {};
+
+function buildAlphabet() {
+  const variant = $('variant').value;
+  const kw = $('keyword').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  let base;
+  if (variant === '66') {
+    SIZE = 6; LABELS = '123456';
+    base = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  } else if (variant === 'adfgx') {
+    SIZE = 5; LABELS = 'ADFGX';
+    base = 'ABCDEFGHIKLMNOPQRSTUVWXYZ'; // no J
+  } else {
+    SIZE = 5; LABELS = '12345';
+    base = 'ABCDEFGHIKLMNOPQRSTUVWXYZ'; // no J
+  }
+  let cleanedKw = '';
+  for (const ch of kw) {
+    if (base.includes(ch) && !cleanedKw.includes(ch)) cleanedKw += ch;
+  }
+  let alpha = cleanedKw;
+  for (const ch of base) if (!alpha.includes(ch)) alpha += ch;
+  ALPHA = alpha;
+}
+
+function buildGrid() {
+  GRID = []; FWD = {}; REV = {};
+  for (let r = 0; r < SIZE; r++) {
+    const row = [];
+    for (let c = 0; c < SIZE; c++) {
+      const idx = r * SIZE + c;
+      if (idx >= ALPHA.length) break;
+      const ch = ALPHA[idx];
+      row.push(ch);
+      const code = LABELS[r] + LABELS[c];
+      FWD[ch] = code;
+      REV[code] = ch;
+      if (SIZE === 5 && LABELS === '12345' && ch === 'I') {
+        FWD['J'] = code;
+      }
+    }
+    GRID.push(row);
+  }
+}
+
+function renderSquare() {
+  const box = $('square');
+  box.innerHTML = '';
+  box.style.gridTemplateColumns = 'repeat(' + (SIZE + 1) + ', 1fr)';
+  const corner = document.createElement('div');
+  corner.className = 'sq-cell head';
+  box.appendChild(corner);
+  for (let c = 0; c < SIZE; c++) {
+    const h = document.createElement('div');
+    h.className = 'sq-cell head';
+    h.textContent = LABELS[c];
+    box.appendChild(h);
+  }
+  for (let r = 0; r < SIZE; r++) {
+    const h = document.createElement('div');
+    h.className = 'sq-cell head';
+    h.textContent = LABELS[r];
+    box.appendChild(h);
+    for (let c = 0; c < SIZE; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'sq-cell';
+      const ch = GRID[r] && GRID[r][c];
+      if (ch) {
+        cell.textContent = (SIZE === 5 && LABELS === '12345' && ch === 'I') ? 'I/J' : ch;
+        if (cell.textContent.length > 1) cell.style.fontSize = '.7rem';
+      }
+      box.appendChild(cell);
+    }
+  }
+}
+
+function encode(text) {
+  const sep = $('sep').value;
+  let out = [];
+  let count = 0;
+  for (const ch of text.toUpperCase()) {
+    const code = FWD[ch];
+    if (code) { out.push(code); count++; }
+  }
+  return { out: out.join(sep), count };
+}
+
+function decode(text) {
+  // Try to extract codes
+  const sep = $('sep').value;
+  let tokens;
+  if (sep) {
+    tokens = text.toUpperCase().split(new RegExp('[' + (sep === ' ' ? '\\s' : '\\-') + ']+')).filter(Boolean);
+  } else {
+    tokens = text.toUpperCase().match(new RegExp('[' + LABELS + ']{2}', 'g')) || [];
+  }
+  let out = '', count = 0;
+  for (const t of tokens) {
+    if (t.length !== 2) continue;
+    const ch = REV[t];
+    if (ch) { out += ch; count++; }
+  }
+  return { out, count };
+}
+
+function run(source) {
+  source = source || 'plain';
+  if (source === 'plain') {
+    const r = encode($('plain').value);
+    $('cipher').value = r.out;
+    $('lenIn').textContent = $('plain').value.length;
+    $('symCount').textContent = r.count;
+  } else {
+    const r = decode($('cipher').value);
+    $('plain').value = r.out;
+    $('lenIn').textContent = r.out.length;
+    $('symCount').textContent = r.count;
+  }
+  $('alphaSize').textContent = ALPHA.length;
+}
+
+function rebuild() {
+  buildAlphabet();
+  buildGrid();
+  renderSquare();
+  run('plain');
+}
+
+rebuild();
+</script>
+</body>
+</html>
