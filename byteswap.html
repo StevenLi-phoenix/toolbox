@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Endian Converter &amp; Byte Swap — LE ↔ BE</title>
+<meta name="description" content="Swap endianness between little-endian and big-endian. Interpret hex bytes as int/uint/float 16/32/64 with signed, unsigned, and IEEE-754 views. 100% client-side.">
+<meta name="keywords" content="endian, endianness, byte swap, little endian, big endian, bswap, ntohl, htonl, ieee 754">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/byteswap.html">
+<meta property="og:title" content="Endian Converter & Byte Swap">
+<meta property="og:description" content="Swap endianness and view int/uint/float interpretations of bytes.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/byteswap.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .control label { display:block; font-size:.76rem; color:var(--muted); font-weight:600; margin-bottom:3px; text-transform:uppercase; letter-spacing:.04em; }
+  .control input, .control select { width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg); color:var(--text); font-family:var(--mono); font-size:.9rem; }
+  textarea { min-height: 80px; font-family: var(--mono); font-size: .95rem; }
+  .swap-view { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .swap-cell { padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .swap-head { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .swap-val { font-family: var(--mono); font-size: 1rem; word-break: break-all; }
+  .interp { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: .84rem; }
+  .interp th, .interp td { border-bottom: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+  .interp th { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .interp td.val { font-family: var(--mono); word-break: break-all; }
+  .interp td.kind { color: var(--muted); font-size: .78rem; width: 120px; }
+  .interp tr.insufficient td { color: var(--muted); font-style: italic; }
+  @media (max-width: 768px) { .swap-view { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Endian Converter &amp; Byte Swap</h1>
+  <p class="subtitle">Swap bytes between little-endian and big-endian order, or interpret a sequence of hex bytes as signed/unsigned integers and IEEE-754 floats at 16, 32, and 64 bits. Useful for debugging binary protocols, memory dumps, network captures, and cross-platform serialization. 100% client-side.</p>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <div class="controls">
+      <div class="control">
+        <label>Input format</label>
+        <select id="format">
+          <option value="hex">Hex bytes</option>
+          <option value="dec">Decimal number</option>
+          <option value="float">Float (decimal)</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>Width</label>
+        <select id="width">
+          <option value="">Auto (hex)</option>
+          <option value="16">16-bit (2 bytes)</option>
+          <option value="32">32-bit (4 bytes)</option>
+          <option value="64">64-bit (8 bytes)</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>Source endian (for numeric input)</label>
+        <select id="endian">
+          <option value="le">Little endian</option>
+          <option value="be">Big endian</option>
+        </select>
+      </div>
+    </div>
+    <label for="input">Input</label>
+    <textarea id="input" placeholder="Hex: &quot;48 65 6c 6c&quot; or &quot;0xdeadbeef&quot;    Decimal: &quot;3735928559&quot;    Float: &quot;3.14159&quot;"></textarea>
+    <div class="btn-row" style="margin-top:8px;">
+      <button class="btn btn-primary" onclick="convert()">Convert</button>
+      <button class="btn btn-secondary" onclick="loadSample('hex')">Sample hex</button>
+      <button class="btn btn-secondary" onclick="loadSample('int')">Sample int</button>
+      <button class="btn btn-secondary" onclick="loadSample('float')">Sample float</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+    <div class="status" id="status"></div>
+
+    <div class="swap-view">
+      <div class="swap-cell">
+        <div class="swap-head">
+          <span>Little endian (LE)</span>
+          <button class="btn btn-secondary" style="padding:3px 10px;font-size:.7rem;" onclick="copyCell('le')">Copy</button>
+        </div>
+        <div class="swap-val" id="le-val"></div>
+      </div>
+      <div class="swap-cell">
+        <div class="swap-head">
+          <span>Big endian (BE)</span>
+          <button class="btn btn-secondary" style="padding:3px 10px;font-size:.7rem;" onclick="copyCell('be')">Copy</button>
+        </div>
+        <div class="swap-val" id="be-val"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Numeric interpretations</h2>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:6px;">Reading the raw bytes as numbers of various widths and types. Grey rows mean there aren't enough bytes for that width.</p>
+    <div id="interp"></div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Notes</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.65;">
+      <b>Endianness</b> is the order of bytes in a multi-byte value. Little-endian (x86, ARM default, RISC-V, WebAssembly) stores the least-significant byte first; big-endian (network byte order, older PowerPC, SPARC) stores the most-significant byte first.<br>
+      Classic conversion functions: <code>htonl</code>/<code>ntohl</code> (host↔network, 32-bit) and <code>htons</code>/<code>ntohs</code> (16-bit). <code>bswap_16/32/64</code> is the GCC byte-swap intrinsic.<br>
+      For floats, the conversion is a <em>bitwise</em> swap of the underlying IEEE-754 representation — the numeric value of a swapped float is usually meaningless unless the source was wrong-endian.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const SAMPLES = {
+  hex:   { format: 'hex',   input: 'de ad be ef' },
+  int:   { format: 'dec',   input: '3735928559' },
+  float: { format: 'float', input: '3.14159265358979' }
+};
+
+function loadSample(k) {
+  const s = SAMPLES[k];
+  document.getElementById('format').value = s.format;
+  document.getElementById('input').value = s.input;
+  if (s.format === 'dec' || s.format === 'float') document.getElementById('width').value = '32';
+  else document.getElementById('width').value = '';
+  convert();
+}
+
+function clearAll() {
+  document.getElementById('input').value = '';
+  document.getElementById('le-val').textContent = '';
+  document.getElementById('be-val').textContent = '';
+  document.getElementById('interp').innerHTML = '';
+  clearStatus();
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() { const el = document.getElementById('status'); el.className = 'status'; el.textContent = ''; }
+
+function parseHex(s) {
+  s = s.replace(/0x/gi, '').replace(/[\s,_-]+/g, '');
+  if (!/^[0-9a-f]*$/i.test(s)) throw new Error('Invalid hex characters');
+  if (s.length % 2) s = '0' + s;
+  const out = new Uint8Array(s.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i*2, 2), 16);
+  return out;
+}
+
+function intToBytes(bi, bytes, endian) {
+  // BigInt → Uint8Array of given length
+  const mask = (1n << (BigInt(bytes)*8n)) - 1n;
+  let v = (bi < 0n ? (bi + (1n << (BigInt(bytes)*8n))) : bi) & mask;
+  const out = new Uint8Array(bytes);
+  for (let i = bytes - 1; i >= 0; i--) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  // out is big-endian; swap if little
+  if (endian === 'le') out.reverse();
+  return out;
+}
+
+function floatToBytes(f, bytes, endian) {
+  const buf = new ArrayBuffer(bytes);
+  const dv = new DataView(buf);
+  if (bytes === 4) dv.setFloat32(0, f, false); // BE
+  else if (bytes === 8) dv.setFloat64(0, f, false);
+  else if (bytes === 2) {
+    // IEEE-754 half-precision encoding
+    const u = encodeFloat16(f);
+    dv.setUint16(0, u, false);
+  }
+  else throw new Error('Float width must be 16, 32, or 64');
+  const arr = new Uint8Array(buf);
+  if (endian === 'le') arr.reverse();
+  return arr;
+}
+
+// IEEE-754 half-precision encoder/decoder
+function encodeFloat16(v) {
+  const f32 = new Float32Array(1); f32[0] = v;
+  const i32 = new Uint32Array(f32.buffer)[0];
+  const sign = (i32 >>> 16) & 0x8000;
+  let exp = ((i32 >>> 23) & 0xff) - (127 - 15);
+  const frac = i32 & 0x7fffff;
+  if (exp <= 0) {
+    if (exp < -10) return sign;
+    const f = (frac | 0x800000) >>> (1 - exp + 13);
+    return sign | f;
+  } else if (exp >= 31) {
+    if ((i32 & 0x7fffffff) > 0x7f800000) return sign | 0x7e00 | (frac >> 13); // NaN
+    return sign | 0x7c00;
+  }
+  return sign | (exp << 10) | (frac >> 13);
+}
+function decodeFloat16(h) {
+  const sign = (h & 0x8000) ? -1 : 1;
+  const exp = (h >> 10) & 0x1f;
+  const frac = h & 0x3ff;
+  if (exp === 0) return sign * Math.pow(2, -14) * (frac / 1024);
+  if (exp === 31) return frac ? NaN : sign * Infinity;
+  return sign * Math.pow(2, exp - 15) * (1 + frac / 1024);
+}
+
+function bytesToHex(arr) {
+  return Array.from(arr, b => b.toString(16).padStart(2, '0')).join(' ');
+}
+
+function swapBytes(arr) {
+  const out = new Uint8Array(arr.length);
+  for (let i = 0; i < arr.length; i++) out[i] = arr[arr.length - 1 - i];
+  return out;
+}
+
+function readInt(arr, signed, endian) {
+  // arr is the raw bytes — convert to BigInt based on endian
+  let v = 0n;
+  if (endian === 'be') {
+    for (let i = 0; i < arr.length; i++) v = (v << 8n) | BigInt(arr[i]);
+  } else {
+    for (let i = arr.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(arr[i]);
+  }
+  if (signed) {
+    const bits = BigInt(arr.length) * 8n;
+    const signBit = 1n << (bits - 1n);
+    if (v & signBit) v -= (1n << bits);
+  }
+  return v;
+}
+
+function readFloat(arr, bytes, endian) {
+  if (arr.length < bytes) return null;
+  const sub = arr.slice(0, bytes);
+  const buf = endian === 'be' ? sub : swapBytes(sub);
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  if (bytes === 4) return dv.getFloat32(0, false);
+  if (bytes === 8) return dv.getFloat64(0, false);
+  if (bytes === 2) return decodeFloat16(dv.getUint16(0, false));
+  return null;
+}
+
+let currentBytes = new Uint8Array();
+
+function convert() {
+  clearStatus();
+  const fmt = document.getElementById('format').value;
+  const widthStr = document.getElementById('width').value;
+  const endian = document.getElementById('endian').value;
+  const raw = document.getElementById('input').value.trim();
+
+  if (!raw) {
+    document.getElementById('le-val').textContent = '';
+    document.getElementById('be-val').textContent = '';
+    document.getElementById('interp').innerHTML = '';
+    currentBytes = new Uint8Array();
+    return;
+  }
+
+  let bytes;
+  try {
+    if (fmt === 'hex') {
+      bytes = parseHex(raw);
+    } else if (fmt === 'dec') {
+      const width = parseInt(widthStr, 10);
+      if (!width) throw new Error('Choose a width for decimal input.');
+      const bi = BigInt(raw);
+      bytes = intToBytes(bi, width / 8, endian);
+    } else if (fmt === 'float') {
+      const width = parseInt(widthStr, 10);
+      if (!width) throw new Error('Choose a width for float input.');
+      bytes = floatToBytes(parseFloat(raw), width / 8, endian);
+    }
+  } catch (e) {
+    setStatus(e.message, 'error');
+    return;
+  }
+
+  // If numeric input, bytes are already in the chosen endian; for hex we treat them as raw bytes.
+  currentBytes = bytes;
+  const swapped = swapBytes(bytes);
+
+  // Determine which set is "LE" and which is "BE".
+  // For hex input we just label them as "as-given" vs "swapped". But showing LE/BE labels is more useful if we assume bytes are BE-ordered.
+  // Convention: display the raw bytes on both sides so the user sees the swap visually.
+  const leBytes = endian === 'le' || fmt === 'hex' ? bytes : swapped;
+  const beBytes = endian === 'be' || fmt === 'hex' ? bytes : swapped;
+
+  // Actually for the swap view, always show both orderings of the same byte sequence.
+  document.getElementById('le-val').textContent = bytesToHex(bytes);
+  document.getElementById('be-val').textContent = bytesToHex(swapped);
+
+  renderInterpretations(bytes);
+}
+
+function renderInterpretations(arr) {
+  const rows = [];
+  const widths = [
+    { name: '8-bit',  bytes: 1, int: true },
+    { name: '16-bit', bytes: 2, int: true, float: true },
+    { name: '32-bit', bytes: 4, int: true, float: true },
+    { name: '64-bit', bytes: 8, int: true, float: true }
+  ];
+
+  for (const w of widths) {
+    const sub = arr.slice(0, w.bytes);
+    const insufficient = sub.length < w.bytes;
+    const mkRow = (kind, leVal, beVal) => `
+      <tr class="${insufficient ? 'insufficient' : ''}">
+        <td class="kind">${kind}</td>
+        <td class="val">${insufficient ? '—' : leVal}</td>
+        <td class="val">${insufficient ? '—' : beVal}</td>
+      </tr>`;
+
+    if (w.int) {
+      if (!insufficient) {
+        const uLe = readInt(sub, false, 'le');
+        const uBe = readInt(sub, false, 'be');
+        const sLe = readInt(sub, true,  'le');
+        const sBe = readInt(sub, true,  'be');
+        rows.push(mkRow(w.name + ' uint', uLe.toString() + '  (0x' + uLe.toString(16) + ')', uBe.toString() + '  (0x' + uBe.toString(16) + ')'));
+        rows.push(mkRow(w.name + ' int',  sLe.toString(), sBe.toString()));
+      } else {
+        rows.push(mkRow(w.name + ' uint', '', ''));
+        rows.push(mkRow(w.name + ' int',  '', ''));
+      }
+    }
+    if (w.float) {
+      if (!insufficient) {
+        const fLe = readFloat(sub, w.bytes, 'le');
+        const fBe = readFloat(sub, w.bytes, 'be');
+        const fmt = v => (Number.isFinite(v) ? v.toPrecision(9) : String(v));
+        rows.push(mkRow(w.name + ' float', fmt(fLe), fmt(fBe)));
+      } else {
+        rows.push(mkRow(w.name + ' float', '', ''));
+      }
+    }
+  }
+
+  document.getElementById('interp').innerHTML = `
+    <table class="interp">
+      <thead><tr><th>Type</th><th>Little-endian</th><th>Big-endian</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>
+  `;
+}
+
+function copyCell(which) {
+  const v = document.getElementById(which + '-val').textContent;
+  if (!v) return;
+  navigator.clipboard.writeText(v).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+['format','width','endian','input'].forEach(id => document.getElementById(id).addEventListener('input', convert));
+</script>
+</body>
+</html>

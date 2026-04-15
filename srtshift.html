@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SRT Subtitle Timing Shifter — Offset &amp; Rescale</title>
+<meta name="description" content="Shift and rescale SRT, VTT, and SBV subtitle timestamps. Apply a constant offset, stretch for framerate conversion (23.976↔25 etc.), and export. 100% client-side.">
+<meta name="keywords" content="srt, vtt, subtitle, timing, shift, offset, framerate, 23.976, 25 fps, rescale">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/srtshift.html">
+<meta property="og:title" content="SRT Subtitle Timing Shifter">
+<meta property="og:description" content="Shift and rescale SRT/VTT subtitle timestamps.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/srtshift.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { min-height: 200px; font-family: var(--mono); font-size: .85rem; }
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 10px 0; }
+  .control { display: flex; flex-direction: column; gap: 4px; }
+  .control label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+  .control input, .control select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .preset-row button { font-size: .72rem; padding: 4px 10px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 14px; font-size: .82rem; margin: 10px 0; color: var(--muted); }
+  .stats b { color: var(--text); font-family: var(--mono); }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .panels > div { display: flex; flex-direction: column; }
+  .panels label { font-size: .82rem; font-weight: 600; margin-bottom: 4px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>SRT Subtitle Timing Shifter</h1>
+  <p class="subtitle">Shift and rescale subtitle timestamps for SRT, WebVTT, and SBV files. Apply a constant offset (positive or negative), stretch for framerate conversion (e.g. 23.976 → 25 fps), and preview the adjusted file side by side. Works entirely in your browser — no uploads.</p>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <div class="controls">
+      <div class="control">
+        <label>Format</label>
+        <select id="format">
+          <option value="srt">SRT (SubRip)</option>
+          <option value="vtt">WebVTT</option>
+          <option value="sbv">SBV (YouTube)</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>Offset (seconds, can be negative)</label>
+        <input type="number" id="offset" value="0" step="0.1">
+      </div>
+      <div class="control">
+        <label>Rate factor (output_time = input_time × factor)</label>
+        <input type="number" id="factor" value="1" step="0.0001">
+      </div>
+      <div class="control">
+        <label>Source framerate</label>
+        <select id="srcfps">
+          <option value="">—</option>
+          <option value="23.976">23.976</option>
+          <option value="24">24</option>
+          <option value="25">25</option>
+          <option value="29.97">29.97</option>
+          <option value="30">30</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>Target framerate</label>
+        <select id="dstfps">
+          <option value="">—</option>
+          <option value="23.976">23.976</option>
+          <option value="24">24</option>
+          <option value="25">25</option>
+          <option value="29.97">29.97</option>
+          <option value="30">30</option>
+        </select>
+      </div>
+    </div>
+    <div class="preset-row">
+      <button class="btn btn-secondary" onclick="setFps('23.976','25')">23.976 → 25</button>
+      <button class="btn btn-secondary" onclick="setFps('25','23.976')">25 → 23.976</button>
+      <button class="btn btn-secondary" onclick="setFps('29.97','23.976')">29.97 → 23.976</button>
+      <button class="btn btn-secondary" onclick="setFps('','')">Clear framerate</button>
+    </div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="apply()">Apply</button>
+      <button class="btn btn-secondary" onclick="openFile()">Open file…</button>
+      <button class="btn btn-secondary" onclick="loadSample()">Sample SRT</button>
+      <button class="btn btn-secondary" onclick="download()">Download</button>
+      <button class="btn btn-secondary" onclick="copyOutput()">Copy output</button>
+      <button class="btn btn-secondary" onclick="swapInputOutput()">Use output as input</button>
+      <input type="file" id="file" accept=".srt,.vtt,.sbv,text/plain" style="display:none">
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <div class="panels">
+      <div>
+        <label>Input</label>
+        <textarea id="input" placeholder="Paste subtitle text here or use 'Open file…'"></textarea>
+      </div>
+      <div>
+        <label>Output</label>
+        <textarea id="output" readonly placeholder="Adjusted subtitles will appear here."></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const SAMPLE_SRT = `1
+00:00:01,000 --> 00:00:03,500
+Hello, world.
+
+2
+00:00:04,000 --> 00:00:06,200
+This is a sample subtitle file.
+
+3
+00:01:15,750 --> 00:01:18,000
+Shift or rescale, then export.
+`;
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() {
+  const el = document.getElementById('status');
+  el.className = 'status'; el.textContent = '';
+}
+
+function loadSample() {
+  document.getElementById('format').value = 'srt';
+  document.getElementById('input').value = SAMPLE_SRT;
+  apply();
+}
+
+function openFile() { document.getElementById('file').click(); }
+document.getElementById('file').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const txt = await f.text();
+  document.getElementById('input').value = txt;
+  const ext = f.name.split('.').pop().toLowerCase();
+  if (['srt','vtt','sbv'].includes(ext)) document.getElementById('format').value = ext;
+  apply();
+});
+
+function setFps(s, d) {
+  document.getElementById('srcfps').value = s;
+  document.getElementById('dstfps').value = d;
+  updateFactor();
+  apply();
+}
+
+function updateFactor() {
+  const s = parseFloat(document.getElementById('srcfps').value);
+  const d = parseFloat(document.getElementById('dstfps').value);
+  if (s && d) {
+    document.getElementById('factor').value = (s / d).toFixed(6);
+  }
+}
+['srcfps','dstfps'].forEach(id => document.getElementById(id).addEventListener('change', () => { updateFactor(); apply(); }));
+
+// Time helpers
+function parseSrtTime(s) {
+  // 00:00:00,000  or  00:00:00.000
+  const m = s.match(/^(\d+):(\d{2}):(\d{2})[,.](\d{1,3})$/);
+  if (!m) return null;
+  return +m[1]*3600 + +m[2]*60 + +m[3] + parseInt(m[4].padEnd(3,'0'),10)/1000;
+}
+function parseSbvTime(s) {
+  // 0:00:00.000
+  const m = s.match(/^(\d+):(\d{1,2}):(\d{2})\.(\d{1,3})$/);
+  if (!m) return null;
+  return +m[1]*3600 + +m[2]*60 + +m[3] + parseInt(m[4].padEnd(3,'0'),10)/1000;
+}
+function fmtSrt(t) {
+  if (t < 0) t = 0;
+  const h = Math.floor(t/3600);
+  const m = Math.floor(t/60)%60;
+  const s = Math.floor(t)%60;
+  const ms = Math.round((t - Math.floor(t))*1000);
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+','+String(ms).padStart(3,'0');
+}
+function fmtVtt(t) { return fmtSrt(t).replace(',', '.'); }
+function fmtSbv(t) {
+  if (t < 0) t = 0;
+  const h = Math.floor(t/3600);
+  const m = Math.floor(t/60)%60;
+  const s = Math.floor(t)%60;
+  const ms = Math.round((t - Math.floor(t))*1000);
+  return h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+'.'+String(ms).padStart(3,'0');
+}
+
+function transform(t, off, factor) { return t * factor + off; }
+
+function shiftSrt(text, off, factor, fmt) {
+  // Matches lines like "00:00:01,000 --> 00:00:03,500" (SRT comma) or "00:00:01.000 --> 00:00:03.500" (VTT dot)
+  const re = /(\d+:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d+:\d{2}:\d{2}[,.]\d{1,3})/g;
+  let count = 0;
+  const out = text.replace(re, (_, a, b) => {
+    const ta = parseSrtTime(a), tb = parseSrtTime(b);
+    if (ta === null || tb === null) return _;
+    count++;
+    const na = transform(ta, off, factor), nb = transform(tb, off, factor);
+    const f = fmt === 'vtt' ? fmtVtt : fmtSrt;
+    return f(na) + ' --> ' + f(nb);
+  });
+  return { text: out, count };
+}
+
+function shiftSbv(text, off, factor) {
+  // 0:00:01.000,0:00:03.500
+  const re = /(\d+:\d{1,2}:\d{2}\.\d{1,3}),(\d+:\d{1,2}:\d{2}\.\d{1,3})/g;
+  let count = 0;
+  const out = text.replace(re, (_, a, b) => {
+    const ta = parseSbvTime(a), tb = parseSbvTime(b);
+    if (ta === null || tb === null) return _;
+    count++;
+    return fmtSbv(transform(ta, off, factor)) + ',' + fmtSbv(transform(tb, off, factor));
+  });
+  return { text: out, count };
+}
+
+function apply() {
+  clearStatus();
+  const input = document.getElementById('input').value;
+  if (!input.trim()) {
+    document.getElementById('output').value = '';
+    document.getElementById('stats').innerHTML = '';
+    return;
+  }
+  const off = parseFloat(document.getElementById('offset').value) || 0;
+  const factor = parseFloat(document.getElementById('factor').value) || 1;
+  const format = document.getElementById('format').value;
+
+  let result;
+  try {
+    if (format === 'sbv') result = shiftSbv(input, off, factor);
+    else result = shiftSrt(input, off, factor, format);
+  } catch (e) {
+    setStatus('Error: ' + e.message, 'error');
+    return;
+  }
+
+  document.getElementById('output').value = result.text;
+  document.getElementById('stats').innerHTML = `
+    <span><b>${result.count}</b> cues adjusted</span>
+    <span>Offset: <b>${off.toFixed(3)}s</b></span>
+    <span>Factor: <b>${factor}</b></span>
+    <span>Format: <b>${format.toUpperCase()}</b></span>
+  `;
+  if (result.count === 0) setStatus('No subtitle cues detected — check the format.', 'error');
+}
+
+function download() {
+  const out = document.getElementById('output').value;
+  if (!out) { setStatus('Nothing to download.', 'error'); return; }
+  const format = document.getElementById('format').value;
+  const ext = format === 'vtt' ? 'vtt' : (format === 'sbv' ? 'sbv' : 'srt');
+  const blob = new Blob([out], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'shifted.' + ext;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function copyOutput() {
+  const out = document.getElementById('output').value;
+  if (!out) return;
+  navigator.clipboard.writeText(out).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function swapInputOutput() {
+  const out = document.getElementById('output').value;
+  if (!out) return;
+  document.getElementById('input').value = out;
+  document.getElementById('offset').value = 0;
+  document.getElementById('factor').value = 1;
+  apply();
+}
+
+['offset','factor','format','input'].forEach(id => document.getElementById(id).addEventListener('input', apply));
+</script>
+</body>
+</html>
