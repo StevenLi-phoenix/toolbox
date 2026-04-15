@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Semver Range Tester — Check if a Version Satisfies a Range</title>
+<meta name="description" content="Test whether a semantic version satisfies a range expression like ^1.2.3, ~1.2, &gt;=1.0.0 &lt;2.0.0, or 1.x. Supports npm-style ranges, caret, tilde, hyphen and OR. 100% client-side.">
+<meta name="keywords" content="semver, range, npm, satisfies, caret, tilde, hyphen, version, package">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/semverrange.html">
+<meta property="og:title" content="Semver Range Tester">
+<meta property="og:description" content="Check if a version satisfies an npm-style semver range in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/semverrange.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 768px) { .inputs { grid-template-columns: 1fr; } }
+  .result-big {
+    margin-top: 14px;
+    padding: 18px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    text-align: center;
+  }
+  .result-big.match  { color: var(--success); border-color: var(--success); }
+  .result-big.nomatch { color: var(--error); border-color: var(--error); }
+  .result-big.error  { color: var(--error); border-color: var(--error); font-size: .9rem; }
+  .sub { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+  .comparators {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+  }
+  .cmp {
+    font-family: var(--mono); font-size: .75rem; padding: 3px 8px;
+    border-radius: var(--radius); border: 1px solid var(--border); color: var(--muted);
+  }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: .82rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+  td.v { font-family: var(--mono); }
+  td.r { text-align: right; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-family: var(--mono); }
+  .pill.y { background: rgba(34,197,94,.15); color: var(--success); }
+  .pill.n { background: rgba(239,68,68,.12); color: var(--error); }
+  .examples button {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    padding: 4px 10px; border-radius: var(--radius); font-size: .75rem; font-family: var(--mono);
+    cursor: pointer; margin: 2px;
+  }
+  .examples button:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Semver Range Tester</h1>
+  <p class="subtitle">Check whether a semantic version satisfies an npm-style range expression. Supports caret (<code>^1.2.3</code>), tilde (<code>~1.2.3</code>), hyphen (<code>1.2.3 - 2.0.0</code>), comparators (<code>&gt;=1.0.0 &lt;2.0.0</code>), wildcards (<code>1.x</code>, <code>*</code>) and OR (<code>||</code>).</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="inputs">
+      <div>
+        <label for="range">Range</label>
+        <input id="range" type="text" placeholder="^1.2.3" value="^1.2.3">
+        <div class="sub">e.g. <code>^1.2.3</code>, <code>~1.2</code>, <code>1.x</code>, <code>&gt;=1.0.0 &lt;2.0.0</code>, <code>1.2.3 - 2.0.0</code></div>
+      </div>
+      <div>
+        <label for="version">Version</label>
+        <input id="version" type="text" placeholder="1.5.0" value="1.5.0">
+        <div class="sub">e.g. <code>1.5.0</code>, <code>2.0.0-beta.1</code></div>
+      </div>
+    </div>
+
+    <div class="result-big" id="result">—</div>
+
+    <div style="margin-top:12px;">
+      <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Expanded comparators</label>
+      <div class="comparators" id="comparators"></div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Try examples</label>
+      <div class="examples">
+        <button data-r="^1.2.3" data-v="1.5.0">^1.2.3 / 1.5.0</button>
+        <button data-r="^1.2.3" data-v="2.0.0">^1.2.3 / 2.0.0</button>
+        <button data-r="~1.2.3" data-v="1.2.9">~1.2.3 / 1.2.9</button>
+        <button data-r="~1.2.3" data-v="1.3.0">~1.2.3 / 1.3.0</button>
+        <button data-r="1.x" data-v="1.99.99">1.x / 1.99.99</button>
+        <button data-r="1.2.3 - 2.3.4" data-v="2.0.0">1.2.3 - 2.3.4 / 2.0.0</button>
+        <button data-r=">=1.0.0 <2.0.0 || >=3.0.0" data-v="3.1.0">OR example</button>
+        <button data-r="^0.2.3" data-v="0.3.0">^0.2.3 / 0.3.0</button>
+        <button data-r="^2.0.0" data-v="2.1.0-beta.1">pre-release</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Batch test</h2>
+    <p class="sub" style="margin-top:0;">Paste one version per line and see which satisfy the range above.</p>
+    <textarea id="batch" rows="6" placeholder="1.0.0&#10;1.2.3&#10;1.5.0&#10;2.0.0-beta&#10;2.1.0">1.0.0
+1.2.3
+1.5.0
+2.0.0-beta
+2.0.0</textarea>
+    <div style="margin-top:8px;">
+      <table id="batch-table">
+        <thead><tr><th>Version</th><th class="r">Satisfies</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Range operators</h2>
+    <table>
+      <tr><td class="v"><code>^1.2.3</code></td><td>≥ 1.2.3 and &lt; 2.0.0 (compatible changes). For 0.x: <code>^0.2.3</code> → ≥ 0.2.3 &lt; 0.3.0.</td></tr>
+      <tr><td class="v"><code>~1.2.3</code></td><td>≥ 1.2.3 and &lt; 1.3.0 (patch changes only).</td></tr>
+      <tr><td class="v"><code>1.2.x</code></td><td>Any patch of 1.2 (equivalent to ≥ 1.2.0 &lt; 1.3.0).</td></tr>
+      <tr><td class="v"><code>1.2.3 - 2.0.0</code></td><td>Inclusive hyphen range: ≥ 1.2.3 and ≤ 2.0.0.</td></tr>
+      <tr><td class="v"><code>&gt;=1.0.0 &lt;2.0.0</code></td><td>All comparators must match (AND).</td></tr>
+      <tr><td class="v"><code>1.x || &gt;=3</code></td><td>Either side matches (OR).</td></tr>
+      <tr><td class="v"><code>*</code></td><td>Any version (pre-releases excluded unless a comparator includes one).</td></tr>
+    </table>
+    <p class="sub" style="margin-top:10px;">Pre-release versions only match a comparator set if at least one comparator in that set explicitly mentions a version with the same <code>[major, minor, patch]</code> tuple — matching npm semver behavior.</p>
+  </div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+/* Minimal npm-semver range implementation.
+   Not a full spec clone but covers: caret, tilde, hyphen, comparator sets, wildcards, OR,
+   and the npm rule that pre-release only matches if a comparator in the same set references
+   the same [major,minor,patch] tuple with a pre-release. */
+
+const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/;
+const LOOSE_RE  = /^(\d+)(?:\.(\d+|x|X|\*))?(?:\.(\d+|x|X|\*))?(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/;
+
+function parseVersion(v) {
+  v = String(v || '').trim().replace(/^[v=]+/, '');
+  const m = v.match(SEMVER_RE);
+  if (!m) throw new Error(`Invalid version: "${v}"`);
+  return {
+    major: +m[1], minor: +m[2], patch: +m[3],
+    pre: m[4] ? m[4].split('.').map(p => /^\d+$/.test(p) ? +p : p) : [],
+  };
+}
+
+function cmpPre(a, b) {
+  if (a.length === 0 && b.length === 0) return 0;
+  if (a.length === 0) return 1;   // 1.0.0 > 1.0.0-alpha
+  if (b.length === 0) return -1;
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const x = a[i], y = b[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    if (x === y) continue;
+    const xn = typeof x === 'number', yn = typeof y === 'number';
+    if (xn && yn) return x < y ? -1 : 1;
+    if (xn) return -1;           // numeric identifiers have lower precedence
+    if (yn) return 1;
+    return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+function cmpVer(a, b) {
+  if (a.major !== b.major) return a.major < b.major ? -1 : 1;
+  if (a.minor !== b.minor) return a.minor < b.minor ? -1 : 1;
+  if (a.patch !== b.patch) return a.patch < b.patch ? -1 : 1;
+  return cmpPre(a.pre, b.pre);
+}
+
+/* Expand a single range token into an array of comparators {op, ver} */
+function expandToken(tok) {
+  tok = tok.trim();
+  if (!tok) return [];
+  if (tok === '*' || tok === '' || tok === 'x' || tok === 'X') {
+    return [{ op: '>=', ver: parseVersion('0.0.0') }];
+  }
+  // Comparator form
+  const cmpMatch = tok.match(/^(>=|<=|>|<|=)?\s*(.+)$/);
+  if (!cmpMatch) throw new Error(`Cannot parse "${tok}"`);
+  const op = cmpMatch[1] || '';
+  const rest = cmpMatch[2];
+
+  // Caret / tilde
+  if (rest.startsWith('^')) return expandCaret(rest.slice(1));
+  if (rest.startsWith('~')) return expandTilde(rest.slice(1));
+
+  const parsed = parsePartial(rest);
+  if (!op || op === '=') {
+    // Partial version becomes a range
+    return expandPartialEq(parsed);
+  }
+  // Need concrete version for >, >=, <, <=
+  const v = {
+    major: parsed.major ?? 0,
+    minor: parsed.minor ?? 0,
+    patch: parsed.patch ?? 0,
+    pre: parsed.pre || [],
+  };
+  return [{ op, ver: v }];
+}
+
+function parsePartial(v) {
+  v = v.trim().replace(/^[v=]+/, '');
+  const m = v.match(LOOSE_RE);
+  if (!m) throw new Error(`Invalid partial: "${v}"`);
+  const parseSeg = (s) => (s === undefined || s === 'x' || s === 'X' || s === '*') ? undefined : +s;
+  return {
+    major: parseSeg(m[1]),
+    minor: parseSeg(m[2]),
+    patch: parseSeg(m[3]),
+    pre: m[4] ? m[4].split('.').map(p => /^\d+$/.test(p) ? +p : p) : [],
+  };
+}
+
+function expandPartialEq(p) {
+  // X - any => *
+  if (p.major === undefined) return [{ op: '>=', ver: { major:0, minor:0, patch:0, pre:[] } }];
+  if (p.minor === undefined) {
+    return [
+      { op: '>=', ver: { major: p.major, minor: 0, patch: 0, pre: [] } },
+      { op: '<',  ver: { major: p.major + 1, minor: 0, patch: 0, pre: [] } },
+    ];
+  }
+  if (p.patch === undefined) {
+    return [
+      { op: '>=', ver: { major: p.major, minor: p.minor, patch: 0, pre: [] } },
+      { op: '<',  ver: { major: p.major, minor: p.minor + 1, patch: 0, pre: [] } },
+    ];
+  }
+  // Exact version
+  return [
+    { op: '>=', ver: { major: p.major, minor: p.minor, patch: p.patch, pre: p.pre } },
+    { op: '<=', ver: { major: p.major, minor: p.minor, patch: p.patch, pre: p.pre } },
+  ];
+}
+
+function expandCaret(v) {
+  const p = parsePartial(v);
+  const lo = {
+    major: p.major ?? 0,
+    minor: p.minor ?? 0,
+    patch: p.patch ?? 0,
+    pre: p.pre || [],
+  };
+  let hi;
+  if ((p.major ?? 0) > 0 || p.minor === undefined) {
+    hi = { major: (p.major ?? 0) + 1, minor: 0, patch: 0, pre: [] };
+  } else if ((p.minor ?? 0) > 0 || p.patch === undefined) {
+    hi = { major: 0, minor: (p.minor ?? 0) + 1, patch: 0, pre: [] };
+  } else {
+    hi = { major: 0, minor: p.minor ?? 0, patch: (p.patch ?? 0) + 1, pre: [] };
+  }
+  return [{ op: '>=', ver: lo }, { op: '<', ver: hi }];
+}
+
+function expandTilde(v) {
+  const p = parsePartial(v);
+  const lo = {
+    major: p.major ?? 0,
+    minor: p.minor ?? 0,
+    patch: p.patch ?? 0,
+    pre: p.pre || [],
+  };
+  let hi;
+  if (p.minor === undefined) {
+    hi = { major: (p.major ?? 0) + 1, minor: 0, patch: 0, pre: [] };
+  } else {
+    hi = { major: p.major ?? 0, minor: (p.minor ?? 0) + 1, patch: 0, pre: [] };
+  }
+  return [{ op: '>=', ver: lo }, { op: '<', ver: hi }];
+}
+
+function expandRangeSet(range) {
+  range = range.trim();
+  // Hyphen range: "1.2.3 - 2.0.0"
+  const hy = range.match(/^([^\s]+)\s+-\s+([^\s]+)$/);
+  if (hy) {
+    const left = parsePartial(hy[1]);
+    const right = parsePartial(hy[2]);
+    const lo = {
+      major: left.major ?? 0,
+      minor: left.minor ?? 0,
+      patch: left.patch ?? 0,
+      pre: left.pre || [],
+    };
+    const cmps = [{ op: '>=', ver: lo }];
+    if (right.minor === undefined) {
+      cmps.push({ op: '<', ver: { major: (right.major ?? 0) + 1, minor:0, patch:0, pre:[] } });
+    } else if (right.patch === undefined) {
+      cmps.push({ op: '<', ver: { major: right.major ?? 0, minor: (right.minor ?? 0) + 1, patch:0, pre:[] } });
+    } else {
+      cmps.push({ op: '<=', ver: { major: right.major, minor: right.minor, patch: right.patch, pre: right.pre || [] } });
+    }
+    return cmps;
+  }
+
+  // Space-separated comparator set
+  const tokens = range.split(/\s+/).filter(Boolean);
+  const cmps = [];
+  for (const t of tokens) cmps.push(...expandToken(t));
+  return cmps;
+}
+
+function parseRange(range) {
+  range = String(range || '').trim();
+  if (!range) range = '*';
+  const alts = range.split(/\s*\|\|\s*/);
+  return alts.map(expandRangeSet);
+}
+
+function matchesComparator(v, c) {
+  const d = cmpVer(v, c.ver);
+  switch (c.op) {
+    case '>':  return d > 0;
+    case '>=': return d >= 0;
+    case '<':  return d < 0;
+    case '<=': return d <= 0;
+    case '=':
+    case '':   return d === 0;
+  }
+  return false;
+}
+
+function satisfies(version, range) {
+  const v = parseVersion(version);
+  const sets = parseRange(range);
+  for (const set of sets) {
+    if (set.length === 0) continue;
+    if (!set.every(c => matchesComparator(v, c))) continue;
+    // Pre-release gate: if v has pre-release, at least one comparator in this set
+    // must reference a version with same [major,minor,patch] and a pre-release.
+    if (v.pre.length > 0) {
+      const ok = set.some(c =>
+        c.ver.pre.length > 0 &&
+        c.ver.major === v.major && c.ver.minor === v.minor && c.ver.patch === v.patch);
+      if (!ok) continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+function opLabel(op) { return op || '='; }
+function verLabel(v) {
+  let s = `${v.major}.${v.minor}.${v.patch}`;
+  if (v.pre.length) s += '-' + v.pre.join('.');
+  return s;
+}
+
+function update() {
+  const range = document.getElementById('range').value;
+  const version = document.getElementById('version').value;
+  const resEl = document.getElementById('result');
+  const cmpEl = document.getElementById('comparators');
+  try {
+    const sets = parseRange(range);
+    cmpEl.innerHTML = sets.map(set =>
+      set.map(c => `<span class="cmp">${opLabel(c.op)}${verLabel(c.ver)}</span>`).join('')
+    ).join('<span class="cmp" style="background:var(--surface2);">||</span>');
+    const ok = satisfies(version, range);
+    resEl.className = 'result-big ' + (ok ? 'match' : 'nomatch');
+    resEl.textContent = ok
+      ? `✓ ${version} satisfies ${range}`
+      : `✗ ${version} does not satisfy ${range}`;
+  } catch (e) {
+    resEl.className = 'result-big error';
+    resEl.textContent = e.message;
+    cmpEl.innerHTML = '';
+  }
+  updateBatch();
+}
+
+function updateBatch() {
+  const range = document.getElementById('range').value;
+  const body = document.querySelector('#batch-table tbody');
+  const lines = document.getElementById('batch').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  body.innerHTML = lines.map(v => {
+    try {
+      const ok = satisfies(v, range);
+      return `<tr><td class="v">${v}</td><td class="r"><span class="pill ${ok?'y':'n'}">${ok?'✓ yes':'✗ no'}</span></td></tr>`;
+    } catch (e) {
+      return `<tr><td class="v">${v}</td><td class="r"><span class="pill n">invalid</span></td></tr>`;
+    }
+  }).join('');
+}
+
+document.getElementById('range').addEventListener('input', update);
+document.getElementById('version').addEventListener('input', update);
+document.getElementById('batch').addEventListener('input', updateBatch);
+
+document.querySelectorAll('.examples button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('range').value = btn.dataset.r;
+    document.getElementById('version').value = btn.dataset.v;
+    update();
+  });
+});
+
+update();
+</script>
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FNV Hash Calculator — FNV-1 & FNV-1a (32/64-bit)</title>
+<meta name="description" content="Compute FNV-1 and FNV-1a 32-bit and 64-bit hashes for text, hex bytes, or files. Fast non-cryptographic hash used in hash tables, DNS, and Bloom filters. 100% client-side.">
+<meta name="keywords" content="fnv, fnv1, fnv1a, hash, fowler noll vo, noncryptographic, 32-bit, 64-bit">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/fnvhash.html">
+<meta property="og:title" content="FNV Hash Calculator">
+<meta property="og:description" content="Compute FNV-1 and FNV-1a 32/64-bit hashes in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/fnvhash.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  textarea { min-height: 130px; }
+  .results { display: grid; gap: 10px; margin-top: 12px; }
+  .row { padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .row-head { display: flex; justify-content: space-between; align-items: center; font-size: .78rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .row-head button { padding: 3px 10px; font-size: .72rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; }
+  .row-head button:hover { background: var(--surface2); }
+  .val { font-family: var(--mono); font-size: .9rem; color: var(--text); word-break: break-all; }
+  .val-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+  .val-grid div span { display: block; font-size: .7rem; color: var(--muted); margin-bottom: 2px; }
+  .file-info { font-size: .82rem; color: var(--muted); margin-top: 6px; }
+  .drop { border: 2px dashed var(--border); border-radius: var(--radius); padding: 16px; text-align: center; color: var(--muted); font-size: .85rem; cursor: pointer; }
+  .drop.over { background: var(--surface2); border-color: var(--text); }
+  @media (max-width: 768px) { .val-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>FNV Hash Calculator</h1>
+  <p class="subtitle">Compute Fowler–Noll–Vo hashes (FNV-1 &amp; FNV-1a, 32-bit &amp; 64-bit) for text, hex bytes, or files. FNV is a fast, simple non-cryptographic hash used in hash tables, Bloom filters, DNS servers, and Twitter Snowflake-style IDs. Runs entirely in your browser.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="tabs">
+      <button class="tab active" data-tab="text">Text / Hex</button>
+      <button class="tab" data-tab="file">File</button>
+    </div>
+
+    <div id="pane-text">
+      <div class="opts">
+        <label>Input mode:
+          <select id="mode">
+            <option value="utf8">UTF-8 text</option>
+            <option value="hex">Hex bytes</option>
+          </select>
+        </label>
+      </div>
+      <label for="input">Input</label>
+      <textarea id="input" placeholder="Enter text or hex bytes (e.g. 48656c6c6f)"></textarea>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-primary" onclick="calcText()">Calculate</button>
+        <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+        <button class="btn btn-secondary" onclick="clearText()">Clear</button>
+      </div>
+    </div>
+
+    <div id="pane-file" style="display:none;">
+      <div class="drop" id="drop">Drop a file here or click to choose</div>
+      <input type="file" id="file" style="display:none;">
+      <div class="file-info" id="fileinfo"></div>
+    </div>
+
+    <div class="results" id="results"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Reference</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      <strong>FNV-1:</strong> <code>hash = (hash * prime) XOR byte</code><br>
+      <strong>FNV-1a:</strong> <code>hash = (hash XOR byte) * prime</code> — better avalanche, preferred in modern code.<br>
+      <strong>32-bit:</strong> offset basis <code>0x811c9dc5</code>, prime <code>0x01000193</code>.<br>
+      <strong>64-bit:</strong> offset basis <code>0xcbf29ce484222325</code>, prime <code>0x00000100000001b3</code>.<br>
+      Standard check: FNV-1a 32 of <code>"foobar"</code> = <code>0xbf9cf968</code>; FNV-1a 64 of <code>"foobar"</code> = <code>0x85944171f73967e8</code>.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+// 32-bit FNV constants
+const FNV32_OFFSET = 0x811c9dc5 >>> 0;
+const FNV32_PRIME  = 0x01000193 >>> 0;
+
+// 32-bit multiplication modulo 2^32 done via split halves to stay in safe int range.
+function mul32(a, b) {
+  const aHigh = (a >>> 16) & 0xffff;
+  const aLow  = a & 0xffff;
+  const bHigh = (b >>> 16) & 0xffff;
+  const bLow  = b & 0xffff;
+  // Only low-part of high-high product matters (mod 2^32).
+  return (((aLow * bLow) + (((aHigh * bLow + aLow * bHigh) & 0xffff) << 16)) >>> 0);
+}
+
+function fnv1_32(bytes) {
+  let h = FNV32_OFFSET;
+  for (let i = 0; i < bytes.length; i++) {
+    h = mul32(h, FNV32_PRIME);
+    h = (h ^ bytes[i]) >>> 0;
+  }
+  return h;
+}
+
+function fnv1a_32(bytes) {
+  let h = FNV32_OFFSET;
+  for (let i = 0; i < bytes.length; i++) {
+    h = (h ^ bytes[i]) >>> 0;
+    h = mul32(h, FNV32_PRIME);
+  }
+  return h;
+}
+
+// 64-bit FNV using BigInt.
+const FNV64_OFFSET = 0xcbf29ce484222325n;
+const FNV64_PRIME  = 0x00000100000001b3n;
+const MASK64 = 0xffffffffffffffffn;
+
+function fnv1_64(bytes) {
+  let h = FNV64_OFFSET;
+  for (let i = 0; i < bytes.length; i++) {
+    h = (h * FNV64_PRIME) & MASK64;
+    h = h ^ BigInt(bytes[i]);
+  }
+  return h;
+}
+
+function fnv1a_64(bytes) {
+  let h = FNV64_OFFSET;
+  for (let i = 0; i < bytes.length; i++) {
+    h = h ^ BigInt(bytes[i]);
+    h = (h * FNV64_PRIME) & MASK64;
+  }
+  return h;
+}
+
+function hexToBytes(hex) {
+  hex = hex.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (hex.length % 2 !== 0) throw new Error('Hex string must have even length');
+  if (!/^[0-9a-fA-F]*$/.test(hex)) throw new Error('Invalid hex characters');
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+
+const VARIANTS = [
+  { name: 'FNV-1 (32-bit)',  width: 32, fn: (b) => BigInt(fnv1_32(b)) },
+  { name: 'FNV-1a (32-bit)', width: 32, fn: (b) => BigInt(fnv1a_32(b)) },
+  { name: 'FNV-1 (64-bit)',  width: 64, fn: (b) => fnv1_64(b) },
+  { name: 'FNV-1a (64-bit)', width: 64, fn: (b) => fnv1a_64(b) },
+];
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() {
+  const el = document.getElementById('status');
+  el.className = 'status';
+  el.textContent = '';
+}
+
+function toHex(bn, width) {
+  return '0x' + bn.toString(16).padStart(width / 4, '0').toLowerCase();
+}
+function toBytesBE(bn, width) {
+  const bytes = width / 8;
+  const parts = [];
+  for (let i = bytes - 1; i >= 0; i--) {
+    parts.push(Number((bn >> BigInt(i * 8)) & 0xffn).toString(16).padStart(2, '0'));
+  }
+  return parts.join(' ');
+}
+
+function render(bytes) {
+  const el = document.getElementById('results');
+  if (!bytes) { el.innerHTML = ''; return; }
+  const parts = VARIANTS.map(v => {
+    const n = v.fn(bytes);
+    const hex = toHex(n, v.width);
+    return `
+      <div class="row">
+        <div class="row-head"><span>${v.name}</span><button onclick="copyVal('${hex}')">Copy</button></div>
+        <div class="val-grid">
+          <div><span>Hex</span><span class="val">${hex}</span></div>
+          <div><span>Decimal</span><span class="val">${n.toString(10)}</span></div>
+          <div><span>Bytes (BE)</span><span class="val">${toBytesBE(n, v.width)}</span></div>
+        </div>
+      </div>`;
+  });
+  el.innerHTML = parts.join('');
+}
+
+function calcText() {
+  clearStatus();
+  const input = document.getElementById('input').value;
+  if (!input) { render(null); return; }
+  try {
+    const mode = document.getElementById('mode').value;
+    const bytes = mode === 'hex' ? hexToBytes(input.trim()) : new TextEncoder().encode(input);
+    render(bytes);
+  } catch (e) {
+    setStatus(e.message, 'error');
+    render(null);
+  }
+}
+
+function loadSample() {
+  document.getElementById('mode').value = 'utf8';
+  document.getElementById('input').value = 'foobar';
+  calcText();
+  setStatus('FNV-1a 32 of "foobar" should be 0xbf9cf968', 'success');
+}
+function clearText() { document.getElementById('input').value = ''; render(null); clearStatus(); }
+
+function copyVal(v) {
+  navigator.clipboard.writeText(v).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('pane-text').style.display = tab === 'text' ? '' : 'none';
+    document.getElementById('pane-file').style.display = tab === 'file' ? '' : 'none';
+    render(null);
+    clearStatus();
+  });
+});
+
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+async function handleFile(file) {
+  clearStatus();
+  document.getElementById('fileinfo').textContent = `${file.name} · ${file.size.toLocaleString()} bytes`;
+  try {
+    const buf = await file.arrayBuffer();
+    render(new Uint8Array(buf));
+  } catch (e) {
+    setStatus('File read error: ' + e.message, 'error');
+  }
+}
+</script>
+</body>
+</html>
