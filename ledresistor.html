@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LED Resistor Calculator — Series Dropping Resistor</title>
+<meta name="description" content="Free online LED series resistor calculator. Pick supply voltage, LED forward voltage, and current to get the exact dropping resistor, nearest E12/E24 value, and power dissipation.">
+<meta name="keywords" content="LED resistor calculator, series resistor, dropping resistor, forward voltage, current limiting resistor, E12, E24">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ledresistor.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .field .row { display: flex; gap: 8px; align-items: center; }
+  .field input, .field select {
+    padding: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1rem;
+    box-sizing: border-box;
+  }
+  .field input { flex: 1; text-align: right; }
+  .result { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 10px; }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1.05rem; word-break: break-all; }
+  .result.ok .v { color: var(--success, #15803d); }
+  .result.warn .v { color: var(--error, #dc2626); }
+  .steps { font-family: var(--mono); font-size: .82rem; line-height: 1.8; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  .steps .label { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; margin-right: 4px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .warning { color: var(--error, #dc2626); font-size: .82rem; margin-top: 6px; }
+  .resistor-viz { display: flex; justify-content: center; align-items: center; padding: 18px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  svg { max-width: 100%; height: auto; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>💡 LED Resistor Calculator</h1>
+<p class="subtitle">Compute the current-limiting resistor for an LED. Formula: <code>R = (V<sub>supply</sub> − n · V<sub>f</sub>) / I<sub>f</sub></code>. Picks the nearest standard E12/E24 value and calculates power dissipation so you can size the resistor wattage.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Inputs</h2>
+
+    <div class="presets">
+      <button class="btn-secondary" type="button" onclick="loadPreset('red5')">Red (5V)</button>
+      <button class="btn-secondary" type="button" onclick="loadPreset('green5')">Green (5V)</button>
+      <button class="btn-secondary" type="button" onclick="loadPreset('blue5')">Blue (5V)</button>
+      <button class="btn-secondary" type="button" onclick="loadPreset('white12')">White (12V)</button>
+      <button class="btn-secondary" type="button" onclick="loadPreset('ir33')">IR (3.3V)</button>
+    </div>
+
+    <div class="field">
+      <label>Supply Voltage (V<sub>s</sub>)</label>
+      <div class="row"><input id="vs" type="number" step="any" value="5"> <span>V</span></div>
+    </div>
+
+    <div class="field">
+      <label>LED Forward Voltage (V<sub>f</sub>) per LED</label>
+      <div class="row"><input id="vf" type="number" step="any" value="2.0"> <span>V</span></div>
+    </div>
+
+    <div class="field">
+      <label>LED Forward Current (I<sub>f</sub>)</label>
+      <div class="row"><input id="if" type="number" step="any" value="20"> <span>mA</span></div>
+    </div>
+
+    <div class="field">
+      <label>LEDs in Series</label>
+      <div class="row"><input id="n" type="number" min="1" step="1" value="1"></div>
+    </div>
+
+    <div class="field">
+      <label>Standard Resistor Series</label>
+      <div class="row">
+        <select id="series">
+          <option value="E12">E12 (10 %)</option>
+          <option value="E24" selected>E24 (5 %)</option>
+          <option value="E48">E48 (2 %)</option>
+          <option value="E96">E96 (1 %)</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="warn" class="warning"></div>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div class="result" id="rRcalc"><div class="k">Exact Resistance</div><div class="v" id="Rcalc">—</div></div>
+    <div class="result ok"><div class="k">Nearest Standard (rounded up)</div><div class="v" id="Rstd">—</div></div>
+    <div class="result"><div class="k">Voltage Drop Across Resistor</div><div class="v" id="Vdrop">—</div></div>
+    <div class="result"><div class="k">Actual Current With Std R</div><div class="v" id="Iact">—</div></div>
+    <div class="result"><div class="k">Power Dissipated in Resistor</div><div class="v" id="Pwr">—</div></div>
+    <div class="result"><div class="k">Recommended Resistor Rating</div><div class="v" id="Wat">—</div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Circuit</h2>
+  <div class="resistor-viz">
+    <svg viewBox="0 0 540 120" width="540" height="120" xmlns="http://www.w3.org/2000/svg" aria-label="LED series resistor schematic">
+      <!-- + supply -->
+      <text x="10" y="68" font-family="monospace" font-size="13" fill="currentColor">+Vs</text>
+      <line x1="40" y1="60" x2="100" y2="60" stroke="currentColor" stroke-width="2"/>
+      <!-- resistor zigzag -->
+      <polyline points="100,60 108,45 118,75 128,45 138,75 148,45 158,75 168,45 178,75 188,60" stroke="currentColor" stroke-width="2" fill="none"/>
+      <text x="118" y="30" font-family="monospace" font-size="12" fill="currentColor" id="svgR">R</text>
+      <!-- wire to LED -->
+      <line x1="188" y1="60" x2="260" y2="60" stroke="currentColor" stroke-width="2"/>
+      <!-- LED triangle -->
+      <polygon points="260,45 260,75 285,60" fill="#ef4444" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="285" y1="45" x2="285" y2="75" stroke="currentColor" stroke-width="2"/>
+      <!-- LED arrows (emission) -->
+      <line x1="268" y1="40" x2="276" y2="32" stroke="currentColor" stroke-width="1.2"/>
+      <polygon points="276,32 272,32 276,36" fill="currentColor"/>
+      <line x1="275" y1="40" x2="283" y2="32" stroke="currentColor" stroke-width="1.2"/>
+      <polygon points="283,32 279,32 283,36" fill="currentColor"/>
+      <text x="255" y="95" font-family="monospace" font-size="12" fill="currentColor" id="svgLED">LED</text>
+      <!-- wire to ground -->
+      <line x1="285" y1="60" x2="420" y2="60" stroke="currentColor" stroke-width="2"/>
+      <!-- ground -->
+      <line x1="420" y1="45" x2="420" y2="75" stroke="currentColor" stroke-width="2"/>
+      <line x1="410" y1="75" x2="430" y2="75" stroke="currentColor" stroke-width="2"/>
+      <line x1="414" y1="80" x2="426" y2="80" stroke="currentColor" stroke-width="2"/>
+      <line x1="418" y1="85" x2="422" y2="85" stroke="currentColor" stroke-width="2"/>
+      <text x="435" y="70" font-family="monospace" font-size="13" fill="currentColor">GND</text>
+    </svg>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Step-by-Step</h2>
+  <div class="steps" id="steps">—</div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Standard resistor series (decade 1.0–9.1)
+const SERIES = {
+  E12: [1.0,1.2,1.5,1.8,2.2,2.7,3.3,3.9,4.7,5.6,6.8,8.2],
+  E24: [1.0,1.1,1.2,1.3,1.5,1.6,1.8,2.0,2.2,2.4,2.7,3.0,3.3,3.6,3.9,4.3,4.7,5.1,5.6,6.2,6.8,7.5,8.2,9.1],
+  E48: [1.00,1.05,1.10,1.15,1.21,1.27,1.33,1.40,1.47,1.54,1.62,1.69,1.78,1.87,1.96,2.05,2.15,2.26,2.37,2.49,2.61,2.74,2.87,3.01,3.16,3.32,3.48,3.65,3.83,4.02,4.22,4.42,4.64,4.87,5.11,5.36,5.62,5.90,6.19,6.49,6.81,7.15,7.50,7.87,8.25,8.66,9.09,9.53],
+  E96: [1.00,1.02,1.05,1.07,1.10,1.13,1.15,1.18,1.21,1.24,1.27,1.30,1.33,1.37,1.40,1.43,1.47,1.50,1.54,1.58,1.62,1.65,1.69,1.74,1.78,1.82,1.87,1.91,1.96,2.00,2.05,2.10,2.15,2.21,2.26,2.32,2.37,2.43,2.49,2.55,2.61,2.67,2.74,2.80,2.87,2.94,3.01,3.09,3.16,3.24,3.32,3.40,3.48,3.57,3.65,3.74,3.83,3.92,4.02,4.12,4.22,4.32,4.42,4.53,4.64,4.75,4.87,4.99,5.11,5.23,5.36,5.49,5.62,5.76,5.90,6.04,6.19,6.34,6.49,6.65,6.81,6.98,7.15,7.32,7.50,7.68,7.87,8.06,8.25,8.45,8.66,8.87,9.09,9.31,9.53,9.76]
+};
+
+const PRESETS = {
+  red5:   {vs:5,  vf:2.0, If:20, n:1},
+  green5: {vs:5,  vf:2.1, If:20, n:1},
+  blue5:  {vs:5,  vf:3.2, If:20, n:1},
+  white12:{vs:12, vf:3.3, If:20, n:3},
+  ir33:   {vs:3.3,vf:1.2, If:20, n:1}
+};
+
+function loadPreset(name) {
+  const p = PRESETS[name]; if (!p) return;
+  $('vs').value = p.vs; $('vf').value = p.vf; $('if').value = p.If; $('n').value = p.n;
+  compute();
+}
+
+function fmt(n, p=4) {
+  if (n === null || !isFinite(n)) return '—';
+  if (Math.abs(n) < 1e-12) return '0';
+  return Number(n.toPrecision(p)).toString();
+}
+
+function formatR(ohm) {
+  if (!isFinite(ohm)) return '—';
+  if (ohm >= 1e6) return fmt(ohm/1e6) + ' MΩ';
+  if (ohm >= 1e3) return fmt(ohm/1e3) + ' kΩ';
+  return fmt(ohm) + ' Ω';
+}
+
+function nearestStandard(value, seriesName) {
+  if (!isFinite(value) || value <= 0) return null;
+  const base = SERIES[seriesName];
+  // Find decade
+  const decade = Math.pow(10, Math.floor(Math.log10(value)));
+  // Generate candidates across nearby decades
+  const candidates = [];
+  for (let d = decade/10; d <= decade*10; d *= 10) {
+    base.forEach(b => candidates.push(b * d));
+  }
+  candidates.sort((a,b) => a - b);
+  // Round UP (never under-size to keep current ≤ rated)
+  for (const c of candidates) {
+    if (c >= value - 1e-9) return c;
+  }
+  return candidates[candidates.length-1];
+}
+
+function compute() {
+  const vs = parseFloat($('vs').value);
+  const vf = parseFloat($('vf').value);
+  const If = parseFloat($('if').value) / 1000; // mA → A
+  const n  = parseInt($('n').value, 10);
+  const series = $('series').value;
+  const warn = $('warn');
+  warn.textContent = '';
+
+  if ([vs,vf,If,n].some(v => !isFinite(v)) || n < 1 || If <= 0) {
+    ['Rcalc','Rstd','Vdrop','Iact','Pwr','Wat'].forEach(id => $(id).textContent = '—');
+    $('steps').textContent = 'Enter all values.';
+    return;
+  }
+
+  const totalVf = n * vf;
+  if (totalVf >= vs) {
+    warn.textContent = `⚠ Supply ${vs} V is not high enough to drive ${n} × ${vf} V LED(s) (${totalVf} V). Increase Vs or reduce LEDs in series.`;
+    ['Rcalc','Rstd','Vdrop','Iact','Pwr','Wat'].forEach(id => $(id).textContent = '—');
+    $('steps').textContent = 'Invalid configuration: forward-voltage sum ≥ supply.';
+    return;
+  }
+
+  const vDrop = vs - totalVf;
+  const rExact = vDrop / If;
+  const rStd = nearestStandard(rExact, series);
+  const iAct = vDrop / rStd;
+  const pRes = iAct * iAct * rStd; // = Vdrop² / R if using exact, but use actual current for accuracy
+  // suggested wattage with 2x safety factor
+  const stdW = [0.125, 0.25, 0.5, 1, 2, 5, 10];
+  const target = pRes * 2;
+  const watRating = stdW.find(w => w >= target) || (Math.ceil(target) + ' W (custom)');
+
+  $('Rcalc').textContent = formatR(rExact);
+  $('Rstd').textContent  = formatR(rStd);
+  $('Vdrop').textContent = fmt(vDrop) + ' V';
+  $('Iact').textContent  = fmt(iAct*1000) + ' mA';
+  $('Pwr').textContent   = fmt(pRes*1000) + ' mW  (' + fmt(pRes) + ' W)';
+  $('Wat').textContent   = (typeof watRating === 'number' ? (watRating + ' W') : watRating) + ' or higher (2× safety)';
+
+  if (iAct > If * 1.1) {
+    warn.textContent = `⚠ Actual current ${fmt(iAct*1000)} mA exceeds target by >10 %. Consider the next higher standard value.`;
+  }
+
+  const steps = [
+    `<span class="label">Voltage across R:</span> V<sub>s</sub> − n·V<sub>f</sub> = ${fmt(vs)} − ${n}·${fmt(vf)} = ${fmt(vDrop)} V`,
+    `<span class="label">Ohm's law:</span> R = V / I = ${fmt(vDrop)} / ${fmt(If)} = ${formatR(rExact)}`,
+    `<span class="label">Nearest ${series}:</span> ${formatR(rStd)} (rounded up to keep current ≤ rated)`,
+    `<span class="label">Actual current:</span> ${fmt(vDrop)} / ${fmt(rStd)} = ${fmt(iAct*1000)} mA`,
+    `<span class="label">Power in R:</span> I²·R = ${fmt(iAct)}² · ${fmt(rStd)} = ${fmt(pRes*1000)} mW`,
+    `<span class="label">Rating:</span> pick ≥ ${fmt(pRes*2*1000)} mW (2× safety)`
+  ];
+  $('steps').innerHTML = steps.join('<br>');
+
+  // update svg text
+  $('svgR').textContent = formatR(rStd);
+  $('svgLED').textContent = n > 1 ? (n + '× LED') : 'LED';
+}
+
+['vs','vf','if','n'].forEach(id => $(id).addEventListener('input', compute));
+$('series').addEventListener('change', compute);
+compute();
+</script>
+</body>
+</html>
