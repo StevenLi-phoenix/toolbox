@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base91 Encoder / Decoder — basE91 basic/extended</title>
+<meta name="description" content="Encode and decode basE91 — a compact binary-to-text encoding that packs 13 bits per 2 characters. 100% client-side, your data never leaves your browser.">
+<meta name="keywords" content="base91, basE91, encoder, decoder, binary, encoding">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/base91.html">
+<meta property="og:title" content="Base91 Encoder / Decoder">
+<meta property="og:description" content="Encode and decode basE91 — a compact binary-to-text encoding.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/base91.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .io { display: grid; gap: 12px; }
+  .io textarea { min-height: 140px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .opts code { font-family: var(--mono); font-size: .75rem; color: var(--muted); word-break: break-all; }
+  .arrow { text-align: center; font-size: 1.4rem; color: var(--muted); padding: 4px 0; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
+  .meta-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; }
+  .meta-tile span { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 2px; }
+  .meta-tile strong { font-family: var(--mono); word-break: break-all; }
+  @media (max-width: 768px) { .opts { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Base91 Encoder / Decoder</h1>
+  <p class="subtitle">Encode and decode basE91 — a compact binary-to-text encoding denser than Base64, packing ~13 bits per 2 output characters.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="opts">
+      <label>Variant:
+        <select id="variant">
+          <option value="basic">basic (Joachim Henke)</option>
+          <option value="extended">extended (no quotes)</option>
+        </select>
+      </label>
+      <label>Input:
+        <select id="mode">
+          <option value="utf8">UTF-8 text</option>
+          <option value="hex">Hex bytes</option>
+        </select>
+      </label>
+    </div>
+    <div class="opts"><code id="alpha-display"></code></div>
+
+    <div class="io">
+      <div>
+        <label for="input">Input</label>
+        <textarea id="input" placeholder="Enter text, hex bytes, or Base91 string..."></textarea>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doEncode()">Encode →</button>
+          <button class="btn" onclick="doDecode()">← Decode</button>
+          <button class="btn btn-secondary" onclick="swapIO()">Swap</button>
+          <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+          <button class="btn btn-secondary" onclick="clearIO()">Clear</button>
+        </div>
+      </div>
+      <div class="arrow">⇅</div>
+      <div>
+        <label for="output">Output</label>
+        <textarea id="output" placeholder="Result will appear here..."></textarea>
+        <div class="btn-row">
+          <button class="btn" onclick="copyOutput()">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta-grid" id="meta"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About basE91</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      basE91 was designed by Joachim Henke as a more efficient alternative to Base64 — it encodes binary data using 91 printable ASCII characters and yields roughly 23% overhead compared to Base64's 33%. The algorithm reads up to 13 bits from the input, then emits a variable-length (1 or 2) base-91 pair. The <strong>basic</strong> alphabet includes <code>"</code>, which is awkward inside JSON strings; the <strong>extended</strong> variant substitutes a different printable character so the output can be embedded unquoted.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const ALPHABETS = {
+  basic:    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~"',
+  extended: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~-',
+};
+
+function getAlphabet() { return ALPHABETS[document.getElementById('variant').value]; }
+
+function base91Encode(bytes, alpha) {
+  let out = '';
+  let b = 0, n = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    b |= bytes[i] << n;
+    n += 8;
+    if (n > 13) {
+      let v = b & 8191;
+      if (v > 88) { b >>= 13; n -= 13; }
+      else { v = b & 16383; b >>= 14; n -= 14; }
+      out += alpha[v % 91] + alpha[Math.floor(v / 91)];
+    }
+  }
+  if (n) {
+    out += alpha[b % 91];
+    if (n > 7 || b > 90) out += alpha[Math.floor(b / 91)];
+  }
+  return out;
+}
+
+function base91Decode(str, alpha) {
+  const map = {};
+  for (let i = 0; i < alpha.length; i++) map[alpha[i]] = i;
+  const out = [];
+  let b = 0, n = 0, v = -1;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (c === ' ' || c === '\n' || c === '\r' || c === '\t') continue;
+    const d = map[c];
+    if (d === undefined) throw new Error('Invalid character "' + c + '" at position ' + i);
+    if (v < 0) { v = d; continue; }
+    v += d * 91;
+    b |= v << n;
+    n += (v & 8191) > 88 ? 13 : 14;
+    do { out.push(b & 0xff); b >>= 8; n -= 8; } while (n > 7);
+    v = -1;
+  }
+  if (v >= 0) out.push((b | v << n) & 0xff);
+  return new Uint8Array(out);
+}
+
+function hexToBytes(hex) {
+  hex = hex.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (hex.length % 2 !== 0) throw new Error('Hex string must have even length');
+  if (!/^[0-9a-fA-F]*$/.test(hex)) throw new Error('Invalid hex characters');
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+function bytesToHex(bytes) {
+  return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (type || '');
+  el.textContent = msg;
+}
+function clearStatus() { document.getElementById('status').className = 'status'; }
+
+function updateAlphaDisplay() {
+  document.getElementById('alpha-display').textContent = 'Alphabet: ' + getAlphabet();
+}
+
+function doEncode() {
+  clearStatus();
+  const input = document.getElementById('input').value;
+  if (!input) { document.getElementById('output').value = ''; renderMeta(null); return; }
+  try {
+    const mode = document.getElementById('mode').value;
+    const bytes = mode === 'hex' ? hexToBytes(input.trim()) : new TextEncoder().encode(input);
+    const encoded = base91Encode(bytes, getAlphabet());
+    document.getElementById('output').value = encoded;
+    renderMeta({ bytes: bytes.length, chars: encoded.length });
+  } catch (e) {
+    setStatus('Encode error: ' + e.message, 'error');
+  }
+}
+
+function doDecode() {
+  clearStatus();
+  const input = document.getElementById('input').value.trim();
+  if (!input) { document.getElementById('output').value = ''; renderMeta(null); return; }
+  try {
+    const bytes = base91Decode(input, getAlphabet());
+    const mode = document.getElementById('mode').value;
+    let output;
+    if (mode === 'hex') output = bytesToHex(bytes);
+    else {
+      try { output = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+      catch { output = bytesToHex(bytes); setStatus('Not valid UTF-8, showing hex', 'warning'); }
+    }
+    document.getElementById('output').value = output;
+    renderMeta({ bytes: bytes.length, chars: input.length });
+  } catch (e) {
+    setStatus('Decode error: ' + e.message, 'error');
+  }
+}
+
+function renderMeta(info) {
+  const el = document.getElementById('meta');
+  if (!info) { el.innerHTML = ''; return; }
+  const ratio = (info.chars / Math.max(info.bytes, 1)).toFixed(2);
+  const overhead = (((info.chars - info.bytes) / Math.max(info.bytes, 1)) * 100).toFixed(1);
+  el.innerHTML = `
+    <div class="meta-tile"><span>Byte length</span><strong>${info.bytes}</strong></div>
+    <div class="meta-tile"><span>Base91 chars</span><strong>${info.chars}</strong></div>
+    <div class="meta-tile"><span>Expansion</span><strong>${ratio}×</strong></div>
+    <div class="meta-tile"><span>Overhead</span><strong>${overhead}%</strong></div>
+  `;
+}
+
+function swapIO() {
+  const a = document.getElementById('input');
+  const b = document.getElementById('output');
+  [a.value, b.value] = [b.value, a.value];
+}
+function clearIO() {
+  document.getElementById('input').value = '';
+  document.getElementById('output').value = '';
+  renderMeta(null);
+  clearStatus();
+}
+function loadSample() {
+  document.getElementById('mode').value = 'utf8';
+  document.getElementById('input').value = 'The quick brown fox jumps over the lazy dog.';
+  doEncode();
+}
+function copyOutput() {
+  const text = document.getElementById('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+document.getElementById('variant').addEventListener('change', updateAlphaDisplay);
+updateAlphaDisplay();
+</script>
+</body>
+</html>
