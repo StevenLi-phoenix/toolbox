@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JsonLogic Evaluator - Free Online Tool</title>
+<meta name="description" content="Evaluate JsonLogic rules against data in real-time. Supports comparisons, logic, arithmetic, arrays, and variable access. Fully client-side.">
+<meta name="keywords" content="jsonlogic, json logic, rule engine, json rules, expression evaluator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonlogic.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .panel { display: flex; flex-direction: column; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+  .panel-header h2 { margin: 0; font-size: .95rem; }
+  .panel textarea { min-height: 240px; font-family: var(--mono); font-size: .82rem; resize: vertical; }
+  .status { font-size: .82rem; padding: 6px 10px; border-radius: var(--radius); margin-top: .5rem; }
+  .status.ok { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .status.err { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .result-box {
+    font-family: var(--mono);
+    font-size: .85rem;
+    padding: .75rem 1rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 3rem;
+  }
+  .op-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .4rem; margin-top: .5rem; }
+  .op-list code { font-size: .78rem; padding: 2px 6px; background: var(--surface2); border-radius: 4px; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JsonLogic Evaluator</h1>
+<p class="subtitle">Write JsonLogic rules and evaluate them against JSON data — great for testing feature flags, form logic, and rule engines.</p>
+
+<div class="card">
+<div class="panels">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📜 Rule (JsonLogic)</h2>
+      <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cp('ruleInput')">Copy</button>
+    </div>
+    <textarea id="ruleInput" oninput="run()" placeholder='{">": [{"var": "age"}, 18]}'></textarea>
+    <div id="ruleStatus"></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📦 Data</h2>
+      <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cp('dataInput')">Copy</button>
+    </div>
+    <textarea id="dataInput" oninput="run()" placeholder='{"age": 21, "name": "Alice"}'></textarea>
+    <div id="dataStatus"></div>
+  </div>
+</div>
+</div>
+
+<div class="card">
+<div class="panel-header"><h2>✨ Result</h2><button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cpResult()">Copy</button></div>
+<div class="result-box" id="result">—</div>
+</div>
+
+<div class="card">
+<h2>💡 Examples</h2>
+<div class="row" style="flex-wrap:wrap;gap:.5rem">
+  <button class="btn-secondary" onclick="loadExample('age')">Age check</button>
+  <button class="btn-secondary" onclick="loadExample('cart')">Cart total</button>
+  <button class="btn-secondary" onclick="loadExample('if')">If/else</button>
+  <button class="btn-secondary" onclick="loadExample('arr')">Array map</button>
+  <button class="btn-secondary" onclick="loadExample('nested')">Nested var</button>
+  <button class="btn-secondary" onclick="loadExample('missing')">Missing keys</button>
+</div>
+<h2 style="margin-top:1rem;font-size:.95rem">Supported operators</h2>
+<div class="op-list">
+  <code>var</code><code>missing</code><code>missing_some</code><code>if</code>
+  <code>==</code><code>===</code><code>!=</code><code>!==</code>
+  <code>&gt; &gt;= &lt; &lt;=</code><code>!</code><code>!!</code><code>and</code>
+  <code>or</code><code>+</code><code>-</code><code>*</code>
+  <code>/</code><code>%</code><code>min</code><code>max</code>
+  <code>in</code><code>cat</code><code>substr</code><code>log</code>
+  <code>merge</code><code>map</code><code>filter</code><code>reduce</code>
+  <code>all</code><code>none</code><code>some</code>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+// Minimal JsonLogic evaluator — compatible with jsonlogic.com
+const JL = {
+  isLogic(o) {
+    return o !== null && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length === 1;
+  },
+  truthy(v) {
+    if (Array.isArray(v)) return v.length > 0;
+    return !!v;
+  },
+  getVar(data, path, def) {
+    if (path === undefined || path === null || path === '') return data;
+    const parts = String(path).split('.');
+    let cur = data;
+    for (const p of parts) {
+      if (cur === null || cur === undefined) return def === undefined ? null : def;
+      cur = cur[p];
+    }
+    return cur === undefined ? (def === undefined ? null : def) : cur;
+  },
+  apply(logic, data) {
+    if (Array.isArray(logic)) return logic.map(x => JL.apply(x, data));
+    if (!JL.isLogic(logic)) return logic;
+    const op = Object.keys(logic)[0];
+    let args = logic[op];
+    if (!Array.isArray(args)) args = [args];
+
+    // Operators that need lazy evaluation
+    if (op === 'if' || op === '?:') {
+      for (let i = 0; i < args.length - 1; i += 2) {
+        if (JL.truthy(JL.apply(args[i], data))) return JL.apply(args[i+1], data);
+      }
+      if (args.length % 2 === 1) return JL.apply(args[args.length - 1], data);
+      return null;
+    }
+    if (op === 'and') {
+      let cur = true;
+      for (const a of args) { cur = JL.apply(a, data); if (!JL.truthy(cur)) return cur; }
+      return cur;
+    }
+    if (op === 'or') {
+      let cur = false;
+      for (const a of args) { cur = JL.apply(a, data); if (JL.truthy(cur)) return cur; }
+      return cur;
+    }
+    if (op === 'var') {
+      const evArgs = args.map(a => JL.apply(a, data));
+      return JL.getVar(data, evArgs[0], evArgs[1]);
+    }
+    if (op === 'missing') {
+      const keys = args.map(a => JL.apply(a, data)).flat();
+      return keys.filter(k => {
+        const v = JL.getVar(data, k);
+        return v === null || v === undefined || v === '';
+      });
+    }
+    if (op === 'missing_some') {
+      const min = JL.apply(args[0], data);
+      const keys = JL.apply(args[1], data);
+      const present = keys.filter(k => {
+        const v = JL.getVar(data, k);
+        return !(v === null || v === undefined || v === '');
+      });
+      if (present.length >= min) return [];
+      return keys.filter(k => !present.includes(k));
+    }
+    if (op === 'map') {
+      const arr = JL.apply(args[0], data);
+      if (!Array.isArray(arr)) return [];
+      return arr.map(item => JL.apply(args[1], item));
+    }
+    if (op === 'filter') {
+      const arr = JL.apply(args[0], data);
+      if (!Array.isArray(arr)) return [];
+      return arr.filter(item => JL.truthy(JL.apply(args[1], item)));
+    }
+    if (op === 'reduce') {
+      const arr = JL.apply(args[0], data);
+      if (!Array.isArray(arr)) return JL.apply(args[2], data);
+      return arr.reduce((acc, cur) => JL.apply(args[1], { current: cur, accumulator: acc }), JL.apply(args[2], data));
+    }
+    if (op === 'all') {
+      const arr = JL.apply(args[0], data);
+      if (!Array.isArray(arr) || arr.length === 0) return false;
+      return arr.every(item => JL.truthy(JL.apply(args[1], item)));
+    }
+    if (op === 'some') {
+      const arr = JL.apply(args[0], data);
+      if (!Array.isArray(arr)) return false;
+      return arr.some(item => JL.truthy(JL.apply(args[1], item)));
+    }
+    if (op === 'none') {
+      const arr = JL.apply(args[0], data);
+      if (!Array.isArray(arr)) return true;
+      return !arr.some(item => JL.truthy(JL.apply(args[1], item)));
+    }
+
+    // Eager: evaluate all args
+    const ev = args.map(a => JL.apply(a, data));
+    switch (op) {
+      case '==': return ev[0] == ev[1];
+      case '===': return ev[0] === ev[1];
+      case '!=': return ev[0] != ev[1];
+      case '!==': return ev[0] !== ev[1];
+      case '>': return ev[0] > ev[1];
+      case '>=': return ev[0] >= ev[1];
+      case '<': return ev.length === 3 ? (ev[0] < ev[1] && ev[1] < ev[2]) : (ev[0] < ev[1]);
+      case '<=': return ev.length === 3 ? (ev[0] <= ev[1] && ev[1] <= ev[2]) : (ev[0] <= ev[1]);
+      case '!': return !JL.truthy(ev[0]);
+      case '!!': return JL.truthy(ev[0]);
+      case '+': return ev.reduce((a, b) => (+a) + (+b), 0);
+      case '-': return ev.length === 1 ? -ev[0] : ev[0] - ev[1];
+      case '*': return ev.reduce((a, b) => (+a) * (+b), 1);
+      case '/': return ev[0] / ev[1];
+      case '%': return ev[0] % ev[1];
+      case 'min': return Math.min(...ev);
+      case 'max': return Math.max(...ev);
+      case 'in':
+        if (typeof ev[1] === 'string') return ev[1].indexOf(ev[0]) !== -1;
+        if (Array.isArray(ev[1])) return ev[1].includes(ev[0]);
+        return false;
+      case 'cat': return ev.map(x => x == null ? '' : String(x)).join('');
+      case 'substr': {
+        const s = String(ev[0]);
+        if (ev.length === 2) return ev[1] < 0 ? s.slice(ev[1]) : s.slice(ev[1]);
+        const start = ev[1];
+        const len = ev[2];
+        if (len < 0) return s.slice(start, s.length + len);
+        return s.slice(start, start + len);
+      }
+      case 'log': console.log(ev[0]); return ev[0];
+      case 'merge': return ev.reduce((a, b) => a.concat(Array.isArray(b) ? b : [b]), []);
+      case 'method': throw new Error('method operator not supported');
+    }
+    throw new Error('Unknown operator: ' + op);
+  }
+};
+
+function run() {
+  const ruleStr = $('ruleInput').value.trim();
+  const dataStr = $('dataInput').value.trim();
+  if (!ruleStr) {
+    $('result').textContent = '—';
+    showStatus('ruleStatus', '');
+    showStatus('dataStatus', '');
+    return;
+  }
+  let rule, data = {};
+  try {
+    rule = JSON.parse(ruleStr);
+    showStatus('ruleStatus', '✓ Valid JSON', 'ok');
+  } catch (e) {
+    showStatus('ruleStatus', '✕ ' + e.message, 'err');
+    $('result').textContent = '—';
+    return;
+  }
+  if (dataStr) {
+    try {
+      data = JSON.parse(dataStr);
+      showStatus('dataStatus', '✓ Valid JSON', 'ok');
+    } catch (e) {
+      showStatus('dataStatus', '✕ ' + e.message, 'err');
+      $('result').textContent = '—';
+      return;
+    }
+  } else {
+    showStatus('dataStatus', '');
+  }
+  try {
+    const out = JL.apply(rule, data);
+    $('result').textContent = JSON.stringify(out, null, 2);
+  } catch (e) {
+    $('result').textContent = 'Error: ' + e.message;
+  }
+}
+
+function showStatus(id, msg, type) {
+  const el = $(id);
+  el.textContent = msg;
+  el.className = 'status' + (type ? ' ' + type : '');
+  el.style.display = msg ? 'block' : 'none';
+}
+
+const examples = {
+  age: {
+    rule: { ">=": [{ "var": "age" }, 18] },
+    data: { age: 21, name: "Alice" }
+  },
+  cart: {
+    rule: { "*": [{ "reduce": [{ "var": "items" }, { "+": [{ "var": "accumulator" }, { "var": "current.price" }] }, 0] }, { "-": [1, { "var": "discount" }] }] },
+    data: { items: [{ price: 9.99 }, { price: 4.5 }, { price: 12.0 }], discount: 0.1 }
+  },
+  if: {
+    rule: { "if": [{ ">": [{ "var": "temp" }, 30] }, "hot", { ">": [{ "var": "temp" }, 15] }, "warm", "cold"] },
+    data: { temp: 22 }
+  },
+  arr: {
+    rule: { "map": [{ "var": "nums" }, { "*": [{ "var": "" }, 2] }] },
+    data: { nums: [1, 2, 3, 4, 5] }
+  },
+  nested: {
+    rule: { "var": "user.address.city" },
+    data: { user: { name: "Bob", address: { city: "Portland", zip: "97201" } } }
+  },
+  missing: {
+    rule: { "missing": ["first_name", "last_name", "email"] },
+    data: { first_name: "Carol", email: "" }
+  }
+};
+
+function loadExample(name) {
+  const ex = examples[name];
+  $('ruleInput').value = JSON.stringify(ex.rule, null, 2);
+  $('dataInput').value = JSON.stringify(ex.data, null, 2);
+  run();
+}
+
+function cp(id) {
+  const text = $(id).value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+function cpResult() {
+  const text = $('result').textContent;
+  if (!text || text === '—') return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+// Load default
+loadExample('age');
+</script>
+</body>
+</html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML to Plain Text Converter - Free Online Tool</title>
+<meta name="description" content="Convert HTML to clean plain text — strip tags, collapse whitespace, preserve structure with headings, lists, and links. Fully client-side.">
+<meta name="keywords" content="html to text, strip html, html stripper, plain text, html cleaner">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/html2txt.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .panel { display: flex; flex-direction: column; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+  .panel-header h2 { margin: 0; font-size: .95rem; }
+  .panel textarea { min-height: 380px; font-family: var(--mono); font-size: .82rem; resize: vertical; }
+  .options { display: flex; flex-wrap: wrap; gap: 1rem; padding: .75rem 1rem; background: var(--surface2); border-radius: var(--radius); margin-bottom: 1rem; }
+  .options label { display: flex; align-items: center; gap: .4rem; font-size: .85rem; cursor: pointer; }
+  .stats { display: flex; gap: 1.25rem; font-size: .8rem; color: var(--muted); margin-top: .5rem; }
+  .stats b { color: var(--text); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .panel textarea { min-height: 220px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HTML → Plain Text Converter</h1>
+<p class="subtitle">Strip HTML tags while preserving readable structure — headings, lists, links, and paragraph breaks.</p>
+
+<div class="card">
+<div class="options">
+  <label><input type="checkbox" id="optLinks" checked onchange="convert()"> Keep links as <code>[text](url)</code></label>
+  <label><input type="checkbox" id="optHeadings" checked onchange="convert()"> Mark headings</label>
+  <label><input type="checkbox" id="optLists" checked onchange="convert()"> Render lists</label>
+  <label><input type="checkbox" id="optCollapse" checked onchange="convert()"> Collapse whitespace</label>
+  <label><input type="checkbox" id="optWrap" onchange="convert()"> Wrap at 80 cols</label>
+</div>
+<div class="panels">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📄 HTML input</h2>
+      <div class="row" style="gap:.5rem">
+        <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="paste()">Paste</button>
+        <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="clearAll()">Clear</button>
+      </div>
+    </div>
+    <textarea id="htmlInput" oninput="convert()" placeholder='<h1>Hello</h1><p>This is <strong>HTML</strong> with <a href="https://example.com">a link</a>.</p>'></textarea>
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📝 Plain text output</h2>
+      <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cp()">Copy</button>
+    </div>
+    <textarea id="textOutput" readonly placeholder="Plain text will appear here..."></textarea>
+    <div class="stats">
+      <span>Chars: <b id="statChars">0</b></span>
+      <span>Words: <b id="statWords">0</b></span>
+      <span>Lines: <b id="statLines">0</b></span>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="card">
+<h2>💡 Examples</h2>
+<div class="row" style="flex-wrap:wrap;gap:.5rem">
+  <button class="btn-secondary" onclick="loadExample('article')">Article</button>
+  <button class="btn-secondary" onclick="loadExample('email')">HTML email</button>
+  <button class="btn-secondary" onclick="loadExample('list')">Nested list</button>
+  <button class="btn-secondary" onclick="loadExample('table')">Table</button>
+</div>
+<p style="margin-top:.75rem;font-size:.82rem;color:var(--muted)">
+Parsing happens via the browser's DOMParser — tags never execute. Scripts, styles,
+and comments are removed. Inline elements become normal text; block elements get
+line breaks. Great for email previews, content extraction, or sanity-checking
+rich-text output.
+</p>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const BLOCK = new Set(['address','article','aside','blockquote','details','dialog','dd','div','dl','dt','fieldset','figcaption','figure','footer','form','header','hgroup','hr','main','nav','section','table','tr','td','th','p']);
+const SKIP = new Set(['script','style','noscript','template','svg','canvas','iframe','head','meta','link','title']);
+
+function render(node, opts, ctx) {
+  if (node.nodeType === 3) {
+    let t = node.textContent;
+    if (opts.collapse) t = t.replace(/[ \t\r\n]+/g, ' ');
+    return t;
+  }
+  if (node.nodeType !== 1) return '';
+  const tag = node.tagName.toLowerCase();
+  if (SKIP.has(tag)) return '';
+
+  if (tag === 'br') return '\n';
+  if (tag === 'hr') return '\n\n----------\n\n';
+
+  if (tag === 'img') {
+    const alt = node.getAttribute('alt');
+    return alt ? '[' + alt + ']' : '';
+  }
+
+  const renderChildren = () => {
+    let out = '';
+    for (const c of node.childNodes) out += render(c, opts, ctx);
+    return out;
+  };
+
+  if (/^h[1-6]$/.test(tag)) {
+    const inner = renderChildren().trim();
+    if (!inner) return '';
+    if (opts.headings) {
+      const level = parseInt(tag[1]);
+      return '\n\n' + '#'.repeat(level) + ' ' + inner + '\n\n';
+    }
+    return '\n\n' + inner + '\n\n';
+  }
+
+  if (tag === 'a' && opts.links) {
+    const href = node.getAttribute('href');
+    const inner = renderChildren();
+    const trimmed = inner.trim();
+    if (href && trimmed && href !== trimmed) return '[' + trimmed + '](' + href + ')';
+    return inner;
+  }
+
+  if (tag === 'strong' || tag === 'b') return '**' + renderChildren() + '**';
+  if (tag === 'em' || tag === 'i') return '*' + renderChildren() + '*';
+  if (tag === 'code' && ctx.inPre === 0) return '`' + renderChildren() + '`';
+
+  if (tag === 'pre') {
+    ctx.inPre++;
+    const prevCollapse = opts.collapse;
+    opts.collapse = false;
+    let inner = '';
+    for (const c of node.childNodes) inner += render(c, opts, ctx);
+    opts.collapse = prevCollapse;
+    ctx.inPre--;
+    return '\n\n' + inner.replace(/^\n+|\n+$/g, '') + '\n\n';
+  }
+
+  if (tag === 'ul' || tag === 'ol') {
+    if (!opts.lists) return '\n' + renderChildren() + '\n';
+    ctx.listStack.push({ type: tag, index: 1 });
+    let out = '\n';
+    for (const c of node.childNodes) {
+      if (c.nodeType === 1 && c.tagName.toLowerCase() === 'li') {
+        const st = ctx.listStack[ctx.listStack.length - 1];
+        const marker = tag === 'ol' ? (st.index + '. ') : '- ';
+        const indent = '  '.repeat(ctx.listStack.length - 1);
+        const inner = render(c, opts, ctx).replace(/^\s+|\s+$/g, '');
+        // Re-indent nested content
+        const lines = inner.split('\n');
+        out += indent + marker + lines[0] + '\n';
+        for (let i = 1; i < lines.length; i++) out += indent + '  ' + lines[i] + '\n';
+        st.index++;
+      }
+    }
+    ctx.listStack.pop();
+    return out + '\n';
+  }
+  if (tag === 'li') return renderChildren();
+
+  if (tag === 'blockquote') {
+    const inner = renderChildren().trim();
+    const quoted = inner.split('\n').map(l => '> ' + l).join('\n');
+    return '\n\n' + quoted + '\n\n';
+  }
+
+  if (tag === 'tr') return renderChildren().replace(/\t$/, '') + '\n';
+  if (tag === 'td' || tag === 'th') return renderChildren().trim() + '\t';
+
+  if (BLOCK.has(tag)) return '\n' + renderChildren() + '\n';
+
+  return renderChildren();
+}
+
+function wrapLines(text, width) {
+  return text.split('\n').map(line => {
+    if (line.length <= width) return line;
+    // Don't wrap code or quotes
+    if (/^(    |\t|> |#)/.test(line)) return line;
+    const words = line.split(' ');
+    const out = [];
+    let cur = '';
+    for (const w of words) {
+      if (!cur) { cur = w; continue; }
+      if (cur.length + 1 + w.length > width) { out.push(cur); cur = w; }
+      else cur += ' ' + w;
+    }
+    if (cur) out.push(cur);
+    return out.join('\n');
+  }).join('\n');
+}
+
+function convert() {
+  const html = $('htmlInput').value;
+  if (!html.trim()) {
+    $('textOutput').value = '';
+    updateStats('');
+    return;
+  }
+  const opts = {
+    links: $('optLinks').checked,
+    headings: $('optHeadings').checked,
+    lists: $('optLists').checked,
+    collapse: $('optCollapse').checked
+  };
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(html, 'text/html');
+  } catch (e) {
+    $('textOutput').value = 'Parse error: ' + e.message;
+    return;
+  }
+  // Remove scripts/styles explicitly
+  doc.querySelectorAll('script, style, noscript').forEach(el => el.remove());
+  const ctx = { listStack: [], inPre: 0 };
+  let out = '';
+  for (const c of doc.body.childNodes) out += render(c, opts, ctx);
+
+  // Decode entities (DOMParser already does this for text nodes)
+  // Clean up: collapse 3+ newlines to 2, trim lines
+  out = out.replace(/[ \t]+\n/g, '\n');
+  out = out.replace(/\n{3,}/g, '\n\n');
+  out = out.replace(/^\s+|\s+$/g, '');
+
+  if ($('optWrap').checked) out = wrapLines(out, 80);
+
+  $('textOutput').value = out;
+  updateStats(out);
+}
+
+function updateStats(text) {
+  $('statChars').textContent = text.length;
+  $('statWords').textContent = text ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+  $('statLines').textContent = text ? text.split('\n').length : 0;
+}
+
+async function paste() {
+  try {
+    const t = await navigator.clipboard.readText();
+    $('htmlInput').value = t;
+    convert();
+  } catch (e) { /* ignore */ }
+}
+
+function clearAll() {
+  $('htmlInput').value = '';
+  $('textOutput').value = '';
+  updateStats('');
+}
+
+function cp() {
+  const text = $('textOutput').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+const examples = {
+  article: `<article>
+  <h1>The Quick Brown Fox</h1>
+  <p class="lede">A short <em>demonstration</em> of the HTML-to-text converter with common elements.</p>
+  <h2>Why it exists</h2>
+  <p>Sometimes you need to extract <strong>plain text</strong> from an HTML blob — for emails, previews, or terminal output. This tool helps you do exactly that.</p>
+  <p>Learn more at <a href="https://example.com/docs">the docs</a>.</p>
+</article>`,
+  email: `<html><body>
+  <h2>Your order has shipped!</h2>
+  <p>Hi Alice,</p>
+  <p>Your order <strong>#1234</strong> has shipped and should arrive by <em>Friday</em>.</p>
+  <p>Track it at <a href="https://tracking.example/1234">tracking.example/1234</a></p>
+  <hr>
+  <p style="color:#888;font-size:11px">Unsubscribe &middot; Update preferences</p>
+</body></html>`,
+  list: `<h3>Shopping list</h3>
+<ul>
+  <li>Groceries
+    <ul>
+      <li>Milk</li>
+      <li>Bread</li>
+      <li>Eggs</li>
+    </ul>
+  </li>
+  <li>Hardware
+    <ol>
+      <li>Screwdriver</li>
+      <li>Nails</li>
+    </ol>
+  </li>
+</ul>`,
+  table: `<table>
+  <tr><th>Name</th><th>Role</th><th>Since</th></tr>
+  <tr><td>Alice</td><td>Engineer</td><td>2020</td></tr>
+  <tr><td>Bob</td><td>Designer</td><td>2021</td></tr>
+  <tr><td>Carol</td><td>PM</td><td>2019</td></tr>
+</table>`
+};
+
+function loadExample(name) {
+  $('htmlInput').value = examples[name];
+  convert();
+}
+
+loadExample('article');
+</script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Google Polyline Encoder/Decoder - Free Online Tool</title>
+<meta name="description" content="Encode lat/lng coordinates to Google's encoded polyline format, or decode polyline strings back to coordinates. Fully client-side.">
+<meta name="keywords" content="google polyline, polyline encoder, polyline decoder, encoded polyline, gps coordinates, maps">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/polyline.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; align-items: stretch; }
+  .panel { display: flex; flex-direction: column; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+  .panel-header h2 { margin: 0; font-size: .95rem; }
+  .panel textarea { flex: 1; min-height: 320px; font-family: var(--mono); font-size: .82rem; resize: vertical; }
+  .arrows { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .5rem; padding: 0 .75rem; }
+  .arrows button { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; font-size: 1.1rem; line-height: 1; }
+  .arrows button:hover { background: var(--surface2); }
+  .status { font-size: .82rem; padding: 6px 10px; border-radius: var(--radius); margin-top: .5rem; }
+  .status.ok { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .status.err { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .precision { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .82rem; background: var(--bg); color: var(--text); }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; margin-top: .75rem; }
+  .stat { padding: .6rem .75rem; background: var(--surface2); border-radius: var(--radius); }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .stat .v { font-size: 1rem; font-weight: 600; font-family: var(--mono); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .arrows { flex-direction: row; padding: .5rem 0; }
+    .arrows button { transform: rotate(90deg); }
+    .panel textarea { min-height: 200px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Google Polyline Encoder/Decoder</h1>
+<p class="subtitle">Encode lat/lng coordinate lists to Google's polyline format (RFC-style) or decode back to points</p>
+
+<div class="card">
+<div class="panels">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📍 Coordinates (lat,lng per line)</h2>
+      <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cp('coordsInput')">Copy</button>
+    </div>
+    <textarea id="coordsInput" placeholder="38.5,-120.2&#10;40.7,-120.95&#10;43.252,-126.453" oninput="clearStatus()"></textarea>
+    <div id="coordsStatus"></div>
+  </div>
+  <div class="arrows">
+    <button onclick="doEncode()" title="Encode to polyline">→</button>
+    <button onclick="doDecode()" title="Decode polyline">←</button>
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <h2>🧵 Encoded Polyline</h2>
+      <div class="row" style="gap:.5rem;align-items:center">
+        <label style="font-size:.82rem;color:var(--muted)">Precision:</label>
+        <select id="precision" class="precision" onchange="onPrecisionChange()">
+          <option value="5" selected>5 (Google)</option>
+          <option value="6">6 (Mapbox)</option>
+        </select>
+        <button class="btn-secondary" style="padding:4px 10px;font-size:.82rem" onclick="cp('polyInput')">Copy</button>
+      </div>
+    </div>
+    <textarea id="polyInput" placeholder="_p~iF~ps|U_ulLnnqC_mqNvxq`@" oninput="clearStatus()"></textarea>
+    <div id="polyStatus"></div>
+  </div>
+</div>
+<div class="stat-grid" id="stats" style="display:none">
+  <div class="stat"><div class="k">Points</div><div class="v" id="statPoints">–</div></div>
+  <div class="stat"><div class="k">Encoded length</div><div class="v" id="statLen">–</div></div>
+  <div class="stat"><div class="k">Total distance</div><div class="v" id="statDist">–</div></div>
+</div>
+</div>
+
+<div class="card">
+<h2>💡 Examples</h2>
+<div class="row" style="flex-wrap:wrap;gap:.5rem">
+  <button class="btn-secondary" onclick="loadExample('classic')">Classic (3 pts)</button>
+  <button class="btn-secondary" onclick="loadExample('sf')">SF loop</button>
+  <button class="btn-secondary" onclick="loadExample('route')">Route polyline</button>
+</div>
+<p style="margin-top:.75rem;font-size:.82rem;color:var(--muted)">
+Google's encoded polyline format packs a signed lat/lng delta into a base64-like
+ASCII string. Precision 5 is used by Google Maps Directions API; precision 6 is
+used by Mapbox (Valhalla, OSRM) for extra accuracy.
+</p>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+function encode(points, precision) {
+  const factor = Math.pow(10, precision);
+  let out = '';
+  let prevLat = 0, prevLng = 0;
+  for (const [lat, lng] of points) {
+    const latI = Math.round(lat * factor);
+    const lngI = Math.round(lng * factor);
+    out += encodeSigned(latI - prevLat);
+    out += encodeSigned(lngI - prevLng);
+    prevLat = latI;
+    prevLng = lngI;
+  }
+  return out;
+}
+
+function encodeSigned(n) {
+  let v = n < 0 ? ~(n << 1) : (n << 1);
+  let out = '';
+  while (v >= 0x20) {
+    out += String.fromCharCode((0x20 | (v & 0x1f)) + 63);
+    v >>= 5;
+  }
+  out += String.fromCharCode(v + 63);
+  return out;
+}
+
+function decode(str, precision) {
+  const factor = Math.pow(10, precision);
+  const pts = [];
+  let i = 0, lat = 0, lng = 0;
+  while (i < str.length) {
+    let b, shift = 0, result = 0;
+    do {
+      if (i >= str.length) throw new Error('Unexpected end of polyline string');
+      b = str.charCodeAt(i++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dLat = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lat += dLat;
+    shift = 0; result = 0;
+    do {
+      if (i >= str.length) throw new Error('Unexpected end of polyline string');
+      b = str.charCodeAt(i++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dLng = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lng += dLng;
+    pts.push([lat / factor, lng / factor]);
+  }
+  return pts;
+}
+
+function parseCoords(text) {
+  const pts = [];
+  const lines = text.split(/\r?\n/);
+  for (let ln of lines) {
+    ln = ln.trim();
+    if (!ln) continue;
+    // Support "lat,lng", "lat lng", "[lat,lng]", "(lat, lng)"
+    const m = ln.match(/-?\d+(?:\.\d+)?/g);
+    if (!m || m.length < 2) throw new Error('Line "' + ln + '" does not contain two numbers');
+    const lat = parseFloat(m[0]);
+    const lng = parseFloat(m[1]);
+    if (!isFinite(lat) || !isFinite(lng)) throw new Error('Invalid number in "' + ln + '"');
+    if (lat < -90 || lat > 90) throw new Error('Latitude out of range in "' + ln + '"');
+    if (lng < -180 || lng > 180) throw new Error('Longitude out of range in "' + ln + '"');
+    pts.push([lat, lng]);
+  }
+  if (pts.length === 0) throw new Error('No coordinates found');
+  return pts;
+}
+
+function haversine(a, b) {
+  const R = 6371000;
+  const toR = x => x * Math.PI / 180;
+  const dLat = toR(b[0] - a[0]);
+  const dLng = toR(b[1] - a[1]);
+  const s = Math.sin(dLat/2) ** 2 + Math.cos(toR(a[0])) * Math.cos(toR(b[0])) * Math.sin(dLng/2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function formatDist(m) {
+  if (m < 1000) return m.toFixed(1) + ' m';
+  return (m / 1000).toFixed(3) + ' km';
+}
+
+function updateStats(pts, encoded) {
+  $('stats').style.display = '';
+  $('statPoints').textContent = pts.length;
+  $('statLen').textContent = encoded.length + ' chars';
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) d += haversine(pts[i-1], pts[i]);
+  $('statDist').textContent = formatDist(d);
+}
+
+function doEncode() {
+  const text = $('coordsInput').value.trim();
+  if (!text) { clearStatus(); return; }
+  try {
+    const pts = parseCoords(text);
+    const p = parseInt($('precision').value);
+    const encoded = encode(pts, p);
+    $('polyInput').value = encoded;
+    showStatus('coordsStatus', '✓ ' + pts.length + ' points parsed', 'ok');
+    showStatus('polyStatus', '✓ Encoded successfully', 'ok');
+    updateStats(pts, encoded);
+  } catch (e) {
+    showStatus('coordsStatus', '✕ ' + e.message, 'err');
+    showStatus('polyStatus', '', '');
+  }
+}
+
+function doDecode() {
+  const str = $('polyInput').value.trim();
+  if (!str) { clearStatus(); return; }
+  try {
+    const p = parseInt($('precision').value);
+    const pts = decode(str, p);
+    $('coordsInput').value = pts.map(pt => pt[0].toFixed(p) + ',' + pt[1].toFixed(p)).join('\n');
+    showStatus('polyStatus', '✓ Decoded ' + pts.length + ' points', 'ok');
+    showStatus('coordsStatus', '✓ Points loaded', 'ok');
+    updateStats(pts, str);
+  } catch (e) {
+    showStatus('polyStatus', '✕ ' + e.message, 'err');
+    showStatus('coordsStatus', '', '');
+  }
+}
+
+function onPrecisionChange() {
+  // Re-encode from current coords if present
+  if ($('coordsInput').value.trim()) doEncode();
+}
+
+function showStatus(id, msg, type) {
+  const el = $(id);
+  el.textContent = msg;
+  el.className = 'status' + (type ? ' ' + type : '');
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function clearStatus() {
+  showStatus('coordsStatus', '');
+  showStatus('polyStatus', '');
+  $('stats').style.display = 'none';
+}
+
+const examples = {
+  classic: '38.5,-120.2\n40.7,-120.95\n43.252,-126.453',
+  sf: '37.7749,-122.4194\n37.7849,-122.4094\n37.7949,-122.3994\n37.7749,-122.3894\n37.7649,-122.4094\n37.7749,-122.4194',
+  route: '34.0522,-118.2437\n34.1522,-118.3437\n34.2522,-118.4437\n34.3522,-118.5437\n34.4522,-118.6437'
+};
+
+function loadExample(name) {
+  $('coordsInput').value = examples[name];
+  doEncode();
+}
+
+function cp(id) {
+  const text = $(id).value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+</script>
+</body>
+</html>
