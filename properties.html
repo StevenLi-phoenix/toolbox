@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java .properties File Parser — Unicode Escape & JSON Converter</title>
+<meta name="description" content="Parse and format Java .properties files. Handle unicode escapes (\\uXXXX), line continuations, and convert to and from JSON. 100% client-side.">
+<meta name="keywords" content="java properties, .properties parser, unicode escape, native2ascii, properties to json, json to properties">
+<meta name="author" content="Steven Li">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/properties.html">
+<meta property="og:title" content="Java .properties File Parser">
+<meta property="og:description" content="Parse Java .properties files with unicode escapes and line continuations. Convert to and from JSON.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+  .panel-header h2 { font-size: .95rem; margin: 0; }
+  .panel-header .btns { display: flex; gap: 6px; }
+  .panel-header .btns button { font-size: .75rem; padding: 4px 10px; }
+  textarea { width: 100%; min-height: 360px; padding: 10px 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .status { font-size: .78rem; padding: 6px 10px; border-radius: var(--radius); margin-bottom: 8px; }
+  .status.ok { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); border: 1px solid var(--success); }
+  .status.err { color: var(--error); background: color-mix(in srgb, var(--error) 15%, transparent); border: 1px solid var(--error); }
+  .status.idle { color: var(--muted); background: var(--surface2); border: 1px solid var(--border); }
+  .options { display: flex; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-bottom: 10px; }
+  .options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } textarea { min-height: 240px; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Java .properties Parser</h1>
+<p class="subtitle">Parse and format Java <code>.properties</code> files per the <a href="https://docs.oracle.com/javase/9/docs/api/java/util/Properties.html#load-java.io.Reader-" target="_blank" rel="noopener">JDK spec</a>. Handles <code>=</code>/<code>:</code>/whitespace separators, line continuations, <code>\uXXXX</code> unicode escapes, and comments. Convert to and from JSON, or ASCII-escape non-ASCII characters like <code>native2ascii</code>.</p>
+
+<div class="options">
+  <label><input type="checkbox" id="optDotted"> Expand <code>a.b.c</code> keys into nested JSON</label>
+  <label><input type="checkbox" id="optAscii"> ASCII-escape output (<code>native2ascii</code>)</label>
+</div>
+
+<div class="panels">
+  <div class="card" style="padding:14px;">
+    <div class="panel-header">
+      <h2>.properties</h2>
+      <div class="btns">
+        <button class="btn btn-secondary" id="sampleBtn">Sample</button>
+        <button class="btn btn-secondary" id="clearProps">Clear</button>
+        <button class="btn btn-secondary" id="copyProps">Copy</button>
+      </div>
+    </div>
+    <div id="propsStatus" class="status idle">Ready</div>
+    <textarea id="propsIn" spellcheck="false" placeholder="# comment
+app.name = Toolbox
+app.version : 1.0
+app.greeting = Hello \u4e16\u754c"></textarea>
+  </div>
+
+  <div class="card" style="padding:14px;">
+    <div class="panel-header">
+      <h2>JSON</h2>
+      <div class="btns">
+        <button class="btn btn-secondary" id="clearJson">Clear</button>
+        <button class="btn btn-secondary" id="copyJson">Copy</button>
+      </div>
+    </div>
+    <div id="jsonStatus" class="status idle">Ready</div>
+    <textarea id="jsonIn" spellcheck="false" placeholder='{ "app.name": "Toolbox" }'></textarea>
+  </div>
+</div>
+
+<div class="card" style="padding:14px; margin-top:16px;">
+  <h3 style="margin-top:0; font-size:.95rem;">Spec notes</h3>
+  <ul style="font-size:.82rem; color: var(--muted); line-height:1.6; padding-left:20px; margin:6px 0;">
+    <li>Lines beginning with <code>#</code> or <code>!</code> are comments (after optional leading whitespace).</li>
+    <li>Key and value are separated by the first unescaped <code>=</code>, <code>:</code>, or whitespace run.</li>
+    <li>A line ending in an odd number of <code>\</code> is continued on the next line (leading whitespace stripped).</li>
+    <li>Escape sequences in values: <code>\t</code>, <code>\n</code>, <code>\r</code>, <code>\f</code>, <code>\\</code>, <code>\=</code>, <code>\:</code>, <code>\uXXXX</code>.</li>
+    <li>When writing, non-ASCII characters are escaped to <code>\uXXXX</code> if the ASCII option is enabled.</li>
+  </ul>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+function setStatus(el, msg, cls) { el.textContent = msg; el.className = 'status ' + cls; }
+
+function unescapeValue(s) {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '\\') {
+      const n = s[++i];
+      if (n === 'n') out += '\n';
+      else if (n === 't') out += '\t';
+      else if (n === 'r') out += '\r';
+      else if (n === 'f') out += '\f';
+      else if (n === 'u') {
+        const hex = s.slice(i + 1, i + 5);
+        if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+          out += String.fromCharCode(parseInt(hex, 16));
+          i += 4;
+        } else {
+          throw new Error('Invalid \\u escape');
+        }
+      } else if (n === undefined) {
+        // trailing backslash
+      } else {
+        out += n;
+      }
+    } else {
+      out += c;
+    }
+  }
+  return out;
+}
+
+function parseProperties(text) {
+  const result = {};
+  // Normalize line endings and join continuation lines
+  const rawLines = text.split(/\r\n|\r|\n/);
+  const logical = [];
+  let buffer = '';
+  let starting = true;
+  for (let i = 0; i < rawLines.length; i++) {
+    let line = rawLines[i];
+    if (starting) {
+      // Skip leading whitespace of a logical line
+      line = line.replace(/^[ \t\f]+/, '');
+      if (line === '' || line[0] === '#' || line[0] === '!') {
+        if (buffer === '') continue;
+      }
+    }
+    // Count trailing backslashes before stripping
+    let bs = 0;
+    for (let j = line.length - 1; j >= 0 && line[j] === '\\'; j--) bs++;
+    const cont = bs % 2 === 1;
+    if (cont) {
+      buffer += line.slice(0, -1);
+      starting = false;
+    } else {
+      buffer += line;
+      logical.push(buffer);
+      buffer = '';
+      starting = true;
+    }
+  }
+  if (buffer) logical.push(buffer);
+
+  for (const l of logical) {
+    const line = l.replace(/^[ \t\f]+/, '');
+    if (!line || line[0] === '#' || line[0] === '!') continue;
+    // Find first unescaped =, :, or whitespace
+    let sep = -1, sepChar = '';
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '\\') { i++; continue; }
+      if (c === '=' || c === ':' || c === ' ' || c === '\t' || c === '\f') {
+        sep = i;
+        sepChar = c;
+        break;
+      }
+    }
+    let key, val;
+    if (sep < 0) { key = line; val = ''; }
+    else {
+      key = line.slice(0, sep);
+      let rest = line.slice(sep);
+      // Skip whitespace, then optional = or :, then whitespace
+      rest = rest.replace(/^[ \t\f]+/, '');
+      if (rest[0] === '=' || rest[0] === ':') rest = rest.slice(1).replace(/^[ \t\f]+/, '');
+      val = rest;
+    }
+    key = unescapeValue(key);
+    val = unescapeValue(val);
+    result[key] = val;
+  }
+  return result;
+}
+
+function escapeKey(s) {
+  let out = '';
+  for (const c of s) {
+    if (c === ' ') out += '\\ ';
+    else if (c === '\\') out += '\\\\';
+    else if (c === '=' || c === ':') out += '\\' + c;
+    else if (c === '\n') out += '\\n';
+    else if (c === '\r') out += '\\r';
+    else if (c === '\t') out += '\\t';
+    else if ($('optAscii').checked && (c.charCodeAt(0) < 0x20 || c.charCodeAt(0) > 0x7e)) {
+      out += '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0');
+    } else {
+      out += c;
+    }
+  }
+  return out;
+}
+function escapeValue(s) {
+  let out = '';
+  const asciiOnly = $('optAscii').checked;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    const cc = c.charCodeAt(0);
+    if (c === '\\') out += '\\\\';
+    else if (c === '\n') out += '\\n';
+    else if (c === '\r') out += '\\r';
+    else if (c === '\t') out += '\\t';
+    else if (c === '\f') out += '\\f';
+    else if (i === 0 && c === ' ') out += '\\ ';
+    else if (asciiOnly && (cc < 0x20 || cc > 0x7e)) {
+      out += '\\u' + cc.toString(16).padStart(4, '0');
+    } else {
+      out += c;
+    }
+  }
+  return out;
+}
+
+function flatten(obj, prefix = '', out = {}) {
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? prefix + '.' + k : k;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      flatten(v, key, out);
+    } else if (Array.isArray(v)) {
+      out[key] = v.join(',');
+    } else {
+      out[key] = v == null ? '' : String(v);
+    }
+  }
+  return out;
+}
+
+function nest(flat) {
+  const root = {};
+  for (const [k, v] of Object.entries(flat)) {
+    const parts = k.split('.');
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const p = parts[i];
+      if (!node[p] || typeof node[p] !== 'object' || Array.isArray(node[p])) node[p] = {};
+      node = node[p];
+    }
+    node[parts[parts.length - 1]] = v;
+  }
+  return root;
+}
+
+function stringifyProperties(obj) {
+  if (obj === null || typeof obj !== 'object') throw new Error('Root must be an object.');
+  const flat = flatten(obj);
+  const lines = [];
+  for (const [k, v] of Object.entries(flat)) {
+    lines.push(escapeKey(k) + '=' + escapeValue(String(v)));
+  }
+  return lines.join('\n');
+}
+
+let syncing = false;
+
+function propsToJson() {
+  if (syncing) return;
+  syncing = true;
+  const text = $('propsIn').value;
+  if (!text.trim()) {
+    $('jsonIn').value = '';
+    setStatus($('propsStatus'), 'Empty', 'idle');
+    setStatus($('jsonStatus'), 'Empty', 'idle');
+    syncing = false;
+    return;
+  }
+  try {
+    const flat = parseProperties(text);
+    const output = $('optDotted').checked ? nest(flat) : flat;
+    $('jsonIn').value = JSON.stringify(output, null, 2);
+    setStatus($('propsStatus'), Object.keys(flat).length + ' key(s) parsed', 'ok');
+    setStatus($('jsonStatus'), 'Generated from properties', 'ok');
+  } catch (e) {
+    setStatus($('propsStatus'), 'Error: ' + e.message, 'err');
+  }
+  syncing = false;
+}
+
+function jsonToProps() {
+  if (syncing) return;
+  syncing = true;
+  const text = $('jsonIn').value;
+  if (!text.trim()) {
+    $('propsIn').value = '';
+    setStatus($('jsonStatus'), 'Empty', 'idle');
+    setStatus($('propsStatus'), 'Empty', 'idle');
+    syncing = false;
+    return;
+  }
+  try {
+    const obj = JSON.parse(text);
+    $('propsIn').value = stringifyProperties(obj);
+    setStatus($('jsonStatus'), 'Valid JSON', 'ok');
+    setStatus($('propsStatus'), 'Generated from JSON', 'ok');
+  } catch (e) {
+    setStatus($('jsonStatus'), 'Error: ' + e.message, 'err');
+  }
+  syncing = false;
+}
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+async function copy(s) {
+  if (!s) return;
+  try { await navigator.clipboard.writeText(s); toast('Copied!'); }
+  catch { toast('Copy failed'); }
+}
+
+$('propsIn').addEventListener('input', propsToJson);
+$('jsonIn').addEventListener('input', jsonToProps);
+$('optDotted').addEventListener('change', propsToJson);
+$('optAscii').addEventListener('change', () => { if ($('jsonIn').value) jsonToProps(); });
+
+$('sampleBtn').addEventListener('click', () => {
+  $('propsIn').value = `# Example Java properties file
+! Also a comment
+
+app.name = Toolbox
+app.version : 1.2.3
+app.greeting = Hello \\u4e16\\u754c
+
+# Multi-line value with continuation
+app.description = A collection of useful, \\
+    client-side developer \\
+    tools.
+
+database.host=localhost
+database.port=5432
+database.user=admin
+database.password=p\\:ssw\\=rd
+
+feature\\ flag = enabled`;
+  propsToJson();
+});
+$('clearProps').addEventListener('click', () => { $('propsIn').value = ''; propsToJson(); });
+$('clearJson').addEventListener('click', () => { $('jsonIn').value = ''; jsonToProps(); });
+$('copyProps').addEventListener('click', () => copy($('propsIn').value));
+$('copyJson').addEventListener('click', () => copy($('jsonIn').value));
+
+$('sampleBtn').click();
+</script>
+</body>
+</html>

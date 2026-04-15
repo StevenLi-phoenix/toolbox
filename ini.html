@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INI File Parser & JSON Converter — Edit INI Config Files</title>
+<meta name="description" content="Parse, format, and convert INI configuration files to and from JSON. Supports sections, comments (; and #), quoted values, and section arrays. 100% client-side.">
+<meta name="keywords" content="ini parser, ini to json, json to ini, config file, ini formatter, ini viewer">
+<meta name="author" content="Steven Li">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ini.html">
+<meta property="og:title" content="INI File Parser & JSON Converter">
+<meta property="og:description" content="Parse, format, and convert INI configuration files to and from JSON. Handles sections, comments, quoted values.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .panel { display: flex; flex-direction: column; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+  .panel-header h2 { font-size: .95rem; margin: 0; }
+  .panel-header .btns { display: flex; gap: 6px; }
+  .panel-header .btns button { font-size: .75rem; padding: 4px 10px; }
+  textarea { width: 100%; min-height: 380px; padding: 10px 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .status { font-size: .78rem; padding: 6px 10px; border-radius: var(--radius); margin-bottom: 8px; }
+  .status.ok { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); border: 1px solid var(--success); }
+  .status.err { color: var(--error); background: color-mix(in srgb, var(--error) 15%, transparent); border: 1px solid var(--error); }
+  .status.idle { color: var(--muted); background: var(--surface2); border: 1px solid var(--border); }
+  .options { display: flex; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-bottom: 10px; }
+  .options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } textarea { min-height: 260px; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>INI File Parser</h1>
+<p class="subtitle">Parse, edit, and convert INI configuration files (<code>[section]</code> / <code>key = value</code>) to and from JSON. Supports comments (<code>;</code> and <code>#</code>), quoted values, nested sections via dot notation, and array-style repeated keys. Runs entirely in your browser.</p>
+
+<div class="options">
+  <label><input type="checkbox" id="optDotted" checked> Expand <code>a.b.c</code> sections into nested objects</label>
+  <label><input type="checkbox" id="optRepeatArr" checked> Merge repeated keys into arrays</label>
+  <label><input type="checkbox" id="optBool" checked> Parse <code>true</code>/<code>false</code>/numbers</label>
+</div>
+
+<div class="panels">
+  <div class="panel card" style="padding: 14px;">
+    <div class="panel-header">
+      <h2>INI</h2>
+      <div class="btns">
+        <button class="btn btn-secondary" id="sampleBtn">Sample</button>
+        <button class="btn btn-secondary" id="clearIni">Clear</button>
+        <button class="btn btn-secondary" id="copyIni">Copy</button>
+      </div>
+    </div>
+    <div id="iniStatus" class="status idle">Ready</div>
+    <textarea id="iniIn" spellcheck="false" placeholder="; comments start with ; or #
+[database]
+host = localhost
+port = 5432
+user = &quot;admin&quot;"></textarea>
+  </div>
+
+  <div class="panel card" style="padding: 14px;">
+    <div class="panel-header">
+      <h2>JSON</h2>
+      <div class="btns">
+        <button class="btn btn-secondary" id="clearJson">Clear</button>
+        <button class="btn btn-secondary" id="copyJson">Copy</button>
+      </div>
+    </div>
+    <div id="jsonStatus" class="status idle">Ready</div>
+    <textarea id="jsonIn" spellcheck="false" placeholder='{ "database": { "host": "localhost" } }'></textarea>
+  </div>
+</div>
+
+<div class="card" style="padding: 14px; margin-top: 16px;">
+  <h3 style="margin-top:0; font-size:.95rem;">Notes</h3>
+  <ul style="font-size:.82rem; color: var(--muted); line-height: 1.6; padding-left: 20px; margin: 6px 0;">
+    <li>Lines starting with <code>;</code> or <code>#</code> are comments and are stripped on parse.</li>
+    <li>Values outside quotes are trimmed. Use <code>"…"</code> or <code>'…'</code> to preserve whitespace and leading <code>#</code>/<code>;</code>.</li>
+    <li>Keys before any section are placed at the root of the JSON object.</li>
+    <li>Dot-notation sections like <code>[a.b.c]</code> are expanded to nested objects when the option is on.</li>
+    <li>No network requests — all parsing happens locally.</li>
+  </ul>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function setStatus(el, msg, cls) {
+  el.textContent = msg;
+  el.className = 'status ' + cls;
+}
+
+function coerce(v) {
+  if (!$('optBool').checked) return v;
+  if (v === 'true' || v === 'yes' || v === 'on') return true;
+  if (v === 'false' || v === 'no' || v === 'off') return false;
+  if (v === 'null' || v === '') return v === '' ? '' : null;
+  if (/^-?\d+$/.test(v)) {
+    const n = parseInt(v, 10);
+    if (Number.isSafeInteger(n)) return n;
+  }
+  if (/^-?\d*\.\d+([eE][+-]?\d+)?$/.test(v)) return parseFloat(v);
+  return v;
+}
+
+function unquote(v) {
+  v = v.trim();
+  if (v.length >= 2) {
+    const q = v[0];
+    if ((q === '"' || q === "'") && v[v.length - 1] === q) {
+      return v.slice(1, -1).replace(/\\(["'\\nrt])/g, (_, c) => {
+        return { n: '\n', r: '\r', t: '\t', '\\': '\\', '"': '"', "'": "'" }[c];
+      });
+    }
+  }
+  return v;
+}
+
+function parseIni(text) {
+  const result = {};
+  const dotted = $('optDotted').checked;
+  const repeatArr = $('optRepeatArr').checked;
+  let current = result;
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    // Strip inline comment only if not inside quotes
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed[0] === ';' || trimmed[0] === '#') continue;
+
+    const secMatch = trimmed.match(/^\[(.+?)\]\s*$/);
+    if (secMatch) {
+      const name = secMatch[1].trim();
+      if (dotted && name.includes('.')) {
+        let node = result;
+        for (const part of name.split('.')) {
+          if (!node[part] || typeof node[part] !== 'object' || Array.isArray(node[part])) node[part] = {};
+          node = node[part];
+        }
+        current = node;
+      } else {
+        if (!result[name] || typeof result[name] !== 'object') result[name] = {};
+        current = result[name];
+      }
+      continue;
+    }
+
+    const kvMatch = trimmed.match(/^([^=:]+?)\s*[=:]\s*(.*)$/);
+    if (!kvMatch) {
+      throw new Error('Line ' + (i + 1) + ': cannot parse "' + trimmed + '"');
+    }
+    let key = kvMatch[1].trim();
+    let rawVal = kvMatch[2];
+    // Strip trailing comment if value is not quoted
+    const t = rawVal.trim();
+    if (!(t.startsWith('"') || t.startsWith("'"))) {
+      const ci = rawVal.search(/[;#]/);
+      if (ci >= 0) rawVal = rawVal.slice(0, ci);
+    }
+    const val = coerce(unquote(rawVal));
+
+    // Array syntax key[] = v
+    if (key.endsWith('[]')) {
+      key = key.slice(0, -2).trim();
+      if (!Array.isArray(current[key])) current[key] = [];
+      current[key].push(val);
+    } else if (key in current && repeatArr) {
+      if (!Array.isArray(current[key])) current[key] = [current[key]];
+      current[key].push(val);
+    } else {
+      current[key] = val;
+    }
+  }
+  return result;
+}
+
+function stringifyIni(obj) {
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) {
+    throw new Error('Root must be an object.');
+  }
+  const lines = [];
+  const globals = [];
+  const sections = [];
+
+  const formatVal = v => {
+    if (v === null) return '';
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'string') {
+      if (/^\s|\s$|[;#"'=:\n]/.test(v)) return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
+      return v;
+    }
+    return JSON.stringify(v);
+  };
+
+  const pushPairs = (out, o, indent = '') => {
+    for (const [k, v] of Object.entries(o)) {
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (item !== null && typeof item === 'object') {
+            out.push('# unsupported: array of objects for key ' + k);
+          } else {
+            out.push(k + '[] = ' + formatVal(item));
+          }
+        }
+      } else if (v !== null && typeof v === 'object') {
+        // handled as section by caller; keep raw via JSON
+        out.push(k + ' = ' + JSON.stringify(v));
+      } else {
+        out.push(k + ' = ' + formatVal(v));
+      }
+    }
+  };
+
+  // Separate primitive/array entries (globals) vs object entries (sections)
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      sections.push([k, v]);
+    } else {
+      globals.push([k, v]);
+    }
+  }
+
+  if (globals.length) {
+    const tmp = {};
+    for (const [k, v] of globals) tmp[k] = v;
+    pushPairs(lines, tmp);
+  }
+
+  const emitSection = (path, o) => {
+    const primitives = {};
+    const nested = [];
+    for (const [k, v] of Object.entries(o)) {
+      if (v !== null && typeof v === 'object' && !Array.isArray(v)) nested.push([k, v]);
+      else primitives[k] = v;
+    }
+    if (lines.length) lines.push('');
+    lines.push('[' + path + ']');
+    pushPairs(lines, primitives);
+    for (const [k, v] of nested) emitSection(path + '.' + k, v);
+  };
+
+  for (const [k, v] of sections) emitSection(k, v);
+
+  return lines.join('\n');
+}
+
+let syncing = false;
+
+function iniToJson() {
+  if (syncing) return;
+  syncing = true;
+  const text = $('iniIn').value;
+  if (!text.trim()) {
+    $('jsonIn').value = '';
+    setStatus($('iniStatus'), 'Empty', 'idle');
+    setStatus($('jsonStatus'), 'Empty', 'idle');
+    syncing = false;
+    return;
+  }
+  try {
+    const obj = parseIni(text);
+    $('jsonIn').value = JSON.stringify(obj, null, 2);
+    setStatus($('iniStatus'), 'Valid INI', 'ok');
+    setStatus($('jsonStatus'), 'Generated from INI', 'ok');
+  } catch (e) {
+    setStatus($('iniStatus'), 'Error: ' + e.message, 'err');
+  }
+  syncing = false;
+}
+
+function jsonToIni() {
+  if (syncing) return;
+  syncing = true;
+  const text = $('jsonIn').value;
+  if (!text.trim()) {
+    $('iniIn').value = '';
+    setStatus($('jsonStatus'), 'Empty', 'idle');
+    setStatus($('iniStatus'), 'Empty', 'idle');
+    syncing = false;
+    return;
+  }
+  try {
+    const obj = JSON.parse(text);
+    $('iniIn').value = stringifyIni(obj);
+    setStatus($('jsonStatus'), 'Valid JSON', 'ok');
+    setStatus($('iniStatus'), 'Generated from JSON', 'ok');
+  } catch (e) {
+    setStatus($('jsonStatus'), 'Error: ' + e.message, 'err');
+  }
+  syncing = false;
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+async function copy(text) {
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); toast('Copied!'); }
+  catch { toast('Copy failed'); }
+}
+
+$('iniIn').addEventListener('input', iniToJson);
+$('jsonIn').addEventListener('input', jsonToIni);
+['optDotted','optRepeatArr','optBool'].forEach(id => $(id).addEventListener('change', iniToJson));
+
+$('sampleBtn').addEventListener('click', () => {
+  $('iniIn').value = `; Example app config
+app_name = Toolbox
+version = 1.2.3
+
+[database]
+host = localhost
+port = 5432
+user = "admin"
+password = "p@ss;word"
+
+[database.pool]
+min = 2
+max = 20
+
+[logging]
+level = info
+targets[] = stdout
+targets[] = syslog
+
+[features]
+beta = true
+experimental = false`;
+  iniToJson();
+});
+$('clearIni').addEventListener('click', () => { $('iniIn').value = ''; iniToJson(); });
+$('clearJson').addEventListener('click', () => { $('jsonIn').value = ''; jsonToIni(); });
+$('copyIni').addEventListener('click', () => copy($('iniIn').value));
+$('copyJson').addEventListener('click', () => copy($('jsonIn').value));
+
+// Init
+$('sampleBtn').click();
+</script>
+</body>
+</html>

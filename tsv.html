@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TSV ⇄ CSV ⇄ JSON Converter — View & Transform Tab-Separated Values</title>
+<meta name="description" content="Convert between TSV (tab-separated values), CSV, and JSON in one place. Preview a table, handle quoted fields, and inspect column stats. 100% client-side.">
+<meta name="keywords" content="tsv, tab separated values, tsv to csv, tsv to json, csv to tsv, tsv converter, tsv viewer">
+<meta name="author" content="Steven Li">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tsv.html">
+<meta property="og:title" content="TSV ⇄ CSV ⇄ JSON Converter">
+<meta property="og:description" content="Convert between TSV, CSV, and JSON with a preview table, quoted field support, and column stats.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .top-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+  .panel-header h2 { font-size: .95rem; margin: 0; }
+  .panel-header select, .panel-header .btns button { font-size: .75rem; padding: 4px 10px; }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  textarea { width: 100%; min-height: 280px; padding: 10px 12px; font-family: var(--mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .status { font-size: .78rem; padding: 6px 10px; border-radius: var(--radius); margin-bottom: 8px; }
+  .status.ok { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); border: 1px solid var(--success); }
+  .status.err { color: var(--error); background: color-mix(in srgb, var(--error) 15%, transparent); border: 1px solid var(--error); }
+  .status.idle { color: var(--muted); background: var(--surface2); border: 1px solid var(--border); }
+  select { padding: 5px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--sans); }
+  .options { display: flex; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-bottom: 10px; }
+  .options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .preview-wrap { margin-top: 16px; overflow: auto; max-height: 420px; border: 1px solid var(--border); border-radius: var(--radius); }
+  table.preview { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .8rem; }
+  table.preview th, table.preview td { padding: 6px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: left; white-space: nowrap; }
+  table.preview th { background: var(--surface2); position: sticky; top: 0; font-weight: 600; }
+  table.preview tr:nth-child(even) td { background: color-mix(in srgb, var(--surface2) 50%, transparent); }
+  table.preview td.num { text-align: right; color: var(--accent); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat { padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .stat .v { font-size: 1.1rem; font-weight: 600; font-family: var(--mono); }
+  @media (max-width: 768px) { .top-row { grid-template-columns: 1fr; } textarea { min-height: 200px; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>TSV ⇄ CSV ⇄ JSON Converter</h1>
+<p class="subtitle">Convert between <strong>TSV</strong> (tab-separated), <strong>CSV</strong>, and <strong>JSON</strong> — paste in any format, pick the output, preview the table, and inspect column stats. Quoted fields, custom delimiters, and header toggles all supported. Works entirely in your browser.</p>
+
+<div class="options">
+  <label>Input:
+    <select id="inFmt">
+      <option value="auto">Auto-detect</option>
+      <option value="tsv">TSV (tab)</option>
+      <option value="csv">CSV (comma)</option>
+      <option value="psv">PSV (pipe)</option>
+      <option value="ssv">SSV (semicolon)</option>
+      <option value="json">JSON</option>
+    </select>
+  </label>
+  <label>Output:
+    <select id="outFmt">
+      <option value="tsv">TSV</option>
+      <option value="csv">CSV</option>
+      <option value="json" selected>JSON</option>
+      <option value="json-array">JSON (array of arrays)</option>
+      <option value="ndjson">NDJSON</option>
+      <option value="md">Markdown table</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="optHeader" checked> First row is header</label>
+  <label><input type="checkbox" id="optTrim" checked> Trim cell whitespace</label>
+</div>
+
+<div class="top-row">
+  <div class="card" style="padding:14px;">
+    <div class="panel-header">
+      <h2>Input</h2>
+      <div class="btns">
+        <button class="btn btn-secondary" id="sampleBtn">Sample</button>
+        <button class="btn btn-secondary" id="clearIn">Clear</button>
+      </div>
+    </div>
+    <div id="inStatus" class="status idle">Ready</div>
+    <textarea id="inText" spellcheck="false" placeholder="Paste TSV, CSV, or JSON here…"></textarea>
+  </div>
+  <div class="card" style="padding:14px;">
+    <div class="panel-header">
+      <h2>Output</h2>
+      <div class="btns">
+        <button class="btn btn-secondary" id="copyOut">Copy</button>
+        <button class="btn btn-secondary" id="dlOut">Download</button>
+      </div>
+    </div>
+    <div id="outStatus" class="status idle">Ready</div>
+    <textarea id="outText" spellcheck="false" readonly></textarea>
+  </div>
+</div>
+
+<div class="card" style="padding:14px; margin-top:16px;" id="previewCard">
+  <h2 style="font-size:.95rem; margin-top:0;">Preview</h2>
+  <div id="stats" class="stats"></div>
+  <div class="preview-wrap"><table class="preview" id="previewTable"></table></div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+function setStatus(el, msg, cls) { el.textContent = msg; el.className = 'status ' + cls; }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+function parseDelimited(text, delim) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += c; i++;
+    } else {
+      if (c === '"' && field === '') { inQuotes = true; i++; continue; }
+      if (c === delim) { row.push(field); field = ''; i++; continue; }
+      if (c === '\r') { i++; continue; }
+      if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+      field += c; i++;
+    }
+  }
+  if (field !== '' || row.length > 0) { row.push(field); rows.push(row); }
+  // Drop trailing empty row
+  if (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === '') rows.pop();
+  return rows;
+}
+
+function detectDelim(text) {
+  const first = text.split(/\r?\n/)[0] || '';
+  const counts = { '\t': 0, ',': 0, ';': 0, '|': 0 };
+  let inQ = false;
+  for (const c of first) {
+    if (c === '"') inQ = !inQ;
+    else if (!inQ && c in counts) counts[c]++;
+  }
+  let best = '\t', max = -1;
+  for (const [d, n] of Object.entries(counts)) if (n > max) { max = n; best = d; }
+  return max > 0 ? best : '\t';
+}
+
+function parseInput(text, fmt) {
+  if (!text.trim()) return { rows: [], headers: [] };
+  let delim;
+  if (fmt === 'auto') {
+    const t = text.trimStart();
+    if (t[0] === '[' || t[0] === '{') fmt = 'json';
+    else delim = detectDelim(text);
+  }
+  if (fmt === 'json') {
+    let obj = JSON.parse(text);
+    if (!Array.isArray(obj)) throw new Error('JSON root must be an array');
+    if (obj.length === 0) return { rows: [], headers: [] };
+    if (Array.isArray(obj[0])) {
+      const rows = obj.map(r => r.map(v => v == null ? '' : String(v)));
+      let headers;
+      if ($('optHeader').checked) { headers = rows.shift(); }
+      else { headers = rows[0].map((_, i) => 'col' + (i + 1)); }
+      return { rows, headers };
+    }
+    // array of objects
+    const keys = [];
+    const seen = new Set();
+    for (const o of obj) {
+      for (const k of Object.keys(o)) if (!seen.has(k)) { seen.add(k); keys.push(k); }
+    }
+    const rows = obj.map(o => keys.map(k => {
+      const v = o[k];
+      if (v == null) return '';
+      if (typeof v === 'object') return JSON.stringify(v);
+      return String(v);
+    }));
+    return { rows, headers: keys };
+  }
+  const delimMap = { tsv: '\t', csv: ',', psv: '|', ssv: ';' };
+  if (fmt in delimMap) delim = delimMap[fmt];
+  let rows = parseDelimited(text, delim);
+  if ($('optTrim').checked) rows = rows.map(r => r.map(c => c.trim()));
+  let headers;
+  if ($('optHeader').checked && rows.length) {
+    headers = rows.shift();
+  } else {
+    const maxLen = rows.reduce((m, r) => Math.max(m, r.length), 0);
+    headers = Array.from({ length: maxLen }, (_, i) => 'col' + (i + 1));
+  }
+  // Normalize row width
+  rows = rows.map(r => {
+    while (r.length < headers.length) r.push('');
+    return r.slice(0, headers.length);
+  });
+  return { rows, headers };
+}
+
+function encodeDelim(rows, headers, delim) {
+  const out = [];
+  const esc = v => {
+    const s = String(v == null ? '' : v);
+    if (delim === '\t') {
+      // For TSV, replace tabs/newlines rather than quoting
+      return s.replace(/\t/g, ' ').replace(/\r?\n/g, ' ');
+    }
+    if (s.includes(delim) || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+  out.push(headers.map(esc).join(delim));
+  for (const r of rows) out.push(r.map(esc).join(delim));
+  return out.join('\n');
+}
+
+function encodeMd(rows, headers) {
+  const esc = v => String(v == null ? '' : v).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const widths = headers.map((h, i) => {
+    let w = esc(h).length;
+    for (const r of rows) w = Math.max(w, esc(r[i] || '').length);
+    return Math.max(3, w);
+  });
+  const pad = (s, w) => s + ' '.repeat(w - s.length);
+  const lines = [];
+  lines.push('| ' + headers.map((h, i) => pad(esc(h), widths[i])).join(' | ') + ' |');
+  lines.push('| ' + widths.map(w => '-'.repeat(w)).join(' | ') + ' |');
+  for (const r of rows) lines.push('| ' + headers.map((_, i) => pad(esc(r[i] || ''), widths[i])).join(' | ') + ' |');
+  return lines.join('\n');
+}
+
+function toNumber(v) {
+  if (v === '' || v == null) return null;
+  if (/^-?\d+$/.test(v)) return parseInt(v, 10);
+  if (/^-?\d*\.\d+([eE][+-]?\d+)?$/.test(v)) return parseFloat(v);
+  return null;
+}
+
+function encodeJsonObjects(rows, headers) {
+  const out = rows.map(r => {
+    const o = {};
+    headers.forEach((h, i) => {
+      const v = r[i];
+      const n = toNumber(v);
+      o[h] = n != null ? n : v;
+    });
+    return o;
+  });
+  return out;
+}
+
+function renderPreview(rows, headers) {
+  const table = $('previewTable');
+  if (!rows.length && !headers.length) { table.innerHTML = ''; $('stats').innerHTML = ''; return; }
+  let html = '<thead><tr>';
+  for (const h of headers) html += '<th>' + escapeHtml(h) + '</th>';
+  html += '</tr></thead><tbody>';
+  const preview = rows.slice(0, 200);
+  for (const r of preview) {
+    html += '<tr>';
+    for (let i = 0; i < headers.length; i++) {
+      const v = r[i] || '';
+      const num = toNumber(v);
+      html += '<td' + (num != null ? ' class="num"' : '') + '>' + escapeHtml(v) + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
+  const extra = rows.length > 200 ? ' (showing first 200)' : '';
+  $('stats').innerHTML =
+    '<div class="stat"><div class="k">Rows</div><div class="v">' + rows.length + '</div></div>' +
+    '<div class="stat"><div class="k">Columns</div><div class="v">' + headers.length + '</div></div>' +
+    '<div class="stat"><div class="k">Preview</div><div class="v">' + preview.length + extra + '</div></div>';
+}
+
+let lastRows = [], lastHeaders = [];
+
+function convert() {
+  const text = $('inText').value;
+  if (!text.trim()) {
+    $('outText').value = '';
+    renderPreview([], []);
+    setStatus($('inStatus'), 'Empty', 'idle');
+    setStatus($('outStatus'), 'Empty', 'idle');
+    return;
+  }
+  try {
+    const { rows, headers } = parseInput(text, $('inFmt').value);
+    lastRows = rows; lastHeaders = headers;
+    const fmt = $('outFmt').value;
+    let output = '';
+    if (fmt === 'tsv') output = encodeDelim(rows, headers, '\t');
+    else if (fmt === 'csv') output = encodeDelim(rows, headers, ',');
+    else if (fmt === 'json') output = JSON.stringify(encodeJsonObjects(rows, headers), null, 2);
+    else if (fmt === 'json-array') output = JSON.stringify([headers, ...rows], null, 2);
+    else if (fmt === 'ndjson') output = encodeJsonObjects(rows, headers).map(o => JSON.stringify(o)).join('\n');
+    else if (fmt === 'md') output = encodeMd(rows, headers);
+    $('outText').value = output;
+    setStatus($('inStatus'), rows.length + ' row(s) · ' + headers.length + ' column(s)', 'ok');
+    setStatus($('outStatus'), 'Generated ' + fmt.toUpperCase(), 'ok');
+    renderPreview(rows, headers);
+  } catch (e) {
+    setStatus($('inStatus'), 'Error: ' + e.message, 'err');
+    $('outText').value = '';
+  }
+}
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+$('inText').addEventListener('input', convert);
+['inFmt','outFmt','optHeader','optTrim'].forEach(id => $(id).addEventListener('change', convert));
+
+$('copyOut').addEventListener('click', async () => {
+  if (!$('outText').value) return;
+  try { await navigator.clipboard.writeText($('outText').value); toast('Copied!'); }
+  catch { toast('Copy failed'); }
+});
+
+$('dlOut').addEventListener('click', () => {
+  const fmt = $('outFmt').value;
+  const ext = { tsv: 'tsv', csv: 'csv', json: 'json', 'json-array': 'json', ndjson: 'ndjson', md: 'md' }[fmt] || 'txt';
+  const mime = { json: 'application/json', 'json-array': 'application/json', ndjson: 'application/x-ndjson' }[fmt] || 'text/plain';
+  const blob = new Blob([$('outText').value], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'data.' + ext;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+});
+
+$('sampleBtn').addEventListener('click', () => {
+  $('inText').value = 'name\tcountry\tpopulation\tcontinent\nTokyo\tJapan\t37400068\tAsia\nDelhi\tIndia\t28514000\tAsia\nShanghai\tChina\t25582000\tAsia\nSão Paulo\tBrazil\t21650000\tSouth America\nMexico City\tMexico\t21581000\tNorth America\nCairo\tEgypt\t20076000\tAfrica\nMumbai\tIndia\t19980000\tAsia\nBeijing\tChina\t19618000\tAsia\nDhaka\tBangladesh\t19578000\tAsia\nOsaka\tJapan\t19281000\tAsia';
+  $('inFmt').value = 'tsv';
+  convert();
+});
+$('clearIn').addEventListener('click', () => { $('inText').value = ''; convert(); });
+
+$('sampleBtn').click();
+</script>
+</body>
+</html>
