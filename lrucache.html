@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LRU Cache Simulator — Free Online Tool</title>
+<meta name="description" content="Visualize a Least-Recently-Used cache step by step. Run GET/PUT operations, watch entries age, and see hit/miss statistics. Runs entirely in your browser.">
+<meta name="keywords" content="lru cache, cache simulator, least recently used, cache visualizer, hit ratio, eviction policy">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/lrucache.html">
+<meta property="og:title" content="LRU Cache Simulator">
+<meta property="og:description" content="Step through GET/PUT operations on an LRU cache and watch evictions happen in real time.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/lrucache.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .top { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .top { grid-template-columns: 1fr; } }
+  textarea#ops { width: 100%; min-height: 180px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; resize: vertical; line-height: 1.5; }
+  .cap { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+  .cap input { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); background: var(--bg); color: var(--text); }
+  h3 { font-size: .88rem; font-weight: 600; margin: 16px 0 6px; }
+  .slots { display: flex; flex-direction: column; gap: 4px; }
+  .slot { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-family: var(--mono); font-size: .88rem; }
+  .slot.empty { color: var(--muted); font-style: italic; justify-content: center; }
+  .slot .age { color: var(--muted); font-size: .72rem; text-transform: uppercase; }
+  .slot.mru { border-color: #1a8c3f; background: #e8f7ec; }
+  .slot.lru { border-color: #c41e1e; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+  .stats .tile { padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); text-align: center; }
+  .stats .n { font-size: 1.3rem; font-weight: 600; font-family: var(--mono); }
+  .stats .l { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .log { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 6px; }
+  .log .line { font-family: var(--mono); font-size: .8rem; padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; }
+  .log .line:last-child { border-bottom: 0; }
+  .log .line.hit { color: #1a8c3f; }
+  .log .line.miss { color: #c41e1e; }
+  .log .line.put { color: #1a56a8; }
+  .log .line.evict { color: #9a6700; }
+  .log .line.current { background: var(--surface2); }
+  .log .idx { color: var(--muted); min-width: 28px; }
+  .ctrls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .help { color: var(--muted); font-size: .78rem; margin-top: 6px; }
+  .help code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>LRU Cache Simulator</h1>
+<p class="subtitle">Step through a Least-Recently-Used (LRU) cache and watch entries move, age, and get evicted. Feed it a list of operations, set the capacity, then play, step, or reset.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="top">
+    <div>
+      <h3>Operations</h3>
+      <textarea id="ops" spellcheck="false"></textarea>
+      <div class="help">One op per line. <code>GET key</code> or <code>PUT key value</code>. Lines starting with <code>#</code> are ignored.</div>
+      <div class="cap">
+        <label>Capacity <input type="number" id="cap" min="1" max="32" value="4"></label>
+        <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+      </div>
+      <div class="ctrls">
+        <button class="btn" onclick="reset()">Reset</button>
+        <button class="btn btn-secondary" onclick="step()">Step ▶</button>
+        <button class="btn btn-secondary" onclick="play()" id="playBtn">Play ▶▶</button>
+        <button class="btn btn-secondary" onclick="runAll()">Run all</button>
+      </div>
+      <div class="stats">
+        <div class="tile"><div class="n" id="sHit">0</div><div class="l">Hits</div></div>
+        <div class="tile"><div class="n" id="sMiss">0</div><div class="l">Misses</div></div>
+        <div class="tile"><div class="n" id="sEvict">0</div><div class="l">Evicts</div></div>
+        <div class="tile"><div class="n" id="sRatio">—</div><div class="l">Hit ratio</div></div>
+      </div>
+    </div>
+    <div>
+      <h3>Cache state <span style="color:var(--muted);font-weight:400;font-size:.75rem;">(top = most recent)</span></h3>
+      <div class="slots" id="slots"></div>
+      <h3>Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let program = [];
+let pc = 0;
+let cache = []; // [key, value], index 0 = MRU
+let stats = { hit: 0, miss: 0, evict: 0 };
+let logs = [];
+let playing = null;
+
+function parseOps() {
+  const lines = $('ops').value.split('\n');
+  const out = [];
+  for (const raw of lines) {
+    const s = raw.trim();
+    if (!s || s.startsWith('#')) continue;
+    const parts = s.split(/\s+/);
+    const op = parts[0].toUpperCase();
+    if (op === 'GET' && parts.length >= 2) out.push({ op, key: parts[1], src: raw });
+    else if (op === 'PUT' && parts.length >= 3) out.push({ op, key: parts[1], val: parts.slice(2).join(' '), src: raw });
+    else if (op === 'SET' && parts.length >= 3) out.push({ op: 'PUT', key: parts[1], val: parts.slice(2).join(' '), src: raw });
+    else out.push({ op: 'ERR', src: raw });
+  }
+  return out;
+}
+
+function reset() {
+  stopPlay();
+  program = parseOps();
+  pc = 0;
+  cache = [];
+  stats = { hit: 0, miss: 0, evict: 0 };
+  logs = [];
+  render();
+}
+
+function cap() { return Math.max(1, Math.min(32, +$('cap').value || 4)); }
+
+function step() {
+  if (pc >= program.length) return false;
+  const instr = program[pc++];
+  if (instr.op === 'ERR') {
+    logs.push({ type: 'err', msg: 'Invalid: ' + instr.src });
+  } else if (instr.op === 'GET') {
+    const idx = cache.findIndex(e => e[0] === instr.key);
+    if (idx === -1) {
+      stats.miss++;
+      logs.push({ type: 'miss', msg: `GET ${instr.key} → miss` });
+    } else {
+      stats.hit++;
+      const entry = cache.splice(idx, 1)[0];
+      cache.unshift(entry);
+      logs.push({ type: 'hit', msg: `GET ${instr.key} → hit (${entry[1]})` });
+    }
+  } else if (instr.op === 'PUT') {
+    const idx = cache.findIndex(e => e[0] === instr.key);
+    if (idx !== -1) {
+      cache.splice(idx, 1);
+      cache.unshift([instr.key, instr.val]);
+      logs.push({ type: 'put', msg: `PUT ${instr.key}=${instr.val} (update)` });
+    } else {
+      if (cache.length >= cap()) {
+        const ev = cache.pop();
+        stats.evict++;
+        logs.push({ type: 'evict', msg: `EVICT ${ev[0]}=${ev[1]} (LRU)` });
+      }
+      cache.unshift([instr.key, instr.val]);
+      logs.push({ type: 'put', msg: `PUT ${instr.key}=${instr.val} (insert)` });
+    }
+  }
+  render();
+  return pc < program.length;
+}
+
+function runAll() {
+  stopPlay();
+  while (pc < program.length) step();
+}
+
+function play() {
+  if (playing) { stopPlay(); return; }
+  $('playBtn').textContent = 'Pause ❚❚';
+  playing = setInterval(() => {
+    if (!step()) stopPlay();
+  }, 450);
+}
+function stopPlay() {
+  if (playing) { clearInterval(playing); playing = null; }
+  $('playBtn').textContent = 'Play ▶▶';
+}
+
+function render() {
+  // slots: always show `cap` rows, padded with "empty"
+  const C = cap();
+  const rows = [];
+  for (let i = 0; i < C; i++) {
+    const e = cache[i];
+    if (!e) {
+      rows.push('<div class="slot empty">— empty —</div>');
+    } else {
+      const age = i === 0 ? 'MRU' : (i === cache.length - 1 ? 'LRU' : `age ${i}`);
+      const cls = i === 0 ? 'mru' : (i === cache.length - 1 && cache.length > 1 ? 'lru' : '');
+      rows.push(`<div class="slot ${cls}"><span>${escapeHtml(e[0])} = ${escapeHtml(e[1] ?? '')}</span><span class="age">${age}</span></div>`);
+    }
+  }
+  $('slots').innerHTML = rows.join('');
+
+  $('sHit').textContent = stats.hit;
+  $('sMiss').textContent = stats.miss;
+  $('sEvict').textContent = stats.evict;
+  const total = stats.hit + stats.miss;
+  $('sRatio').textContent = total ? (100 * stats.hit / total).toFixed(0) + '%' : '—';
+
+  // log: show program with a marker on current PC
+  const out = program.map((p, i) => {
+    const executed = i < pc;
+    const current = i === pc;
+    const kind = executed && logs[i] ? logs[i].type : '';
+    return `<div class="line ${kind} ${current ? 'current' : ''}"><span class="idx">${i + 1}</span><span>${escapeHtml(p.src.trim())}</span>${executed && logs[i] ? `<span style="margin-left:auto">${escapeHtml(logs[i].msg.replace(p.src.trim() + ' ', ''))}</span>` : ''}</div>`;
+  }).join('');
+  $('log').innerHTML = out;
+  const cur = $('log').querySelector('.current');
+  if (cur) cur.scrollIntoView({ block: 'nearest' });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function loadSample() {
+  $('ops').value = `# LRU cache with capacity 4
+PUT a 1
+PUT b 2
+PUT c 3
+PUT d 4
+GET a
+PUT e 5
+GET b
+GET c
+PUT f 6
+GET d
+GET a`;
+  $('cap').value = 4;
+  reset();
+}
+
+$('ops').addEventListener('input', () => reset());
+$('cap').addEventListener('input', () => reset());
+loadSample();
+</script>
+</body>
+</html>

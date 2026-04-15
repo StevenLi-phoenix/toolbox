@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Braille Translator — Free Online Tool</title>
+<meta name="description" content="Translate text to and from Grade 1 Unified English Braille. Supports letters, digits, punctuation, and the number indicator. Runs entirely in your browser.">
+<meta name="keywords" content="braille translator, text to braille, braille to text, unified english braille, grade 1 braille, dot notation">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/braille.html">
+<meta property="og:title" content="Braille Translator">
+<meta property="og:description" content="Convert text to and from Grade 1 Unified English Braille, with dot-pattern reference.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/braille.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 140px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1rem; resize: vertical; line-height: 1.5; }
+  textarea.braille { font-size: 1.4rem; letter-spacing: 2px; line-height: 1.8; }
+  h3 { font-size: .9rem; font-weight: 600; margin: 16px 0 6px; }
+  .chart { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; margin-top: 10px; }
+  .cell { padding: 8px 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); text-align: center; }
+  .cell .glyph { font-size: 1.5rem; line-height: 1; }
+  .cell .char { font-family: var(--mono); font-size: .75rem; color: var(--muted); margin-top: 4px; }
+  .cell .dots { font-family: var(--mono); font-size: .65rem; color: var(--muted); }
+  .legend { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: .82rem; color: var(--muted); margin-top: 12px; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Braille Translator</h1>
+<p class="subtitle">Convert text to and from Grade 1 Unified English Braille (uncontracted). Letters, digits 0–9 (after a number indicator ⠼), and common punctuation are supported. Capital letters are marked with a leading capital indicator ⠠.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="panels">
+    <div>
+      <h3>Plain text</h3>
+      <textarea id="plain" placeholder="Type text here..."></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn" onclick="toBraille()">Text → Braille ↓</button>
+        <button class="btn btn-secondary" onclick="sample()">Sample</button>
+        <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+      </div>
+    </div>
+    <div>
+      <h3>Braille</h3>
+      <textarea id="braille" class="braille" placeholder="⠠⠓⠑⠇⠇⠕ ⠠⠺⠕⠗⠇⠙"></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn" onclick="fromBraille()">↑ Braille → Text</button>
+        <button class="btn btn-secondary" onclick="copyBraille()">Copy</button>
+      </div>
+    </div>
+  </div>
+  <div class="legend"><b>Indicators:</b> ⠠ = next letter capital · ⠼ = following chars are digits (a–j map to 1–0) until a space</div>
+
+  <h3>Alphabet reference</h3>
+  <div class="chart" id="chart"></div>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+// Dots are numbered 1..6. Braille Unicode block starts at U+2800.
+// Bit for dot N = 1 << (N-1). Dots 1-3 left col, 4-6 right col.
+function b(dots) {
+  let v = 0;
+  for (const d of dots) v |= 1 << (d - 1);
+  return String.fromCharCode(0x2800 + v);
+}
+
+const LETTERS = {
+  a: [1], b: [1,2], c: [1,4], d: [1,4,5], e: [1,5],
+  f: [1,2,4], g: [1,2,4,5], h: [1,2,5], i: [2,4], j: [2,4,5],
+  k: [1,3], l: [1,2,3], m: [1,3,4], n: [1,3,4,5], o: [1,3,5],
+  p: [1,2,3,4], q: [1,2,3,4,5], r: [1,2,3,5], s: [2,3,4], t: [2,3,4,5],
+  u: [1,3,6], v: [1,2,3,6], w: [2,4,5,6], x: [1,3,4,6], y: [1,3,4,5,6], z: [1,3,5,6]
+};
+
+const PUNCT = {
+  ',': [2], ';': [2,3], ':': [2,5], '.': [2,5,6], '?': [2,3,6],
+  '!': [2,3,5], "'": [3], '-': [3,6], '"': [2,3,6], '(': [1,2,3,5,6],
+  ')': [2,3,4,5,6], '/': [3,4], '*': [1,6,3,5], '@': [4,7]
+};
+
+const CAP = b([6]);          // Unified English Braille capital indicator: ⠠ (dot 6)
+const NUM = b([3,4,5,6]);    // Number indicator: ⠼
+
+// Build encode map
+const enc = {};
+for (const [k, v] of Object.entries(LETTERS)) enc[k] = b(v);
+for (const [k, v] of Object.entries(PUNCT)) enc[k] = b(v);
+enc[' '] = ' ';
+enc['\n'] = '\n';
+enc['\t'] = '\t';
+
+// Digits 0..9 map to letters j,a,b,c,d,e,f,g,h,i (after NUM indicator)
+const DIGIT_LETTER = ['j','a','b','c','d','e','f','g','h','i'];
+
+// Build decode map (letter-dots -> letter)
+const decLetter = {};
+for (const [k, v] of Object.entries(LETTERS)) decLetter[b(v)] = k;
+const decPunct = {};
+for (const [k, v] of Object.entries(PUNCT)) decPunct[b(v)] = k;
+
+function toBraille() {
+  const t = document.getElementById('plain').value;
+  let out = '';
+  let inNum = false;
+  for (const ch of t) {
+    if (/\d/.test(ch)) {
+      if (!inNum) { out += NUM; inNum = true; }
+      out += enc[DIGIT_LETTER[+ch]];
+      continue;
+    }
+    if (ch === ' ' || ch === '\n' || ch === '\t') { inNum = false; out += ch; continue; }
+    inNum = false;
+    if (/[A-Z]/.test(ch)) {
+      out += CAP + (enc[ch.toLowerCase()] || '?');
+    } else if (enc[ch]) {
+      out += enc[ch];
+    } else if (/[a-z]/.test(ch)) {
+      out += enc[ch];
+    } else {
+      out += ch; // unknown char passthrough
+    }
+  }
+  document.getElementById('braille').value = out;
+}
+
+function fromBraille() {
+  const t = document.getElementById('braille').value;
+  let out = '';
+  let cap = false;
+  let inNum = false;
+  for (const ch of t) {
+    if (ch === CAP) { cap = true; continue; }
+    if (ch === NUM) { inNum = true; continue; }
+    if (ch === ' ' || ch === '\n' || ch === '\t') { cap = false; inNum = false; out += ch; continue; }
+    if (decLetter[ch]) {
+      let letter = decLetter[ch];
+      if (inNum) {
+        const idx = DIGIT_LETTER.indexOf(letter);
+        if (idx >= 0) { out += String(idx); continue; }
+        inNum = false;
+      }
+      if (cap) { letter = letter.toUpperCase(); cap = false; }
+      out += letter;
+    } else if (decPunct[ch]) {
+      inNum = false;
+      out += decPunct[ch];
+    } else {
+      out += ch;
+    }
+  }
+  document.getElementById('plain').value = out;
+}
+
+function sample() {
+  document.getElementById('plain').value = "Hello, World! Braille uses 6 dots.";
+  toBraille();
+}
+function clearAll() {
+  document.getElementById('plain').value = '';
+  document.getElementById('braille').value = '';
+}
+function copyBraille() {
+  const ta = document.getElementById('braille');
+  ta.select();
+  document.execCommand('copy');
+}
+
+// Build alphabet + digits chart
+function buildChart() {
+  const chart = document.getElementById('chart');
+  const items = [];
+  for (const [k, v] of Object.entries(LETTERS)) {
+    items.push({ glyph: b(v), char: k, dots: v.join('') });
+  }
+  for (let i = 0; i <= 9; i++) {
+    items.push({ glyph: NUM + enc[DIGIT_LETTER[i]], char: String(i), dots: '#' });
+  }
+  chart.innerHTML = items.map(it =>
+    `<div class="cell"><div class="glyph">${it.glyph}</div><div class="char">${it.char}</div><div class="dots">${it.dots}</div></div>`
+  ).join('');
+}
+
+document.getElementById('plain').addEventListener('input', toBraille);
+buildChart();
+sample();
+</script>
+</body>
+</html>

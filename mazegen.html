@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maze Generator — Free Online Tool</title>
+<meta name="description" content="Generate random rectangular mazes using recursive backtracking, Prim's, or Kruskal's algorithm. Export as SVG. Runs entirely in your browser.">
+<meta name="keywords" content="maze generator, recursive backtracker, prims algorithm, kruskals algorithm, svg maze, random maze">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mazegen.html">
+<meta property="og:title" content="Maze Generator">
+<meta property="og:description" content="Generate random mazes with three classic algorithms and export the result as SVG.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/mazegen.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .controls label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .controls input, .controls select { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; }
+  .maze-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; overflow: auto; }
+  svg { max-width: 100%; height: auto; background: #fff; }
+  .meta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: .82rem; color: var(--muted); }
+  .meta b { color: var(--text); font-family: var(--mono); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  @media (max-width: 600px) {
+    .controls { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Maze Generator</h1>
+<p class="subtitle">Generate perfect random mazes (exactly one path between any two cells) using three classic algorithms. Pick a size, click <i>Generate</i>, and copy or download the SVG.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="controls">
+    <label>Width (cells)<input type="number" id="w" value="25" min="4" max="120"></label>
+    <label>Height (cells)<input type="number" id="h" value="17" min="4" max="120"></label>
+    <label>Cell size (px)<input type="number" id="cell" value="22" min="6" max="60"></label>
+    <label>Algorithm
+      <select id="algo">
+        <option value="dfs">Recursive backtracker</option>
+        <option value="prim">Prim's</option>
+        <option value="kruskal">Kruskal's</option>
+      </select>
+    </label>
+    <label>Seed (optional)<input type="text" id="seed" placeholder="random"></label>
+    <label><input type="checkbox" id="solve" style="width:auto"> Show solution</label>
+  </div>
+  <div class="actions">
+    <button class="btn" onclick="generate()">Generate</button>
+    <button class="btn btn-secondary" onclick="downloadSVG()">Download SVG</button>
+    <button class="btn btn-secondary" onclick="copySVG()">Copy SVG</button>
+  </div>
+  <div class="meta" id="meta"></div>
+  <div class="maze-wrap" id="wrap" style="margin-top:12px;"></div>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+// Seeded RNG — mulberry32
+function rng(seed) {
+  let a = seed | 0;
+  return function() {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hashSeed(s) {
+  if (!s) return (Math.random() * 2 ** 32) | 0;
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+// cell walls: N=1, E=2, S=4, W=8 (bit set means wall present)
+const N = 1, E = 2, S = 4, W = 8;
+const OPP = { 1: 4, 2: 8, 4: 1, 8: 2 };
+const DX = { 1: 0, 2: 1, 4: 0, 8: -1 };
+const DY = { 1: -1, 2: 0, 4: 1, 8: 0 };
+
+function newGrid(w, h) {
+  const g = new Array(w * h).fill(N | E | S | W);
+  return g;
+}
+const idx = (x, y, w) => y * w + x;
+
+function carve(g, x, y, dir, w) {
+  const i = idx(x, y, w);
+  g[i] &= ~dir;
+  const nx = x + DX[dir], ny = y + DY[dir];
+  g[idx(nx, ny, w)] &= ~OPP[dir];
+}
+
+function genDFS(w, h, rand) {
+  const g = newGrid(w, h);
+  const visited = new Uint8Array(w * h);
+  const stack = [[(rand() * w) | 0, (rand() * h) | 0]];
+  visited[idx(stack[0][0], stack[0][1], w)] = 1;
+  while (stack.length) {
+    const [x, y] = stack[stack.length - 1];
+    const dirs = [N, E, S, W].filter(d => {
+      const nx = x + DX[d], ny = y + DY[d];
+      return nx >= 0 && nx < w && ny >= 0 && ny < h && !visited[idx(nx, ny, w)];
+    });
+    if (!dirs.length) { stack.pop(); continue; }
+    const d = dirs[(rand() * dirs.length) | 0];
+    carve(g, x, y, d, w);
+    const nx = x + DX[d], ny = y + DY[d];
+    visited[idx(nx, ny, w)] = 1;
+    stack.push([nx, ny]);
+  }
+  return g;
+}
+
+function genPrim(w, h, rand) {
+  const g = newGrid(w, h);
+  const inMaze = new Uint8Array(w * h);
+  const sx = (rand() * w) | 0, sy = (rand() * h) | 0;
+  inMaze[idx(sx, sy, w)] = 1;
+  const frontier = [];
+  const addFrontier = (x, y) => {
+    for (const d of [N, E, S, W]) {
+      const nx = x + DX[d], ny = y + DY[d];
+      if (nx >= 0 && nx < w && ny >= 0 && ny < h && !inMaze[idx(nx, ny, w)]) {
+        frontier.push([nx, ny]);
+      }
+    }
+  };
+  addFrontier(sx, sy);
+  while (frontier.length) {
+    const pi = (rand() * frontier.length) | 0;
+    const [x, y] = frontier.splice(pi, 1)[0];
+    if (inMaze[idx(x, y, w)]) continue;
+    const neigh = [N, E, S, W].filter(d => {
+      const nx = x + DX[d], ny = y + DY[d];
+      return nx >= 0 && nx < w && ny >= 0 && ny < h && inMaze[idx(nx, ny, w)];
+    });
+    if (neigh.length) {
+      const d = neigh[(rand() * neigh.length) | 0];
+      carve(g, x, y, d, w);
+      inMaze[idx(x, y, w)] = 1;
+      addFrontier(x, y);
+    }
+  }
+  return g;
+}
+
+function genKruskal(w, h, rand) {
+  const g = newGrid(w, h);
+  const parent = new Int32Array(w * h);
+  for (let i = 0; i < parent.length; i++) parent[i] = i;
+  const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const edges = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (x + 1 < w) edges.push([x, y, E]);
+    if (y + 1 < h) edges.push([x, y, S]);
+  }
+  // shuffle
+  for (let i = edges.length - 1; i > 0; i--) {
+    const j = (rand() * (i + 1)) | 0;
+    [edges[i], edges[j]] = [edges[j], edges[i]];
+  }
+  for (const [x, y, d] of edges) {
+    const a = find(idx(x, y, w));
+    const b = find(idx(x + DX[d], y + DY[d], w));
+    if (a !== b) { parent[a] = b; carve(g, x, y, d, w); }
+  }
+  return g;
+}
+
+// BFS solve from top-left (0,0) to bottom-right (w-1,h-1)
+function solve(g, w, h) {
+  const prev = new Int32Array(w * h).fill(-1);
+  const start = 0, end = w * h - 1;
+  const q = [start]; prev[start] = start;
+  while (q.length) {
+    const i = q.shift();
+    if (i === end) break;
+    const x = i % w, y = (i / w) | 0;
+    for (const d of [N, E, S, W]) {
+      if (g[i] & d) continue;
+      const nx = x + DX[d], ny = y + DY[d];
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const ni = idx(nx, ny, w);
+      if (prev[ni] !== -1) continue;
+      prev[ni] = i;
+      q.push(ni);
+    }
+  }
+  const path = [];
+  if (prev[end] === -1) return path;
+  let cur = end;
+  while (cur !== 0) { path.push(cur); cur = prev[cur]; }
+  path.push(0);
+  return path.reverse();
+}
+
+function buildSVG(g, w, h, cell, path) {
+  const pad = 4;
+  const W = w * cell + pad * 2;
+  const H = h * cell + pad * 2;
+  const lines = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = idx(x, y, w);
+      const gx = pad + x * cell, gy = pad + y * cell;
+      if (g[i] & N) lines.push(`M${gx},${gy}L${gx + cell},${gy}`);
+      if (g[i] & W) lines.push(`M${gx},${gy}L${gx},${gy + cell}`);
+      if (y === h - 1 && (g[i] & S)) lines.push(`M${gx},${gy + cell}L${gx + cell},${gy + cell}`);
+      if (x === w - 1 && (g[i] & E)) lines.push(`M${gx + cell},${gy}L${gx + cell},${gy + cell}`);
+    }
+  }
+  let pathSVG = '';
+  if (path && path.length) {
+    const pts = path.map(i => {
+      const x = i % w, y = (i / w) | 0;
+      return `${pad + x * cell + cell / 2},${pad + y * cell + cell / 2}`;
+    });
+    pathSVG = `<polyline points="${pts.join(' ')}" fill="none" stroke="#c41e1e" stroke-width="${Math.max(2, cell * 0.22)}" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+<rect width="100%" height="100%" fill="#fff"/>
+${pathSVG}
+<path d="${lines.join(' ')}" fill="none" stroke="#111" stroke-width="2" stroke-linecap="square"/>
+</svg>`;
+}
+
+let currentSVG = '';
+
+function generate() {
+  const w = Math.max(4, Math.min(120, +document.getElementById('w').value || 25));
+  const h = Math.max(4, Math.min(120, +document.getElementById('h').value || 17));
+  const cell = Math.max(6, Math.min(60, +document.getElementById('cell').value || 22));
+  const algo = document.getElementById('algo').value;
+  const seedInput = document.getElementById('seed').value.trim();
+  const seed = hashSeed(seedInput);
+  const rand = rng(seed);
+
+  const t0 = performance.now();
+  let g;
+  if (algo === 'dfs') g = genDFS(w, h, rand);
+  else if (algo === 'prim') g = genPrim(w, h, rand);
+  else g = genKruskal(w, h, rand);
+  const t1 = performance.now();
+
+  const path = document.getElementById('solve').checked ? solve(g, w, h) : null;
+  currentSVG = buildSVG(g, w, h, cell, path);
+  document.getElementById('wrap').innerHTML = currentSVG;
+  document.getElementById('meta').innerHTML =
+    `<span>Cells: <b>${w * h}</b></span>` +
+    `<span>Seed: <b>${seedInput || seed}</b></span>` +
+    `<span>Algorithm: <b>${algo}</b></span>` +
+    `<span>Generated in <b>${(t1 - t0).toFixed(1)} ms</b></span>` +
+    (path ? `<span>Solution length: <b>${path.length} cells</b></span>` : '');
+}
+
+function downloadSVG() {
+  if (!currentSVG) return;
+  const blob = new Blob([currentSVG], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'maze.svg';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function copySVG() {
+  if (!currentSVG) return;
+  navigator.clipboard && navigator.clipboard.writeText(currentSVG);
+}
+
+generate();
+</script>
+</body>
+</html>
