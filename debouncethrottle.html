@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Debounce vs Throttle Simulator — Visualize Event Handlers</title>
+<meta name="description" content="Interactive debounce vs throttle visualizer. Fire synthetic events and see exactly which fires reach a debounced or throttled callback, with adjustable wait and leading/trailing edges.">
+<meta name="keywords" content="debounce, throttle, javascript, event handler, simulator, visualizer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/debouncethrottle.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0; }
+  .control label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 4px; }
+  .control input[type="number"], .control select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .9rem;
+  }
+  .trigger-area {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 40px 20px; text-align: center; background: var(--surface2);
+    cursor: crosshair; user-select: none; margin: 16px 0;
+    transition: border-color .15s, background .15s;
+  }
+  .trigger-area:hover { border-color: var(--accent, #4af); }
+  .trigger-area.active { background: var(--surface, #222); border-color: var(--success, #4a4); }
+  .trigger-area h3 { margin: 0 0 6px; font-size: 1rem; }
+  .trigger-area p { margin: 0; font-size: .82rem; color: var(--muted); }
+  .timeline-wrap { margin-top: 20px; }
+  .timeline-wrap h2 { font-size: 1rem; margin-bottom: 8px; }
+  .timeline {
+    position: relative; height: 60px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; margin-bottom: 4px;
+  }
+  .timeline-label { font-size: .72rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .evt-marker {
+    position: absolute; top: 50%; width: 3px; height: 28px;
+    transform: translate(-50%, -50%); border-radius: 2px;
+  }
+  .evt-raw { background: var(--muted); opacity: .7; }
+  .evt-fired { background: var(--success, #4a4); width: 5px; height: 40px; }
+  .axis {
+    display: flex; justify-content: space-between; font-size: .68rem;
+    color: var(--muted); font-family: var(--mono); margin-bottom: 12px;
+  }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 16px 0; }
+  .stat {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px;
+  }
+  .stat .k { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-family: var(--mono); font-size: 1.2rem; font-weight: 700; margin-top: 4px; }
+  .code-block {
+    font-family: var(--mono); font-size: .85rem; background: var(--surface2);
+    padding: 12px; border-radius: var(--radius); border: 1px solid var(--border);
+    white-space: pre; overflow-x: auto; line-height: 1.5;
+  }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  @media (max-width: 768px) {
+    .trigger-area { padding: 30px 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>⏱️ Debounce vs Throttle Simulator</h1>
+<p class="subtitle">Rapid-fire synthetic events and watch, frame by frame, which ones actually reach a debounced or throttled callback. Tune the wait window, leading/trailing edges, and auto-fire rate to build intuition for which pattern fits your use case.</p>
+
+<div class="card" style="padding: 20px;">
+  <div class="controls">
+    <div class="control">
+      <label for="wait">Wait (ms)</label>
+      <input type="number" id="wait" value="400" min="20" max="5000" step="10">
+    </div>
+    <div class="control">
+      <label for="leading">Leading edge</label>
+      <select id="leading"><option value="true">Yes</option><option value="false" selected>No</option></select>
+    </div>
+    <div class="control">
+      <label for="trailing">Trailing edge</label>
+      <select id="trailing"><option value="true" selected>Yes</option><option value="false">No</option></select>
+    </div>
+    <div class="control">
+      <label for="autoRate">Auto-fire rate (Hz)</label>
+      <input type="number" id="autoRate" value="0" min="0" max="60" step="1">
+    </div>
+  </div>
+
+  <div class="trigger-area" id="trigger">
+    <h3>🖱️ Click, tap, or move here to fire events</h3>
+    <p>Raw events appear in grey. Fired callbacks appear in green.</p>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" id="clear">Clear timeline</button>
+    <button class="btn btn-secondary" id="burst">Burst 20 events</button>
+  </div>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <div class="stats">
+    <div class="stat"><div class="k">Raw events</div><div class="v" id="rawCount">0</div></div>
+    <div class="stat"><div class="k">Debounced fires</div><div class="v" id="debCount">0</div></div>
+    <div class="stat"><div class="k">Throttled fires</div><div class="v" id="thrCount">0</div></div>
+    <div class="stat"><div class="k">Saved calls</div><div class="v" id="saved">0%</div></div>
+  </div>
+
+  <div class="timeline-wrap">
+    <div class="timeline-label">Raw events</div>
+    <div class="timeline" id="tlRaw"></div>
+    <div class="timeline-label">Debounced (fires after events pause)</div>
+    <div class="timeline" id="tlDeb"></div>
+    <div class="timeline-label">Throttled (fires at most once per wait)</div>
+    <div class="timeline" id="tlThr"></div>
+    <div class="axis"><span>now − 10s</span><span>now</span></div>
+  </div>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Reference implementation</h2>
+  <div class="code-block" id="code"></div>
+</div>
+
+</div>
+
+<footer style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem;">
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const waitEl = document.getElementById('wait');
+const leadingEl = document.getElementById('leading');
+const trailingEl = document.getElementById('trailing');
+const autoRateEl = document.getElementById('autoRate');
+const trigger = document.getElementById('trigger');
+const tlRaw = document.getElementById('tlRaw');
+const tlDeb = document.getElementById('tlDeb');
+const tlThr = document.getElementById('tlThr');
+const rawCountEl = document.getElementById('rawCount');
+const debCountEl = document.getElementById('debCount');
+const thrCountEl = document.getElementById('thrCount');
+const savedEl = document.getElementById('saved');
+const codeEl = document.getElementById('code');
+
+const WINDOW_MS = 10000;
+let raw = [], deb = [], thr = [];
+let rawCount = 0, debCount = 0, thrCount = 0;
+
+// Debounce state
+let debTimer = null, debLastCall = 0;
+// Throttle state
+let thrLast = 0, thrTimer = null, thrLastCall = 0;
+
+function now() { return performance.now(); }
+
+function fireDebounced(t) {
+  debCount++;
+  deb.push(t);
+}
+function fireThrottled(t) {
+  thrCount++;
+  thr.push(t);
+}
+
+function onRaw() {
+  const t = now();
+  rawCount++;
+  raw.push(t);
+  trigger.classList.add('active');
+  setTimeout(() => trigger.classList.remove('active'), 60);
+
+  const wait = +waitEl.value;
+  const leading = leadingEl.value === 'true';
+  const trailing = trailingEl.value === 'true';
+
+  // Debounce
+  const sinceLast = t - debLastCall;
+  if (debTimer) clearTimeout(debTimer);
+  if (leading && sinceLast > wait) {
+    fireDebounced(t);
+    debLastCall = t;
+  } else if (trailing) {
+    debTimer = setTimeout(() => {
+      fireDebounced(now());
+      debLastCall = now();
+      debTimer = null;
+    }, wait);
+  }
+
+  // Throttle
+  const thrSince = t - thrLast;
+  if (thrSince >= wait) {
+    if (leading) {
+      fireThrottled(t);
+      thrLast = t;
+    } else {
+      thrLast = t;
+      if (trailing && !thrTimer) {
+        thrTimer = setTimeout(() => {
+          fireThrottled(now());
+          thrLast = now();
+          thrTimer = null;
+        }, wait);
+      }
+    }
+  } else if (trailing && !thrTimer) {
+    thrTimer = setTimeout(() => {
+      fireThrottled(now());
+      thrLast = now();
+      thrTimer = null;
+    }, wait - thrSince);
+  }
+}
+
+trigger.addEventListener('mousemove', onRaw);
+trigger.addEventListener('click', onRaw);
+trigger.addEventListener('touchmove', e => { e.preventDefault(); onRaw(); }, { passive: false });
+
+document.getElementById('clear').addEventListener('click', () => {
+  raw = []; deb = []; thr = [];
+  rawCount = 0; debCount = 0; thrCount = 0;
+  if (debTimer) { clearTimeout(debTimer); debTimer = null; }
+  if (thrTimer) { clearTimeout(thrTimer); thrTimer = null; }
+  updateStats();
+});
+
+document.getElementById('burst').addEventListener('click', () => {
+  for (let i = 0; i < 20; i++) setTimeout(onRaw, i * 20);
+});
+
+function renderTimeline(el, list, klass) {
+  const t = now();
+  const cutoff = t - WINDOW_MS;
+  // Cleanup
+  while (list.length && list[0] < cutoff) list.shift();
+  el.innerHTML = '';
+  for (const ev of list) {
+    const pct = ((ev - cutoff) / WINDOW_MS) * 100;
+    const m = document.createElement('div');
+    m.className = 'evt-marker ' + klass;
+    m.style.left = pct + '%';
+    el.appendChild(m);
+  }
+}
+
+function updateStats() {
+  rawCountEl.textContent = rawCount;
+  debCountEl.textContent = debCount;
+  thrCountEl.textContent = thrCount;
+  const best = Math.max(debCount, thrCount);
+  const saved = rawCount === 0 ? 0 : Math.round((1 - best / rawCount) * 100);
+  savedEl.textContent = saved + '%';
+}
+
+function renderCode() {
+  const wait = +waitEl.value;
+  const leading = leadingEl.value === 'true';
+  const trailing = trailingEl.value === 'true';
+  codeEl.textContent =
+`// wait = ${wait}ms, leading = ${leading}, trailing = ${trailing}
+
+function debounce(fn, wait, { leading = ${leading}, trailing = ${trailing} } = {}) {
+  let timer = null, lastCall = 0;
+  return function (...args) {
+    const now = Date.now();
+    const sinceLast = now - lastCall;
+    if (timer) clearTimeout(timer);
+    if (leading && sinceLast > wait) {
+      fn.apply(this, args);
+      lastCall = now;
+    } else if (trailing) {
+      timer = setTimeout(() => {
+        fn.apply(this, args);
+        lastCall = Date.now();
+        timer = null;
+      }, wait);
+    }
+  };
+}
+
+function throttle(fn, wait, { leading = ${leading}, trailing = ${trailing} } = {}) {
+  let last = 0, timer = null;
+  return function (...args) {
+    const now = Date.now();
+    const since = now - last;
+    if (since >= wait) {
+      if (leading) { fn.apply(this, args); last = now; }
+      else if (trailing && !timer) {
+        timer = setTimeout(() => { fn.apply(this, args); last = Date.now(); timer = null; }, wait);
+      }
+    } else if (trailing && !timer) {
+      timer = setTimeout(() => { fn.apply(this, args); last = Date.now(); timer = null; }, wait - since);
+    }
+  };
+}`;
+}
+
+let autoTimer = null;
+function configureAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  const rate = +autoRateEl.value;
+  if (rate > 0) autoTimer = setInterval(onRaw, 1000 / rate);
+}
+
+[waitEl, leadingEl, trailingEl].forEach(e => e.addEventListener('input', renderCode));
+autoRateEl.addEventListener('input', configureAuto);
+
+function tick() {
+  renderTimeline(tlRaw, raw, 'evt-raw');
+  renderTimeline(tlDeb, deb, 'evt-fired');
+  renderTimeline(tlThr, thr, 'evt-fired');
+  updateStats();
+  requestAnimationFrame(tick);
+}
+
+renderCode();
+tick();
+</script>
+</body>
+</html>

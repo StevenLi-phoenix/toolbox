@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polling Interval Planner — Balance Freshness, Cost, and Rate Limits</title>
+<meta name="description" content="Plan HTTP polling intervals. Enter rate limits, budget, and freshness requirements to compute safe polling frequencies, daily request counts, and cost estimates with optional jitter and backoff.">
+<meta name="keywords" content="polling interval, rate limit, freshness, request budget, backoff, planning">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pollinterval.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .grid2 { grid-template-columns: 1fr; } }
+  .field { margin-bottom: 12px; }
+  .field label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 4px; }
+  .field input, .field select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .9rem;
+  }
+  .hint { font-size: .72rem; color: var(--muted); margin-top: 4px; }
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0; }
+  .result {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px;
+  }
+  .result .k { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .result .v { font-family: var(--mono); font-size: 1.25rem; font-weight: 700; margin-top: 4px; word-break: break-all; }
+  .result .sub { font-size: .72rem; color: var(--muted); margin-top: 4px; }
+  .result.ok { border-color: var(--success, #4a4); }
+  .result.warn { border-color: #f9a825; }
+  .result.err { border-color: var(--error, #e55); }
+  .verdict {
+    padding: 12px 14px; border-radius: var(--radius); margin: 12px 0;
+    font-size: .9rem; line-height: 1.5;
+  }
+  .verdict.ok { background: rgba(80, 200, 120, .12); border: 1px solid var(--success, #4a4); }
+  .verdict.warn { background: rgba(249, 168, 37, .12); border: 1px solid #f9a825; }
+  .verdict.err { background: rgba(229, 85, 85, .12); border: 1px solid var(--error, #e55); }
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .85rem; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .code-block {
+    font-family: var(--mono); font-size: .85rem; background: var(--surface2);
+    padding: 12px; border-radius: var(--radius); border: 1px solid var(--border);
+    white-space: pre; overflow-x: auto; line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔁 Polling Interval Planner</h1>
+<p class="subtitle">Pick a polling interval that respects upstream rate limits, a daily request budget, and your freshness SLA. Add jitter and backoff to avoid thundering herds, and copy a snippet that matches your plan.</p>
+
+<div class="card" style="padding: 20px;">
+  <div class="grid2">
+    <div>
+      <div class="field">
+        <label for="interval">Polling interval</label>
+        <input type="number" id="interval" value="60" min="1">
+        <div class="hint">seconds between each poll attempt</div>
+      </div>
+      <div class="field">
+        <label for="clients">Concurrent clients</label>
+        <input type="number" id="clients" value="1" min="1">
+        <div class="hint">how many pollers will run in parallel</div>
+      </div>
+      <div class="field">
+        <label for="jitter">Jitter (± %)</label>
+        <input type="number" id="jitter" value="20" min="0" max="100">
+        <div class="hint">randomize to spread requests and avoid herds</div>
+      </div>
+    </div>
+    <div>
+      <div class="field">
+        <label for="limit">Upstream rate limit</label>
+        <input type="number" id="limit" value="60" min="0">
+        <div class="hint">requests allowed per limit window</div>
+      </div>
+      <div class="field">
+        <label for="window">Rate-limit window (seconds)</label>
+        <input type="number" id="window" value="60" min="1">
+      </div>
+      <div class="field">
+        <label for="budget">Daily request budget</label>
+        <input type="number" id="budget" value="10000" min="0">
+        <div class="hint">0 = unlimited</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="field">
+      <label for="freshness">Required freshness (seconds)</label>
+      <input type="number" id="freshness" value="120" min="1">
+      <div class="hint">how stale data can be before it's a problem</div>
+    </div>
+    <div class="field">
+      <label for="cost">Cost per 1,000 requests ($)</label>
+      <input type="number" id="cost" value="0" min="0" step="0.01">
+    </div>
+  </div>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Plan summary</h2>
+  <div id="verdict"></div>
+  <div class="results">
+    <div class="result" id="rRps"><div class="k">Effective RPS</div><div class="v">—</div></div>
+    <div class="result" id="rDay"><div class="k">Requests / day</div><div class="v">—</div></div>
+    <div class="result" id="rLimit"><div class="k">Rate-limit usage</div><div class="v">—</div></div>
+    <div class="result" id="rFresh"><div class="k">Worst-case staleness</div><div class="v">—</div></div>
+    <div class="result" id="rCost"><div class="k">Est. daily cost</div><div class="v">—</div></div>
+    <div class="result" id="rHeadroom"><div class="k">Headroom to ceiling</div><div class="v">—</div></div>
+  </div>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Interval comparison</h2>
+  <table>
+    <thead><tr><th>Interval</th><th>RPS</th><th>Req/day</th><th>Limit usage</th><th>Fits budget?</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <h2 style="font-size:1rem;margin-bottom:10px;">Pseudocode</h2>
+  <div class="code-block" id="code"></div>
+</div>
+
+</div>
+
+<footer style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem;">
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const inputs = ['interval','clients','jitter','limit','window','budget','freshness','cost'].map($);
+
+function fmt(n, d = 2) {
+  if (!isFinite(n)) return '∞';
+  if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return (+n.toFixed(d)).toString();
+}
+
+function setResult(id, v, sub, cls) {
+  const el = $(id);
+  el.querySelector('.v').textContent = v;
+  let s = el.querySelector('.sub');
+  if (sub) {
+    if (!s) { s = document.createElement('div'); s.className = 'sub'; el.appendChild(s); }
+    s.textContent = sub;
+  } else if (s) { s.remove(); }
+  el.classList.remove('ok','warn','err');
+  if (cls) el.classList.add(cls);
+}
+
+function update() {
+  const interval = +$('interval').value || 1;
+  const clients = +$('clients').value || 1;
+  const jitter = +$('jitter').value || 0;
+  const limit = +$('limit').value || 0;
+  const windowSec = +$('window').value || 1;
+  const budget = +$('budget').value || 0;
+  const freshness = +$('freshness').value || 1;
+  const cost = +$('cost').value || 0;
+
+  const rps = clients / interval;
+  const perDay = rps * 86400;
+  const perWindow = rps * windowSec;
+  const limitPct = limit > 0 ? (perWindow / limit) * 100 : 0;
+  const worstStale = interval * (1 + jitter / 100);
+  const dailyCost = (perDay / 1000) * cost;
+
+  setResult('rRps', fmt(rps, 3) + ' req/s');
+  setResult('rDay', fmt(perDay, 0), budget > 0 ? `of ${fmt(budget,0)} budget` : 'unlimited budget',
+    budget > 0 ? (perDay > budget ? 'err' : perDay > budget * 0.8 ? 'warn' : 'ok') : 'ok');
+  if (limit > 0) {
+    setResult('rLimit', fmt(limitPct, 1) + '%', `${fmt(perWindow,1)} / ${limit} per ${windowSec}s`,
+      limitPct > 100 ? 'err' : limitPct > 80 ? 'warn' : 'ok');
+  } else {
+    setResult('rLimit', 'n/a', 'no limit set');
+  }
+  setResult('rFresh', fmt(worstStale,1) + ' s', `need ≤ ${freshness}s`,
+    worstStale > freshness ? 'err' : worstStale > freshness * 0.9 ? 'warn' : 'ok');
+  setResult('rCost', '$' + fmt(dailyCost, 2), cost > 0 ? `≈ $${fmt(dailyCost * 30, 0)}/mo` : 'no cost set', 'ok');
+
+  // Headroom = min of (budget/perDay, limit/perWindow)
+  let headroom = Infinity;
+  if (budget > 0) headroom = Math.min(headroom, budget / perDay);
+  if (limit > 0) headroom = Math.min(headroom, limit / perWindow);
+  const headroomStr = headroom === Infinity ? '∞' : fmt(headroom, 2) + '×';
+  setResult('rHeadroom', headroomStr,
+    headroom < 1 ? 'over capacity' : headroom < 1.25 ? 'tight' : 'healthy',
+    headroom < 1 ? 'err' : headroom < 1.25 ? 'warn' : 'ok');
+
+  // Verdict
+  const issues = [];
+  if (limit > 0 && limitPct > 100) issues.push(`Exceeds rate limit by ${fmt(limitPct - 100,0)}%`);
+  if (budget > 0 && perDay > budget) issues.push(`Blows daily budget by ${fmt(perDay - budget,0)} requests`);
+  if (worstStale > freshness) issues.push(`Worst-case staleness (${fmt(worstStale,1)}s) breaches SLA (${freshness}s)`);
+  const v = $('verdict');
+  if (issues.length === 0) {
+    v.className = 'verdict ok';
+    v.textContent = '✓ Plan fits all constraints. Consider adding jitter to spread load.';
+  } else if (issues.length === 1 || (limit === 0 && budget === 0)) {
+    v.className = 'verdict warn';
+    v.innerHTML = '⚠ ' + issues.join(' · ');
+  } else {
+    v.className = 'verdict err';
+    v.innerHTML = '✗ ' + issues.join(' · ');
+  }
+
+  // Comparison table
+  const candidates = [5, 10, 30, 60, 120, 300, 600, 1800, 3600];
+  const body = $('tbody');
+  body.innerHTML = '';
+  for (const c of candidates) {
+    const r = clients / c;
+    const d = r * 86400;
+    const lw = r * windowSec;
+    const pct = limit > 0 ? (lw / limit) * 100 : 0;
+    const fits = (limit === 0 || pct <= 100) && (budget === 0 || d <= budget);
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${c}s</td><td>${fmt(r,3)}</td><td>${fmt(d,0)}</td>` +
+      `<td>${limit > 0 ? fmt(pct,1) + '%' : '—'}</td>` +
+      `<td style="color:${fits ? 'var(--success, #4a4)' : 'var(--error, #e55)'}">${fits ? '✓' : '✗'}</td>`;
+    if (c === interval) row.style.fontWeight = '700';
+    body.appendChild(row);
+  }
+
+  // Code
+  $('code').textContent =
+`// Poll every ${interval}s with ±${jitter}% jitter
+const BASE_MS = ${interval * 1000};
+const JITTER = ${jitter / 100};
+
+async function pollForever() {
+  let attempt = 0;
+  while (true) {
+    try {
+      await pollOnce();
+      attempt = 0;
+    } catch (e) {
+      if (e.status === 429 || e.status >= 500) {
+        // Exponential backoff up to 5×base
+        attempt = Math.min(attempt + 1, 5);
+      } else { throw e; }
+    }
+    const wait = BASE_MS * Math.pow(2, attempt) * (1 + (Math.random() * 2 - 1) * JITTER);
+    await new Promise(r => setTimeout(r, wait));
+  }
+}`;
+}
+
+inputs.forEach(el => el.addEventListener('input', update));
+update();
+</script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pascal's Triangle Generator — Binomial Coefficients Explorer</title>
+<meta name="description" content="Generate Pascal's triangle to any depth. Highlight binomial coefficients, Fibonacci sums, prime rows, and powers of 2. Computes with BigInt for arbitrarily large values.">
+<meta name="keywords" content="pascal triangle, binomial coefficient, n choose k, combinatorics, bigint">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pascaltriangle.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; align-items: flex-end; }
+  .control label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 4px; }
+  .control input, .control select {
+    padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .9rem; min-width: 100px;
+  }
+  .triangle {
+    font-family: var(--mono); font-size: .85rem; text-align: center;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; overflow-x: auto;
+    max-height: 70vh; overflow-y: auto;
+  }
+  .row { white-space: nowrap; line-height: 1.8; }
+  .cell {
+    display: inline-block; padding: 2px 6px; margin: 1px;
+    border-radius: 4px; cursor: pointer; transition: background .15s;
+    min-width: 28px;
+  }
+  .cell:hover { background: var(--surface, #333); }
+  .cell.hi-even { color: var(--muted); }
+  .cell.hi-odd { color: var(--success, #4a4); font-weight: 700; }
+  .cell.hi-prime { background: rgba(255, 200, 50, .18); color: #ffc832; font-weight: 700; }
+  .cell.hi-pow2 { background: rgba(80, 160, 255, .18); color: #5ca0ff; font-weight: 700; }
+  .cell.hi-selected { background: var(--success, #4a4); color: #fff; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 16px 0; }
+  .stat {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px;
+  }
+  .stat .k { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-family: var(--mono); font-size: 1.1rem; font-weight: 700; margin-top: 4px; word-break: break-all; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; margin-bottom: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .chip { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; }
+  @media (max-width: 768px) {
+    .triangle { font-size: .75rem; padding: 10px; }
+    .cell { padding: 1px 3px; min-width: 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔺 Pascal's Triangle Generator</h1>
+<p class="subtitle">Generate Pascal's triangle up to 200 rows with arbitrary-precision BigInt. Highlight row patterns (odd/even for Sierpinski, primes, powers of 2) or pick individual cells to read out C(n,k), the row sum, and the row's Fibonacci diagonal.</p>
+
+<div class="card" style="padding: 20px;">
+  <div class="controls">
+    <div class="control">
+      <label for="rows">Rows</label>
+      <input type="number" id="rows" value="15" min="1" max="200">
+    </div>
+    <div class="control">
+      <label for="highlight">Highlight</label>
+      <select id="highlight">
+        <option value="none">None</option>
+        <option value="parity" selected>Odd / even (Sierpinski)</option>
+        <option value="prime">Prime entries</option>
+        <option value="pow2">Powers of 2</option>
+      </select>
+    </div>
+    <div class="control">
+      <label for="nk">C(n, k) lookup — n</label>
+      <input type="number" id="nInput" value="10" min="0">
+    </div>
+    <div class="control">
+      <label for="k">k</label>
+      <input type="number" id="kInput" value="4" min="0">
+    </div>
+  </div>
+  <div class="legend">
+    <span><span class="chip" style="background:#4a4"></span>Odd / highlight</span>
+    <span><span class="chip" style="background:rgba(255,200,50,.6)"></span>Prime</span>
+    <span><span class="chip" style="background:rgba(80,160,255,.6)"></span>Power of 2</span>
+    <span>Click any cell to read its value.</span>
+  </div>
+  <div id="err" class="err"></div>
+</div>
+
+<div class="card" style="padding: 20px;">
+  <div class="stats">
+    <div class="stat"><div class="k">C(n, k)</div><div class="v" id="cnk">—</div></div>
+    <div class="stat"><div class="k">Row sum 2<sup>n</sup></div><div class="v" id="rowsum">—</div></div>
+    <div class="stat"><div class="k">Fibonacci diagonal</div><div class="v" id="fibdiag">—</div></div>
+    <div class="stat"><div class="k">Row max digits</div><div class="v" id="maxdigits">—</div></div>
+  </div>
+  <div class="triangle" id="triangle"></div>
+</div>
+
+</div>
+
+<footer style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem;">
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const rowsEl = document.getElementById('rows');
+const highlightEl = document.getElementById('highlight');
+const nInput = document.getElementById('nInput');
+const kInput = document.getElementById('kInput');
+const triangleEl = document.getElementById('triangle');
+const cnkEl = document.getElementById('cnk');
+const rowsumEl = document.getElementById('rowsum');
+const fibdiagEl = document.getElementById('fibdiag');
+const maxdigitsEl = document.getElementById('maxdigits');
+const errEl = document.getElementById('err');
+
+let cache = [];
+
+function buildTriangle(n) {
+  cache = [[1n]];
+  for (let i = 1; i <= n; i++) {
+    const row = [1n];
+    const prev = cache[i - 1];
+    for (let j = 1; j < i; j++) row.push(prev[j - 1] + prev[j]);
+    row.push(1n);
+    cache.push(row);
+  }
+}
+
+function isPrimeBig(n) {
+  if (n < 2n) return false;
+  if (n < 4n) return true;
+  if (n % 2n === 0n) return false;
+  if (n > 1000000000n) return null; // skip heavy check
+  const x = Number(n);
+  const lim = Math.floor(Math.sqrt(x));
+  for (let p = 3; p <= lim; p += 2) if (x % p === 0) return false;
+  return true;
+}
+
+function isPow2(n) {
+  if (n <= 0n) return false;
+  return (n & (n - 1n)) === 0n;
+}
+
+function render() {
+  errEl.textContent = '';
+  const rows = Math.min(Math.max(+rowsEl.value || 1, 1), 200);
+  buildTriangle(rows);
+  const mode = highlightEl.value;
+  const ni = Math.min(Math.max(+nInput.value || 0, 0), rows);
+  const ki = Math.min(Math.max(+kInput.value || 0, 0), ni);
+
+  let maxDigits = 0;
+  let html = '';
+  for (let i = 0; i <= rows; i++) {
+    const row = cache[i];
+    let rowHtml = '<div class="row">';
+    for (let j = 0; j < row.length; j++) {
+      const v = row[j];
+      const s = v.toString();
+      if (s.length > maxDigits) maxDigits = s.length;
+      let cls = 'cell';
+      if (mode === 'parity') cls += v % 2n === 1n ? ' hi-odd' : ' hi-even';
+      else if (mode === 'prime' && isPrimeBig(v)) cls += ' hi-prime';
+      else if (mode === 'pow2' && isPow2(v)) cls += ' hi-pow2';
+      if (i === ni && j === ki) cls += ' hi-selected';
+      rowHtml += `<span class="${cls}" data-n="${i}" data-k="${j}" title="C(${i},${j}) = ${s}">${s}</span>`;
+    }
+    rowHtml += '</div>';
+    html += rowHtml;
+  }
+  triangleEl.innerHTML = html;
+  maxdigitsEl.textContent = maxDigits;
+
+  // Lookup stats
+  if (ni <= rows && ki <= ni) {
+    cnkEl.textContent = cache[ni][ki].toString();
+    let sum = 0n;
+    for (const v of cache[ni]) sum += v;
+    rowsumEl.textContent = sum.toString();
+    // Fibonacci diagonal for row ni: sum_{k=0}^{floor(n/2)} C(n-k, k)
+    let fib = 0n;
+    for (let k = 0; k <= Math.floor(ni / 2); k++) fib += cache[ni - k][k];
+    fibdiagEl.textContent = fib.toString();
+  } else {
+    cnkEl.textContent = '—';
+    rowsumEl.textContent = '—';
+    fibdiagEl.textContent = '—';
+  }
+}
+
+triangleEl.addEventListener('click', e => {
+  const t = e.target.closest('.cell');
+  if (!t) return;
+  nInput.value = t.dataset.n;
+  kInput.value = t.dataset.k;
+  render();
+});
+
+[rowsEl, highlightEl, nInput, kInput].forEach(el => el.addEventListener('input', render));
+render();
+</script>
+</body>
+</html>
