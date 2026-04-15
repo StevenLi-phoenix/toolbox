@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Running Pace Calculator — Distance, Time, Pace & Splits</title>
+<meta name="description" content="Free online running pace calculator. Enter any two of distance, time, or pace and the third is computed. Includes km/mi splits, speed, and common race presets (5K, 10K, half, marathon).">
+<meta name="keywords" content="running pace calculator, pace calculator, splits calculator, 5k 10k marathon pace, min per km, min per mile">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/runpace.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .form .cell label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .form input, .form select {
+    width: 100%; padding: 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: 1rem; box-sizing: border-box;
+  }
+  .time-row { display: flex; gap: 4px; }
+  .time-row input { text-align: center; }
+  .time-row span { align-self: center; color: var(--muted); font-family: var(--mono); font-weight: 700; }
+  .result-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+  .result { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1.1rem; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  table.splits { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .9rem; margin-top: 8px; }
+  table.splits th, table.splits td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  table.splits th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .status { font-size: .85rem; margin: 8px 0; color: var(--muted); }
+  .status.err { color: var(--error, #dc2626); }
+  .status.ok { color: var(--success, #15803d); }
+  .solve-for { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  @media (max-width: 768px) {
+    .form { grid-template-columns: 1fr; }
+    .result-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🏃 Running Pace Calculator</h1>
+<p class="subtitle">Enter any <strong>two</strong> of distance, time, or pace — the third is computed. Use the race presets for 5K, 10K, half marathon, or marathon. Splits are generated per kilometer and per mile.</p>
+
+<div class="card">
+  <h2>Inputs</h2>
+  <div class="presets">
+    <button class="btn-secondary" type="button" onclick="preset(5,'km')">5K</button>
+    <button class="btn-secondary" type="button" onclick="preset(10,'km')">10K</button>
+    <button class="btn-secondary" type="button" onclick="preset(21.0975,'km')">Half Marathon</button>
+    <button class="btn-secondary" type="button" onclick="preset(42.195,'km')">Marathon</button>
+    <button class="btn-secondary" type="button" onclick="preset(1,'mi')">1 mile</button>
+    <button class="btn-secondary" type="button" onclick="clearAll()">Clear</button>
+  </div>
+
+  <div class="solve-for">
+    <label><input type="radio" name="solve" value="time" checked> Solve for Time</label>
+    <label><input type="radio" name="solve" value="distance"> Solve for Distance</label>
+    <label><input type="radio" name="solve" value="pace"> Solve for Pace</label>
+  </div>
+
+  <div class="form">
+    <div class="cell">
+      <label>Distance</label>
+      <div style="display:flex;gap:4px;">
+        <input type="number" id="dist" step="any" placeholder="10">
+        <select id="distUnit"><option value="km" selected>km</option><option value="mi">mi</option><option value="m">m</option></select>
+      </div>
+    </div>
+    <div class="cell">
+      <label>Time (h : m : s)</label>
+      <div class="time-row">
+        <input type="number" id="th" min="0" placeholder="0">
+        <span>:</span>
+        <input type="number" id="tm" min="0" max="59" placeholder="50">
+        <span>:</span>
+        <input type="number" id="ts" min="0" max="59" placeholder="00">
+      </div>
+    </div>
+    <div class="cell">
+      <label>Pace (per unit)</label>
+      <div style="display:flex;gap:4px;">
+        <div class="time-row" style="flex:1;">
+          <input type="number" id="pm" min="0" placeholder="5">
+          <span>:</span>
+          <input type="number" id="ps" min="0" max="59" placeholder="00">
+        </div>
+        <select id="paceUnit"><option value="km" selected>/km</option><option value="mi">/mi</option></select>
+      </div>
+    </div>
+  </div>
+  <div id="status" class="status">Pick what to solve for, then fill the other two fields.</div>
+  <div style="margin-top:10px;">
+    <button class="btn" onclick="calc()">Calculate</button>
+  </div>
+</div>
+
+<div class="result-grid">
+  <div class="result"><div class="k">Distance</div><div class="v" id="rDist">—</div></div>
+  <div class="result"><div class="k">Total Time</div><div class="v" id="rTime">—</div></div>
+  <div class="result"><div class="k">Pace /km</div><div class="v" id="rPaceKm">—</div></div>
+  <div class="result"><div class="k">Pace /mi</div><div class="v" id="rPaceMi">—</div></div>
+  <div class="result"><div class="k">Speed</div><div class="v" id="rSpeed">—</div></div>
+  <div class="result"><div class="k">VO₂ Est.</div><div class="v" id="rVo2">—</div></div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Splits</h2>
+  <div id="splitsBox"><p class="empty">Splits will appear here after calculation.</p></div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const KM_PER_MI = 1.609344;
+
+function numOrZero(v) { const n = parseFloat(v); return isFinite(n) ? n : 0; }
+
+function getDistanceMeters() {
+  const v = parseFloat($('dist').value);
+  if (!isFinite(v) || v <= 0) return null;
+  const u = $('distUnit').value;
+  if (u === 'km') return v * 1000;
+  if (u === 'mi') return v * 1000 * KM_PER_MI;
+  return v;
+}
+
+function getTimeSeconds() {
+  const h = numOrZero($('th').value), m = numOrZero($('tm').value), s = numOrZero($('ts').value);
+  const total = h * 3600 + m * 60 + s;
+  return total > 0 ? total : null;
+}
+
+function getPaceSecPerKm() {
+  const m = numOrZero($('pm').value), s = numOrZero($('ps').value);
+  const perUnit = m * 60 + s;
+  if (perUnit <= 0) return null;
+  return $('paceUnit').value === 'mi' ? perUnit / KM_PER_MI : perUnit;
+}
+
+function fmtHMS(total) {
+  if (!isFinite(total) || total < 0) return '—';
+  total = Math.round(total);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+               : `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function fmtPace(secPerKm, unit) {
+  if (!isFinite(secPerKm) || secPerKm <= 0) return '—';
+  const sec = unit === 'mi' ? secPerKm * KM_PER_MI : secPerKm;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec - m * 60);
+  return `${m}:${String(s).padStart(2,'0')} /${unit}`;
+}
+
+function setStatus(msg, cls) {
+  const el = $('status');
+  el.textContent = msg;
+  el.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+function preset(d, u) {
+  $('dist').value = d;
+  $('distUnit').value = u;
+  calc();
+}
+
+function clearAll() {
+  ['dist','th','tm','ts','pm','ps'].forEach(id => $(id).value = '');
+  ['rDist','rTime','rPaceKm','rPaceMi','rSpeed','rVo2'].forEach(id => $(id).textContent = '—');
+  $('splitsBox').innerHTML = '<p class="empty">Splits will appear here after calculation.</p>';
+  setStatus('Pick what to solve for, then fill the other two fields.');
+}
+
+function calc() {
+  const solve = document.querySelector('input[name=solve]:checked').value;
+  let distM = getDistanceMeters();
+  let timeS = getTimeSeconds();
+  let paceSpk = getPaceSecPerKm();
+
+  try {
+    if (solve === 'time') {
+      if (distM === null || paceSpk === null) throw new Error('Enter distance and pace.');
+      timeS = (distM / 1000) * paceSpk;
+    } else if (solve === 'distance') {
+      if (timeS === null || paceSpk === null) throw new Error('Enter time and pace.');
+      distM = (timeS / paceSpk) * 1000;
+    } else {
+      if (distM === null || timeS === null) throw new Error('Enter distance and time.');
+      paceSpk = timeS / (distM / 1000);
+    }
+  } catch (e) {
+    setStatus(e.message, 'err');
+    return;
+  }
+
+  const distKm = distM / 1000;
+  const distMi = distKm / KM_PER_MI;
+  const speedKph = distKm / (timeS / 3600);
+  const speedMph = distMi / (timeS / 3600);
+  // Daniels/Gilbert VO2 estimate (requires time in minutes, distance in meters)
+  const minutes = timeS / 60;
+  const velocity = distM / minutes;
+  const vo2 = (-4.60 + 0.182258 * velocity + 0.000104 * velocity * velocity);
+  const percentMax = (0.8 + 0.1894393 * Math.exp(-0.012778 * minutes) + 0.2989558 * Math.exp(-0.1932605 * minutes));
+  const vo2max = percentMax > 0 ? vo2 / percentMax : NaN;
+
+  $('rDist').textContent = `${distKm.toFixed(3)} km · ${distMi.toFixed(3)} mi`;
+  $('rTime').textContent = fmtHMS(timeS);
+  $('rPaceKm').textContent = fmtPace(paceSpk, 'km');
+  $('rPaceMi').textContent = fmtPace(paceSpk, 'mi');
+  $('rSpeed').textContent = `${speedKph.toFixed(2)} km/h · ${speedMph.toFixed(2)} mph`;
+  $('rVo2').textContent = isFinite(vo2max) && vo2max > 0 && vo2max < 120 ? `~${vo2max.toFixed(1)} ml/kg·min` : '—';
+
+  renderSplits(distKm, paceSpk);
+  setStatus('Calculated.', 'ok');
+}
+
+function renderSplits(distKm, paceSpk) {
+  const box = $('splitsBox');
+  if (!isFinite(distKm) || distKm <= 0 || !isFinite(paceSpk)) {
+    box.innerHTML = '<p class="empty">No splits.</p>';
+    return;
+  }
+  let html = '';
+  // Km splits
+  const nKm = Math.min(60, Math.ceil(distKm));
+  let rowsKm = '';
+  let cum = 0;
+  for (let i = 1; i <= nKm; i++) {
+    const segKm = Math.min(1, distKm - (i - 1));
+    if (segKm <= 0) break;
+    const segTime = segKm * paceSpk;
+    cum += segTime;
+    rowsKm += `<tr><td>${i}</td><td>${segKm.toFixed(3)} km</td><td>${fmtHMS(segTime)}</td><td>${fmtHMS(cum)}</td></tr>`;
+  }
+  html += `<h3 style="font-size:.85rem;margin:12px 0 4px;">Kilometer splits</h3>
+    <table class="splits"><thead><tr><th>#</th><th>Segment</th><th>Time</th><th>Cumulative</th></tr></thead><tbody>${rowsKm}</tbody></table>`;
+
+  // Mile splits
+  const distMi = distKm / KM_PER_MI;
+  const paceSpm = paceSpk * KM_PER_MI;
+  const nMi = Math.min(60, Math.ceil(distMi));
+  let rowsMi = '';
+  cum = 0;
+  for (let i = 1; i <= nMi; i++) {
+    const segMi = Math.min(1, distMi - (i - 1));
+    if (segMi <= 0) break;
+    const segTime = segMi * paceSpm;
+    cum += segTime;
+    rowsMi += `<tr><td>${i}</td><td>${segMi.toFixed(3)} mi</td><td>${fmtHMS(segTime)}</td><td>${fmtHMS(cum)}</td></tr>`;
+  }
+  html += `<h3 style="font-size:.85rem;margin:14px 0 4px;">Mile splits</h3>
+    <table class="splits"><thead><tr><th>#</th><th>Segment</th><th>Time</th><th>Cumulative</th></tr></thead><tbody>${rowsMi}</tbody></table>`;
+
+  box.innerHTML = html;
+}
+
+['dist','distUnit','th','tm','ts','pm','ps','paceUnit'].forEach(id => {
+  $(id).addEventListener('input', () => { /* no-op until user hits Calculate or presses Enter */ });
+});
+document.querySelectorAll('input, select').forEach(el => {
+  el.addEventListener('keydown', e => { if (e.key === 'Enter') calc(); });
+});
+</script>
+</body>
+</html>
