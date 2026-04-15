@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV to JSON Converter</title>
+<meta name="description" content="Convert CSV to JSON in your browser. Supports custom delimiters, headers, type inference, and compact or pretty output. 100% client-side.">
+<meta name="keywords" content="csv, json, converter, csv2json, csv to json, parser, type inference">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/csv2json.html">
+<meta property="og:title" content="CSV to JSON Converter">
+<meta property="og:description" content="Parse CSV into JSON with header detection, type inference, and custom delimiters.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/csv2json.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+  .panes textarea { min-height: 340px; font-family: var(--mono); font-size: .86rem; width: 100%; }
+  .opts { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: .85rem; margin-bottom: 10px; }
+  .opts label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .opts input[type="text"] { width: 50px; text-align: center; font-family: var(--mono); padding: 4px 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .opts select { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--sans); }
+  .stats { font-size: .8rem; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
+  .verdict { margin-top: 10px; padding: 8px 12px; border-radius: var(--radius); font-size: .85rem; }
+  .verdict.ok { background: rgba(16,185,129,.1); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+  .verdict.bad { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.3); }
+  @media (max-width: 768px) { .panes { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>CSV to JSON Converter</h1>
+  <p class="subtitle">Parse CSV data into a JSON array with optional header row, type inference, and configurable delimiters. Handles quoted fields, embedded newlines, and escaped quotes per RFC 4180.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="opts">
+      <label>Delimiter
+        <select id="delim">
+          <option value=",">, (comma)</option>
+          <option value=";">; (semicolon)</option>
+          <option value="\t">\t (tab)</option>
+          <option value="|">| (pipe)</option>
+          <option value="custom">custom…</option>
+        </select>
+      </label>
+      <input type="text" id="customDelim" maxlength="3" placeholder="," style="display:none;">
+      <label><input type="checkbox" id="header" checked> First row is header</label>
+      <label><input type="checkbox" id="infer" checked> Infer types</label>
+      <label><input type="checkbox" id="trim" checked> Trim whitespace</label>
+      <label><input type="checkbox" id="pretty" checked> Pretty print</label>
+      <label><input type="checkbox" id="skipEmpty" checked> Skip blank rows</label>
+    </div>
+
+    <div class="panes">
+      <div>
+        <label for="csv">CSV Input</label>
+        <textarea id="csv" placeholder="name,age,active
+Alice,30,true
+Bob,25,false"></textarea>
+        <div class="stats" id="inStats"></div>
+      </div>
+      <div>
+        <label for="json">JSON Output</label>
+        <textarea id="json" readonly></textarea>
+        <div class="stats" id="outStats"></div>
+      </div>
+    </div>
+
+    <div id="verdict"></div>
+
+    <div class="row" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="convert()">Convert</button>
+      <button class="btn btn-secondary" onclick="copyJson()">Copy JSON</button>
+      <button class="btn btn-secondary" onclick="downloadJson()">Download .json</button>
+      <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Tips</h2>
+    <ul style="font-size:.85rem;color:var(--muted);line-height:1.7;padding-left:18px;margin:0;">
+      <li>Fields containing the delimiter, quotes, or newlines should be wrapped in double quotes.</li>
+      <li>To include a literal double quote inside a quoted field, escape it as <code>""</code>.</li>
+      <li>Type inference converts <code>123</code>, <code>3.14</code>, <code>true</code>, <code>false</code>, <code>null</code>, and ISO dates to their native JSON types.</li>
+      <li>Without a header row, objects become arrays indexed by column position.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function parseCSV(text, delim) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let i = 0;
+  let inQuotes = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if (c === '"') { inQuotes = true; i++; continue; }
+    if (c === delim) { row.push(field); field = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+    field += c; i++;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function inferValue(v) {
+  if (v === '' || v === 'null' || v === 'NULL') return null;
+  if (v === 'true' || v === 'TRUE') return true;
+  if (v === 'false' || v === 'FALSE') return false;
+  // integer
+  if (/^-?\d+$/.test(v)) {
+    const n = Number(v);
+    if (Number.isSafeInteger(n)) return n;
+  }
+  // float
+  if (/^-?\d*\.\d+(?:[eE][+-]?\d+)?$/.test(v) || /^-?\d+[eE][+-]?\d+$/.test(v)) {
+    const n = Number(v);
+    if (!isNaN(n)) return n;
+  }
+  return v;
+}
+
+function getDelim() {
+  const sel = document.getElementById('delim').value;
+  if (sel === 'custom') return document.getElementById('customDelim').value || ',';
+  if (sel === '\\t') return '\t';
+  return sel;
+}
+
+function setVerdict(msg, ok) {
+  const el = document.getElementById('verdict');
+  if (!msg) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="verdict ${ok ? 'ok' : 'bad'}">${ok ? '✓' : '✗'} ${escapeHtml(msg)}</div>`;
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function convert() {
+  const text = document.getElementById('csv').value;
+  if (!text.trim()) { document.getElementById('json').value = ''; setVerdict('', true); return; }
+  try {
+    const delim = getDelim();
+    const useHeader = document.getElementById('header').checked;
+    const useInfer = document.getElementById('infer').checked;
+    const trim = document.getElementById('trim').checked;
+    const pretty = document.getElementById('pretty').checked;
+    const skipEmpty = document.getElementById('skipEmpty').checked;
+
+    let rows = parseCSV(text, delim);
+    if (skipEmpty) rows = rows.filter(r => !(r.length === 1 && r[0].trim() === ''));
+    if (trim) rows = rows.map(r => r.map(c => c.trim()));
+
+    if (!rows.length) { document.getElementById('json').value = '[]'; setVerdict('No rows parsed', false); return; }
+
+    let output;
+    if (useHeader) {
+      const headers = rows[0];
+      const data = rows.slice(1).map(r => {
+        const obj = {};
+        for (let j = 0; j < headers.length; j++) {
+          let val = r[j] ?? '';
+          if (useInfer) val = inferValue(val);
+          obj[headers[j]] = val;
+        }
+        return obj;
+      });
+      output = data;
+    } else {
+      output = rows.map(r => useInfer ? r.map(inferValue) : r);
+    }
+
+    const json = pretty ? JSON.stringify(output, null, 2) : JSON.stringify(output);
+    document.getElementById('json').value = json;
+
+    const nCols = rows[0].length;
+    const nData = useHeader ? rows.length - 1 : rows.length;
+    document.getElementById('inStats').textContent = `${rows.length} row${rows.length===1?'':'s'} · ${nCols} column${nCols===1?'':'s'}`;
+    document.getElementById('outStats').textContent = `${nData} record${nData===1?'':'s'} · ${json.length.toLocaleString()} chars`;
+    setVerdict(`Converted ${nData} record${nData===1?'':'s'}`, true);
+  } catch (e) {
+    setVerdict('Parse error: ' + e.message, false);
+  }
+}
+
+function copyJson() {
+  const v = document.getElementById('json').value;
+  if (!v) return;
+  navigator.clipboard.writeText(v).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function downloadJson() {
+  const v = document.getElementById('json').value;
+  if (!v) return;
+  const blob = new Blob([v], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function loadSample() {
+  document.getElementById('csv').value = `name,age,active,joined,notes
+Alice,30,true,2021-03-15,"Senior engineer, team lead"
+Bob,25,false,2023-08-01,
+Carol,42,true,2019-11-22,"Likes ""quoted"" strings"
+Dave,,true,2024-01-09,New hire`;
+  convert();
+}
+
+function clearAll() {
+  document.getElementById('csv').value = '';
+  document.getElementById('json').value = '';
+  document.getElementById('inStats').textContent = '';
+  document.getElementById('outStats').textContent = '';
+  setVerdict('', true);
+}
+
+document.getElementById('delim').addEventListener('change', () => {
+  document.getElementById('customDelim').style.display = document.getElementById('delim').value === 'custom' ? '' : 'none';
+  convert();
+});
+['csv','customDelim','header','infer','trim','pretty','skipEmpty'].forEach(id => {
+  document.getElementById(id).addEventListener('input', convert);
+  document.getElementById(id).addEventListener('change', convert);
+});
+
+loadSample();
+</script>
+</body>
+</html>

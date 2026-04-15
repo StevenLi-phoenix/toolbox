@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MongoDB Connection String Parser</title>
+<meta name="description" content="Parse and inspect MongoDB connection strings (mongodb:// and mongodb+srv://). Breaks apart hosts, auth, database, and options. 100% client-side.">
+<meta name="keywords" content="mongodb, connection string, uri, parser, mongodb+srv, atlas, replica set">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mongouri.html">
+<meta property="og:title" content="MongoDB Connection String Parser">
+<meta property="og:description" content="Decode MongoDB URIs into hosts, auth, database, and options.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/mongouri.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .uri-in { font-family: var(--mono); font-size: .92rem; width: 100%; }
+  .parts { display: grid; grid-template-columns: 140px 1fr; gap: 8px 14px; margin-top: 14px; font-size: .88rem; }
+  .parts .label { color: var(--muted); font-weight: 500; align-self: center; }
+  .parts .val { font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; word-break: break-all; min-height: 1.2em; }
+  .parts .val.empty { color: var(--muted); font-style: italic; }
+  .verdict { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius); font-size: .9rem; font-weight: 500; }
+  .verdict.ok { background: rgba(16,185,129,.1); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+  .verdict.bad { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.3); }
+  .verdict.warn { background: rgba(245,158,11,.1); color: #d97706; border: 1px solid rgba(245,158,11,.3); }
+  .hosts-list, .opts-list { list-style: none; padding: 0; margin: 0; }
+  .hosts-list li, .opts-list li { font-family: var(--mono); font-size: .84rem; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .hosts-list li:last-child, .opts-list li:last-child { border-bottom: 0; }
+  .opts-list li .k { color: var(--text); font-weight: 500; }
+  .opts-list li .v { color: var(--muted); margin-left: 8px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .examples button { font-size: .72rem; padding: 4px 8px; }
+  @media (max-width: 768px) {
+    .parts { grid-template-columns: 1fr; gap: 4px 0; }
+    .parts .label { margin-top: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>MongoDB Connection String Parser</h1>
+  <p class="subtitle">Parse <code>mongodb://</code> and <code>mongodb+srv://</code> connection strings into scheme, credentials, host list, database, and options. Flags common pitfalls like unencoded special characters in passwords. 100% client-side.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <label for="uri">Connection string</label>
+    <input type="text" id="uri" class="uri-in" value="mongodb+srv://admin:p%40ssword@cluster0.example.mongodb.net/myApp?retryWrites=true&w=majority&appName=WebApp">
+    <div class="examples">
+      <button class="btn btn-secondary" onclick="loadEx('mongodb://localhost:27017')">Local</button>
+      <button class="btn btn-secondary" onclick="loadEx('mongodb://user:pass@localhost:27017/mydb?authSource=admin')">Auth + DB</button>
+      <button class="btn btn-secondary" onclick="loadEx('mongodb://host1:27017,host2:27017,host3:27017/mydb?replicaSet=rs0&readPreference=secondary')">Replica Set</button>
+      <button class="btn btn-secondary" onclick="loadEx('mongodb+srv://admin:p%40ssword@cluster0.example.mongodb.net/myApp?retryWrites=true&w=majority&appName=WebApp')">SRV (Atlas)</button>
+      <button class="btn btn-secondary" onclick="loadEx('mongodb://user:pass@mongo/?authMechanism=SCRAM-SHA-256&tls=true&tlsCAFile=/etc/ssl/ca.pem')">TLS</button>
+    </div>
+    <div id="verdict"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;" id="detailsCard">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Components</h2>
+    <div class="parts" id="parts"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About MongoDB URIs</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      General format:
+    </p>
+    <pre style="font-family:var(--mono);font-size:.8rem;background:var(--surface2);padding:10px;border-radius:var(--radius);border:1px solid var(--border);overflow-x:auto;">mongodb://[username:password@]host1[:port1][,...hostN[:portN]][/[defaultauthdb][?options]]
+mongodb+srv://[username:password@]host[/[defaultauthdb][?options]]</pre>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;margin-top:8px;">
+      With <code>mongodb+srv://</code>, the driver resolves the host list from a DNS SRV record (only a single host allowed, no port). Username and password must be percent-encoded if they contain <code>@</code>, <code>:</code>, <code>/</code>, or <code>?</code>.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+function parseMongoUri(input) {
+  const s = (input || '').trim();
+  if (!s) return { ok: false, error: 'empty' };
+
+  let rest = s;
+  let scheme;
+  if (rest.startsWith('mongodb+srv://')) { scheme = 'mongodb+srv'; rest = rest.slice(14); }
+  else if (rest.startsWith('mongodb://')) { scheme = 'mongodb'; rest = rest.slice(10); }
+  else return { ok: false, error: 'Must start with "mongodb://" or "mongodb+srv://"' };
+
+  // Split off options (?...) - note the fragment isn't used by MongoDB
+  let query = '';
+  const qi = rest.indexOf('?');
+  if (qi !== -1) { query = rest.slice(qi + 1); rest = rest.slice(0, qi); }
+
+  // Split off path (database)
+  let database = '';
+  const si = rest.indexOf('/');
+  if (si !== -1) { database = rest.slice(si + 1); rest = rest.slice(0, si); }
+
+  // Split auth (user:pass@) from hosts
+  let authRaw = '';
+  const ai = rest.lastIndexOf('@');
+  if (ai !== -1) { authRaw = rest.slice(0, ai); rest = rest.slice(ai + 1); }
+
+  let username = '', password = '', userRaw = '', passRaw = '';
+  if (authRaw) {
+    const ci = authRaw.indexOf(':');
+    if (ci === -1) {
+      userRaw = authRaw;
+      try { username = decodeURIComponent(userRaw); } catch { username = userRaw; }
+    } else {
+      userRaw = authRaw.slice(0, ci);
+      passRaw = authRaw.slice(ci + 1);
+      try { username = decodeURIComponent(userRaw); } catch { username = userRaw; }
+      try { password = decodeURIComponent(passRaw); } catch { password = passRaw; }
+    }
+  }
+
+  // Parse hosts
+  const hosts = [];
+  if (rest) {
+    for (const h of rest.split(',')) {
+      if (!h) continue;
+      const idx = h.lastIndexOf(':');
+      // handle IPv6 style [::1]:27017
+      if (h.startsWith('[')) {
+        const close = h.indexOf(']');
+        if (close !== -1) {
+          const host = h.slice(1, close);
+          const port = h.slice(close + 1).startsWith(':') ? h.slice(close + 2) : '';
+          hosts.push({ host, port });
+          continue;
+        }
+      }
+      if (idx !== -1) hosts.push({ host: h.slice(0, idx), port: h.slice(idx + 1) });
+      else hosts.push({ host: h, port: '' });
+    }
+  }
+
+  // Parse options
+  const options = [];
+  if (query) {
+    for (const kv of query.split('&')) {
+      if (!kv) continue;
+      const ei = kv.indexOf('=');
+      const k = ei === -1 ? kv : kv.slice(0, ei);
+      const v = ei === -1 ? '' : kv.slice(ei + 1);
+      let dv = v;
+      try { dv = decodeURIComponent(v); } catch {}
+      options.push({ key: k, value: dv });
+    }
+  }
+
+  // Warnings
+  const warnings = [];
+  if (!hosts.length) warnings.push('No hosts found');
+  if (scheme === 'mongodb+srv') {
+    if (hosts.length > 1) warnings.push('mongodb+srv:// only supports a single host (driver resolves SRV record)');
+    if (hosts.some(h => h.port)) warnings.push('mongodb+srv:// cannot specify a port; the SRV record provides it');
+  }
+  if (userRaw && /[@:/?]/.test(decodeSafe(userRaw)) && userRaw === decodeSafe(userRaw)) {
+    warnings.push('Username contains reserved characters — should be percent-encoded');
+  }
+  if (passRaw && /[@:/?]/.test(decodeSafe(passRaw)) && passRaw === decodeSafe(passRaw)) {
+    warnings.push('Password contains reserved characters — should be percent-encoded');
+  }
+  for (const h of hosts) {
+    if (h.port && !/^\d{1,5}$/.test(h.port)) warnings.push(`Invalid port: ${h.port}`);
+    else if (h.port && Number(h.port) > 65535) warnings.push(`Port out of range: ${h.port}`);
+  }
+  if (database.includes('?')) warnings.push('Database contains a "?"; options should follow the path');
+
+  return { ok: true, scheme, username, password, userRaw, passRaw, hosts, database, options, warnings };
+}
+
+function decodeSafe(s) { try { return decodeURIComponent(s); } catch { return s; } }
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function render() {
+  const input = document.getElementById('uri').value;
+  const r = parseMongoUri(input);
+  const verdictEl = document.getElementById('verdict');
+  const partsEl = document.getElementById('parts');
+  if (!r.ok) {
+    if (!input.trim()) { verdictEl.innerHTML = ''; partsEl.innerHTML = ''; return; }
+    verdictEl.innerHTML = '<div class="verdict bad">✗ ' + escapeHtml(r.error) + '</div>';
+    partsEl.innerHTML = '';
+    return;
+  }
+  const cls = r.warnings.length ? 'warn' : 'ok';
+  const icon = r.warnings.length ? '⚠' : '✓';
+  const msg = r.warnings.length ? 'Parsed with warnings: ' + r.warnings.join('; ') : 'Valid connection string';
+  verdictEl.innerHTML = '<div class="verdict ' + cls + '">' + icon + ' ' + escapeHtml(msg) + '</div>';
+
+  const hostsHtml = r.hosts.length
+    ? '<ul class="hosts-list">' + r.hosts.map(h => '<li>' + escapeHtml(h.host) + (h.port ? ':' + escapeHtml(h.port) : '<span style="color:var(--muted)"> (default 27017)</span>') + '</li>').join('') + '</ul>'
+    : '<span class="empty">(none)</span>';
+
+  const optsHtml = r.options.length
+    ? '<ul class="opts-list">' + r.options.map(o => '<li><span class="k">' + escapeHtml(o.key) + '</span>=<span class="v">' + escapeHtml(o.value) + '</span></li>').join('') + '</ul>'
+    : '<span class="empty">(none)</span>';
+
+  const rows = [
+    ['Scheme', escapeHtml(r.scheme)],
+    ['Username', r.username ? escapeHtml(r.username) : '<span class="empty">(none)</span>'],
+    ['Password', r.password ? escapeHtml(r.password) : '<span class="empty">(none)</span>'],
+    ['Hosts', hostsHtml],
+    ['Database', r.database ? escapeHtml(r.database) : '<span class="empty">(none / admin)</span>'],
+    ['Options', optsHtml],
+  ];
+  partsEl.innerHTML = rows.map(([k, v]) => '<div class="label">' + k + '</div><div class="val">' + v + '</div>').join('');
+}
+
+function loadEx(s) {
+  document.getElementById('uri').value = s;
+  render();
+}
+
+document.getElementById('uri').addEventListener('input', render);
+render();
+</script>
+</body>
+</html>
