@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Easter Date Calculator — Gauss / Meeus Algorithm</title>
+<meta name="description" content="Compute the Western (Gregorian) and Eastern (Julian/Orthodox) Easter date for any year 1583–9999 using the Meeus/Jones/Butcher algorithm. Includes related dates: Ash Wednesday, Good Friday, Pentecost.">
+<meta name="keywords" content="easter calculator, gregorian easter, orthodox easter, meeus algorithm, gauss easter, computus, good friday, ash wednesday">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/easter.html">
+<meta property="og:title" content="Easter Date Calculator">
+<meta property="og:description" content="Compute Western and Eastern Easter for any year from 1583 onward, plus related movable feasts.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/easter.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: end; }
+  .controls label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .controls input {
+    width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1rem; box-sizing: border-box;
+  }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .result {
+    padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2);
+  }
+  .result h3 { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+  .result .main { font-family: var(--mono); font-weight: 700; font-size: 1.2rem; color: var(--text); }
+  .result .sub { font-size: .82rem; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+  .related { margin-top: 16px; }
+  .related table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .related th, .related td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  .related th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  .related td.date { font-family: var(--mono); color: var(--text); white-space: nowrap; }
+  .tbl {
+    width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .85rem;
+  }
+  .tbl th, .tbl td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  .tbl th { background: var(--surface2); color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .range-wrap { max-height: 340px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+  @media (max-width: 768px) {
+    .controls { grid-template-columns: 1fr; }
+    .result-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>✝️ Easter Date Calculator</h1>
+<p class="subtitle">Compute the date of Easter Sunday for both the Western (Gregorian) and Eastern (Orthodox/Julian) traditions using the Meeus/Jones/Butcher algorithm. Also shows related movable feasts (Ash Wednesday, Palm Sunday, Good Friday, Ascension, Pentecost), and can print a table across a range of years.</p>
+
+<div class="card">
+  <h2>Single year</h2>
+  <div class="controls">
+    <div>
+      <label for="year">Year</label>
+      <input type="number" id="year" min="1583" max="9999" value="2026">
+    </div>
+    <div><button class="btn" type="button" onclick="render()">Compute</button></div>
+    <div><button class="btn btn-secondary" type="button" onclick="setThisYear()">This year</button></div>
+  </div>
+
+  <div class="result-grid" id="results"></div>
+  <div class="related" id="related"></div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Year range</h2>
+  <div class="controls">
+    <div>
+      <label for="yfrom">From</label>
+      <input type="number" id="yfrom" min="1583" max="9999" value="2020">
+    </div>
+    <div>
+      <label for="yto">To</label>
+      <input type="number" id="yto" min="1583" max="9999" value="2040">
+    </div>
+    <div><button class="btn" type="button" onclick="renderRange()">Show table</button></div>
+  </div>
+  <div class="range-wrap" id="rangewrap"></div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>About the algorithm</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+    Easter is the first Sunday after the first ecclesiastical full moon on or after March 21. The Western church uses the Gregorian calendar and the Meeus/Jones/Butcher "anonymous" algorithm (valid for any Gregorian year). The Eastern Orthodox church still bases the full-moon date on the Julian calendar; this tool computes the Julian date and then converts it to the modern Gregorian date. Between 1583 and 2099, Orthodox Easter falls 4, 5, or 35 days after Western Easter, or on the same day roughly 30% of the time.
+  </p>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+// Meeus/Jones/Butcher Gregorian Easter
+function easterGregorian(Y) {
+  const a = Y % 19;
+  const b = Math.floor(Y / 100);
+  const c = Y % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19*a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const L = (32 + 2*e + 2*i - h - k) % 7;
+  const m = Math.floor((a + 11*h + 22*L) / 451);
+  const month = Math.floor((h + L - 7*m + 114) / 31);
+  const day = ((h + L - 7*m + 114) % 31) + 1;
+  return { y: Y, m: month, d: day };
+}
+
+// Meeus Julian Easter (returns Julian-calendar date, then converted to Gregorian)
+function easterJulian(Y) {
+  const a = Y % 4;
+  const b = Y % 7;
+  const c = Y % 19;
+  const d = (19*c + 15) % 30;
+  const e = (2*a + 4*b - d + 34) % 7;
+  const month = Math.floor((d + e + 114) / 31);
+  const day = ((d + e + 114) % 31) + 1;
+  return { y: Y, m: month, d: day };
+}
+
+// Convert Julian-calendar date to proleptic Gregorian calendar date.
+function julianToGregorian(y, m, d) {
+  // Compute Julian Day Number for Julian-calendar date
+  const a = Math.floor((14 - m) / 12);
+  const y2 = y + 4800 - a;
+  const m2 = m + 12*a - 3;
+  const JDN = d + Math.floor((153*m2 + 2)/5) + 365*y2 + Math.floor(y2/4) - 32083;
+  // Convert JDN to Gregorian
+  const alpha = Math.floor((4*(JDN + 32044) + 3) / 146097);
+  const b = JDN + 32044 - Math.floor(146097*alpha/4);
+  const beta = Math.floor((4*b + 3)/1461);
+  const c = b - Math.floor(1461*beta/4);
+  const gm = Math.floor((5*c + 2)/153);
+  const gd = c - Math.floor((153*gm + 2)/5) + 1;
+  const gmonth = gm + 3 - 12*Math.floor(gm/10);
+  const gyear = 100*alpha + beta - 4800 + Math.floor(gm/10);
+  return { y: gyear, m: gmonth, d: gd };
+}
+
+function daysInMonth(y, m) {
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  return [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m-1];
+}
+
+function addDays(date, delta) {
+  // Use Date object for simplicity; all dates within valid JS range after 1583.
+  const d = new Date(Date.UTC(date.y, date.m-1, date.d));
+  d.setUTCDate(d.getUTCDate() + delta);
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth()+1, d: d.getUTCDate() };
+}
+
+function dowOf(date) {
+  return new Date(Date.UTC(date.y, date.m-1, date.d)).getUTCDay();
+}
+
+function fmt(date) {
+  return `${MONTHS[date.m-1]} ${date.d}, ${date.y}`;
+}
+function fmtShort(date) {
+  return `${date.y}-${String(date.m).padStart(2,'0')}-${String(date.d).padStart(2,'0')}`;
+}
+
+function setThisYear() {
+  document.getElementById('year').value = new Date().getFullYear();
+  render();
+}
+
+function render() {
+  const y = parseInt(document.getElementById('year').value, 10);
+  const resEl = document.getElementById('results');
+  const relEl = document.getElementById('related');
+  if (!y || y < 1583 || y > 9999) {
+    resEl.innerHTML = '<div class="result"><h3>Error</h3><div class="main">Enter year 1583–9999</div></div>';
+    relEl.innerHTML = '';
+    return;
+  }
+  const west = easterGregorian(y);
+  const eastJulian = easterJulian(y);
+  const east = julianToGregorian(eastJulian.y, eastJulian.m, eastJulian.d);
+
+  const diff = Math.round((Date.UTC(east.y, east.m-1, east.d) - Date.UTC(west.y, west.m-1, west.d)) / 86400000);
+
+  resEl.innerHTML = `
+    <div class="result">
+      <h3>Western (Gregorian) Easter</h3>
+      <div class="main">${fmt(west)}</div>
+      <div class="sub">${DAY_NAMES[dowOf(west)]} · ISO ${fmtShort(west)}</div>
+    </div>
+    <div class="result">
+      <h3>Eastern (Orthodox) Easter</h3>
+      <div class="main">${fmt(east)}</div>
+      <div class="sub">${DAY_NAMES[dowOf(east)]} · ISO ${fmtShort(east)} · ${diff === 0 ? 'Same day' : `${diff > 0 ? '+' : ''}${diff} day${Math.abs(diff)===1?'':'s'} from West`}</div>
+    </div>`;
+
+  // Related movable feasts (Western)
+  const related = [
+    { name: 'Ash Wednesday', date: addDays(west, -46), note: 'Start of Lent (46 days before Easter)' },
+    { name: 'Palm Sunday',   date: addDays(west, -7),  note: '1 week before Easter' },
+    { name: 'Maundy Thursday', date: addDays(west, -3), note: '3 days before Easter' },
+    { name: 'Good Friday',   date: addDays(west, -2),  note: '2 days before Easter' },
+    { name: 'Holy Saturday', date: addDays(west, -1),  note: '1 day before Easter' },
+    { name: 'Easter Sunday', date: west,               note: 'Western' },
+    { name: 'Ascension',     date: addDays(west, 39),  note: '39 days after Easter' },
+    { name: 'Pentecost',     date: addDays(west, 49),  note: '49 days after Easter' },
+    { name: 'Trinity Sunday',date: addDays(west, 56),  note: '56 days after Easter' },
+  ];
+  relEl.innerHTML = `
+    <h3 style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:12px 0 6px;">Related Western movable feasts</h3>
+    <table><thead><tr><th>Feast</th><th>Date</th><th>Note</th></tr></thead>
+    <tbody>${related.map(r => `<tr><td>${r.name}</td><td class="date">${fmt(r.date)}</td><td style="color:var(--muted);font-size:.8rem;">${r.note}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function renderRange() {
+  const yf = parseInt(document.getElementById('yfrom').value, 10);
+  const yt = parseInt(document.getElementById('yto').value, 10);
+  const wrap = document.getElementById('rangewrap');
+  if (!yf || !yt || yf < 1583 || yt > 9999 || yt < yf) {
+    wrap.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:.85rem;">Enter a valid range (1583–9999).</div>';
+    return;
+  }
+  if (yt - yf > 500) {
+    wrap.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:.85rem;">Range too large. Please limit to 500 years.</div>';
+    return;
+  }
+  const rows = [];
+  for (let y = yf; y <= yt; y++) {
+    const w = easterGregorian(y);
+    const ej = easterJulian(y);
+    const e = julianToGregorian(ej.y, ej.m, ej.d);
+    const diff = Math.round((Date.UTC(e.y, e.m-1, e.d) - Date.UTC(w.y, w.m-1, w.d)) / 86400000);
+    rows.push(`<tr><td>${y}</td><td>${fmtShort(w)}</td><td>${fmtShort(e)}</td><td>${diff === 0 ? 'same' : (diff>0?'+':'') + diff}</td></tr>`);
+  }
+  wrap.innerHTML = `<table class="tbl"><thead><tr><th>Year</th><th>Western</th><th>Eastern</th><th>Δ days</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+}
+
+render();
+renderRange();
+</script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coin Flipper — Random Flip with Streak Stats</title>
+<meta name="description" content="Flip a fair coin once or thousands of times. Track heads/tails counts, longest run, and chi-square fairness test. Uses the browser's cryptographic RNG.">
+<meta name="keywords" content="coin flipper, flip a coin, random coin, heads or tails, streak test, chi square fairness">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/coinflip.html">
+<meta property="og:title" content="Coin Flipper with Streak Stats">
+<meta property="og:description" content="Flip a coin once or thousands of times with live stats, longest-run detection, and a chi-square fairness test.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/coinflip.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .coin {
+    width: 150px; height: 150px; margin: 18px auto;
+    border-radius: 50%; border: 4px solid var(--border);
+    background: var(--surface2); display: flex; align-items: center; justify-content: center;
+    font-size: 3rem; font-weight: 700; color: var(--text);
+    box-shadow: 0 4px 14px rgba(0,0,0,.15);
+    transition: transform .25s;
+  }
+  .coin.spin { animation: spin .55s ease-out; }
+  @keyframes spin {
+    0%   { transform: rotateY(0) scale(1); }
+    50%  { transform: rotateY(900deg) scale(1.05); }
+    100% { transform: rotateY(1800deg) scale(1); }
+  }
+  .coin.H { background: linear-gradient(140deg, #f5d66e, #c49e2e); color: #3b2d06; border-color: #8a6f1a; }
+  .coin.T { background: linear-gradient(140deg, #e6e6e6, #9a9a9a); color: #1a1a1a; border-color: #666; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; }
+  .stat { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+  .stat .k { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 4px; }
+  .stat .v { font-family: var(--mono); font-weight: 700; font-size: 1.1rem; color: var(--text); }
+  .bar-wrap { margin-top: 14px; }
+  .bar { height: 22px; display: flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+  .bar .h { background: #f5b042; }
+  .bar .t { background: #888; }
+  .bar-label { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+  .seq {
+    max-height: 180px; overflow-y: auto; font-family: var(--mono); font-size: .82rem;
+    padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    word-break: break-all; line-height: 1.6; margin-top: 10px;
+  }
+  .seq .h { color: #d49410; font-weight: 700; }
+  .seq .t { color: var(--muted); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; justify-content: center; margin-top: 10px; }
+  .controls label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 4px; }
+  .controls input {
+    width: 110px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  @media (max-width: 768px) {
+    .coin { width: 120px; height: 120px; font-size: 2.4rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🪙 Coin Flipper</h1>
+<p class="subtitle">Flip a fair coin once, or run batch simulations of up to 1,000,000 flips. See running heads/tails counts, the longest same-side streak, and a chi-square fairness test. Uses <code>crypto.getRandomValues</code> for unbiased randomness.</p>
+
+<div class="card">
+  <div class="coin" id="coin">?</div>
+  <div class="btn-row">
+    <button class="btn" type="button" onclick="flipOne()">Flip</button>
+    <button class="btn btn-secondary" type="button" onclick="reset()">Reset</button>
+  </div>
+
+  <div class="controls">
+    <div>
+      <label for="batch">Batch flips</label>
+      <input type="number" id="batch" value="100" min="1" max="1000000">
+    </div>
+    <div>
+      <button class="btn btn-secondary" type="button" onclick="flipBatch()">Run batch</button>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Results</h2>
+  <div class="stats" id="stats"></div>
+  <div class="bar-wrap">
+    <div class="bar" id="bar"><div class="h" style="width:50%"></div><div class="t" style="width:50%"></div></div>
+    <div class="bar-label"><span>Heads</span><span>Tails</span></div>
+  </div>
+  <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-top:10px;">Last flips (most recent first, up to 500)</label>
+  <div class="seq" id="seq">No flips yet.</div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>About the fairness test</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+    The chi-square statistic compares observed counts to the expected 50/50 split: χ² = (H − N/2)² / (N/2) + (T − N/2)² / (N/2). With 1 degree of freedom, a value above <strong>3.84</strong> is statistically significant at p &lt; 0.05 — suggesting bias, though at small N this happens by chance. <strong>Longest run</strong> counts the longest streak of identical consecutive outcomes.
+  </p>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+let heads = 0, tails = 0;
+let lastFlips = []; // newest first
+let longest = 0;
+let curRunSide = null;
+let curRunLen = 0;
+
+function randBit() {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0] & 1;
+}
+
+function updateRun(side) {
+  if (side === curRunSide) curRunLen++;
+  else { curRunSide = side; curRunLen = 1; }
+  if (curRunLen > longest) longest = curRunLen;
+}
+
+function recordFlip(side) {
+  if (side === 'H') heads++; else tails++;
+  updateRun(side);
+  lastFlips.unshift(side);
+  if (lastFlips.length > 500) lastFlips.length = 500;
+}
+
+function flipOne() {
+  const side = randBit() ? 'H' : 'T';
+  const coin = document.getElementById('coin');
+  coin.classList.remove('spin','H','T');
+  void coin.offsetWidth; // restart animation
+  coin.classList.add('spin', side);
+  coin.textContent = side === 'H' ? 'H' : 'T';
+  recordFlip(side);
+  render();
+}
+
+function flipBatch() {
+  const n = Math.max(1, Math.min(1000000, parseInt(document.getElementById('batch').value, 10) || 0));
+  // Use batched getRandomValues for performance
+  const chunk = 65536;
+  const buf = new Uint32Array(Math.min(n, chunk));
+  let remaining = n;
+  while (remaining > 0) {
+    const take = Math.min(remaining, chunk);
+    crypto.getRandomValues(buf);
+    for (let i = 0; i < take; i++) {
+      // Use all 32 bits, 1 flip per bit for speed
+      let v = buf[i];
+      // But we only do 1 flip per u32 here for simplicity
+      const side = (v & 1) ? 'H' : 'T';
+      recordFlip(side);
+    }
+    remaining -= take;
+  }
+  // Update coin display to the last flip
+  if (lastFlips.length) {
+    const side = lastFlips[0];
+    const coin = document.getElementById('coin');
+    coin.classList.remove('spin','H','T');
+    void coin.offsetWidth;
+    coin.classList.add('spin', side);
+    coin.textContent = side;
+  }
+  render();
+}
+
+function reset() {
+  heads = 0; tails = 0; lastFlips = []; longest = 0; curRunSide = null; curRunLen = 0;
+  const coin = document.getElementById('coin');
+  coin.classList.remove('spin','H','T');
+  coin.textContent = '?';
+  render();
+}
+
+function render() {
+  const total = heads + tails;
+  const hp = total ? (heads / total * 100) : 50;
+  const tp = total ? (tails / total * 100) : 50;
+  const chi = total ? Math.pow(heads - total/2, 2)/(total/2) + Math.pow(tails - total/2, 2)/(total/2) : 0;
+  const stats = [
+    { k: 'Total flips', v: total.toLocaleString() },
+    { k: 'Heads', v: `${heads.toLocaleString()} (${hp.toFixed(2)}%)` },
+    { k: 'Tails', v: `${tails.toLocaleString()} (${tp.toFixed(2)}%)` },
+    { k: 'Longest run', v: longest.toString() },
+    { k: 'Chi-square', v: total ? chi.toFixed(3) : '—' },
+    { k: 'Fair at p<.05?', v: total < 10 ? '—' : (chi < 3.841 ? 'Yes' : 'No') },
+  ];
+  document.getElementById('stats').innerHTML = stats.map(s =>
+    `<div class="stat"><div class="k">${s.k}</div><div class="v">${s.v}</div></div>`
+  ).join('');
+  const bar = document.getElementById('bar');
+  bar.innerHTML = `<div class="h" style="width:${hp}%"></div><div class="t" style="width:${tp}%"></div>`;
+  const seq = document.getElementById('seq');
+  if (!lastFlips.length) {
+    seq.textContent = 'No flips yet.';
+  } else {
+    seq.innerHTML = lastFlips.map(f => `<span class="${f.toLowerCase()}">${f}</span>`).join(' ');
+  }
+}
+
+render();
+</script>
+</body>
+</html>
