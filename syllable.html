@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Syllable Counter — Free Online Tool</title>
+<meta name="description" content="Count syllables, words, sentences, and characters in English text. Estimates Flesch reading ease and grade level. Runs entirely in your browser.">
+<meta name="keywords" content="syllable counter, syllables, word count, flesch reading ease, reading level, readability, grade level">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/syllable.html">
+<meta property="og:title" content="Syllable Counter">
+<meta property="og:description" content="Count syllables, words, and sentences with readability scores. In-browser, no data sent.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/syllable.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea#text { width: 100%; min-height: 180px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--sans); font-size: .95rem; resize: vertical; line-height: 1.5; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .stats .tile { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); text-align: center; }
+  .stats .tile .n { font-size: 1.4rem; font-weight: 600; font-family: var(--mono); color: var(--text); }
+  .stats .tile .l { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+  h3 { font-size: .9rem; font-weight: 600; margin: 16px 0 6px; }
+  .wlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .wlist .w { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-family: var(--mono); font-size: .78rem; }
+  .wlist .w b { color: var(--text); }
+  .wlist .w span { color: var(--muted); margin-left: 4px; }
+  .readability { margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .readability .fact { display: flex; justify-content: space-between; padding: 4px 0; font-size: .85rem; }
+  .readability .fact span:first-child { color: var(--muted); }
+  .readability .fact span:last-child { font-family: var(--mono); font-weight: 600; }
+  @media (max-width: 768px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Syllable Counter</h1>
+<p class="subtitle">Count syllables, words, sentences, and characters in English text. Syllables are estimated heuristically by counting vowel groups with adjustments for silent <i>e</i>, diphthongs, and common suffixes. Readability scores follow the Flesch–Kincaid formulas.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <textarea id="text" placeholder="Paste or type English text..." spellcheck="true"></textarea>
+  <div class="row" style="margin-top:10px;">
+    <button class="btn btn-secondary" onclick="sample()">Sample text</button>
+    <button class="btn btn-secondary" onclick="clearText()">Clear</button>
+  </div>
+
+  <div class="stats">
+    <div class="tile"><div class="n" id="nSyl">0</div><div class="l">Syllables</div></div>
+    <div class="tile"><div class="n" id="nWord">0</div><div class="l">Words</div></div>
+    <div class="tile"><div class="n" id="nSent">0</div><div class="l">Sentences</div></div>
+    <div class="tile"><div class="n" id="nChar">0</div><div class="l">Characters</div></div>
+  </div>
+
+  <div class="readability">
+    <div class="fact"><span>Flesch reading ease</span><span id="flesch">—</span></div>
+    <div class="fact"><span>Flesch–Kincaid grade level</span><span id="grade">—</span></div>
+    <div class="fact"><span>Avg syllables / word</span><span id="spw">—</span></div>
+    <div class="fact"><span>Avg words / sentence</span><span id="wps">—</span></div>
+    <div class="fact"><span>Reading level</span><span id="level">—</span></div>
+  </div>
+
+  <h3>Per-word breakdown <span id="countWords" style="color:var(--muted);font-weight:400;"></span></h3>
+  <div class="wlist" id="wlist"></div>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Heuristic syllable counter (Naive but works for most English words).
+function countSyllables(word) {
+  if (!word) return 0;
+  word = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (!word) return 0;
+  if (word.length <= 3) return 1;
+  // Handle common endings first
+  word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
+  word = word.replace(/^y/, '');
+  const matches = word.match(/[aeiouy]{1,2}/g);
+  let count = matches ? matches.length : 0;
+  // Silent e handling already done; bump up minimum to 1
+  return count || 1;
+}
+
+function readingLevel(flesch) {
+  if (flesch >= 90) return 'Very easy (5th grade)';
+  if (flesch >= 80) return 'Easy (6th grade)';
+  if (flesch >= 70) return 'Fairly easy (7th grade)';
+  if (flesch >= 60) return 'Plain English (8–9th grade)';
+  if (flesch >= 50) return 'Fairly difficult (10–12th grade)';
+  if (flesch >= 30) return 'Difficult (college)';
+  if (flesch >= 10) return 'Very difficult (college grad)';
+  return 'Extremely difficult';
+}
+
+function update() {
+  const text = $('text').value;
+  const words = text.match(/\b[A-Za-z][A-Za-z'’-]*\b/g) || [];
+  const sentences = (text.match(/[^.!?]+[.!?]+/g) || (text.trim() ? [text] : [])).filter(s => s.trim());
+  const chars = text.replace(/\s/g, '').length;
+
+  let syllables = 0;
+  const perWord = words.map(w => {
+    const s = countSyllables(w);
+    syllables += s;
+    return [w, s];
+  });
+
+  $('nSyl').textContent = syllables.toLocaleString();
+  $('nWord').textContent = words.length.toLocaleString();
+  $('nSent').textContent = sentences.length.toLocaleString();
+  $('nChar').textContent = chars.toLocaleString();
+
+  if (words.length && sentences.length) {
+    const spw = syllables / words.length;
+    const wps = words.length / sentences.length;
+    const flesch = 206.835 - 1.015 * wps - 84.6 * spw;
+    const grade = 0.39 * wps + 11.8 * spw - 15.59;
+    $('flesch').textContent = flesch.toFixed(1);
+    $('grade').textContent = grade.toFixed(1);
+    $('spw').textContent = spw.toFixed(2);
+    $('wps').textContent = wps.toFixed(2);
+    $('level').textContent = readingLevel(flesch);
+  } else {
+    ['flesch','grade','spw','wps','level'].forEach(id => $(id).textContent = '—');
+  }
+
+  // show up to 400 word breakdowns
+  const show = perWord.slice(0, 400);
+  $('countWords').textContent = words.length > show.length ? `(first ${show.length} of ${words.length})` : '';
+  $('wlist').innerHTML = show.map(([w, s]) => `<div class="w"><b>${escapeHtml(w)}</b><span>${s}</span></div>`).join('');
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function sample() {
+  $('text').value = "The quick brown fox jumps over the lazy dog. Readability measures how easy text is to understand. Shorter sentences and simpler words usually make writing more accessible to a wider audience.";
+  update();
+}
+function clearText() {
+  $('text').value = '';
+  update();
+}
+
+$('text').addEventListener('input', update);
+sample();
+</script>
+</body>
+</html>
