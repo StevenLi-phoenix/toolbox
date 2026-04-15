@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quadratic Equation Solver — ax² + bx + c = 0</title>
+<meta name="description" content="Free online quadratic equation solver. Enter a, b, c and get real or complex roots, discriminant, vertex, axis of symmetry, and a live parabola plot.">
+<meta name="keywords" content="quadratic formula, quadratic equation solver, roots, discriminant, parabola, vertex form">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/quadratic.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .coef-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .coef label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .coef input {
+    width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1rem;
+    text-align: center; box-sizing: border-box;
+  }
+  .eq {
+    font-family: var(--mono); font-size: 1.4rem; font-weight: 700;
+    text-align: center; padding: 14px; margin: 10px 0;
+    background: var(--surface2); border-radius: var(--radius); border: 1px solid var(--border);
+    word-break: break-word;
+  }
+  .result { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 10px; }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1rem; color: var(--accent, #2563eb); word-break: break-all; }
+  .result.ok .v { color: var(--success, #15803d); }
+  .result.warn .v { color: var(--error, #dc2626); }
+  canvas { width: 100%; height: 320px; display: block; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  .steps { font-family: var(--mono); font-size: .82rem; line-height: 1.7; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  .steps .label { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📐 Quadratic Equation Solver</h1>
+<p class="subtitle">Solve <em>ax² + bx + c = 0</em> with real or complex roots, see the discriminant, vertex, axis of symmetry, and a plot of the parabola. Enter any real numbers — including fractions like <code>-1.5</code>.</p>
+
+<div class="card">
+  <h2>Coefficients</h2>
+  <div class="coef-row coef">
+    <div><label>a (x²)</label><input type="number" id="a" value="1" step="any"></div>
+    <div><label>b (x)</label><input type="number" id="b" value="-3" step="any"></div>
+    <div><label>c (const)</label><input type="number" id="c" value="2" step="any"></div>
+  </div>
+  <div class="eq" id="eqDisp">x² − 3x + 2 = 0</div>
+</div>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Roots</h2>
+    <div class="result" id="rootBox"><div class="k">Solution</div><div class="v" id="roots">—</div></div>
+    <div class="result"><div class="k">Discriminant b² − 4ac</div><div class="v" id="disc">—</div></div>
+    <div class="result"><div class="k">Nature of roots</div><div class="v" id="nature">—</div></div>
+  </div>
+  <div class="card">
+    <h2>Parabola Properties</h2>
+    <div class="result"><div class="k">Vertex (min/max point)</div><div class="v" id="vertex">—</div></div>
+    <div class="result"><div class="k">Axis of symmetry</div><div class="v" id="axis">—</div></div>
+    <div class="result"><div class="k">Y-intercept</div><div class="v" id="yint">—</div></div>
+    <div class="result"><div class="k">Vertex form</div><div class="v" id="vform">—</div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top: 16px;">
+  <h2>Plot</h2>
+  <canvas id="chart" width="800" height="320"></canvas>
+</div>
+
+<div class="card" style="margin-top: 16px;">
+  <h2>Step-by-Step</h2>
+  <div class="steps" id="steps">—</div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function fmt(n, p = 4) {
+  if (!isFinite(n)) return String(n);
+  if (Math.abs(n) < 1e-12) return '0';
+  const r = Number(n.toPrecision(p));
+  return Object.is(r, -0) ? '0' : String(r);
+}
+
+function term(coef, sym, first = false) {
+  if (coef === 0) return '';
+  const sign = coef < 0 ? ' − ' : (first ? '' : ' + ');
+  const abs = Math.abs(coef);
+  const num = (abs === 1 && sym) ? '' : fmt(abs);
+  return sign + num + sym;
+}
+
+function buildEquation(a, b, c) {
+  let s = '';
+  if (a !== 0) s += term(a, 'x²', true);
+  if (b !== 0) s += term(b, 'x', s === '');
+  if (c !== 0) s += term(c, '', s === '');
+  if (s === '') s = '0';
+  return s + ' = 0';
+}
+
+function solve() {
+  const a = parseFloat($('a').value);
+  const b = parseFloat($('b').value);
+  const c = parseFloat($('c').value);
+
+  if ([a, b, c].some(isNaN)) {
+    ['roots', 'disc', 'nature', 'vertex', 'axis', 'yint', 'vform'].forEach(id => $(id).textContent = '—');
+    $('steps').textContent = 'Enter numeric coefficients.';
+    $('eqDisp').textContent = '—';
+    draw(a || 0, b || 0, c || 0, []);
+    return;
+  }
+
+  $('eqDisp').textContent = buildEquation(a, b, c);
+
+  if (a === 0) {
+    // Linear fallback bx + c = 0
+    if (b === 0) {
+      $('roots').textContent = c === 0 ? 'All real numbers' : 'No solution';
+      $('disc').textContent = '—';
+      $('nature').textContent = 'Not a quadratic (a = 0, b = 0)';
+      $('vertex').textContent = '—';
+      $('axis').textContent = '—';
+      $('yint').textContent = fmt(c);
+      $('vform').textContent = '—';
+      $('steps').innerHTML = '<span class="label">Degenerate:</span> both a and b are zero.';
+    } else {
+      const x = -c / b;
+      $('roots').textContent = 'x = ' + fmt(x);
+      $('disc').textContent = '—';
+      $('nature').textContent = 'Linear (one real root)';
+      $('vertex').textContent = '—';
+      $('axis').textContent = '—';
+      $('yint').textContent = fmt(c);
+      $('vform').textContent = '—';
+      $('steps').innerHTML = `<span class="label">Linear:</span> ${fmt(b)}x + ${fmt(c)} = 0<br>x = −c / b = ${fmt(-c)} / ${fmt(b)} = ${fmt(x)}`;
+    }
+    draw(a, b, c, a === 0 && b !== 0 ? [-c / b] : []);
+    return;
+  }
+
+  const disc = b * b - 4 * a * c;
+  let roots = [];
+  let rootStr, nature;
+
+  if (disc > 0) {
+    const s = Math.sqrt(disc);
+    const x1 = (-b + s) / (2 * a);
+    const x2 = (-b - s) / (2 * a);
+    roots = [x1, x2];
+    rootStr = `x₁ = ${fmt(x1)},  x₂ = ${fmt(x2)}`;
+    nature = 'Two distinct real roots';
+    $('rootBox').className = 'result ok';
+  } else if (disc === 0) {
+    const x = -b / (2 * a);
+    roots = [x];
+    rootStr = `x = ${fmt(x)} (double root)`;
+    nature = 'One real double root';
+    $('rootBox').className = 'result ok';
+  } else {
+    const re = -b / (2 * a);
+    const im = Math.sqrt(-disc) / (2 * a);
+    rootStr = `x = ${fmt(re)} ± ${fmt(Math.abs(im))}i`;
+    nature = 'Two complex conjugate roots';
+    $('rootBox').className = 'result warn';
+  }
+
+  const vx = -b / (2 * a);
+  const vy = a * vx * vx + b * vx + c;
+
+  $('roots').textContent = rootStr;
+  $('disc').textContent = fmt(disc);
+  $('nature').textContent = nature;
+  $('vertex').textContent = `(${fmt(vx)}, ${fmt(vy)})`;
+  $('axis').textContent = 'x = ' + fmt(vx);
+  $('yint').textContent = '(0, ' + fmt(c) + ')';
+  const sign = vy >= 0 ? ' + ' : ' − ';
+  $('vform').textContent = `y = ${fmt(a)}(x − ${fmt(vx)})²${sign}${fmt(Math.abs(vy))}`;
+
+  const steps = [
+    `<span class="label">Formula:</span> x = (−b ± √(b² − 4ac)) / (2a)`,
+    `<span class="label">Plug in:</span> a=${fmt(a)}, b=${fmt(b)}, c=${fmt(c)}`,
+    `<span class="label">Discriminant:</span> (${fmt(b)})² − 4·(${fmt(a)})·(${fmt(c)}) = ${fmt(disc)}`,
+    disc >= 0
+      ? `<span class="label">√Δ:</span> ${fmt(Math.sqrt(disc))}`
+      : `<span class="label">√Δ:</span> √(${fmt(disc)}) = ${fmt(Math.sqrt(-disc))}i (imaginary)`,
+    `<span class="label">Denominator:</span> 2a = ${fmt(2 * a)}`,
+    `<span class="label">Result:</span> ${rootStr}`
+  ];
+  $('steps').innerHTML = steps.join('<br>');
+
+  draw(a, b, c, roots);
+}
+
+function draw(a, b, c, roots) {
+  const canvas = $('chart');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Choose x range around vertex / roots
+  let center = 0;
+  if (a !== 0) center = -b / (2 * a);
+  else if (b !== 0) center = -c / b;
+  let span = 10;
+  if (roots.length) {
+    const maxD = Math.max(...roots.map(r => Math.abs(r - center)));
+    span = Math.max(maxD * 2.5, 6);
+  }
+  const xMin = center - span, xMax = center + span;
+
+  // Sample curve
+  const N = 240;
+  const xs = [], ys = [];
+  for (let i = 0; i <= N; i++) {
+    const x = xMin + (xMax - xMin) * i / N;
+    xs.push(x);
+    ys.push(a * x * x + b * x + c);
+  }
+  let yMin = Math.min(...ys), yMax = Math.max(...ys);
+  if (yMin === yMax) { yMin -= 1; yMax += 1; }
+  const pad = 0.15 * (yMax - yMin);
+  yMin -= pad; yMax += pad;
+
+  const pxOf = x => 30 + ((x - xMin) / (xMax - xMin)) * (W - 40);
+  const pyOf = y => H - 24 - ((y - yMin) / (yMax - yMin)) * (H - 40);
+
+  // grid
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 8; i++) {
+    const x = 30 + i * (W - 40) / 8;
+    ctx.beginPath(); ctx.moveTo(x, 12); ctx.lineTo(x, H - 24); ctx.stroke();
+  }
+  for (let i = 1; i < 6; i++) {
+    const y = 12 + i * (H - 36) / 6;
+    ctx.beginPath(); ctx.moveTo(30, y); ctx.lineTo(W - 10, y); ctx.stroke();
+  }
+
+  // axes (x=0, y=0 if visible)
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 1.5;
+  if (0 >= xMin && 0 <= xMax) {
+    const x = pxOf(0);
+    ctx.beginPath(); ctx.moveTo(x, 12); ctx.lineTo(x, H - 24); ctx.stroke();
+  }
+  if (0 >= yMin && 0 <= yMax) {
+    const y = pyOf(0);
+    ctx.beginPath(); ctx.moveTo(30, y); ctx.lineTo(W - 10, y); ctx.stroke();
+  }
+
+  // curve
+  ctx.strokeStyle = '#2563eb';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  xs.forEach((x, i) => {
+    const px = pxOf(x), py = pyOf(ys[i]);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  });
+  ctx.stroke();
+
+  // roots
+  ctx.fillStyle = '#15803d';
+  roots.forEach(r => {
+    if (r >= xMin && r <= xMax) {
+      const px = pxOf(r), py = pyOf(0);
+      ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+
+  // vertex
+  if (a !== 0) {
+    const vx = -b / (2 * a);
+    const vy = a * vx * vx + b * vx + c;
+    if (vx >= xMin && vx <= xMax && vy >= yMin && vy <= yMax) {
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath(); ctx.arc(pxOf(vx), pyOf(vy), 4, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // labels
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10px monospace';
+  ctx.fillText('x: [' + fmt(xMin, 3) + ', ' + fmt(xMax, 3) + ']', 34, H - 8);
+  ctx.fillText('y: [' + fmt(yMin, 3) + ', ' + fmt(yMax, 3) + ']', 34, 12);
+}
+
+['a', 'b', 'c'].forEach(id => $(id).addEventListener('input', solve));
+window.addEventListener('resize', solve);
+solve();
+</script>
+</body>
+</html>

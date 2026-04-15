@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fibonacci Generator — Big Numbers, Golden Ratio, Nth Term</title>
+<meta name="description" content="Free online Fibonacci sequence generator. Compute the first N terms or a single huge nth term with BigInt precision, see the golden ratio convergence, and export to CSV.">
+<meta name="keywords" content="fibonacci sequence, fibonacci generator, nth fibonacci, golden ratio, lucas numbers, bigint fibonacci">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/fibonacci.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+  .controls label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .controls input, .controls select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; box-sizing: border-box;
+  }
+  .result { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 10px; }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1rem; color: var(--accent, #2563eb); word-break: break-all; }
+  .seq {
+    max-height: 360px; overflow-y: auto;
+    font-family: var(--mono); font-size: .85rem;
+    padding: 10px 12px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .seq table { width: 100%; border-collapse: collapse; }
+  .seq td { padding: 4px 8px; border-bottom: 1px solid var(--border); word-break: break-all; }
+  .seq td.idx { color: var(--muted); width: 60px; text-align: right; }
+  .seq td.val { color: var(--text); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) {
+    .controls { grid-template-columns: 1fr 1fr; }
+    .grid-two { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🐚 Fibonacci Generator</h1>
+<p class="subtitle">Generate the first N terms of the Fibonacci (or Lucas) sequence, or jump straight to a single huge nth term with BigInt precision. See the golden-ratio convergence, digit counts, and sum. No server — everything runs in your browser.</p>
+
+<div class="card">
+  <h2>Parameters</h2>
+  <div class="controls">
+    <div>
+      <label for="n">Number of terms / nth index</label>
+      <input type="number" id="n" value="30" min="1" max="10000">
+    </div>
+    <div>
+      <label for="kind">Sequence</label>
+      <select id="kind">
+        <option value="fib">Fibonacci (0, 1, 1, 2, 3…)</option>
+        <option value="lucas">Lucas (2, 1, 3, 4, 7…)</option>
+      </select>
+    </div>
+    <div>
+      <button class="btn" type="button" onclick="compute()">Generate</button>
+    </div>
+  </div>
+  <p class="subtitle" style="margin-top:10px;">Max 10,000 terms. Terms beyond ~20,000 digits get very large fast — but BigInt can still handle them.</p>
+</div>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Statistics</h2>
+    <div class="result"><div class="k">Last term F(n)</div><div class="v" id="last">—</div></div>
+    <div class="result"><div class="k">Number of digits in F(n)</div><div class="v" id="digits">—</div></div>
+    <div class="result"><div class="k">Sum of first n terms</div><div class="v" id="sum">—</div></div>
+    <div class="result"><div class="k">Ratio F(n)/F(n−1) (φ)</div><div class="v" id="phi">—</div></div>
+  </div>
+  <div class="card">
+    <h2>Nth Term (fast doubling)</h2>
+    <p class="subtitle" style="margin-top:0">Compute a single term without generating the whole sequence — works in O(log n).</p>
+    <div class="result"><div class="k">Direct F(n)</div><div class="v" id="direct">—</div></div>
+    <div class="actions">
+      <button class="btn btn-secondary" type="button" onclick="copyDirect()">Copy F(n)</button>
+      <span id="toast" class="toast" style="display:none;">Copied!</span>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Sequence <span id="cnt" style="font-size:.8rem;color:var(--muted);font-weight:400;"></span></h2>
+  <div class="seq" id="seq"><table><tbody><tr><td class="empty" colspan="2">Generate a sequence to see terms</td></tr></tbody></table></div>
+  <div class="actions">
+    <button class="btn btn-secondary" type="button" onclick="copyAll()">Copy all</button>
+    <button class="btn btn-secondary" type="button" onclick="downloadCsv()">Download CSV</button>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let current = [];
+let directVal = 0n;
+
+function buildSeq(n, kind) {
+  const seq = [];
+  let a, b;
+  if (kind === 'lucas') { a = 2n; b = 1n; }
+  else { a = 0n; b = 1n; }
+  for (let i = 0; i < n; i++) {
+    seq.push(a);
+    [a, b] = [b, a + b];
+  }
+  return seq;
+}
+
+// Fast doubling: returns [F(n), F(n+1)]
+function fastDouble(n) {
+  if (n === 0n) return [0n, 1n];
+  const [a, b] = fastDouble(n >> 1n);
+  const c = a * (2n * b - a);
+  const d = a * a + b * b;
+  if (n & 1n) return [d, c + d];
+  return [c, d];
+}
+
+function lucasNth(n) {
+  // L(n) = F(n-1) + F(n+1) = 2*F(n+1) - F(n)
+  const [fn, fn1] = fastDouble(BigInt(n));
+  return 2n * fn1 - fn;
+}
+
+function fmtBig(big, maxLen = 80) {
+  const s = big.toString();
+  if (s.length <= maxLen) return s;
+  return s.slice(0, 30) + ' … ' + s.slice(-30) + ` (${s.length} digits)`;
+}
+
+function compute() {
+  const n = parseInt($('n').value, 10);
+  const kind = $('kind').value;
+  if (!Number.isFinite(n) || n < 1) {
+    ['last', 'digits', 'sum', 'phi', 'direct'].forEach(id => $(id).textContent = '—');
+    $('seq').innerHTML = '<table><tbody><tr><td class="empty" colspan="2">Enter a positive integer</td></tr></tbody></table>';
+    $('cnt').textContent = '';
+    return;
+  }
+  const N = Math.min(n, 10000);
+
+  current = buildSeq(N, kind);
+  const last = current[current.length - 1];
+  const sum = current.reduce((a, b) => a + b, 0n);
+
+  $('last').textContent = fmtBig(last);
+  $('digits').textContent = last.toString().length.toLocaleString();
+  $('sum').textContent = fmtBig(sum);
+
+  if (current.length >= 2 && current[current.length - 2] !== 0n) {
+    const a = Number(current[current.length - 1]);
+    const b = Number(current[current.length - 2]);
+    if (isFinite(a) && isFinite(b) && b !== 0) {
+      $('phi').textContent = (a / b).toFixed(15);
+    } else {
+      // fall back to string division for huge values: use top-digit ratio
+      const ls = current[current.length - 1].toString();
+      const ps = current[current.length - 2].toString();
+      const an = Number(ls.slice(0, 16));
+      const bn = Number(ps.slice(0, 16));
+      const expDiff = ls.length - ps.length;
+      $('phi').textContent = ((an / bn) * Math.pow(10, expDiff)).toFixed(15);
+    }
+  } else {
+    $('phi').textContent = '—';
+  }
+
+  // direct nth (1-indexed: F(1)=0 for fib, F(1)=2 for lucas? we use 0-indexed here)
+  const idx = BigInt(N - 1);
+  directVal = kind === 'lucas' ? lucasNth(Number(idx)) : fastDouble(idx)[0];
+  $('direct').textContent = fmtBig(directVal, 120);
+
+  renderSeq();
+}
+
+function renderSeq() {
+  const MAX = 500;
+  const rows = current.slice(0, MAX).map((v, i) =>
+    `<tr><td class="idx">${i}</td><td class="val">${v.toString()}</td></tr>`
+  ).join('');
+  const more = current.length > MAX ? `<tr><td colspan="2" class="empty">… ${current.length - MAX} more terms (use Copy/Download)</td></tr>` : '';
+  $('seq').innerHTML = `<table><tbody>${rows}${more}</tbody></table>`;
+  $('cnt').textContent = `(${current.length} terms)`;
+}
+
+function copyAll() {
+  if (!current.length) return;
+  navigator.clipboard.writeText(current.map(v => v.toString()).join('\n')).then(toastShow);
+}
+
+function copyDirect() {
+  navigator.clipboard.writeText(directVal.toString()).then(toastShow);
+}
+
+function downloadCsv() {
+  if (!current.length) return;
+  const csv = 'index,value\n' + current.map((v, i) => `${i},${v.toString()}`).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'fibonacci.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function toastShow() {
+  const t = $('toast');
+  t.style.display = 'inline-block';
+  setTimeout(() => t.style.display = 'none', 1200);
+}
+
+$('n').addEventListener('input', compute);
+$('kind').addEventListener('change', compute);
+compute();
+</script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BPM Tap Tempo — Tap to Measure Beats per Minute</title>
+<meta name="description" content="Free online BPM tap tempo tool. Tap the button (or spacebar) to measure a song's beats per minute in real time. Includes beat interval, confidence, and note-value timings.">
+<meta name="keywords" content="bpm tap tempo, beats per minute calculator, metronome, tempo finder, music bpm">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bpmtap.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .tap-pad {
+    width: 100%;
+    padding: 60px 20px;
+    font-size: 1.4rem;
+    font-weight: 700;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    transition: transform .08s, background .15s, border-color .15s;
+    user-select: none;
+  }
+  .tap-pad:hover { border-color: var(--accent, #2563eb); }
+  .tap-pad.pulse { transform: scale(.97); background: var(--accent, #2563eb); color: #fff; border-style: solid; }
+  .big { font-family: var(--mono); font-size: 3.4rem; font-weight: 800; color: var(--accent, #2563eb); line-height: 1; margin: 6px 0; }
+  .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat {
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-family: var(--mono); font-size: 1.05rem; font-weight: 700; color: var(--text); margin-top: 4px; }
+  .note-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .note-table th, .note-table td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  .note-table th { font-weight: 600; color: var(--muted); font-size: .75rem; text-transform: uppercase; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .hint { font-size: .78rem; color: var(--muted); text-align: center; margin-top: 8px; }
+  @media (max-width: 768px) { .stat-grid { grid-template-columns: 1fr; } .big { font-size: 2.6rem; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🥁 BPM Tap Tempo</h1>
+<p class="subtitle">Tap along with a song to measure its tempo in beats per minute. Use the big button, click anywhere in the pad, or press <kbd>Space</kbd>. BPM is calculated from a rolling window of your most recent taps, so it locks in after just a few beats.</p>
+
+<div class="card">
+  <button id="pad" class="tap-pad" type="button">Tap here · or press Space</button>
+  <p class="hint">Tap on every beat. Reset after 2 seconds of silence.</p>
+</div>
+
+<div class="card">
+  <h2>Current Tempo</h2>
+  <div class="big" id="bpm">—</div>
+  <div class="stat-grid">
+    <div class="stat"><div class="k">Taps counted</div><div class="v" id="taps">0</div></div>
+    <div class="stat"><div class="k">Last interval</div><div class="v" id="last">—</div></div>
+    <div class="stat"><div class="k">Average interval</div><div class="v" id="avg">—</div></div>
+    <div class="stat"><div class="k">Stability (±)</div><div class="v" id="stab">—</div></div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-secondary" type="button" onclick="resetAll()">Reset</button>
+    <button class="btn btn-secondary" type="button" onclick="copyBpm()">Copy BPM</button>
+    <span id="toast" class="toast" style="display:none;">Copied!</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Note Value Timings</h2>
+  <p class="subtitle" style="margin-top:0">Rounded from the current BPM. Useful for setting delay & reverb times.</p>
+  <table class="note-table">
+    <thead><tr><th>Note</th><th>Duration (ms)</th><th>Frequency (Hz)</th></tr></thead>
+    <tbody id="notes"><tr><td colspan="3" class="empty">Start tapping to see timings</td></tr></tbody>
+  </table>
+</div>
+
+</div>
+
+<footer>
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+
+<script>
+const WINDOW = 8;         // taps used to compute average
+const RESET_MS = 2000;    // silence to reset
+let taps = [];
+let lastTap = 0;
+
+const pad = document.getElementById('pad');
+const bpmEl = document.getElementById('bpm');
+const tapsEl = document.getElementById('taps');
+const lastEl = document.getElementById('last');
+const avgEl = document.getElementById('avg');
+const stabEl = document.getElementById('stab');
+const notesEl = document.getElementById('notes');
+const toast = document.getElementById('toast');
+
+function tap() {
+  const now = performance.now();
+  if (lastTap && now - lastTap > RESET_MS) taps = [];
+  lastTap = now;
+  taps.push(now);
+  if (taps.length > WINDOW) taps.shift();
+  pad.classList.add('pulse');
+  setTimeout(() => pad.classList.remove('pulse'), 90);
+  update();
+}
+
+function update() {
+  tapsEl.textContent = taps.length;
+  if (taps.length < 2) {
+    bpmEl.textContent = '—';
+    lastEl.textContent = '—';
+    avgEl.textContent = '—';
+    stabEl.textContent = '—';
+    notesEl.innerHTML = '<tr><td colspan="3" class="empty">Keep tapping…</td></tr>';
+    return;
+  }
+  const intervals = [];
+  for (let i = 1; i < taps.length; i++) intervals.push(taps[i] - taps[i - 1]);
+  const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  const bpm = 60000 / avg;
+  const last = intervals[intervals.length - 1];
+  const variance = intervals.reduce((s, v) => s + (v - avg) ** 2, 0) / intervals.length;
+  const stdev = Math.sqrt(variance);
+
+  bpmEl.textContent = bpm.toFixed(1);
+  lastEl.textContent = last.toFixed(0) + ' ms';
+  avgEl.textContent = avg.toFixed(1) + ' ms';
+  stabEl.textContent = '±' + stdev.toFixed(1) + ' ms';
+
+  renderNotes(bpm);
+}
+
+function renderNotes(bpm) {
+  const quarter = 60000 / bpm;
+  const rows = [
+    ['Whole note', quarter * 4],
+    ['Half note', quarter * 2],
+    ['Quarter note', quarter],
+    ['Eighth note', quarter / 2],
+    ['Sixteenth note', quarter / 4],
+    ['Dotted quarter', quarter * 1.5],
+    ['Triplet quarter', quarter * 2 / 3],
+  ];
+  notesEl.innerHTML = rows.map(([name, ms]) =>
+    `<tr><td>${name}</td><td>${ms.toFixed(1)}</td><td>${(1000 / ms).toFixed(3)}</td></tr>`
+  ).join('');
+}
+
+function resetAll() {
+  taps = [];
+  lastTap = 0;
+  update();
+}
+
+function copyBpm() {
+  if (taps.length < 2) return;
+  const bpm = (60000 / ((taps[taps.length - 1] - taps[0]) / (taps.length - 1))).toFixed(1);
+  navigator.clipboard.writeText(bpm).then(() => {
+    toast.style.display = 'inline-block';
+    setTimeout(() => toast.style.display = 'none', 1200);
+  });
+}
+
+pad.addEventListener('click', tap);
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+    e.preventDefault();
+    tap();
+  }
+});
+
+update();
+</script>
+</body>
+</html>
