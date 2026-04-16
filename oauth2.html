@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OAuth 2.0 URL Builder & Debugger - Free Online Tool</title>
+<meta name="description" content="Build OAuth 2.0 authorization URLs, parse callback URLs, decode tokens, and debug OAuth flows. 100% client-side, no data leaves your browser.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/oauth2.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .35rem; color: var(--text); }
+  .form-group input, .form-group select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: .9rem; font-family: var(--mono); }
+  .form-group select { font-family: var(--sans); }
+  .scope-tags { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
+  .scope-tag { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: .82rem; font-family: var(--mono); cursor: pointer; }
+  .scope-tag.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .url-output { word-break: break-all; font-family: var(--mono); font-size: .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; line-height: 1.6; min-height: 60px; }
+  .url-output .param-key { color: var(--accent); font-weight: 600; }
+  .url-output .param-val { color: var(--success); }
+  .parsed-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .parsed-table th, .parsed-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .parsed-table th { font-weight: 600; color: var(--muted); width: 140px; }
+  .parsed-table td { font-family: var(--mono); word-break: break-all; }
+  .token-section { margin-top: 1rem; }
+  .token-part { margin-bottom: .75rem; }
+  .token-label { font-size: .82rem; font-weight: 600; margin-bottom: .25rem; }
+  .token-content { font-family: var(--mono); font-size: .82rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+  .header-color { color: #e06c75; }
+  .payload-color { color: #61afef; }
+  .sig-color { color: var(--muted); }
+  .actions { display: flex; gap: .5rem; margin-top: .75rem; }
+  .preset-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .preset-btn { padding: 5px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; font-size: .8rem; }
+  .preset-btn:hover { background: var(--surface2); }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>OAuth 2.0 URL Builder</h1>
+<p class="subtitle">Build OAuth 2.0 authorization URLs, parse callback responses, and decode access tokens.</p>
+
+<div class="tabs" style="margin-bottom:1.5rem">
+  <button class="tab active" onclick="switchTab('build',this)">Build URL</button>
+  <button class="tab" onclick="switchTab('parse',this)">Parse Callback</button>
+  <button class="tab" onclick="switchTab('decode',this)">Decode Token</button>
+</div>
+
+<div id="tab-build">
+<div class="panels">
+<div>
+  <div class="card">
+    <h2>🔧 Configuration</h2>
+    <div class="preset-row">
+      <span style="font-size:.85rem;font-weight:600;line-height:2">Presets:</span>
+      <button class="preset-btn" onclick="loadPreset('google')">Google</button>
+      <button class="preset-btn" onclick="loadPreset('github')">GitHub</button>
+      <button class="preset-btn" onclick="loadPreset('microsoft')">Microsoft</button>
+      <button class="preset-btn" onclick="loadPreset('custom')">Custom</button>
+    </div>
+    <div class="form-group">
+      <label>Grant Type</label>
+      <select id="grantType" onchange="toggleGrant();buildUrl()">
+        <option value="code">Authorization Code</option>
+        <option value="implicit">Implicit</option>
+        <option value="pkce">Authorization Code + PKCE</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Authorization Endpoint</label>
+      <input id="authEndpoint" placeholder="https://accounts.google.com/o/oauth2/v2/auth" oninput="buildUrl()">
+    </div>
+    <div class="form-group">
+      <label>Client ID</label>
+      <input id="clientId" placeholder="your-client-id" oninput="buildUrl()">
+    </div>
+    <div class="form-group">
+      <label>Redirect URI</label>
+      <input id="redirectUri" placeholder="https://localhost:3000/callback" oninput="buildUrl()">
+    </div>
+    <div class="form-group">
+      <label>Response Type</label>
+      <input id="responseType" value="code" oninput="buildUrl()">
+    </div>
+    <div class="form-group">
+      <label>Scope</label>
+      <input id="scopeInput" placeholder="openid profile email" oninput="buildUrl()">
+      <div class="scope-tags" id="scopeTags"></div>
+    </div>
+    <div class="form-group">
+      <label>State (auto-generated)</label>
+      <input id="stateParam" oninput="buildUrl()">
+      <button class="add-btn" style="margin-top:.35rem" onclick="generateState()">↻ Regenerate</button>
+    </div>
+    <div id="pkceFields" style="display:none">
+      <div class="form-group">
+        <label>Code Verifier</label>
+        <input id="codeVerifier" readonly>
+        <button class="add-btn" style="margin-top:.35rem" onclick="generatePKCE()">↻ Regenerate PKCE</button>
+      </div>
+      <div class="form-group">
+        <label>Code Challenge</label>
+        <input id="codeChallenge" readonly>
+      </div>
+      <div class="form-group">
+        <label>Code Challenge Method</label>
+        <input value="S256" readonly>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Extra Parameters (key=value, one per line)</label>
+      <textarea id="extraParams" rows="3" placeholder="access_type=offline&#10;prompt=consent" oninput="buildUrl()"></textarea>
+    </div>
+  </div>
+</div>
+<div>
+  <div class="card">
+    <h2>🔗 Authorization URL</h2>
+    <div class="url-output" id="builtUrl"></div>
+    <div class="actions">
+      <button class="btn" onclick="copyUrl()">Copy URL</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>📋 Parameters Breakdown</h2>
+    <table class="parsed-table" id="paramTable"><tbody></tbody></table>
+  </div>
+</div>
+</div>
+</div>
+
+<div id="tab-parse" style="display:none">
+<div class="card">
+  <h2>🔍 Parse Callback URL</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Paste the full callback URL (with query params or hash fragment) to extract the authorization code, token, or error.</p>
+  <textarea id="callbackUrl" placeholder="https://localhost:3000/callback?code=abc123&state=xyz" oninput="parseCallback()"></textarea>
+  <div id="callbackResult" style="margin-top:1rem"></div>
+</div>
+</div>
+
+<div id="tab-decode" style="display:none">
+<div class="card">
+  <h2>🔓 Decode Access/ID Token</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Paste a JWT access token or ID token to decode its header and payload.</p>
+  <textarea id="tokenInput" placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." oninput="decodeToken()"></textarea>
+  <div class="token-section" id="tokenResult"></div>
+</div>
+</div>
+
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const PRESETS={
+  google:{endpoint:'https://accounts.google.com/o/oauth2/v2/auth',scopes:['openid','profile','email'],extra:'access_type=offline\nprompt=consent'},
+  github:{endpoint:'https://github.com/login/oauth/authorize',scopes:['read:user','user:email','repo'],extra:''},
+  microsoft:{endpoint:'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',scopes:['openid','profile','email','offline_access'],extra:''},
+  custom:{endpoint:'',scopes:[],extra:''}
+};
+
+const COMMON_SCOPES=['openid','profile','email','read','write','admin','offline_access','repo','user','api'];
+
+function switchTab(tab,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['build','parse','decode'].forEach(t=>{
+    $('tab-'+t).style.display=t===tab?'block':'none';
+  });
+}
+
+function loadPreset(name){
+  const p=PRESETS[name];
+  $('authEndpoint').value=p.endpoint;
+  $('scopeInput').value=p.scopes.join(' ');
+  $('extraParams').value=p.extra;
+  buildUrl();
+}
+
+function toggleGrant(){
+  const gt=$('grantType').value;
+  $('pkceFields').style.display=gt==='pkce'?'block':'none';
+  if(gt==='implicit')$('responseType').value='token';
+  else $('responseType').value='code';
+  if(gt==='pkce')generatePKCE();
+}
+
+function generateState(){
+  const arr=new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  $('stateParam').value=Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('');
+  buildUrl();
+}
+
+async function generatePKCE(){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  const verifier=base64url(arr);
+  $('codeVerifier').value=verifier;
+  const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
+  $('codeChallenge').value=base64url(new Uint8Array(hash));
+  buildUrl();
+}
+
+function base64url(buf){
+  let s='';
+  const bytes=buf instanceof Uint8Array?buf:new Uint8Array(buf);
+  bytes.forEach(b=>s+=String.fromCharCode(b));
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+function buildUrl(){
+  const endpoint=$('authEndpoint').value;
+  const params=new URLSearchParams();
+  const clientId=$('clientId').value;
+  const redirectUri=$('redirectUri').value;
+  const responseType=$('responseType').value;
+  const scope=$('scopeInput').value;
+  const state=$('stateParam').value;
+  const gt=$('grantType').value;
+
+  if(responseType)params.set('response_type',responseType);
+  if(clientId)params.set('client_id',clientId);
+  if(redirectUri)params.set('redirect_uri',redirectUri);
+  if(scope)params.set('scope',scope);
+  if(state)params.set('state',state);
+
+  if(gt==='pkce'){
+    const challenge=$('codeChallenge').value;
+    if(challenge){
+      params.set('code_challenge',challenge);
+      params.set('code_challenge_method','S256');
+    }
+  }
+
+  const extra=$('extraParams').value.trim();
+  if(extra){
+    extra.split('\n').forEach(line=>{
+      const eq=line.indexOf('=');
+      if(eq>0)params.set(line.slice(0,eq).trim(),line.slice(eq+1).trim());
+    });
+  }
+
+  const url=endpoint?(endpoint+'?'+params.toString()):'';
+  renderBuiltUrl(url,params);
+  renderParamTable(params);
+  renderScopeTags(scope);
+}
+
+function renderBuiltUrl(url,params){
+  if(!url){$('builtUrl').innerHTML='<span style="color:var(--muted)">Enter an authorization endpoint to generate the URL.</span>';return;}
+  const endpoint=$('authEndpoint').value;
+  let html=`<span>${escHtml(endpoint)}</span>?`;
+  const entries=[...params.entries()];
+  entries.forEach(([k,v],i)=>{
+    if(i>0)html+='&amp;';
+    html+=`<span class="param-key">${escHtml(k)}</span>=<span class="param-val">${escHtml(v)}</span>`;
+  });
+  $('builtUrl').innerHTML=html;
+}
+
+function renderParamTable(params){
+  const rows=[...params.entries()].map(([k,v])=>`<tr><th>${escHtml(k)}</th><td>${escHtml(decodeURIComponent(v))}</td></tr>`).join('');
+  $('paramTable').innerHTML=rows||'<tr><td colspan="2" style="color:var(--muted);text-align:center">No parameters yet</td></tr>';
+}
+
+function renderScopeTags(scope){
+  const current=scope?scope.split(/\s+/).filter(Boolean):[];
+  const all=[...new Set([...COMMON_SCOPES,...current])];
+  $('scopeTags').innerHTML=all.map(s=>{
+    const active=current.includes(s);
+    return `<span class="scope-tag${active?' active':''}" onclick="toggleScope('${s}')">${s}</span>`;
+  }).join('');
+}
+
+function toggleScope(s){
+  const input=$('scopeInput');
+  const scopes=input.value?input.value.split(/\s+/).filter(Boolean):[];
+  const idx=scopes.indexOf(s);
+  if(idx>=0)scopes.splice(idx,1);else scopes.push(s);
+  input.value=scopes.join(' ');
+  buildUrl();
+}
+
+function parseCallback(){
+  const raw=$('callbackUrl').value.trim();
+  if(!raw){$('callbackResult').innerHTML='';return;}
+  let params;
+  try{
+    const url=new URL(raw);
+    params=url.searchParams;
+    if(!params.toString()&&url.hash){
+      params=new URLSearchParams(url.hash.slice(1));
+    }
+  }catch(e){
+    $('callbackResult').innerHTML=`<div style="color:var(--error)">Invalid URL format</div>`;
+    return;
+  }
+  const entries=[...params.entries()];
+  if(!entries.length){$('callbackResult').innerHTML='<div style="color:var(--muted)">No parameters found in URL</div>';return;}
+  let html='<table class="parsed-table">';
+  entries.forEach(([k,v])=>{
+    const isErr=k==='error';
+    const isCode=k==='code';
+    const isToken=k==='access_token'||k==='id_token';
+    let style='';
+    if(isErr)style='color:var(--error);font-weight:600';
+    else if(isCode||isToken)style='color:var(--success);font-weight:600';
+    html+=`<tr><th>${escHtml(k)}</th><td style="${style}">${escHtml(v)}</td></tr>`;
+  });
+  html+='</table>';
+  $('callbackResult').innerHTML=html;
+}
+
+function decodeToken(){
+  const raw=$('tokenInput').value.trim();
+  if(!raw){$('tokenResult').innerHTML='';return;}
+  const parts=raw.split('.');
+  if(parts.length!==3){
+    $('tokenResult').innerHTML='<div style="color:var(--error)">Not a valid JWT (expected 3 dot-separated parts)</div>';
+    return;
+  }
+  let header,payload;
+  try{
+    header=JSON.parse(atob(parts[0].replace(/-/g,'+').replace(/_/g,'/')));
+    payload=JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+  }catch(e){
+    $('tokenResult').innerHTML='<div style="color:var(--error)">Failed to decode JWT: '+escHtml(e.message)+'</div>';
+    return;
+  }
+  let html='';
+  html+=`<div class="token-part"><div class="token-label header-color">Header</div><div class="token-content">${escHtml(JSON.stringify(header,null,2))}</div></div>`;
+  html+=`<div class="token-part"><div class="token-label payload-color">Payload</div><div class="token-content">${escHtml(JSON.stringify(payload,null,2))}</div></div>`;
+
+  if(payload.exp){
+    const exp=new Date(payload.exp*1000);
+    const now=new Date();
+    const expired=now>exp;
+    html+=`<div style="margin-top:.75rem;padding:8px 12px;border-radius:var(--radius);font-size:.85rem;border:1px solid ${expired?'var(--error)':'var(--success)'};background:${expired?'#fef2f2':'#ecfdf5'};color:${expired?'var(--error)':'var(--success)'}"><strong>${expired?'Expired':'Valid'}</strong> — exp: ${exp.toISOString()}</div>`;
+  }
+  if(payload.iat){
+    html+=`<div style="font-size:.82rem;color:var(--muted);margin-top:.5rem">Issued at: ${new Date(payload.iat*1000).toISOString()}</div>`;
+  }
+
+  html+=`<div class="token-part" style="margin-top:.75rem"><div class="token-label sig-color">Signature</div><div class="token-content sig-color">${escHtml(parts[2])}</div></div>`;
+  $('tokenResult').innerHTML=html;
+}
+
+function copyUrl(){
+  const endpoint=$('authEndpoint').value;
+  if(!endpoint)return;
+  const params=new URLSearchParams();
+  const text=$('builtUrl').textContent;
+  navigator.clipboard.writeText(text).then(()=>{
+    const t=$('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+  });
+}
+
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+generateState();
+buildUrl();
+</script>
+</body>
+</html>
