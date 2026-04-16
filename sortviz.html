@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sorting Algorithm Visualizer — Free Online Tool</title>
+<meta name="description" content="Visualize bubble sort, insertion sort, selection sort, merge sort, quicksort, heapsort, and shell sort side-by-side. Step through comparisons and swaps.">
+<meta name="keywords" content="sorting visualizer, algorithm animation, bubble sort, quicksort, mergesort, heapsort">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sortviz.html">
+<meta property="og:title" content="Sorting Algorithm Visualizer">
+<meta property="og:description" content="Watch classic sorting algorithms in action with live comparison and swap counters.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/sortviz.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .controls label { font-size: .78rem; color: var(--muted); display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: .5px; }
+  .controls select, .controls input[type="number"] {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem;
+  }
+  .controls input[type="range"] { width: 140px; }
+  .canvas-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; }
+  canvas { display: block; width: 100%; height: 360px; background: #fff; border-radius: calc(var(--radius) - 2px); }
+  .meta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: .82rem; color: var(--muted); }
+  .meta b { color: var(--text); font-family: var(--mono); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: .8rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Sorting Algorithm Visualizer</h1>
+<p class="subtitle">Watch seven classic sorting algorithms shuffle an array into order. Adjust the size and speed, pick your algorithm, and see comparisons and swaps counted live.</p>
+
+<div class="card" style="padding:16px;margin-top:16px;">
+  <div class="controls">
+    <label>Algorithm
+      <select id="algo">
+        <option value="bubble">Bubble sort</option>
+        <option value="insertion">Insertion sort</option>
+        <option value="selection">Selection sort</option>
+        <option value="shell">Shell sort</option>
+        <option value="merge">Merge sort</option>
+        <option value="quick" selected>Quicksort</option>
+        <option value="heap">Heapsort</option>
+      </select>
+    </label>
+    <label>Size <input type="number" id="size" min="5" max="400" value="80"></label>
+    <label>Speed <input type="range" id="speed" min="1" max="500" value="150"></label>
+    <button class="btn" id="runBtn">▶ Start</button>
+    <button class="btn btn-secondary" onclick="shuffle()">Shuffle</button>
+    <button class="btn btn-secondary" onclick="reverseArr()">Reverse</button>
+  </div>
+  <div class="canvas-wrap">
+    <canvas id="c"></canvas>
+  </div>
+  <div class="legend">
+    <span><i class="sw" style="background:#9ca3af"></i> idle</span>
+    <span><i class="sw" style="background:#2563eb"></i> compare</span>
+    <span><i class="sw" style="background:#dc2626"></i> swap / write</span>
+    <span><i class="sw" style="background:#16a34a"></i> sorted</span>
+  </div>
+  <div class="meta" id="meta"></div>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const algoEl = document.getElementById('algo');
+const sizeEl = document.getElementById('size');
+const speedEl = document.getElementById('speed');
+const runBtn = document.getElementById('runBtn');
+const metaEl = document.getElementById('meta');
+
+let arr = [];
+let state = { compare: [], write: [], sorted: new Set() };
+let compares = 0, writes = 0;
+let running = false;
+let stopToken = 0;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * dpr;
+  canvas.height = 360 * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  draw();
+}
+window.addEventListener('resize', resize);
+
+function shuffle() {
+  const n = Math.max(5, Math.min(400, +sizeEl.value || 80));
+  arr = Array.from({ length: n }, (_, i) => i + 1);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  state = { compare: [], write: [], sorted: new Set() };
+  compares = 0; writes = 0;
+  updateMeta();
+  draw();
+}
+function reverseArr() {
+  const n = Math.max(5, Math.min(400, +sizeEl.value || 80));
+  arr = Array.from({ length: n }, (_, i) => n - i);
+  state = { compare: [], write: [], sorted: new Set() };
+  compares = 0; writes = 0;
+  updateMeta();
+  draw();
+}
+
+function updateMeta() {
+  metaEl.innerHTML =
+    `<span>Length: <b>${arr.length}</b></span>` +
+    `<span>Comparisons: <b>${compares}</b></span>` +
+    `<span>Writes: <b>${writes}</b></span>` +
+    `<span>Algorithm: <b>${algoEl.options[algoEl.selectedIndex].text}</b></span>`;
+}
+
+function draw() {
+  const w = canvas.clientWidth;
+  const h = 360;
+  ctx.clearRect(0, 0, w, h);
+  const n = arr.length;
+  const bw = w / n;
+  const max = n;
+  const cmp = new Set(state.compare);
+  const wr = new Set(state.write);
+  for (let i = 0; i < n; i++) {
+    const bh = (arr[i] / max) * (h - 6);
+    if (wr.has(i)) ctx.fillStyle = '#dc2626';
+    else if (cmp.has(i)) ctx.fillStyle = '#2563eb';
+    else if (state.sorted.has(i)) ctx.fillStyle = '#16a34a';
+    else ctx.fillStyle = '#9ca3af';
+    ctx.fillRect(i * bw, h - bh - 2, Math.max(1, bw - 1), bh);
+  }
+}
+
+function delayMs() {
+  const v = +speedEl.value; // 1..500 ops per frame target
+  // Map speed to ops per frame and delay
+  return 0; // we'll use a yield counter approach
+}
+
+async function yieldStep(ops) {
+  // Flush visual state every N operations based on speed slider.
+  const speed = +speedEl.value;
+  const every = Math.max(1, Math.floor(speed / 5));
+  if (ops.count % every === 0) {
+    draw();
+    updateMeta();
+    await new Promise(r => setTimeout(r, 1));
+  }
+  if (ops.token !== stopToken) throw new Error('stopped');
+}
+
+async function cmp(i, j, ops) {
+  compares++;
+  state.compare = [i, j];
+  state.write = [];
+  ops.count++;
+  await yieldStep(ops);
+  return arr[i] - arr[j];
+}
+async function swap(i, j, ops) {
+  writes += 2;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  state.write = [i, j];
+  state.compare = [];
+  ops.count++;
+  await yieldStep(ops);
+}
+async function writeAt(i, v, ops) {
+  writes++;
+  arr[i] = v;
+  state.write = [i];
+  state.compare = [];
+  ops.count++;
+  await yieldStep(ops);
+}
+
+async function bubbleSort(ops) {
+  const n = arr.length;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n - i - 1; j++) {
+      if ((await cmp(j, j + 1, ops)) > 0) await swap(j, j + 1, ops);
+    }
+    state.sorted.add(n - i - 1);
+  }
+}
+async function insertionSort(ops) {
+  const n = arr.length;
+  for (let i = 1; i < n; i++) {
+    let j = i;
+    while (j > 0 && (await cmp(j - 1, j, ops)) > 0) {
+      await swap(j - 1, j, ops);
+      j--;
+    }
+  }
+  for (let i = 0; i < n; i++) state.sorted.add(i);
+}
+async function selectionSort(ops) {
+  const n = arr.length;
+  for (let i = 0; i < n; i++) {
+    let m = i;
+    for (let j = i + 1; j < n; j++) {
+      if ((await cmp(j, m, ops)) < 0) m = j;
+    }
+    if (m !== i) await swap(i, m, ops);
+    state.sorted.add(i);
+  }
+}
+async function shellSort(ops) {
+  const n = arr.length;
+  for (let gap = n >> 1; gap > 0; gap >>= 1) {
+    for (let i = gap; i < n; i++) {
+      const tmp = arr[i];
+      let j = i;
+      while (j >= gap) {
+        compares++;
+        state.compare = [j - gap, i];
+        ops.count++;
+        await yieldStep(ops);
+        if (arr[j - gap] > tmp) {
+          await writeAt(j, arr[j - gap], ops);
+          j -= gap;
+        } else break;
+      }
+      await writeAt(j, tmp, ops);
+    }
+  }
+  for (let i = 0; i < n; i++) state.sorted.add(i);
+}
+async function mergeSort(ops, lo = 0, hi = arr.length - 1) {
+  if (lo >= hi) return;
+  const mid = (lo + hi) >> 1;
+  await mergeSort(ops, lo, mid);
+  await mergeSort(ops, mid + 1, hi);
+  const tmp = [];
+  let i = lo, j = mid + 1;
+  while (i <= mid && j <= hi) {
+    if ((await cmp(i, j, ops)) <= 0) tmp.push(arr[i++]);
+    else tmp.push(arr[j++]);
+  }
+  while (i <= mid) tmp.push(arr[i++]);
+  while (j <= hi) tmp.push(arr[j++]);
+  for (let k = 0; k < tmp.length; k++) await writeAt(lo + k, tmp[k], ops);
+  if (lo === 0 && hi === arr.length - 1) for (let k = 0; k < arr.length; k++) state.sorted.add(k);
+}
+async function quickSort(ops, lo = 0, hi = arr.length - 1) {
+  if (lo >= hi) { if (lo === hi) state.sorted.add(lo); return; }
+  const pivot = arr[hi];
+  let i = lo;
+  for (let j = lo; j < hi; j++) {
+    compares++;
+    state.compare = [j, hi];
+    ops.count++;
+    await yieldStep(ops);
+    if (arr[j] < pivot) {
+      await swap(i, j, ops);
+      i++;
+    }
+  }
+  await swap(i, hi, ops);
+  state.sorted.add(i);
+  await quickSort(ops, lo, i - 1);
+  await quickSort(ops, i + 1, hi);
+}
+async function heapSort(ops) {
+  const n = arr.length;
+  async function siftDown(start, end) {
+    let root = start;
+    while (root * 2 + 1 <= end) {
+      let child = root * 2 + 1;
+      if (child + 1 <= end && (await cmp(child, child + 1, ops)) < 0) child++;
+      if ((await cmp(root, child, ops)) < 0) {
+        await swap(root, child, ops);
+        root = child;
+      } else return;
+    }
+  }
+  for (let start = (n - 2) >> 1; start >= 0; start--) await siftDown(start, n - 1);
+  for (let end = n - 1; end > 0; end--) {
+    await swap(0, end, ops);
+    state.sorted.add(end);
+    await siftDown(0, end - 1);
+  }
+  state.sorted.add(0);
+}
+
+const algos = {
+  bubble: bubbleSort, insertion: insertionSort, selection: selectionSort,
+  shell: shellSort, merge: mergeSort, quick: quickSort, heap: heapSort,
+};
+
+runBtn.onclick = async () => {
+  if (running) {
+    stopToken++;
+    running = false;
+    runBtn.textContent = '▶ Start';
+    return;
+  }
+  running = true;
+  runBtn.textContent = '⏹ Stop';
+  state.sorted = new Set();
+  const token = ++stopToken;
+  const ops = { count: 0, token };
+  try {
+    await algos[algoEl.value](ops);
+  } catch (e) { /* stopped */ }
+  state.compare = []; state.write = [];
+  running = false;
+  runBtn.textContent = '▶ Start';
+  draw();
+  updateMeta();
+};
+
+sizeEl.onchange = () => { stopToken++; running = false; runBtn.textContent = '▶ Start'; shuffle(); };
+algoEl.onchange = updateMeta;
+
+shuffle();
+resize();
+</script>
+</body>
+</html>
