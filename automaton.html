@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finite Automaton Simulator — Free Online DFA/NFA Tool</title>
+<meta name="description" content="Build, visualize, and simulate deterministic and nondeterministic finite automata. Test input strings step by step with animated state transitions.">
+<meta name="keywords" content="finite automaton, DFA, NFA, state machine, automata, simulator, regex, formal language">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/automaton.html">
+<meta property="og:title" content="Finite Automaton Simulator">
+<meta property="og:description" content="Build and simulate DFA/NFA state machines with animated transitions.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/automaton.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .fa-layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+  @media (max-width: 900px) { .fa-layout { grid-template-columns: 1fr; } }
+  .panel { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .panel h3 { margin: 0 0 10px; font-size: .92rem; }
+  .form-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .form-row label { font-size: .78rem; color: var(--muted); min-width: 50px; text-transform: uppercase; letter-spacing: .4px; }
+  .form-row input, .form-row select { flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; }
+  .form-row input[type="checkbox"] { flex: none; width: 16px; height: 16px; }
+  .state-list, .trans-list { max-height: 200px; overflow-y: auto; margin-bottom: 10px; }
+  .state-item, .trans-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: .82rem; font-family: var(--mono); border-bottom: 1px solid var(--border); }
+  .state-item:hover, .trans-item:hover { background: var(--bg); }
+  .state-item .badge { font-size: .7rem; padding: 1px 5px; border-radius: 3px; background: var(--accent); color: #fff; }
+  .state-item .badge.accept { background: var(--success); }
+  .del-btn { background: none; border: none; color: var(--error); cursor: pointer; font-size: .9rem; padding: 2px 4px; }
+  .del-btn:hover { background: var(--error); color: #fff; border-radius: 3px; }
+  canvas#faCanvas { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); display: block; }
+  .test-section { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .test-section input { flex: 1; min-width: 120px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .9rem; background: var(--bg); color: var(--text); }
+  .result-badge { padding: 4px 12px; border-radius: var(--radius); font-size: .85rem; font-weight: 600; }
+  .result-badge.accepted { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .result-badge.rejected { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .result-badge.running { background: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe; }
+  .step-info { font-size: .82rem; font-family: var(--mono); color: var(--muted); margin-top: 8px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .presets button { padding: 4px 10px; font-size: .78rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); cursor: pointer; }
+  .presets button:hover { background: var(--surface2); border-color: var(--accent); }
+  .alphabet-display { font-size: .78rem; color: var(--muted); margin-bottom: 8px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Finite Automaton Simulator</h1>
+<p class="subtitle">Build DFA or NFA state machines, define transitions, and test input strings with step-by-step animation. Everything runs locally in your browser.</p>
+
+<div class="card">
+<h2>Presets</h2>
+<div class="presets">
+  <button onclick="loadPreset('binary_even')">Binary: even 0s</button>
+  <button onclick="loadPreset('ends_ab')">Ends with "ab"</button>
+  <button onclick="loadPreset('divisible3')">Binary div by 3</button>
+  <button onclick="loadPreset('contains_01')">Contains "01"</button>
+  <button onclick="clearAll()">Clear All</button>
+</div>
+</div>
+
+<div class="fa-layout">
+<div>
+  <div class="panel">
+    <h3>States</h3>
+    <div class="form-row">
+      <input type="text" id="newState" placeholder="State name (e.g. q0)" maxlength="10">
+      <label style="min-width:auto"><input type="checkbox" id="newAccept"> Accept</label>
+      <button class="btn" onclick="addState()" style="padding:5px 12px;font-size:.82rem">Add</button>
+    </div>
+    <div class="state-list" id="stateList"></div>
+    <div class="form-row">
+      <label>Start</label>
+      <select id="startState" onchange="render()"></select>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:12px">
+    <h3>Transitions</h3>
+    <div class="form-row">
+      <select id="transFrom" style="flex:1"></select>
+      <input type="text" id="transSymbol" placeholder="sym" maxlength="5" style="flex:.6">
+      <span style="color:var(--muted)">→</span>
+      <select id="transTo" style="flex:1"></select>
+      <button class="btn" onclick="addTransition()" style="padding:5px 12px;font-size:.82rem">Add</button>
+    </div>
+    <div class="alphabet-display" id="alphabetDisplay">Alphabet: (none)</div>
+    <div class="trans-list" id="transList"></div>
+  </div>
+</div>
+
+<div>
+  <canvas id="faCanvas" height="420"></canvas>
+  <div class="test-section">
+    <input type="text" id="testInput" placeholder="Enter input string to test…" onkeydown="if(event.key==='Enter')runTest()">
+    <button class="btn" onclick="runTest()">Run</button>
+    <button class="btn btn-secondary" onclick="stepTest()">Step</button>
+    <button class="btn btn-secondary" onclick="resetTest()">Reset</button>
+  </div>
+  <div id="testResult"></div>
+  <div class="step-info" id="stepInfo"></div>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">Done!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let states = [];         // [{name, accept, x, y}]
+let transitions = [];    // [{from, symbol, to}]
+let startState = null;
+let simulation = null;   // {input, pos, currentStates, history, done, accepted}
+
+function getAlphabet() {
+  const s = new Set();
+  transitions.forEach(t => { if (t.symbol !== 'ε') s.add(t.symbol); });
+  return [...s].sort();
+}
+
+function addState() {
+  const name = $('newState').value.trim();
+  if (!name || states.find(s => s.name === name)) return;
+  const accept = $('newAccept').checked;
+  const angle = states.length * 2.4;
+  const cx = 300, cy = 210, r = 130;
+  const x = cx + r * Math.cos(angle);
+  const y = cy + r * Math.sin(angle);
+  states.push({ name, accept, x, y });
+  if (!startState) startState = name;
+  $('newState').value = '';
+  $('newAccept').checked = false;
+  updateUI();
+}
+
+function removeState(name) {
+  states = states.filter(s => s.name !== name);
+  transitions = transitions.filter(t => t.from !== name && t.to !== name);
+  if (startState === name) startState = states.length ? states[0].name : null;
+  updateUI();
+}
+
+function addTransition() {
+  const from = $('transFrom').value;
+  const symbol = $('transSymbol').value.trim() || 'ε';
+  const to = $('transTo').value;
+  if (!from || !to) return;
+  if (transitions.find(t => t.from === from && t.symbol === symbol && t.to === to)) return;
+  transitions.push({ from, symbol, to });
+  $('transSymbol').value = '';
+  updateUI();
+}
+
+function removeTransition(i) {
+  transitions.splice(i, 1);
+  updateUI();
+}
+
+function updateUI() {
+  // State list
+  const sl = $('stateList');
+  sl.innerHTML = states.map(s => `
+    <div class="state-item">
+      <span>${s.name}</span>
+      ${s.name === startState ? '<span class="badge">start</span>' : ''}
+      ${s.accept ? '<span class="badge accept">accept</span>' : ''}
+      <span style="flex:1"></span>
+      <button class="del-btn" onclick="removeState('${s.name}')">&times;</button>
+    </div>
+  `).join('');
+
+  // Dropdowns
+  const opts = states.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+  $('startState').innerHTML = opts;
+  $('transFrom').innerHTML = opts;
+  $('transTo').innerHTML = opts;
+  if (startState) $('startState').value = startState;
+
+  // Transition list
+  const tl = $('transList');
+  tl.innerHTML = transitions.map((t, i) => `
+    <div class="trans-item">
+      <span>${t.from}</span>
+      <span style="color:var(--accent)">${t.symbol === 'ε' ? 'ε' : '"' + t.symbol + '"'}</span>
+      <span>→ ${t.to}</span>
+      <span style="flex:1"></span>
+      <button class="del-btn" onclick="removeTransition(${i})">&times;</button>
+    </div>
+  `).join('');
+
+  // Alphabet
+  const alpha = getAlphabet();
+  $('alphabetDisplay').textContent = 'Alphabet: ' + (alpha.length ? '{' + alpha.join(', ') + '}' : '(none)');
+
+  // Start state
+  $('startState').onchange = () => { startState = $('startState').value; render(); };
+
+  render();
+}
+
+// === Canvas drawing ===
+function render() {
+  const canvas = $('faCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const activeStates = simulation ? simulation.currentStates : [];
+
+  // Draw transitions
+  transitions.forEach(t => {
+    const fromS = states.find(s => s.name === t.from);
+    const toS = states.find(s => s.name === t.to);
+    if (!fromS || !toS) return;
+
+    const isActive = simulation && simulation.lastTransition &&
+      simulation.lastTransition.from === t.from &&
+      simulation.lastTransition.symbol === t.symbol &&
+      simulation.lastTransition.to === t.to;
+
+    ctx.strokeStyle = isActive ? '#3b82f6' : getComputedStyle(document.body).getPropertyValue('--muted').trim() || '#888';
+    ctx.lineWidth = isActive ? 2.5 : 1.5;
+
+    if (t.from === t.to) {
+      // Self-loop
+      const r = 20;
+      ctx.beginPath();
+      ctx.arc(fromS.x, fromS.y - 30, r, 0.3 * Math.PI, 0.7 * Math.PI);
+      ctx.stroke();
+      // Arrow
+      const ax = fromS.x + r * Math.cos(0.7 * Math.PI) * 0.6;
+      const ay = fromS.y - 30 + r * Math.sin(0.7 * Math.PI) * 0.6;
+      drawArrowHead(ctx, fromS.x - 5, fromS.y - 50, fromS.x + 5, fromS.y - 30);
+      // Label
+      ctx.fillStyle = isActive ? '#3b82f6' : getComputedStyle(document.body).getPropertyValue('--text').trim() || '#333';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(t.symbol, fromS.x, fromS.y - 55);
+    } else {
+      // Check for reverse transition to offset
+      const hasReverse = transitions.some(t2 => t2.from === t.to && t2.to === t.from);
+      const dx = toS.x - fromS.x;
+      const dy = toS.y - fromS.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const nx = -dy / len, ny = dx / len;
+      const offset = hasReverse ? 12 : 0;
+
+      const x1 = fromS.x + nx * offset;
+      const y1 = fromS.y + ny * offset;
+      const x2 = toS.x + nx * offset;
+      const y2 = toS.y + ny * offset;
+
+      // Shorten to circle edge
+      const sr = 22;
+      const ang = Math.atan2(y2 - y1, x2 - x1);
+      const sx = x1 + sr * Math.cos(ang);
+      const sy = y1 + sr * Math.sin(ang);
+      const ex = x2 - sr * Math.cos(ang);
+      const ey = y2 - sr * Math.sin(ang);
+
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      drawArrowHead(ctx, sx, sy, ex, ey);
+
+      // Label
+      const mx = (sx + ex) / 2 + nx * 12;
+      const my = (sy + ey) / 2 + ny * 12;
+      ctx.fillStyle = isActive ? '#3b82f6' : getComputedStyle(document.body).getPropertyValue('--text').trim() || '#333';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(t.symbol, mx, my);
+    }
+  });
+
+  // Draw start arrow
+  if (startState) {
+    const ss = states.find(s => s.name === startState);
+    if (ss) {
+      ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--muted').trim() || '#888';
+      ctx.lineWidth = 1.5;
+      const ax = ss.x - 45;
+      const ay = ss.y;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ss.x - 23, ay);
+      ctx.stroke();
+      drawArrowHead(ctx, ax, ay, ss.x - 23, ay);
+    }
+  }
+
+  // Draw states
+  states.forEach(s => {
+    const active = activeStates.includes(s.name);
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 22, 0, 2 * Math.PI);
+    ctx.fillStyle = active ? '#3b82f6' : (getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#fff');
+    ctx.fill();
+    ctx.strokeStyle = active ? '#3b82f6' : (getComputedStyle(document.body).getPropertyValue('--border').trim() || '#ccc');
+    ctx.lineWidth = active ? 2.5 : 1.5;
+    ctx.stroke();
+
+    if (s.accept) {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 18, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = active ? '#fff' : (getComputedStyle(document.body).getPropertyValue('--text').trim() || '#333');
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(s.name, s.x, s.y);
+  });
+}
+
+function drawArrowHead(ctx, x1, y1, x2, y2) {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const size = 8;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - size * Math.cos(angle - Math.PI / 6), y2 - size * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(x2 - size * Math.cos(angle + Math.PI / 6), y2 - size * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.fill();
+}
+
+// === Drag states ===
+let dragging = null, dragOff = { x: 0, y: 0 };
+$('faCanvas').addEventListener('mousedown', e => {
+  const rect = $('faCanvas').getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  for (const s of states) {
+    const dx = mx - s.x, dy = my - s.y;
+    if (dx * dx + dy * dy < 22 * 22) {
+      dragging = s;
+      dragOff = { x: dx, y: dy };
+      return;
+    }
+  }
+});
+$('faCanvas').addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const rect = $('faCanvas').getBoundingClientRect();
+  dragging.x = e.clientX - rect.left - dragOff.x;
+  dragging.y = e.clientY - rect.top - dragOff.y;
+  render();
+});
+window.addEventListener('mouseup', () => { dragging = null; });
+
+// === Simulation ===
+function epsilonClosure(stateSet) {
+  const stack = [...stateSet];
+  const closure = new Set(stateSet);
+  while (stack.length) {
+    const s = stack.pop();
+    transitions.filter(t => t.from === s && t.symbol === 'ε').forEach(t => {
+      if (!closure.has(t.to)) { closure.add(t.to); stack.push(t.to); }
+    });
+  }
+  return [...closure];
+}
+
+function step(currentStates, symbol) {
+  const next = new Set();
+  let usedTransition = null;
+  currentStates.forEach(s => {
+    transitions.filter(t => t.from === s && t.symbol === symbol).forEach(t => {
+      next.add(t.to);
+      usedTransition = t;
+    });
+  });
+  return { states: epsilonClosure([...next]), transition: usedTransition };
+}
+
+function runTest() {
+  if (!startState) return;
+  const input = $('testInput').value;
+  simulation = {
+    input,
+    pos: 0,
+    currentStates: epsilonClosure([startState]),
+    lastTransition: null,
+    done: false,
+    accepted: false,
+    history: []
+  };
+
+  // Run all at once
+  for (let i = 0; i < input.length; i++) {
+    const { states: next, transition } = step(simulation.currentStates, input[i]);
+    simulation.history.push({ states: [...simulation.currentStates], symbol: input[i] });
+    simulation.currentStates = next;
+    simulation.lastTransition = transition;
+    simulation.pos = i + 1;
+  }
+
+  simulation.done = true;
+  simulation.accepted = simulation.currentStates.some(s => {
+    const st = states.find(st => st.name === s);
+    return st && st.accept;
+  });
+
+  showResult();
+  render();
+}
+
+function stepTest() {
+  if (!startState) return;
+  const input = $('testInput').value;
+
+  if (!simulation || simulation.done) {
+    simulation = {
+      input,
+      pos: 0,
+      currentStates: epsilonClosure([startState]),
+      lastTransition: null,
+      done: false,
+      accepted: false,
+      history: []
+    };
+    showResult();
+    render();
+    return;
+  }
+
+  if (simulation.pos < simulation.input.length) {
+    const sym = simulation.input[simulation.pos];
+    const { states: next, transition } = step(simulation.currentStates, sym);
+    simulation.history.push({ states: [...simulation.currentStates], symbol: sym });
+    simulation.currentStates = next;
+    simulation.lastTransition = transition;
+    simulation.pos++;
+  }
+
+  if (simulation.pos >= simulation.input.length) {
+    simulation.done = true;
+    simulation.accepted = simulation.currentStates.some(s => {
+      const st = states.find(st => st.name === s);
+      return st && st.accept;
+    });
+  }
+
+  showResult();
+  render();
+}
+
+function resetTest() {
+  simulation = null;
+  $('testResult').innerHTML = '';
+  $('stepInfo').textContent = '';
+  render();
+}
+
+function showResult() {
+  if (!simulation) return;
+  const r = $('testResult');
+  const info = $('stepInfo');
+
+  if (simulation.done) {
+    r.innerHTML = simulation.accepted
+      ? '<span class="result-badge accepted">Accepted</span>'
+      : '<span class="result-badge rejected">Rejected</span>';
+  } else {
+    r.innerHTML = '<span class="result-badge running">Running…</span>';
+  }
+
+  const consumed = simulation.input.substring(0, simulation.pos);
+  const remaining = simulation.input.substring(simulation.pos);
+  info.textContent = `Position: ${simulation.pos}/${simulation.input.length} | Read: "${consumed}" | Remaining: "${remaining}" | States: {${simulation.currentStates.join(', ')}}`;
+}
+
+// === Presets ===
+function loadPreset(name) {
+  clearAll();
+  const p = PRESETS[name];
+  if (!p) return;
+  p.states.forEach(s => states.push(s));
+  p.transitions.forEach(t => transitions.push({ ...t }));
+  startState = p.start;
+  updateUI();
+}
+
+function clearAll() {
+  states = [];
+  transitions = [];
+  startState = null;
+  simulation = null;
+  $('testResult').innerHTML = '';
+  $('stepInfo').textContent = '';
+  updateUI();
+}
+
+const cx = 300, cy = 210;
+const PRESETS = {
+  binary_even: {
+    start: 'q0',
+    states: [
+      { name: 'q0', accept: true,  x: cx - 100, y: cy },
+      { name: 'q1', accept: false, x: cx + 100, y: cy },
+    ],
+    transitions: [
+      { from: 'q0', symbol: '1', to: 'q0' },
+      { from: 'q0', symbol: '0', to: 'q1' },
+      { from: 'q1', symbol: '1', to: 'q1' },
+      { from: 'q1', symbol: '0', to: 'q0' },
+    ]
+  },
+  ends_ab: {
+    start: 'q0',
+    states: [
+      { name: 'q0', accept: false, x: cx - 140, y: cy },
+      { name: 'q1', accept: false, x: cx,       y: cy },
+      { name: 'q2', accept: true,  x: cx + 140, y: cy },
+    ],
+    transitions: [
+      { from: 'q0', symbol: 'a', to: 'q1' },
+      { from: 'q0', symbol: 'b', to: 'q0' },
+      { from: 'q1', symbol: 'a', to: 'q1' },
+      { from: 'q1', symbol: 'b', to: 'q2' },
+      { from: 'q2', symbol: 'a', to: 'q1' },
+      { from: 'q2', symbol: 'b', to: 'q0' },
+    ]
+  },
+  divisible3: {
+    start: 'q0',
+    states: [
+      { name: 'q0', accept: true,  x: cx,       y: cy - 100 },
+      { name: 'q1', accept: false, x: cx + 120, y: cy + 80 },
+      { name: 'q2', accept: false, x: cx - 120, y: cy + 80 },
+    ],
+    transitions: [
+      { from: 'q0', symbol: '0', to: 'q0' },
+      { from: 'q0', symbol: '1', to: 'q1' },
+      { from: 'q1', symbol: '0', to: 'q2' },
+      { from: 'q1', symbol: '1', to: 'q0' },
+      { from: 'q2', symbol: '0', to: 'q1' },
+      { from: 'q2', symbol: '1', to: 'q2' },
+    ]
+  },
+  contains_01: {
+    start: 'q0',
+    states: [
+      { name: 'q0', accept: false, x: cx - 140, y: cy },
+      { name: 'q1', accept: false, x: cx,       y: cy },
+      { name: 'q2', accept: true,  x: cx + 140, y: cy },
+    ],
+    transitions: [
+      { from: 'q0', symbol: '0', to: 'q1' },
+      { from: 'q0', symbol: '1', to: 'q0' },
+      { from: 'q1', symbol: '0', to: 'q1' },
+      { from: 'q1', symbol: '1', to: 'q2' },
+      { from: 'q2', symbol: '0', to: 'q2' },
+      { from: 'q2', symbol: '1', to: 'q2' },
+    ]
+  }
+};
+
+// Init with a preset
+loadPreset('ends_ab');
+window.addEventListener('resize', render);
+</script>
+</body>
+</html>

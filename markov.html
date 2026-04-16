@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markov Chain Text Generator — Free Online Tool</title>
+<meta name="description" content="Build Markov chains from sample text and generate new text. Adjustable n-gram order, live chain visualization, and probability display.">
+<meta name="keywords" content="markov chain, text generator, n-gram, natural language, probability, stochastic">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/markov.html">
+<meta property="og:title" content="Markov Chain Text Generator">
+<meta property="og:description" content="Build Markov chains from sample text and generate new sentences.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/markov.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .mk-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .mk-layout { grid-template-columns: 1fr; } }
+  textarea { width: 100%; min-height: 180px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .88rem; resize: vertical; box-sizing: border-box; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+  .controls label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; display: flex; align-items: center; gap: 6px; }
+  .controls input[type="number"], .controls select { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; width: 70px; }
+  .output-area { width: 100%; min-height: 180px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-family: var(--sans); font-size: .92rem; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin: 8px 0; }
+  .stats b { color: var(--text); font-family: var(--mono); }
+  .chain-table { width: 100%; border-collapse: collapse; font-size: .82rem; max-height: 400px; display: block; overflow-y: auto; }
+  .chain-table th, .chain-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  .chain-table th { position: sticky; top: 0; background: var(--surface2); font-weight: 600; text-transform: uppercase; font-size: .75rem; letter-spacing: .4px; color: var(--muted); }
+  .chain-table td:first-child { font-family: var(--mono); font-weight: 600; color: var(--accent); }
+  .chain-table .prob { color: var(--muted); font-family: var(--mono); }
+  .next-words { display: flex; flex-wrap: wrap; gap: 4px; }
+  .next-word { padding: 2px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; font-family: var(--mono); font-size: .78rem; }
+  .next-word .pw { color: var(--muted); font-size: .7rem; margin-left: 3px; }
+  .chain-filter { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .82rem; margin-bottom: 8px; }
+  .sample-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .sample-btns button { padding: 4px 10px; font-size: .78rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); cursor: pointer; }
+  .sample-btns button:hover { background: var(--surface2); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Markov Chain Text Generator</h1>
+<p class="subtitle">Feed in sample text to build an n-gram Markov chain, then generate new text that mimics the style. Adjust the order to control creativity vs coherence. Everything runs locally.</p>
+
+<div class="card">
+<h2>Sample Text</h2>
+<div class="sample-btns">
+  <button onclick="loadSample('lorem')">Lorem Ipsum</button>
+  <button onclick="loadSample('shakespeare')">Shakespeare</button>
+  <button onclick="loadSample('tech')">Tech Blog</button>
+</div>
+<textarea id="sourceText" placeholder="Paste or type your training text here…" oninput="buildChain()">To be, or not to be, that is the question. Whether 'tis nobler in the mind to suffer the slings and arrows of outrageous fortune, or to take arms against a sea of troubles and by opposing end them. To die, to sleep, no more; and by a sleep to say we end the heartache and the thousand natural shocks that flesh is heir to. 'Tis a consummation devoutly to be wished. To die, to sleep; to sleep, perchance to dream. Ay, there's the rub, for in that sleep of death what dreams may come when we have shuffled off this mortal coil must give us pause.</textarea>
+</div>
+
+<div class="controls">
+  <label>Order <input type="number" id="order" value="2" min="1" max="6" onchange="buildChain()"></label>
+  <label>Words <input type="number" id="numWords" value="80" min="5" max="500"></label>
+  <label>Mode
+    <select id="mode">
+      <option value="word">Word-level</option>
+      <option value="char">Character-level</option>
+    </select>
+  </label>
+  <button class="btn" onclick="generate()">Generate</button>
+  <button class="btn btn-secondary" onclick="copyOutput()">Copy</button>
+</div>
+
+<div class="mk-layout">
+<div>
+  <h3 style="font-size:.92rem;margin:0 0 8px">Generated Text</h3>
+  <div class="output-area" id="output">Click "Generate" to create text from the Markov chain.</div>
+  <div class="stats" id="stats"></div>
+</div>
+<div>
+  <h3 style="font-size:.92rem;margin:0 0 8px">Chain Explorer</h3>
+  <input class="chain-filter" id="chainFilter" placeholder="Filter states…" oninput="renderChain()">
+  <table class="chain-table" id="chainTable">
+    <thead><tr><th>State</th><th>Next → Probability</th></tr></thead>
+    <tbody id="chainBody"></tbody>
+  </table>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let chain = {};
+let stateKeys = [];
+
+function tokenize(text, mode) {
+  if (mode === 'char') return text.split('');
+  return text.split(/\s+/).filter(w => w.length > 0);
+}
+
+function buildChain() {
+  const text = $('sourceText').value;
+  const order = parseInt($('order').value) || 2;
+  const mode = $('mode').value;
+  const tokens = tokenize(text, mode);
+
+  chain = {};
+  for (let i = 0; i <= tokens.length - order; i++) {
+    const key = tokens.slice(i, i + order).join(mode === 'char' ? '' : ' ');
+    const next = tokens[i + order];
+    if (next === undefined) continue;
+    if (!chain[key]) chain[key] = {};
+    chain[key][next] = (chain[key][next] || 0) + 1;
+  }
+
+  stateKeys = Object.keys(chain).sort();
+  renderChain();
+  updateStats(tokens);
+}
+
+function updateStats(tokens) {
+  const order = parseInt($('order').value) || 2;
+  const totalTransitions = Object.values(chain).reduce((s, v) => s + Object.values(v).reduce((a, b) => a + b, 0), 0);
+  $('stats').innerHTML = `
+    <span>Tokens: <b>${tokens.length}</b></span>
+    <span>States: <b>${stateKeys.length}</b></span>
+    <span>Transitions: <b>${totalTransitions}</b></span>
+    <span>Order: <b>${order}</b></span>
+  `;
+}
+
+function renderChain() {
+  const filter = $('chainFilter').value.toLowerCase();
+  const body = $('chainBody');
+  const filtered = stateKeys.filter(k => !filter || k.toLowerCase().includes(filter));
+  const display = filtered.slice(0, 100); // limit for performance
+
+  body.innerHTML = display.map(key => {
+    const nexts = chain[key];
+    const total = Object.values(nexts).reduce((a, b) => a + b, 0);
+    const sorted = Object.entries(nexts).sort((a, b) => b[1] - a[1]);
+    const nextHtml = sorted.map(([word, count]) => {
+      const pct = ((count / total) * 100).toFixed(0);
+      return `<span class="next-word">${escHtml(word)}<span class="pw">${pct}%</span></span>`;
+    }).join('');
+    return `<tr><td>${escHtml(key)}</td><td><div class="next-words">${nextHtml}</div></td></tr>`;
+  }).join('');
+
+  if (filtered.length > 100) {
+    body.innerHTML += `<tr><td colspan="2" style="color:var(--muted);font-style:italic">…and ${filtered.length - 100} more states</td></tr>`;
+  }
+}
+
+function generate() {
+  const order = parseInt($('order').value) || 2;
+  const numWords = parseInt($('numWords').value) || 80;
+  const mode = $('mode').value;
+
+  if (stateKeys.length === 0) {
+    $('output').textContent = 'No chain built. Add more sample text.';
+    return;
+  }
+
+  // Pick a random starting state
+  let current = stateKeys[Math.floor(Math.random() * stateKeys.length)];
+  const result = mode === 'char' ? current.split('') : current.split(' ');
+
+  for (let i = 0; i < numWords; i++) {
+    const nexts = chain[current];
+    if (!nexts) break;
+
+    // Weighted random pick
+    const total = Object.values(nexts).reduce((a, b) => a + b, 0);
+    let r = Math.random() * total;
+    let picked = null;
+    for (const [word, count] of Object.entries(nexts)) {
+      r -= count;
+      if (r <= 0) { picked = word; break; }
+    }
+    if (!picked) break;
+
+    result.push(picked);
+    // Update current state
+    const tail = result.slice(-(order));
+    current = tail.join(mode === 'char' ? '' : ' ');
+  }
+
+  $('output').textContent = mode === 'char' ? result.join('') : result.join(' ');
+}
+
+function copyOutput() {
+  navigator.clipboard.writeText($('output').textContent).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const SAMPLES = {
+  lorem: `Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.`,
+  shakespeare: `To be, or not to be, that is the question. Whether 'tis nobler in the mind to suffer the slings and arrows of outrageous fortune, or to take arms against a sea of troubles and by opposing end them. To die, to sleep, no more; and by a sleep to say we end the heartache and the thousand natural shocks that flesh is heir to. 'Tis a consummation devoutly to be wished. To die, to sleep; to sleep, perchance to dream. Ay, there's the rub, for in that sleep of death what dreams may come when we have shuffled off this mortal coil must give us pause. All the world's a stage, and all the men and women merely players. They have their exits and their entrances, and one man in his time plays many parts. The quality of mercy is not strained. It droppeth as the gentle rain from heaven upon the place beneath. It is twice blessed: it blesseth him that gives and him that takes.`,
+  tech: `The microservices architecture pattern has gained significant traction in modern software development. By decomposing applications into small, independently deployable services, teams can iterate faster and scale individual components. Each service communicates through well-defined APIs, typically REST or gRPC. Container orchestration platforms like Kubernetes manage the lifecycle of these services. Observability becomes critical in distributed systems, requiring structured logging, distributed tracing, and metrics collection. Service mesh technologies like Istio add a dedicated infrastructure layer for service-to-service communication. The twelve-factor app methodology provides guidelines for building cloud-native applications that are portable and resilient. Continuous integration and continuous deployment pipelines automate the build, test, and release process. Infrastructure as code tools like Terraform enable teams to manage cloud resources declaratively.`
+};
+
+function loadSample(name) {
+  $('sourceText').value = SAMPLES[name] || '';
+  buildChain();
+}
+
+// Init
+$('mode').addEventListener('change', buildChain);
+buildChain();
+</script>
+</body>
+</html>
