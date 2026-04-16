@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docker Run Builder - Free Online Docker Command Generator</title>
+<meta name="description" content="Free online Docker run command builder. Build complex docker run commands with an interactive form — ports, volumes, environment variables, networks, and more. No data sent to any server.">
+<meta name="keywords" content="docker run, docker command builder, docker generator, container, docker ports, docker volumes, free docker tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dockerrun.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form-grid { display: grid; gap: 12px; }
+  .form-row { display: flex; gap: 8px; align-items: center; }
+  .form-row input, .form-row select { flex: 1; }
+  .form-row .btn-icon { flex-shrink: 0; padding: 6px 10px; }
+  .pair-list { display: flex; flex-direction: column; gap: 6px; }
+  .pair-row { display: flex; gap: 6px; align-items: center; }
+  .pair-row input { flex: 1; }
+  .pair-row .remove-btn { flex-shrink: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 10px; cursor: pointer; color: var(--error); font-size: .85rem; }
+  .pair-row .remove-btn:hover { background: var(--surface2); }
+  .add-btn { font-size: .82rem; padding: 4px 12px; background: none; border: 1px dashed var(--border); border-radius: var(--radius); cursor: pointer; color: var(--muted); }
+  .add-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .output-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; font-family: var(--mono); font-size: .85rem; white-space: pre-wrap; word-break: break-all; min-height: 60px; line-height: 1.6; }
+  .flag-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .flag-grid label { display: flex; align-items: center; gap: 5px; font-size: .85rem; cursor: pointer; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .section-label { font-size: .85rem; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+  .hint { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+  @media (max-width: 768px) {
+    .form-row { flex-direction: column; }
+    .pair-row { flex-direction: column; }
+    .pair-row .remove-btn { align-self: flex-end; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🐳 Docker Run Builder</h1>
+<p class="subtitle">Build complex <code>docker run</code> commands interactively. 100% client-side.</p>
+
+<div class="card">
+<h2>⚡ Presets</h2>
+<div class="presets">
+  <button class="btn-secondary" onclick="loadPreset('nginx')">Nginx</button>
+  <button class="btn-secondary" onclick="loadPreset('postgres')">PostgreSQL</button>
+  <button class="btn-secondary" onclick="loadPreset('redis')">Redis</button>
+  <button class="btn-secondary" onclick="loadPreset('mongo')">MongoDB</button>
+  <button class="btn-secondary" onclick="loadPreset('mysql')">MySQL</button>
+  <button class="btn-secondary" onclick="loadPreset('node')">Node.js</button>
+  <button class="btn-secondary" onclick="loadPreset('python')">Python</button>
+</div>
+</div>
+
+<div class="card">
+<h2>📦 Image</h2>
+<div class="form-grid">
+  <div>
+    <div class="section-label">Image name</div>
+    <input type="text" id="image" placeholder="e.g. nginx:latest" oninput="generate()">
+  </div>
+  <div>
+    <div class="section-label">Container name</div>
+    <input type="text" id="containerName" placeholder="e.g. my-container (optional)" oninput="generate()">
+  </div>
+</div>
+</div>
+
+<div class="card">
+<h2>🔌 Ports</h2>
+<div class="pair-list" id="ports"></div>
+<button class="add-btn" onclick="addPort()">+ Add port mapping</button>
+<div class="hint">host:container (e.g. 8080:80)</div>
+</div>
+
+<div class="card">
+<h2>📂 Volumes</h2>
+<div class="pair-list" id="volumes"></div>
+<button class="add-btn" onclick="addVolume()">+ Add volume mount</button>
+<div class="hint">host_path:container_path (e.g. ./data:/var/lib/data)</div>
+</div>
+
+<div class="card">
+<h2>🔑 Environment Variables</h2>
+<div class="pair-list" id="envVars"></div>
+<button class="add-btn" onclick="addEnv()">+ Add environment variable</button>
+<div class="hint">KEY=VALUE pairs</div>
+</div>
+
+<div class="card">
+<h2>🌐 Network</h2>
+<div class="form-grid">
+  <div>
+    <div class="section-label">Network mode</div>
+    <select id="network" onchange="generate()">
+      <option value="">Default (bridge)</option>
+      <option value="host">host</option>
+      <option value="none">none</option>
+      <option value="custom">Custom network…</option>
+    </select>
+  </div>
+  <div id="customNetworkWrap" style="display:none">
+    <div class="section-label">Network name</div>
+    <input type="text" id="customNetwork" placeholder="my-network" oninput="generate()">
+  </div>
+  <div>
+    <div class="section-label">Hostname</div>
+    <input type="text" id="hostname" placeholder="optional" oninput="generate()">
+  </div>
+</div>
+</div>
+
+<div class="card">
+<h2>⚙️ Options</h2>
+<div class="flag-grid">
+  <label><input type="checkbox" id="flagDetach" onchange="generate()"> <code>-d</code> Detached</label>
+  <label><input type="checkbox" id="flagInteractive" onchange="generate()"> <code>-it</code> Interactive TTY</label>
+  <label><input type="checkbox" id="flagRemove" onchange="generate()"> <code>--rm</code> Auto-remove</label>
+  <label><input type="checkbox" id="flagPrivileged" onchange="generate()"> <code>--privileged</code></label>
+  <label><input type="checkbox" id="flagReadonly" onchange="generate()"> <code>--read-only</code></label>
+</div>
+<div class="form-grid" style="margin-top: 12px;">
+  <div>
+    <div class="section-label">Restart policy</div>
+    <select id="restart" onchange="generate()">
+      <option value="">No restart</option>
+      <option value="always">always</option>
+      <option value="unless-stopped">unless-stopped</option>
+      <option value="on-failure">on-failure</option>
+    </select>
+  </div>
+  <div>
+    <div class="section-label">Working directory</div>
+    <input type="text" id="workdir" placeholder="/app (optional)" oninput="generate()">
+  </div>
+  <div>
+    <div class="section-label">User</div>
+    <input type="text" id="user" placeholder="uid:gid (optional)" oninput="generate()">
+  </div>
+  <div>
+    <div class="section-label">Entrypoint override</div>
+    <input type="text" id="entrypoint" placeholder="optional" oninput="generate()">
+  </div>
+  <div>
+    <div class="section-label">Command / args</div>
+    <input type="text" id="cmd" placeholder="e.g. /bin/sh -c 'echo hi'" oninput="generate()">
+  </div>
+  <div>
+    <div class="section-label">Memory limit</div>
+    <input type="text" id="memory" placeholder="e.g. 512m, 1g (optional)" oninput="generate()">
+  </div>
+  <div>
+    <div class="section-label">CPU limit</div>
+    <input type="text" id="cpus" placeholder="e.g. 1.5 (optional)" oninput="generate()">
+  </div>
+</div>
+</div>
+
+<div class="card">
+<h2>📋 Generated Command</h2>
+<div class="output-box" id="output">docker run nginx:latest</div>
+<div style="margin-top: 10px; display:flex; gap:8px; flex-wrap:wrap;">
+  <button class="btn" onclick="copyCmd()">📋 Copy</button>
+  <button class="btn-secondary" onclick="copyMultiline()">📋 Copy (multiline)</button>
+  <button class="btn-secondary" onclick="resetAll()">🗑️ Reset</button>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let ports=[],volumes=[],envVars=[];
+
+function addPort(host='',container=''){
+  ports.push({host,container});
+  renderPorts();
+  generate();
+}
+function addVolume(host='',container='',ro=false){
+  volumes.push({host,container,ro});
+  renderVolumes();
+  generate();
+}
+function addEnv(key='',val=''){
+  envVars.push({key,val});
+  renderEnvs();
+  generate();
+}
+
+function renderPorts(){
+  const el=$('ports');
+  el.innerHTML=ports.map((p,i)=>`<div class="pair-row">
+    <input type="text" placeholder="Host port" value="${esc(p.host)}" oninput="ports[${i}].host=this.value;generate()">
+    <span style="color:var(--muted)">:</span>
+    <input type="text" placeholder="Container port" value="${esc(p.container)}" oninput="ports[${i}].container=this.value;generate()">
+    <button class="remove-btn" onclick="ports.splice(${i},1);renderPorts();generate()">✕</button>
+  </div>`).join('');
+}
+function renderVolumes(){
+  const el=$('volumes');
+  el.innerHTML=volumes.map((v,i)=>`<div class="pair-row">
+    <input type="text" placeholder="Host path" value="${esc(v.host)}" oninput="volumes[${i}].host=this.value;generate()">
+    <span style="color:var(--muted)">:</span>
+    <input type="text" placeholder="Container path" value="${esc(v.container)}" oninput="volumes[${i}].container=this.value;generate()">
+    <label style="font-size:.8rem;white-space:nowrap"><input type="checkbox" ${v.ro?'checked':''} onchange="volumes[${i}].ro=this.checked;generate()"> ro</label>
+    <button class="remove-btn" onclick="volumes.splice(${i},1);renderVolumes();generate()">✕</button>
+  </div>`).join('');
+}
+function renderEnvs(){
+  const el=$('envVars');
+  el.innerHTML=envVars.map((e,i)=>`<div class="pair-row">
+    <input type="text" placeholder="KEY" value="${esc(e.key)}" oninput="envVars[${i}].key=this.value;generate()">
+    <span style="color:var(--muted)">=</span>
+    <input type="text" placeholder="value" value="${esc(e.val)}" oninput="envVars[${i}].val=this.value;generate()">
+    <button class="remove-btn" onclick="envVars.splice(${i},1);renderEnvs();generate()">✕</button>
+  </div>`).join('');
+}
+
+function esc(s){return s.replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+function generate(){
+  const image=$('image').value.trim()||'nginx:latest';
+  const parts=['docker run'];
+
+  if($('flagDetach').checked) parts.push('-d');
+  if($('flagInteractive').checked) parts.push('-it');
+  if($('flagRemove').checked) parts.push('--rm');
+  if($('flagPrivileged').checked) parts.push('--privileged');
+  if($('flagReadonly').checked) parts.push('--read-only');
+
+  const name=$('containerName').value.trim();
+  if(name) parts.push(`--name ${shellQuote(name)}`);
+
+  const restart=$('restart').value;
+  if(restart) parts.push(`--restart ${restart}`);
+
+  const net=$('network').value;
+  $('customNetworkWrap').style.display=net==='custom'?'block':'none';
+  if(net==='host'||net==='none') parts.push(`--network ${net}`);
+  else if(net==='custom'){
+    const cn=$('customNetwork').value.trim();
+    if(cn) parts.push(`--network ${shellQuote(cn)}`);
+  }
+
+  const hostname=$('hostname').value.trim();
+  if(hostname) parts.push(`--hostname ${shellQuote(hostname)}`);
+
+  ports.forEach(p=>{
+    if(p.host||p.container){
+      const mapping=`${p.host}:${p.container}`;
+      parts.push(`-p ${mapping}`);
+    }
+  });
+
+  volumes.forEach(v=>{
+    if(v.host||v.container){
+      let mapping=`${v.host}:${v.container}`;
+      if(v.ro) mapping+=':ro';
+      parts.push(`-v ${shellQuote(mapping)}`);
+    }
+  });
+
+  envVars.forEach(e=>{
+    if(e.key){
+      parts.push(`-e ${shellQuote(e.key+'='+(e.val||''))}`);
+    }
+  });
+
+  const workdir=$('workdir').value.trim();
+  if(workdir) parts.push(`-w ${shellQuote(workdir)}`);
+
+  const user=$('user').value.trim();
+  if(user) parts.push(`--user ${shellQuote(user)}`);
+
+  const memory=$('memory').value.trim();
+  if(memory) parts.push(`--memory ${memory}`);
+
+  const cpus=$('cpus').value.trim();
+  if(cpus) parts.push(`--cpus ${cpus}`);
+
+  const entrypoint=$('entrypoint').value.trim();
+  if(entrypoint) parts.push(`--entrypoint ${shellQuote(entrypoint)}`);
+
+  parts.push(image);
+
+  const cmd=$('cmd').value.trim();
+  if(cmd) parts.push(cmd);
+
+  $('output').textContent=parts.join(' ');
+}
+
+function shellQuote(s){
+  if(/^[a-zA-Z0-9._\/:=-]+$/.test(s)) return s;
+  return "'"+s.replace(/'/g,"'\\''")+"'";
+}
+
+function getMultiline(){
+  const text=$('output').textContent;
+  const tokens=tokenize(text);
+  if(tokens.length<=3) return text;
+  const lines=[];
+  let current=tokens[0]+' '+tokens[1]; // docker run
+  for(let i=2;i<tokens.length;i++){
+    const t=tokens[i];
+    if(t.startsWith('-')&&i<tokens.length-1){
+      lines.push(current);
+      current='  '+t;
+      // consume value if next token is not a flag and not the image
+      if(i+1<tokens.length && !tokens[i+1].startsWith('-') && i+1<tokens.length-1){
+        current+=' '+tokens[++i];
+      } else if(t==='-d'||t==='-it'||t==='--rm'||t==='--privileged'||t==='--read-only'){
+        // standalone flags
+      } else if(i+1<tokens.length && !tokens[i+1].startsWith('-')){
+        current+=' '+tokens[++i];
+      }
+    } else {
+      lines.push(current);
+      current='  '+t;
+    }
+  }
+  if(current) lines.push(current);
+  return lines.join(' \\\n');
+}
+
+function tokenize(s){
+  const tokens=[];
+  let i=0;
+  while(i<s.length){
+    while(i<s.length&&s[i]===' ')i++;
+    if(i>=s.length)break;
+    let tok='';
+    if(s[i]==="'"){
+      i++;
+      while(i<s.length&&s[i]!=="'"){tok+=s[i++];}
+      i++;
+      tokens.push("'"+tok+"'");
+    } else {
+      while(i<s.length&&s[i]!==' '){tok+=s[i++];}
+      tokens.push(tok);
+    }
+  }
+  return tokens;
+}
+
+function copyCmd(){
+  navigator.clipboard.writeText($('output').textContent);
+  showToast();
+}
+function copyMultiline(){
+  navigator.clipboard.writeText(getMultiline());
+  showToast();
+}
+
+function showToast(){
+  const t=$('toast');
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),1500);
+}
+
+function resetAll(){
+  $('image').value='';$('containerName').value='';
+  $('flagDetach').checked=false;$('flagInteractive').checked=false;
+  $('flagRemove').checked=false;$('flagPrivileged').checked=false;$('flagReadonly').checked=false;
+  $('restart').value='';$('network').value='';$('customNetwork').value='';
+  $('hostname').value='';$('workdir').value='';$('user').value='';
+  $('entrypoint').value='';$('cmd').value='';$('memory').value='';$('cpus').value='';
+  ports=[];volumes=[];envVars=[];
+  renderPorts();renderVolumes();renderEnvs();
+  generate();
+}
+
+const PRESETS={
+  nginx:{
+    image:'nginx:latest',name:'nginx-server',detach:true,rm:false,
+    ports:[{host:'8080',container:'80'}],
+    volumes:[{host:'./html',container:'/usr/share/nginx/html',ro:true}],
+    env:[],restart:'unless-stopped'
+  },
+  postgres:{
+    image:'postgres:16',name:'postgres-db',detach:true,rm:false,
+    ports:[{host:'5432',container:'5432'}],
+    volumes:[{host:'pgdata',container:'/var/lib/postgresql/data',ro:false}],
+    env:[{key:'POSTGRES_PASSWORD',val:'changeme'},{key:'POSTGRES_DB',val:'mydb'}],
+    restart:'unless-stopped'
+  },
+  redis:{
+    image:'redis:7-alpine',name:'redis-cache',detach:true,rm:false,
+    ports:[{host:'6379',container:'6379'}],
+    volumes:[{host:'redis-data',container:'/data',ro:false}],
+    env:[],restart:'unless-stopped'
+  },
+  mongo:{
+    image:'mongo:7',name:'mongo-db',detach:true,rm:false,
+    ports:[{host:'27017',container:'27017'}],
+    volumes:[{host:'mongo-data',container:'/data/db',ro:false}],
+    env:[{key:'MONGO_INITDB_ROOT_USERNAME',val:'admin'},{key:'MONGO_INITDB_ROOT_PASSWORD',val:'changeme'}],
+    restart:'unless-stopped'
+  },
+  mysql:{
+    image:'mysql:8',name:'mysql-db',detach:true,rm:false,
+    ports:[{host:'3306',container:'3306'}],
+    volumes:[{host:'mysql-data',container:'/var/lib/mysql',ro:false}],
+    env:[{key:'MYSQL_ROOT_PASSWORD',val:'changeme'},{key:'MYSQL_DATABASE',val:'mydb'}],
+    restart:'unless-stopped'
+  },
+  node:{
+    image:'node:20-alpine',name:'',detach:false,rm:true,interactive:true,
+    ports:[{host:'3000',container:'3000'}],
+    volumes:[{host:'.',container:'/app',ro:false}],
+    env:[{key:'NODE_ENV',val:'development'}],
+    restart:'',workdir:'/app',cmd:'npm start'
+  },
+  python:{
+    image:'python:3.12-slim',name:'',detach:false,rm:true,interactive:true,
+    ports:[{host:'8000',container:'8000'}],
+    volumes:[{host:'.',container:'/app',ro:false}],
+    env:[],restart:'',workdir:'/app',cmd:'python app.py'
+  }
+};
+
+function loadPreset(key){
+  resetAll();
+  const p=PRESETS[key];
+  $('image').value=p.image;
+  if(p.name) $('containerName').value=p.name;
+  $('flagDetach').checked=!!p.detach;
+  $('flagInteractive').checked=!!p.interactive;
+  $('flagRemove').checked=!!p.rm;
+  if(p.restart) $('restart').value=p.restart;
+  if(p.workdir) $('workdir').value=p.workdir;
+  if(p.cmd) $('cmd').value=p.cmd;
+  ports=p.ports.map(x=>({...x}));
+  volumes=p.volumes.map(x=>({...x}));
+  envVars=p.env.map(x=>({...x}));
+  renderPorts();renderVolumes();renderEnvs();
+  generate();
+}
+
+// init
+generate();
+</script>
+</body>
+</html>

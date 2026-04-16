@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Grid Maker - Free Online Photo Collage Tool</title>
+<meta name="description" content="Free online image grid maker. Arrange multiple images into a grid collage layout and export as a single image. No data sent to any server.">
+<meta name="keywords" content="image grid, photo collage, image combine, grid maker, photo grid, image mosaic, free image tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/imagegrid.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .dropzone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 40px 20px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--surface2); }
+  .dropzone input { display: none; }
+  .dropzone p { color: var(--muted); margin: 0; }
+  .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .thumb { position: relative; width: 80px; height: 80px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .thumb .remove { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 50%; font-size: .7rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .thumb .remove:hover { background: var(--error); }
+  .controls-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .controls-row > div { flex: 1; min-width: 120px; }
+  .controls-row label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 4px; }
+  .preview-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface2); display: flex; align-items: center; justify-content: center; min-height: 200px; }
+  .preview-wrap canvas { max-width: 100%; height: auto; }
+  .preview-wrap .empty { color: var(--muted); font-size: .9rem; }
+  .color-input-wrap { display: flex; align-items: center; gap: 8px; }
+  .color-input-wrap input[type=color] { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; padding: 2px; }
+  @media (max-width: 768px) {
+    .controls-row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🖼️ Image Grid Maker</h1>
+<p class="subtitle">Combine multiple images into a grid collage. Drag to reorder. Export as PNG or JPEG.</p>
+
+<div class="card">
+<h2>📸 Add Images</h2>
+<div class="dropzone" id="dropzone">
+  <p>Drop images here or click to browse</p>
+  <input type="file" id="fileInput" accept="image/*" multiple>
+</div>
+<div class="thumbs" id="thumbs"></div>
+</div>
+
+<div class="card">
+<h2>⚙️ Grid Settings</h2>
+<div class="controls-row">
+  <div>
+    <label>Columns</label>
+    <input type="number" id="cols" value="3" min="1" max="10" oninput="render()">
+  </div>
+  <div>
+    <label>Cell Size (px)</label>
+    <input type="number" id="cellSize" value="300" min="50" max="2000" step="10" oninput="render()">
+  </div>
+  <div>
+    <label>Gap (px)</label>
+    <input type="number" id="gap" value="4" min="0" max="50" oninput="render()">
+  </div>
+  <div>
+    <label>Border Radius (px)</label>
+    <input type="number" id="radius" value="0" min="0" max="100" oninput="render()">
+  </div>
+  <div>
+    <label>Background</label>
+    <div class="color-input-wrap">
+      <input type="color" id="bgColor" value="#ffffff" oninput="render()">
+      <input type="text" id="bgColorText" value="#ffffff" oninput="syncColor(this,'bgColor');render()" style="width:80px;font-family:var(--mono);font-size:.85rem">
+    </div>
+  </div>
+  <div>
+    <label>Fit mode</label>
+    <select id="fitMode" onchange="render()">
+      <option value="cover">Cover (crop)</option>
+      <option value="contain">Contain (letterbox)</option>
+      <option value="stretch">Stretch</option>
+    </select>
+  </div>
+</div>
+</div>
+
+<div class="card">
+<h2>👁️ Preview</h2>
+<div class="preview-wrap" id="previewWrap">
+  <canvas id="canvas"></canvas>
+  <div class="empty" id="emptyMsg">Add images to see preview</div>
+</div>
+<div style="margin-top: 12px; display:flex; gap:8px; flex-wrap:wrap;">
+  <button class="btn" onclick="exportImage('png')">📥 Export PNG</button>
+  <button class="btn-secondary" onclick="exportImage('jpeg')">📥 Export JPEG</button>
+  <button class="btn-secondary" onclick="clearAll()">🗑️ Clear All</button>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Exported!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let images=[];
+let dragIdx=null;
+
+// File handling
+const dropzone=$('dropzone');
+const fileInput=$('fileInput');
+
+dropzone.addEventListener('click',()=>fileInput.click());
+dropzone.addEventListener('dragover',e=>{e.preventDefault();dropzone.classList.add('dragover');});
+dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop',e=>{
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change',()=>{handleFiles(fileInput.files);fileInput.value='';});
+
+function handleFiles(files){
+  [...files].forEach(file=>{
+    if(!file.type.startsWith('image/')) return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        images.push({img,name:file.name});
+        renderThumbs();
+        render();
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderThumbs(){
+  const el=$('thumbs');
+  el.innerHTML=images.map((item,i)=>`<div class="thumb" draggable="true" data-idx="${i}">
+    <img src="${item.img.src}" alt="${item.name}">
+    <button class="remove" onclick="removeImage(${i})">✕</button>
+  </div>`).join('');
+
+  // Drag to reorder
+  el.querySelectorAll('.thumb').forEach(thumb=>{
+    thumb.addEventListener('dragstart',e=>{
+      dragIdx=parseInt(e.target.closest('.thumb').dataset.idx);
+      e.target.closest('.thumb').style.opacity='.5';
+    });
+    thumb.addEventListener('dragend',e=>{
+      e.target.closest('.thumb').style.opacity='1';
+      dragIdx=null;
+    });
+    thumb.addEventListener('dragover',e=>e.preventDefault());
+    thumb.addEventListener('drop',e=>{
+      e.preventDefault();
+      const targetIdx=parseInt(e.target.closest('.thumb').dataset.idx);
+      if(dragIdx!==null&&dragIdx!==targetIdx){
+        const item=images.splice(dragIdx,1)[0];
+        images.splice(targetIdx,0,item);
+        renderThumbs();
+        render();
+      }
+    });
+  });
+}
+
+function removeImage(i){
+  images.splice(i,1);
+  renderThumbs();
+  render();
+}
+
+function clearAll(){
+  images=[];
+  renderThumbs();
+  render();
+}
+
+function render(){
+  const canvas=$('canvas');
+  const ctx=canvas.getContext('2d');
+  const empty=$('emptyMsg');
+
+  if(images.length===0){
+    canvas.width=0;canvas.height=0;
+    empty.style.display='block';
+    return;
+  }
+  empty.style.display='none';
+
+  const cols=Math.max(1,parseInt($('cols').value)||3);
+  const cellSize=Math.max(50,parseInt($('cellSize').value)||300);
+  const gap=Math.max(0,parseInt($('gap').value)||0);
+  const borderRadius=Math.max(0,parseInt($('radius').value)||0);
+  const bgColor=$('bgColor').value;
+  const fitMode=$('fitMode').value;
+
+  const rows=Math.ceil(images.length/cols);
+  const totalW=cols*cellSize+(cols+1)*gap;
+  const totalH=rows*cellSize+(rows+1)*gap;
+
+  canvas.width=totalW;
+  canvas.height=totalH;
+
+  ctx.fillStyle=bgColor;
+  ctx.fillRect(0,0,totalW,totalH);
+
+  images.forEach((item,i)=>{
+    const col=i%cols;
+    const row=Math.floor(i/cols);
+    const x=gap+col*(cellSize+gap);
+    const y=gap+row*(cellSize+gap);
+
+    ctx.save();
+
+    // Clip with border radius
+    if(borderRadius>0){
+      roundRect(ctx,x,y,cellSize,cellSize,borderRadius);
+      ctx.clip();
+    }
+
+    const img=item.img;
+    if(fitMode==='cover'){
+      const scale=Math.max(cellSize/img.width,cellSize/img.height);
+      const sw=cellSize/scale;
+      const sh=cellSize/scale;
+      const sx=(img.width-sw)/2;
+      const sy=(img.height-sh)/2;
+      ctx.drawImage(img,sx,sy,sw,sh,x,y,cellSize,cellSize);
+    } else if(fitMode==='contain'){
+      ctx.fillStyle=bgColor;
+      ctx.fillRect(x,y,cellSize,cellSize);
+      const scale=Math.min(cellSize/img.width,cellSize/img.height);
+      const dw=img.width*scale;
+      const dh=img.height*scale;
+      ctx.drawImage(img,0,0,img.width,img.height,x+(cellSize-dw)/2,y+(cellSize-dh)/2,dw,dh);
+    } else {
+      ctx.drawImage(img,x,y,cellSize,cellSize);
+    }
+
+    ctx.restore();
+
+    // Draw border radius outline for visual separation
+    if(borderRadius>0){
+      ctx.save();
+      ctx.strokeStyle=bgColor;
+      ctx.lineWidth=1;
+      roundRect(ctx,x,y,cellSize,cellSize,borderRadius);
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+function syncColor(textInput,colorId){
+  const v=textInput.value;
+  if(/^#[0-9a-fA-F]{6}$/.test(v)) $(colorId).value=v;
+}
+$('bgColor').addEventListener('input',()=>{$('bgColorText').value=$('bgColor').value;});
+
+function exportImage(format){
+  if(images.length===0) return;
+  const canvas=$('canvas');
+  const mime=format==='jpeg'?'image/jpeg':'image/png';
+  const ext=format==='jpeg'?'jpg':'png';
+  canvas.toBlob(blob=>{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`grid-${images.length}x.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast();
+  },mime,0.92);
+}
+
+function showToast(){
+  const t=$('toast');
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),1500);
+}
+</script>
+</body>
+</html>

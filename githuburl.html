@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub URL Parser - Free Online GitHub URL Converter</title>
+<meta name="description" content="Free online GitHub URL parser and converter. Convert between HTTPS, SSH, API, raw content, github.dev, and other GitHub URL formats. No data sent to any server.">
+<meta name="keywords" content="github url parser, github url converter, github ssh https, github raw url, github api url, free github tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/githuburl.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .url-input-wrap { display: flex; gap: 8px; }
+  .url-input-wrap input { flex: 1; font-family: var(--mono); font-size: .9rem; }
+  .url-grid { display: grid; gap: 10px; }
+  .url-row { padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .url-label { display: flex; justify-content: space-between; align-items: center; font-size: .82rem; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+  .url-label button { padding: 3px 10px; font-size: .75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; }
+  .url-label button:hover { background: var(--surface2); }
+  .url-value { font-family: var(--mono); font-size: .82rem; word-break: break-all; color: var(--text); user-select: all; }
+  .url-value.na { color: var(--muted); font-style: italic; }
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .info-item { padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .info-item .label { font-size: .78rem; color: var(--muted); margin-bottom: 2px; }
+  .info-item .value { font-family: var(--mono); font-size: .88rem; font-weight: 600; word-break: break-all; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; }
+  @media (max-width: 768px) {
+    .url-input-wrap { flex-direction: column; }
+    .info-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔗 GitHub URL Parser</h1>
+<p class="subtitle">Parse any GitHub URL and convert between HTTPS, SSH, API, raw, and editor formats.</p>
+
+<div class="card">
+<h2>📥 Input URL</h2>
+<div class="url-input-wrap">
+  <input type="text" id="urlInput" placeholder="Paste any GitHub URL or owner/repo..." autofocus oninput="parse()">
+  <button class="btn" onclick="parse()">Parse</button>
+</div>
+<div class="examples" style="margin-top: 10px;">
+  <button class="btn-secondary" onclick="loadExample('repo')">Repo</button>
+  <button class="btn-secondary" onclick="loadExample('file')">File</button>
+  <button class="btn-secondary" onclick="loadExample('pr')">PR</button>
+  <button class="btn-secondary" onclick="loadExample('issue')">Issue</button>
+  <button class="btn-secondary" onclick="loadExample('ssh')">SSH</button>
+  <button class="btn-secondary" onclick="loadExample('raw')">Raw</button>
+  <button class="btn-secondary" onclick="loadExample('gist')">Gist</button>
+</div>
+</div>
+
+<div class="card" id="infoCard" style="display:none">
+<h2>📊 Parsed Info</h2>
+<div class="info-grid" id="infoGrid"></div>
+</div>
+
+<div class="card" id="urlsCard" style="display:none">
+<h2>🔄 URL Formats</h2>
+<div class="url-grid" id="urlGrid"></div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const EXAMPLES={
+  repo:'https://github.com/facebook/react',
+  file:'https://github.com/facebook/react/blob/main/README.md',
+  pr:'https://github.com/facebook/react/pull/28271',
+  issue:'https://github.com/facebook/react/issues/28000',
+  ssh:'git@github.com:facebook/react.git',
+  raw:'https://raw.githubusercontent.com/facebook/react/main/README.md',
+  gist:'https://gist.github.com/octocat/1234567'
+};
+
+function loadExample(key){
+  $('urlInput').value=EXAMPLES[key];
+  parse();
+}
+
+function parse(){
+  const input=$('urlInput').value.trim();
+  if(!input){
+    $('infoCard').style.display='none';
+    $('urlsCard').style.display='none';
+    return;
+  }
+
+  const info=parseGitHubUrl(input);
+  if(!info){
+    $('infoCard').style.display='block';
+    $('urlsCard').style.display='none';
+    $('infoGrid').innerHTML='<div class="info-item"><div class="label">Error</div><div class="value" style="color:var(--error)">Could not parse as a GitHub URL</div></div>';
+    return;
+  }
+
+  renderInfo(info);
+  renderUrls(info);
+}
+
+function parseGitHubUrl(input){
+  // Handle shorthand: owner/repo
+  if(/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(input)){
+    return {owner:input.split('/')[0],repo:input.split('/')[1],type:'repository'};
+  }
+
+  // Handle SSH: git@github.com:owner/repo.git
+  const sshMatch=input.match(/^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/);
+  if(sshMatch) return {owner:sshMatch[1],repo:sshMatch[2],type:'repository'};
+
+  // Handle github.dev URLs
+  const devMatch=input.match(/^https?:\/\/github\.dev\/([^/]+)\/([^/]+)(?:\/(.*))?$/);
+  if(devMatch){
+    const info={owner:devMatch[1],repo:devMatch[2],type:'repository'};
+    if(devMatch[3]) parsePathParts(info,devMatch[3]);
+    return info;
+  }
+
+  // Handle raw.githubusercontent.com
+  const rawMatch=input.match(/^https?:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/);
+  if(rawMatch) return {owner:rawMatch[1],repo:rawMatch[2],branch:rawMatch[3],path:rawMatch[4],type:'file'};
+
+  // Handle gist URLs
+  const gistMatch=input.match(/^https?:\/\/gist\.github\.com\/([^/]+)(?:\/([a-f0-9]+))?/);
+  if(gistMatch) return {owner:gistMatch[1],gistId:gistMatch[2]||'',type:'gist'};
+
+  // Handle API URLs
+  const apiMatch=input.match(/^https?:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)(?:\/(.*))?$/);
+  if(apiMatch){
+    const info={owner:apiMatch[1],repo:apiMatch[2],type:'repository'};
+    if(apiMatch[3]) parseApiPath(info,apiMatch[3]);
+    return info;
+  }
+
+  // Handle standard github.com URLs
+  const ghMatch=input.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/(.*))?$/);
+  if(ghMatch){
+    const info={owner:ghMatch[1],repo:ghMatch[2],type:'repository'};
+    if(ghMatch[3]) parsePathParts(info,ghMatch[3]);
+    return info;
+  }
+
+  // Handle github.com/owner only
+  const ownerMatch=input.match(/^https?:\/\/github\.com\/([^/]+)\/?$/);
+  if(ownerMatch) return {owner:ownerMatch[1],type:'user'};
+
+  return null;
+}
+
+function parsePathParts(info,path){
+  const parts=path.split('/').filter(Boolean);
+  if(!parts.length) return;
+
+  if(parts[0]==='tree'&&parts.length>=2){
+    info.branch=parts[1];
+    info.path=parts.slice(2).join('/');
+    info.type='tree';
+  } else if(parts[0]==='blob'&&parts.length>=2){
+    info.branch=parts[1];
+    info.path=parts.slice(2).join('/');
+    info.type='file';
+    // Check for line numbers
+    const hash=info.path.match(/#L(\d+)(?:-L(\d+))?$/);
+    if(hash){
+      info.lineStart=hash[1];
+      if(hash[2]) info.lineEnd=hash[2];
+      info.path=info.path.replace(/#L\d+(?:-L\d+)?$/,'');
+    }
+  } else if(parts[0]==='pull'&&parts[1]){
+    info.type='pull_request';
+    info.number=parts[1];
+    if(parts[2]) info.prTab=parts[2];
+  } else if(parts[0]==='issues'&&parts[1]){
+    info.type='issue';
+    info.number=parts[1];
+  } else if(parts[0]==='commit'&&parts[1]){
+    info.type='commit';
+    info.sha=parts[1];
+  } else if(parts[0]==='releases'){
+    info.type='releases';
+    if(parts[1]==='tag'&&parts[2]) info.tag=parts[2];
+  } else if(parts[0]==='actions'){
+    info.type='actions';
+    if(parts[1]==='runs'&&parts[2]) info.runId=parts[2];
+  } else if(parts[0]==='compare'&&parts[1]){
+    info.type='compare';
+    info.compareSpec=parts[1];
+  }
+}
+
+function parseApiPath(info,path){
+  const parts=path.split('/').filter(Boolean);
+  if(parts[0]==='pulls'&&parts[1]){info.type='pull_request';info.number=parts[1];}
+  else if(parts[0]==='issues'&&parts[1]){info.type='issue';info.number=parts[1];}
+  else if(parts[0]==='commits'&&parts[1]){info.type='commit';info.sha=parts[1];}
+  else if(parts[0]==='contents'&&parts[1]){info.type='file';info.path=parts.slice(1).join('/');}
+}
+
+function renderInfo(info){
+  $('infoCard').style.display='block';
+  const items=[];
+  const typeLabels={repository:'Repository',file:'File',tree:'Directory',pull_request:'Pull Request',issue:'Issue',commit:'Commit',gist:'Gist',user:'User',releases:'Releases',actions:'Actions',compare:'Compare'};
+
+  items.push({label:'Type',value:typeLabels[info.type]||info.type});
+  if(info.owner) items.push({label:'Owner',value:info.owner});
+  if(info.repo) items.push({label:'Repository',value:info.repo});
+  if(info.branch) items.push({label:'Branch / Ref',value:info.branch});
+  if(info.path) items.push({label:'Path',value:info.path});
+  if(info.number) items.push({label:'Number',value:'#'+info.number});
+  if(info.sha) items.push({label:'SHA',value:info.sha});
+  if(info.tag) items.push({label:'Tag',value:info.tag});
+  if(info.gistId) items.push({label:'Gist ID',value:info.gistId});
+  if(info.lineStart) items.push({label:'Lines',value:info.lineEnd?`L${info.lineStart}-L${info.lineEnd}`:`L${info.lineStart}`});
+  if(info.compareSpec) items.push({label:'Compare',value:info.compareSpec});
+
+  $('infoGrid').innerHTML=items.map(it=>`<div class="info-item"><div class="label">${it.label}</div><div class="value">${escHtml(it.value)}</div></div>`).join('');
+}
+
+function renderUrls(info){
+  $('urlsCard').style.display='block';
+  const urls=[];
+
+  if(info.owner&&info.repo){
+    const base=`https://github.com/${info.owner}/${info.repo}`;
+
+    urls.push({label:'HTTPS Clone',url:`${base}.git`});
+    urls.push({label:'SSH Clone',url:`git@github.com:${info.owner}/${info.repo}.git`});
+    urls.push({label:'GitHub CLI',url:`gh repo clone ${info.owner}/${info.repo}`});
+    urls.push({label:'Repository Page',url:base});
+    urls.push({label:'API (Repo)',url:`https://api.github.com/repos/${info.owner}/${info.repo}`});
+
+    if(info.type==='file'&&info.branch&&info.path){
+      const lineHash=info.lineStart?(info.lineEnd?`#L${info.lineStart}-L${info.lineEnd}`:`#L${info.lineStart}`):'';
+      urls.push({label:'File URL',url:`${base}/blob/${info.branch}/${info.path}${lineHash}`});
+      urls.push({label:'Raw Content',url:`https://raw.githubusercontent.com/${info.owner}/${info.repo}/${info.branch}/${info.path}`});
+      urls.push({label:'Edit on github.dev',url:`https://github.dev/${info.owner}/${info.repo}/blob/${info.branch}/${info.path}`});
+      urls.push({label:'API (Contents)',url:`https://api.github.com/repos/${info.owner}/${info.repo}/contents/${info.path}?ref=${info.branch}`});
+    }
+
+    if(info.type==='tree'&&info.branch){
+      const treePath=info.path?`/${info.path}`:'';
+      urls.push({label:'Tree URL',url:`${base}/tree/${info.branch}${treePath}`});
+      urls.push({label:'Open in github.dev',url:`https://github.dev/${info.owner}/${info.repo}/tree/${info.branch}${treePath}`});
+    }
+
+    if(info.type==='pull_request'&&info.number){
+      urls.push({label:'PR Page',url:`${base}/pull/${info.number}`});
+      urls.push({label:'PR Diff',url:`${base}/pull/${info.number}.diff`});
+      urls.push({label:'PR Patch',url:`${base}/pull/${info.number}.patch`});
+      urls.push({label:'API (PR)',url:`https://api.github.com/repos/${info.owner}/${info.repo}/pulls/${info.number}`});
+    }
+
+    if(info.type==='issue'&&info.number){
+      urls.push({label:'Issue Page',url:`${base}/issues/${info.number}`});
+      urls.push({label:'API (Issue)',url:`https://api.github.com/repos/${info.owner}/${info.repo}/issues/${info.number}`});
+    }
+
+    if(info.type==='commit'&&info.sha){
+      urls.push({label:'Commit Page',url:`${base}/commit/${info.sha}`});
+      urls.push({label:'Commit Diff',url:`${base}/commit/${info.sha}.diff`});
+      urls.push({label:'Commit Patch',url:`${base}/commit/${info.sha}.patch`});
+      urls.push({label:'API (Commit)',url:`https://api.github.com/repos/${info.owner}/${info.repo}/commits/${info.sha}`});
+    }
+
+    if(info.type==='compare'&&info.compareSpec){
+      urls.push({label:'Compare Page',url:`${base}/compare/${info.compareSpec}`});
+      urls.push({label:'Compare Diff',url:`${base}/compare/${info.compareSpec}.diff`});
+    }
+
+    if(info.type==='releases'){
+      urls.push({label:'Releases Page',url:`${base}/releases`});
+      if(info.tag) urls.push({label:'Tag Release',url:`${base}/releases/tag/${info.tag}`});
+      urls.push({label:'API (Releases)',url:`https://api.github.com/repos/${info.owner}/${info.repo}/releases`});
+    }
+
+    // Always add these common links
+    urls.push({label:'Issues',url:`${base}/issues`});
+    urls.push({label:'Pull Requests',url:`${base}/pulls`});
+    urls.push({label:'Open in github.dev',url:`https://github.dev/${info.owner}/${info.repo}`});
+  }
+
+  if(info.type==='gist'&&info.gistId){
+    urls.push({label:'Gist Page',url:`https://gist.github.com/${info.owner}/${info.gistId}`});
+    urls.push({label:'API (Gist)',url:`https://api.github.com/gists/${info.gistId}`});
+    urls.push({label:'Raw Gist',url:`https://gist.githubusercontent.com/${info.owner}/${info.gistId}/raw`});
+  }
+
+  if(info.type==='user'&&info.owner){
+    urls.push({label:'Profile',url:`https://github.com/${info.owner}`});
+    urls.push({label:'API (User)',url:`https://api.github.com/users/${info.owner}`});
+    urls.push({label:'Repositories',url:`https://github.com/${info.owner}?tab=repositories`});
+    urls.push({label:'Gists',url:`https://gist.github.com/${info.owner}`});
+  }
+
+  $('urlGrid').innerHTML=urls.map(u=>`<div class="url-row">
+    <div class="url-label"><span>${u.label}</span><button onclick="copyUrl(this,'${escAttr(u.url)}')">Copy</button></div>
+    <div class="url-value">${escHtml(u.url)}</div>
+  </div>`).join('');
+}
+
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escAttr(s){return s.replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+
+function copyUrl(btn,url){
+  navigator.clipboard.writeText(url);
+  const orig=btn.textContent;
+  btn.textContent='Copied!';
+  setTimeout(()=>btn.textContent=orig,1200);
+}
+
+$('urlInput').addEventListener('keydown',e=>{if(e.key==='Enter')parse();});
+</script>
+</body>
+</html>
