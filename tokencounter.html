@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Token Counter - Free Online Tool</title>
+<meta name="description" content="Free online LLM token counter. Estimate token counts for GPT-4, Claude, Llama, and other models. Analyze text, count characters, words, and tokens.">
+<meta name="keywords" content="token counter, llm tokens, gpt token counter, claude tokens, tiktoken, bpe tokenizer, prompt engineering">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tokencounter.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat-box { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+  .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--accent, #6366f1); font-family: var(--mono); }
+  .stat-label { font-size: .78rem; color: var(--muted); margin-top: 4px; }
+  .model-select { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .model-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface, var(--bg)); color: var(--text); cursor: pointer; font-size: .85rem; font-family: var(--sans); transition: all .15s; }
+  .model-btn:hover { border-color: var(--border2, var(--border)); }
+  .model-btn.active { background: var(--accent, #6366f1); color: #fff; border-color: var(--accent, #6366f1); }
+  .cost-row { display: flex; justify-content: space-between; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .85rem; margin-top: 6px; }
+  .cost-label { color: var(--muted); }
+  .cost-value { font-family: var(--mono); font-weight: 600; }
+  .breakdown { margin-top: 16px; }
+  .breakdown h3 { font-size: .9rem; margin-bottom: 8px; }
+  .bar-container { display: flex; height: 24px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+  .bar-segment { display: flex; align-items: center; justify-content: center; font-size: .7rem; color: #fff; font-weight: 600; min-width: 2px; transition: width .3s; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: .8rem; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+  .context-bar { margin-top: 12px; }
+  .context-track { height: 8px; background: var(--surface2, #e5e7eb); border-radius: 4px; overflow: hidden; }
+  .context-fill { height: 100%; border-radius: 4px; transition: width .3s, background .3s; }
+  .context-label { display: flex; justify-content: space-between; font-size: .78rem; color: var(--muted); margin-top: 4px; }
+  textarea { min-height: 200px; }
+  @media (max-width: 768px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>LLM Token Counter</h1>
+<p class="subtitle">Estimate token counts for GPT-4, Claude, Llama & other large language models</p>
+
+<div class="card">
+<h2>🤖 Model</h2>
+<div class="model-select" id="modelSelect"></div>
+</div>
+
+<div class="card">
+<h2>📝 Input Text</h2>
+<textarea id="input" placeholder="Paste your prompt or text here to count tokens..."></textarea>
+</div>
+
+<div class="card">
+<h2>📊 Token Statistics</h2>
+<div class="stats-grid">
+  <div class="stat-box"><div class="stat-value" id="tokenCount">0</div><div class="stat-label">Estimated Tokens</div></div>
+  <div class="stat-box"><div class="stat-value" id="charCount">0</div><div class="stat-label">Characters</div></div>
+  <div class="stat-box"><div class="stat-value" id="wordCount">0</div><div class="stat-label">Words</div></div>
+  <div class="stat-box"><div class="stat-value" id="lineCount">0</div><div class="stat-label">Lines</div></div>
+  <div class="stat-box"><div class="stat-value" id="sentenceCount">0</div><div class="stat-label">Sentences</div></div>
+  <div class="stat-box"><div class="stat-value" id="ratio">0</div><div class="stat-label">Chars / Token</div></div>
+</div>
+
+<div class="context-bar">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <span style="font-size:.85rem;font-weight:600">Context Window Usage</span>
+    <span style="font-size:.78rem;color:var(--muted)" id="contextPct">0%</span>
+  </div>
+  <div class="context-track"><div class="context-fill" id="contextFill" style="width:0%;background:var(--success)"></div></div>
+  <div class="context-label"><span id="contextUsed">0 tokens</span><span id="contextMax">0 tokens max</span></div>
+</div>
+
+<div class="breakdown">
+  <h3>Content Breakdown</h3>
+  <div class="bar-container" id="breakdownBar"></div>
+  <div class="legend" id="legend"></div>
+</div>
+</div>
+
+<div class="card">
+<h2>💰 Estimated Cost</h2>
+<div id="costRows"></div>
+<p style="font-size:.75rem;color:var(--muted);margin-top:8px">* Prices based on published API pricing as of 2025. Actual costs may vary.</p>
+</div>
+</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const MODELS = [
+  { id:'gpt4o',       name:'GPT-4o',        ratio:3.8, ctx:128000, input:2.50,  output:10.00 },
+  { id:'gpt4omini',   name:'GPT-4o mini',   ratio:3.8, ctx:128000, input:0.15,  output:0.60  },
+  { id:'gpt4turbo',   name:'GPT-4 Turbo',   ratio:3.8, ctx:128000, input:10.00, output:30.00 },
+  { id:'claude4sonnet',name:'Claude Sonnet 4',ratio:3.5,ctx:200000, input:3.00,  output:15.00 },
+  { id:'claude4opus', name:'Claude Opus 4',  ratio:3.5, ctx:200000, input:15.00, output:75.00 },
+  { id:'claude35haiku',name:'Claude Haiku 3.5',ratio:3.5,ctx:200000,input:0.80,  output:4.00  },
+  { id:'llama3',      name:'Llama 3 (70B)',  ratio:3.6, ctx:128000, input:0.59,  output:0.79  },
+  { id:'gemini2',     name:'Gemini 2.5 Pro', ratio:3.9, ctx:1000000,input:1.25,  output:10.00 },
+];
+
+let currentModel = MODELS[0];
+
+function initModels() {
+  const wrap = $('modelSelect');
+  MODELS.forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'model-btn' + (m.id === currentModel.id ? ' active' : '');
+    btn.textContent = m.name;
+    btn.onclick = () => { currentModel = m; document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); analyze(); };
+    wrap.appendChild(btn);
+  });
+}
+
+function estimateTokens(text, ratio) {
+  if (!text) return 0;
+  let tokens = 0;
+  const codePattern = /[{}()\[\];=<>|&!@#$%^*+\-\/\\~`]/g;
+  const codeChars = (text.match(codePattern) || []).length;
+  const whitespace = (text.match(/\s+/g) || []).length;
+  const words = text.trim().split(/\s+/).filter(Boolean);
+
+  words.forEach(w => {
+    if (/^[a-zA-Z]+$/.test(w)) {
+      tokens += w.length <= 4 ? 1 : Math.ceil(w.length / ratio);
+    } else if (/^\d+$/.test(w)) {
+      tokens += Math.ceil(w.length / 2.5);
+    } else {
+      tokens += Math.ceil(w.length / (ratio * 0.7));
+    }
+  });
+
+  tokens += Math.ceil(codeChars * 0.3);
+  tokens += Math.ceil(whitespace * 0.15);
+
+  const nonAscii = (text.match(/[^\x00-\x7F]/g) || []).length;
+  tokens += nonAscii;
+
+  return Math.max(1, Math.round(tokens));
+}
+
+function categorizeContent(text) {
+  if (!text) return [];
+  const alphaWords = (text.match(/[a-zA-Z]{2,}/g) || []).join('').length;
+  const numbers = (text.match(/\d+/g) || []).join('').length;
+  const codeChars = (text.match(/[{}()\[\];=<>|&!@#$%^*+\-\/\\~`]/g) || []).length;
+  const whitespace = (text.match(/\s/g) || []).length;
+  const punctuation = (text.match(/[.,!?:;"']/g) || []).length;
+  const nonAscii = (text.match(/[^\x00-\x7F]/g) || []).length;
+  const total = text.length || 1;
+
+  return [
+    { label: 'Words', pct: alphaWords / total, color: '#6366f1' },
+    { label: 'Numbers', pct: numbers / total, color: '#06b6d4' },
+    { label: 'Code/Symbols', pct: codeChars / total, color: '#f59e0b' },
+    { label: 'Whitespace', pct: whitespace / total, color: '#94a3b8' },
+    { label: 'Punctuation', pct: punctuation / total, color: '#10b981' },
+    { label: 'Unicode', pct: nonAscii / total, color: '#ef4444' },
+  ].filter(s => s.pct > 0);
+}
+
+function fmtNum(n) { return n.toLocaleString(); }
+function fmtCost(n) { return n < 0.0001 ? '< $0.0001' : '$' + n.toFixed(4); }
+
+function analyze() {
+  const text = $('input').value;
+  const tokens = estimateTokens(text, currentModel.ratio);
+  const chars = text.length;
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const lines = text ? text.split('\n').length : 0;
+  const sentences = text.trim() ? (text.match(/[.!?]+\s/g) || []).length + (text.trim().match(/[.!?]$/) ? 1 : 0) || (text.trim().length > 0 ? 1 : 0) : 0;
+  const ratio = tokens > 0 ? (chars / tokens).toFixed(1) : '0';
+
+  $('tokenCount').textContent = fmtNum(tokens);
+  $('charCount').textContent = fmtNum(chars);
+  $('wordCount').textContent = fmtNum(words);
+  $('lineCount').textContent = fmtNum(lines);
+  $('sentenceCount').textContent = fmtNum(sentences);
+  $('ratio').textContent = ratio;
+
+  const pct = Math.min(100, (tokens / currentModel.ctx) * 100);
+  $('contextPct').textContent = pct.toFixed(1) + '%';
+  $('contextFill').style.width = pct + '%';
+  $('contextFill').style.background = pct < 50 ? 'var(--success)' : pct < 80 ? 'var(--warning, #f59e0b)' : 'var(--error)';
+  $('contextUsed').textContent = fmtNum(tokens) + ' tokens';
+  $('contextMax').textContent = fmtNum(currentModel.ctx) + ' tokens max';
+
+  const cats = categorizeContent(text);
+  const bar = $('breakdownBar');
+  const legend = $('legend');
+  bar.innerHTML = '';
+  legend.innerHTML = '';
+  if (cats.length === 0) {
+    bar.innerHTML = '<div class="bar-segment" style="width:100%;background:var(--surface2,#e5e7eb)"></div>';
+  } else {
+    cats.forEach(c => {
+      const seg = document.createElement('div');
+      seg.className = 'bar-segment';
+      seg.style.width = (c.pct * 100).toFixed(1) + '%';
+      seg.style.background = c.color;
+      if (c.pct > 0.08) seg.textContent = (c.pct * 100).toFixed(0) + '%';
+      bar.appendChild(seg);
+
+      const li = document.createElement('span');
+      li.className = 'legend-item';
+      li.innerHTML = `<span class="legend-dot" style="background:${c.color}"></span>${c.label}`;
+      legend.appendChild(li);
+    });
+  }
+
+  const costWrap = $('costRows');
+  const inputCost = (tokens / 1_000_000) * currentModel.input;
+  const outputCost = (tokens / 1_000_000) * currentModel.output;
+  costWrap.innerHTML = `
+    <div class="cost-row"><span class="cost-label">As input tokens (${currentModel.name})</span><span class="cost-value">${fmtCost(inputCost)} <span style="color:var(--muted);font-weight:400">/ $${currentModel.input} per 1M</span></span></div>
+    <div class="cost-row"><span class="cost-label">As output tokens (${currentModel.name})</span><span class="cost-value">${fmtCost(outputCost)} <span style="color:var(--muted);font-weight:400">/ $${currentModel.output} per 1M</span></span></div>
+  `;
+}
+
+initModels();
+$('input').addEventListener('input', analyze);
+analyze();
+</script>
+</body>
+</html>
