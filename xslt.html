@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XSLT Transformer - Free Online XML Transform Tool</title>
+<meta name="description" content="Free online XSLT transformer. Apply XSLT stylesheets to XML documents in your browser. No data sent to any server.">
+<meta name="keywords" content="xslt transformer, xml transform, xslt editor, xslt tester, xml stylesheet, free xslt tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/xslt.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .panels textarea { min-height: 280px; font-family: var(--mono); font-size: .85rem; }
+  .output-wrap { position: relative; }
+  .output-wrap pre {
+    min-height: 280px; max-height: 500px; overflow: auto;
+    padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2); font-family: var(--mono); font-size: .85rem;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .error-msg { color: var(--error); font-size: .85rem; margin-top: .5rem; }
+  .actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>XSLT Transformer</h1>
+<p class="subtitle">Apply XSLT stylesheets to XML documents — everything runs in your browser</p>
+
+<div class="panels">
+  <div class="card">
+    <h2>📄 XML Input</h2>
+    <textarea id="xmlInput" placeholder="Paste your XML here..."></textarea>
+  </div>
+  <div class="card">
+    <h2>🔧 XSLT Stylesheet</h2>
+    <textarea id="xsltInput" placeholder="Paste your XSLT stylesheet here..."></textarea>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn" onclick="transform()">Transform</button>
+  <button class="btn-secondary" onclick="loadExample()">Load Example</button>
+  <button class="btn-secondary" onclick="copyOutput()">Copy Output</button>
+  <button class="btn-secondary" onclick="downloadOutput()">Download Output</button>
+  <button class="btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>📋 Result</h2>
+  <div class="output-wrap">
+    <pre id="output"><span class="empty">Transform result will appear here</span></pre>
+  </div>
+  <div class="error-msg" id="error"></div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function parseXML(str) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(str, 'application/xml');
+  const err = doc.querySelector('parsererror');
+  if (err) throw new Error('XML Parse Error: ' + err.textContent.split('\n')[0]);
+  return doc;
+}
+
+function serializeXML(doc) {
+  const s = new XMLSerializer();
+  let result = s.serializeToString(doc);
+  try {
+    const formatted = formatXML(result);
+    return formatted;
+  } catch { return result; }
+}
+
+function formatXML(xml) {
+  let formatted = '';
+  let indent = 0;
+  const parts = xml.replace(/(>)(<)/g, '$1\n$2').split('\n');
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('</')) indent--;
+    formatted += '  '.repeat(Math.max(0, indent)) + trimmed + '\n';
+    if (trimmed.startsWith('<') && !trimmed.startsWith('</') && !trimmed.startsWith('<?') && !trimmed.endsWith('/>') && !/<\/[^>]+>$/.test(trimmed)) indent++;
+  }
+  return formatted.trim();
+}
+
+function transform() {
+  $('error').textContent = '';
+  const xmlStr = $('xmlInput').value.trim();
+  const xsltStr = $('xsltInput').value.trim();
+
+  if (!xmlStr || !xsltStr) {
+    $('error').textContent = 'Please provide both XML input and XSLT stylesheet.';
+    return;
+  }
+
+  try {
+    const xmlDoc = parseXML(xmlStr);
+    const xsltDoc = parseXML(xsltStr);
+    const processor = new XSLTProcessor();
+    processor.importStylesheet(xsltDoc);
+    const result = processor.transformToDocument(xmlDoc);
+
+    if (!result || !result.documentElement) {
+      $('error').textContent = 'Transformation produced no output.';
+      $('output').textContent = '';
+      return;
+    }
+
+    const body = result.querySelector('body');
+    if (body && result.documentElement.tagName === 'html') {
+      $('output').textContent = serializeXML(result);
+    } else {
+      $('output').textContent = serializeXML(result);
+    }
+  } catch (e) {
+    $('error').textContent = e.message;
+    $('output').innerHTML = '<span class="empty">Transform failed — see error below</span>';
+  }
+}
+
+function loadExample() {
+  $('xmlInput').value = `<?xml version="1.0" encoding="UTF-8"?>
+<bookstore>
+  <book category="fiction">
+    <title>The Great Gatsby</title>
+    <author>F. Scott Fitzgerald</author>
+    <year>1925</year>
+    <price>10.99</price>
+  </book>
+  <book category="non-fiction">
+    <title>Thinking, Fast and Slow</title>
+    <author>Daniel Kahneman</author>
+    <year>2011</year>
+    <price>15.99</price>
+  </book>
+  <book category="fiction">
+    <title>1984</title>
+    <author>George Orwell</author>
+    <year>1949</year>
+    <price>8.99</price>
+  </book>
+</bookstore>`;
+
+  $('xsltInput').value = `<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="html" indent="yes"/>
+
+  <xsl:template match="/bookstore">
+    <html>
+      <body>
+        <h1>Book Catalog</h1>
+        <table border="1" cellpadding="6">
+          <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Year</th>
+            <th>Price</th>
+            <th>Category</th>
+          </tr>
+          <xsl:for-each select="book">
+            <xsl:sort select="year"/>
+            <tr>
+              <td><xsl:value-of select="title"/></td>
+              <td><xsl:value-of select="author"/></td>
+              <td><xsl:value-of select="year"/></td>
+              <td>$<xsl:value-of select="price"/></td>
+              <td><xsl:value-of select="@category"/></td>
+            </tr>
+          </xsl:for-each>
+        </table>
+        <p>Total books: <xsl:value-of select="count(book)"/></p>
+      </body>
+    </html>
+  </xsl:template>
+</xsl:stylesheet>`;
+
+  transform();
+}
+
+function copyOutput() {
+  const text = $('output').textContent;
+  if (!text || text.includes('Transform result will appear')) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+function downloadOutput() {
+  const text = $('output').textContent;
+  if (!text || text.includes('Transform result will appear')) return;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'xslt-result.xml';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function clearAll() {
+  $('xmlInput').value = '';
+  $('xsltInput').value = '';
+  $('output').innerHTML = '<span class="empty">Transform result will appear here</span>';
+  $('error').textContent = '';
+}
+</script>
+</body>
+</html>

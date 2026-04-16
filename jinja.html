@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jinja2 Template Tester - Free Online Template Renderer</title>
+<meta name="description" content="Free online Jinja2/Mustache-style template tester. Render templates with variables, loops, conditionals, and filters. No data sent to any server.">
+<meta name="keywords" content="jinja2 tester, template renderer, jinja template, mustache template, template engine, free template tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jinja.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .panels textarea { min-height: 220px; font-family: var(--mono); font-size: .85rem; }
+  .output-wrap pre {
+    min-height: 180px; max-height: 400px; overflow: auto;
+    padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2); font-family: var(--mono); font-size: .85rem;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .error-msg { color: var(--error); font-size: .85rem; margin-top: .5rem; }
+  .actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
+  .ref-section { margin-top: 1rem; }
+  .ref-section summary { cursor: pointer; font-weight: 600; font-size: .9rem; color: var(--text); }
+  .ref-table { width: 100%; font-size: .82rem; border-collapse: collapse; margin-top: .5rem; }
+  .ref-table th, .ref-table td { padding: 6px 10px; border: 1px solid var(--border); text-align: left; }
+  .ref-table th { background: var(--surface2); font-weight: 600; }
+  .ref-table code { font-family: var(--mono); font-size: .8rem; background: var(--surface2); padding: 1px 4px; border-radius: 3px; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Jinja2 Template Tester</h1>
+<p class="subtitle">Test Jinja2-style templates with variables, loops, conditionals, and filters</p>
+
+<div class="panels">
+  <div class="card">
+    <h2>📝 Template</h2>
+    <textarea id="templateInput" placeholder="Hello {{ name }}!&#10;&#10;{% for item in items %}&#10;- {{ item | upper }}&#10;{% endfor %}" oninput="render()"></textarea>
+  </div>
+  <div class="card">
+    <h2>📦 Context (JSON)</h2>
+    <textarea id="contextInput" placeholder='{&#10;  "name": "World",&#10;  "items": ["alpha", "beta", "gamma"]&#10;}' oninput="render()"></textarea>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn" onclick="render()">Render</button>
+  <button class="btn-secondary" onclick="loadExample()">Load Example</button>
+  <button class="btn-secondary" onclick="copyOutput()">Copy Output</button>
+  <button class="btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <h2>📋 Rendered Output</h2>
+  <div class="output-wrap">
+    <pre id="output"><span class="empty">Output will appear here as you type</span></pre>
+  </div>
+  <div class="error-msg" id="error"></div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <details class="ref-section">
+    <summary>Syntax Reference</summary>
+    <table class="ref-table">
+      <tr><th>Syntax</th><th>Description</th><th>Example</th></tr>
+      <tr><td><code>{{ var }}</code></td><td>Output a variable</td><td><code>{{ name }}</code></td></tr>
+      <tr><td><code>{{ var | filter }}</code></td><td>Apply a filter</td><td><code>{{ name | upper }}</code></td></tr>
+      <tr><td><code>{% for x in list %}</code></td><td>Loop over items</td><td><code>{% for i in items %}{{ i }}{% endfor %}</code></td></tr>
+      <tr><td><code>{% if cond %}</code></td><td>Conditional block</td><td><code>{% if show %}yes{% else %}no{% endif %}</code></td></tr>
+      <tr><td><code>{{ var | default("x") }}</code></td><td>Default value</td><td><code>{{ missing | default("N/A") }}</code></td></tr>
+      <tr><td><code>{{ var | join(", ") }}</code></td><td>Join array</td><td><code>{{ tags | join(", ") }}</code></td></tr>
+    </table>
+    <p style="font-size:.8rem;color:var(--muted);margin-top:.5rem;">Filters: <code>upper</code>, <code>lower</code>, <code>capitalize</code>, <code>title</code>, <code>trim</code>, <code>length</code>, <code>reverse</code>, <code>sort</code>, <code>first</code>, <code>last</code>, <code>join</code>, <code>default</code>, <code>replace</code>, <code>truncate</code>, <code>round</code>, <code>abs</code>, <code>int</code>, <code>float</code></p>
+  </details>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let debounceTimer;
+
+function render() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(doRender, 200);
+}
+
+function doRender() {
+  $('error').textContent = '';
+  const tpl = $('templateInput').value;
+  const ctxStr = $('contextInput').value.trim();
+
+  if (!tpl && !ctxStr) {
+    $('output').innerHTML = '<span class="empty">Output will appear here as you type</span>';
+    return;
+  }
+
+  let ctx = {};
+  if (ctxStr) {
+    try { ctx = JSON.parse(ctxStr); }
+    catch (e) { $('error').textContent = 'Invalid JSON context: ' + e.message; return; }
+  }
+
+  try {
+    const result = renderTemplate(tpl, ctx);
+    $('output').textContent = result;
+  } catch (e) {
+    $('error').textContent = 'Template error: ' + e.message;
+  }
+}
+
+function renderTemplate(tpl, ctx) {
+  let result = tpl;
+  result = processBlocks(result, ctx);
+  result = processExpressions(result, ctx);
+  return result;
+}
+
+function processBlocks(tpl, ctx) {
+  let result = tpl;
+  let safety = 0;
+
+  while (safety++ < 100) {
+    const forMatch = result.match(/\{%[-\s]*for\s+(\w+)\s+in\s+(\w+(?:\.\w+)*)[-\s]*%\}([\s\S]*?)\{%[-\s]*endfor[-\s]*%\}/);
+    if (forMatch) {
+      const [full, varName, listName, body] = forMatch;
+      const list = resolveVar(listName, ctx);
+      if (Array.isArray(list)) {
+        let loopResult = '';
+        for (let i = 0; i < list.length; i++) {
+          const loopCtx = { ...ctx, [varName]: list[i], loop: { index: i + 1, index0: i, first: i === 0, last: i === list.length - 1, length: list.length } };
+          let iterBody = processBlocks(body, loopCtx);
+          iterBody = processExpressions(iterBody, loopCtx);
+          loopResult += iterBody;
+        }
+        result = result.replace(full, loopResult);
+      } else {
+        result = result.replace(full, '');
+      }
+      continue;
+    }
+
+    const ifMatch = result.match(/\{%[-\s]*if\s+(.+?)[-\s]*%\}([\s\S]*?)\{%[-\s]*endif[-\s]*%\}/);
+    if (ifMatch) {
+      const [full, condition, body] = ifMatch;
+      const elseParts = body.split(/\{%[-\s]*else[-\s]*%\}/);
+      const truthy = evaluateCondition(condition, ctx);
+      if (truthy) {
+        let content = processBlocks(elseParts[0], ctx);
+        content = processExpressions(content, ctx);
+        result = result.replace(full, content);
+      } else {
+        let content = elseParts[1] ? processBlocks(elseParts[1], ctx) : '';
+        content = processExpressions(content, ctx);
+        result = result.replace(full, content);
+      }
+      continue;
+    }
+
+    break;
+  }
+
+  return result;
+}
+
+function processExpressions(tpl, ctx) {
+  return tpl.replace(/\{\{[-\s]*(.+?)[-\s]*\}\}/g, (match, expr) => {
+    try {
+      return evaluateExpression(expr.trim(), ctx);
+    } catch {
+      return match;
+    }
+  });
+}
+
+function evaluateExpression(expr, ctx) {
+  const parts = expr.split(/\s*\|\s*/);
+  let value = resolveVar(parts[0].trim(), ctx);
+
+  for (let i = 1; i < parts.length; i++) {
+    value = applyFilter(value, parts[i].trim(), ctx);
+  }
+
+  return value === undefined || value === null ? '' : String(value);
+}
+
+function resolveVar(name, ctx) {
+  if (name.startsWith('"') && name.endsWith('"')) return name.slice(1, -1);
+  if (name.startsWith("'") && name.endsWith("'")) return name.slice(1, -1);
+  if (!isNaN(name) && name !== '') return Number(name);
+  if (name === 'true') return true;
+  if (name === 'false') return false;
+  if (name === 'none' || name === 'null') return null;
+
+  const parts = name.split('.');
+  let val = ctx;
+  for (const p of parts) {
+    if (val === undefined || val === null) return undefined;
+    val = val[p];
+  }
+  return val;
+}
+
+function evaluateCondition(cond, ctx) {
+  cond = cond.trim();
+
+  const notMatch = cond.match(/^not\s+(.+)$/);
+  if (notMatch) return !evaluateCondition(notMatch[1], ctx);
+
+  const compMatch = cond.match(/^(.+?)\s*(==|!=|>=|<=|>|<)\s*(.+)$/);
+  if (compMatch) {
+    const left = resolveVar(compMatch[1].trim(), ctx);
+    const right = resolveVar(compMatch[3].trim(), ctx);
+    switch (compMatch[2]) {
+      case '==': return left == right;
+      case '!=': return left != right;
+      case '>': return left > right;
+      case '<': return left < right;
+      case '>=': return left >= right;
+      case '<=': return left <= right;
+    }
+  }
+
+  const andMatch = cond.match(/^(.+?)\s+and\s+(.+)$/);
+  if (andMatch) return evaluateCondition(andMatch[1], ctx) && evaluateCondition(andMatch[2], ctx);
+
+  const orMatch = cond.match(/^(.+?)\s+or\s+(.+)$/);
+  if (orMatch) return evaluateCondition(orMatch[1], ctx) || evaluateCondition(orMatch[2], ctx);
+
+  const val = resolveVar(cond, ctx);
+  return !!val && val !== 0 && val !== '' && !(Array.isArray(val) && val.length === 0);
+}
+
+function applyFilter(value, filterExpr, ctx) {
+  const argMatch = filterExpr.match(/^(\w+)\((.+)\)$/);
+  const filterName = argMatch ? argMatch[1] : filterExpr;
+  const argStr = argMatch ? argMatch[2].trim() : null;
+
+  function parseArg(s) {
+    s = s.trim();
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) return s.slice(1, -1);
+    if (!isNaN(s) && s !== '') return Number(s);
+    if (s === 'true') return true;
+    if (s === 'false') return false;
+    return s;
+  }
+
+  switch (filterName) {
+    case 'upper': return String(value).toUpperCase();
+    case 'lower': return String(value).toLowerCase();
+    case 'capitalize': { const s = String(value); return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); }
+    case 'title': return String(value).replace(/\b\w/g, c => c.toUpperCase());
+    case 'trim': return String(value).trim();
+    case 'length': return Array.isArray(value) ? value.length : String(value).length;
+    case 'reverse': return Array.isArray(value) ? [...value].reverse() : String(value).split('').reverse().join('');
+    case 'sort': return Array.isArray(value) ? [...value].sort() : value;
+    case 'first': return Array.isArray(value) ? value[0] : String(value)[0];
+    case 'last': return Array.isArray(value) ? value[value.length - 1] : String(value).slice(-1);
+    case 'join': return Array.isArray(value) ? value.join(argStr ? parseArg(argStr) : ', ') : value;
+    case 'default': return (value === undefined || value === null || value === '') ? (argStr ? parseArg(argStr) : '') : value;
+    case 'replace': {
+      if (!argStr) return value;
+      const args = argStr.split(',').map(s => parseArg(s.trim()));
+      return String(value).split(args[0]).join(args[1] || '');
+    }
+    case 'truncate': {
+      const len = argStr ? parseArg(argStr) : 80;
+      const s = String(value);
+      return s.length > len ? s.substring(0, len) + '...' : s;
+    }
+    case 'round': {
+      const digits = argStr ? parseArg(argStr) : 0;
+      return Number(Number(value).toFixed(digits));
+    }
+    case 'abs': return Math.abs(Number(value));
+    case 'int': return parseInt(value, 10);
+    case 'float': return parseFloat(value);
+    default: return value;
+  }
+}
+
+function loadExample() {
+  $('templateInput').value = `Dear {{ recipient.name | capitalize }},
+
+Thank you for your order #{{ order_id }}.
+
+Items ordered:
+{% for item in items %}
+  {{ loop.index }}. {{ item.name | title }} — ${{ item.price }} x {{ item.qty }}
+{% endfor %}
+
+Subtotal: ${{ subtotal }}
+{% if discount %}Discount: -${{ discount }}
+Total: ${{ total }}{% else %}Total: ${{ subtotal }}{% endif %}
+
+{% if notes %}Note: {{ notes }}{% endif %}
+
+Best regards,
+{{ sender | default("The Team") }}`;
+
+  $('contextInput').value = JSON.stringify({
+    recipient: { name: "jane doe" },
+    order_id: "ORD-2025-4871",
+    items: [
+      { name: "wireless keyboard", price: 49.99, qty: 1 },
+      { name: "USB-C hub", price: 29.99, qty: 2 },
+      { name: "monitor stand", price: 89.00, qty: 1 }
+    ],
+    subtotal: 198.97,
+    discount: 20.00,
+    total: 178.97,
+    notes: "Leave at front desk"
+  }, null, 2);
+
+  render();
+}
+
+function copyOutput() {
+  const text = $('output').textContent;
+  if (!text || text.includes('Output will appear')) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+function clearAll() {
+  $('templateInput').value = '';
+  $('contextInput').value = '';
+  $('output').innerHTML = '<span class="empty">Output will appear here as you type</span>';
+  $('error').textContent = '';
+}
+</script>
+</body>
+</html>

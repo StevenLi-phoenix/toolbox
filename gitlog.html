@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Git Log Parser - Free Online Git Log Analyzer</title>
+<meta name="description" content="Free online git log parser. Paste git log output and filter, sort, search, and visualize commits. No data sent to any server.">
+<meta name="keywords" content="git log parser, git log analyzer, git commit viewer, git history, free git tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/gitlog.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .filters { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+  .filters input, .filters select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .85rem; background: var(--bg); color: var(--text); }
+  .filters input[type="text"] { flex: 1; min-width: 200px; }
+  .stats-bar { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; font-size: .85rem; color: var(--muted); }
+  .stats-bar span { font-weight: 600; color: var(--text); }
+  .commit-list { display: flex; flex-direction: column; gap: .5rem; }
+  .commit-item {
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); font-size: .85rem; transition: border-color .15s;
+  }
+  .commit-item:hover { border-color: var(--border2); }
+  .commit-hash { font-family: var(--mono); color: var(--accent); font-weight: 600; font-size: .82rem; }
+  .commit-msg { font-weight: 600; margin: 4px 0 2px; }
+  .commit-meta { color: var(--muted); font-size: .8rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+  .author-chart { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+  .author-bar { padding: 4px 10px; border-radius: var(--radius); background: var(--surface2); font-size: .8rem; border: 1px solid var(--border); }
+  .author-bar span { font-weight: 600; }
+  .no-commits { text-align: center; color: var(--muted); padding: 2rem; }
+  @media (max-width: 768px) {
+    .filters input[type="text"] { min-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Git Log Parser</h1>
+<p class="subtitle">Paste <code>git log</code> output to parse, filter, sort, and analyze commits</p>
+
+<div class="card">
+  <h2>📋 Paste Git Log</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:.5rem;">Run <code>git log --oneline</code>, <code>git log --format="%H|%an|%ae|%ai|%s"</code>, or standard <code>git log</code></p>
+  <textarea id="logInput" placeholder="Paste git log output here..."></textarea>
+  <div style="margin-top:.75rem;display:flex;gap:.5rem;">
+    <button class="btn" onclick="parseLog()">Parse</button>
+    <button class="btn-secondary" onclick="loadExample()">Load Example</button>
+    <button class="btn-secondary" onclick="clearAll()">Clear</button>
+  </div>
+</div>
+
+<div id="resultsArea" style="display:none;">
+  <div class="card">
+    <h2>📊 Stats</h2>
+    <div class="stats-bar" id="stats"></div>
+    <div class="author-chart" id="authorChart"></div>
+  </div>
+
+  <div class="card">
+    <h2>🔍 Filter & Sort</h2>
+    <div class="filters">
+      <input type="text" id="searchFilter" placeholder="Search messages or authors..." oninput="renderCommits()">
+      <select id="authorFilter" onchange="renderCommits()"><option value="">All authors</option></select>
+      <select id="sortOrder" onchange="renderCommits()">
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="author">By author</option>
+      </select>
+    </div>
+    <div class="stats-bar"><span id="visibleCount"></span> commits shown</div>
+    <div class="commit-list" id="commitList"></div>
+    <div class="no-commits" id="noCommits" style="display:none;">No commits match your filters.</div>
+  </div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let commits = [];
+
+function parseLog() {
+  const raw = $('logInput').value.trim();
+  if (!raw) return;
+  commits = [];
+
+  const lines = raw.split('\n');
+
+  if (lines[0] && lines[0].includes('|') && lines[0].split('|').length >= 4) {
+    parsePipeFormat(lines);
+  } else if (/^[0-9a-f]{7,40}\s/.test(lines[0])) {
+    parseOnelineFormat(lines);
+  } else {
+    parseStandardFormat(lines);
+  }
+
+  if (commits.length === 0) {
+    alert('Could not parse any commits. Try a different git log format.');
+    return;
+  }
+
+  $('resultsArea').style.display = '';
+  buildAuthorFilter();
+  renderStats();
+  renderCommits();
+}
+
+function parsePipeFormat(lines) {
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split('|');
+    if (parts.length >= 5) {
+      commits.push({
+        hash: parts[0].trim(),
+        author: parts[1].trim(),
+        email: parts[2].trim(),
+        date: new Date(parts[3].trim()),
+        message: parts.slice(4).join('|').trim()
+      });
+    }
+  }
+}
+
+function parseOnelineFormat(lines) {
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const match = trimmed.match(/^([0-9a-f]{7,40})\s+(.*)$/);
+    if (match) {
+      commits.push({
+        hash: match[1],
+        author: '',
+        email: '',
+        date: null,
+        message: match[2]
+      });
+    }
+  }
+}
+
+function parseStandardFormat(lines) {
+  let current = null;
+  let msgLines = [];
+
+  function flush() {
+    if (current) {
+      current.message = msgLines.join(' ').trim();
+      if (current.message) commits.push(current);
+    }
+    msgLines = [];
+  }
+
+  for (const line of lines) {
+    if (line.startsWith('commit ')) {
+      flush();
+      current = { hash: line.replace('commit ', '').trim(), author: '', email: '', date: null, message: '' };
+    } else if (line.startsWith('Author:') && current) {
+      const m = line.match(/Author:\s*(.+?)\s*<(.+?)>/);
+      if (m) { current.author = m[1].trim(); current.email = m[2].trim(); }
+      else current.author = line.replace('Author:', '').trim();
+    } else if (line.startsWith('Date:') && current) {
+      current.date = new Date(line.replace('Date:', '').trim());
+    } else if (current && line.trim()) {
+      msgLines.push(line.trim());
+    }
+  }
+  flush();
+}
+
+function buildAuthorFilter() {
+  const authors = [...new Set(commits.map(c => c.author).filter(Boolean))].sort();
+  $('authorFilter').innerHTML = '<option value="">All authors</option>' +
+    authors.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+}
+
+function renderStats() {
+  const authors = new Set(commits.map(c => c.author).filter(Boolean));
+  const dates = commits.map(c => c.date).filter(Boolean);
+  const earliest = dates.length ? new Date(Math.min(...dates)) : null;
+  const latest = dates.length ? new Date(Math.max(...dates)) : null;
+
+  let html = `<div><span>${commits.length}</span> commits</div>`;
+  if (authors.size) html += `<div><span>${authors.size}</span> authors</div>`;
+  if (earliest && latest) html += `<div><span>${formatDate(earliest)}</span> to <span>${formatDate(latest)}</span></div>`;
+  $('stats').innerHTML = html;
+
+  if (authors.size) {
+    const counts = {};
+    commits.forEach(c => { if (c.author) counts[c.author] = (counts[c.author] || 0) + 1; });
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    $('authorChart').innerHTML = sorted.map(([name, count]) =>
+      `<div class="author-bar"><span>${count}</span> ${esc(name)}</div>`
+    ).join('');
+  } else {
+    $('authorChart').innerHTML = '';
+  }
+}
+
+function renderCommits() {
+  const search = $('searchFilter').value.toLowerCase();
+  const authorFilter = $('authorFilter').value;
+  const sort = $('sortOrder').value;
+
+  let filtered = commits.filter(c => {
+    if (authorFilter && c.author !== authorFilter) return false;
+    if (search && !c.message.toLowerCase().includes(search) && !c.author.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  if (sort === 'oldest') filtered.sort((a, b) => (a.date || 0) - (b.date || 0));
+  else if (sort === 'newest') filtered.sort((a, b) => (b.date || 0) - (a.date || 0));
+  else if (sort === 'author') filtered.sort((a, b) => a.author.localeCompare(b.author));
+
+  $('visibleCount').textContent = filtered.length;
+
+  if (filtered.length === 0) {
+    $('commitList').innerHTML = '';
+    $('noCommits').style.display = '';
+    return;
+  }
+
+  $('noCommits').style.display = 'none';
+  $('commitList').innerHTML = filtered.slice(0, 200).map(c => {
+    const shortHash = c.hash.substring(0, 7);
+    let meta = [];
+    if (c.author) meta.push(esc(c.author));
+    if (c.date) meta.push(formatDate(c.date));
+    return `<div class="commit-item" onclick="copyHash('${esc(c.hash)}')">
+      <span class="commit-hash">${esc(shortHash)}</span>
+      <div class="commit-msg">${esc(c.message)}</div>
+      ${meta.length ? `<div class="commit-meta">${meta.join(' · ')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function formatDate(d) {
+  if (!d || isNaN(d)) return '';
+  return d.toISOString().split('T')[0];
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function copyHash(hash) {
+  navigator.clipboard.writeText(hash).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+function loadExample() {
+  $('logInput').value = `commit a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+Author: Alice Johnson <alice@example.com>
+Date:   Mon Mar 10 14:32:00 2025 +0000
+
+    Fix race condition in WebSocket reconnect logic
+
+commit b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3
+Author: Bob Smith <bob@example.com>
+Date:   Sun Mar 9 09:15:00 2025 +0000
+
+    Add pagination to user list API endpoint
+
+commit c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+Author: Alice Johnson <alice@example.com>
+Date:   Sat Mar 8 18:45:00 2025 +0000
+
+    Refactor auth middleware to support OAuth2 PKCE flow
+
+commit d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5
+Author: Carol Davis <carol@example.com>
+Date:   Fri Mar 7 11:20:00 2025 +0000
+
+    Update Docker base image to Node 20 LTS
+
+commit e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6
+Author: Bob Smith <bob@example.com>
+Date:   Thu Mar 6 16:55:00 2025 +0000
+
+    Fix CSS grid layout breaking on Safari 17
+
+commit f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1
+Author: Alice Johnson <alice@example.com>
+Date:   Wed Mar 5 10:30:00 2025 +0000
+
+    Add rate limiting to public API routes
+
+commit a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6
+Author: Dan Lee <dan@example.com>
+Date:   Tue Mar 4 08:00:00 2025 +0000
+
+    Migrate database schema for multi-tenant support`;
+  parseLog();
+}
+
+function clearAll() {
+  $('logInput').value = '';
+  $('searchFilter').value = '';
+  $('authorFilter').innerHTML = '<option value="">All authors</option>';
+  commits = [];
+  $('resultsArea').style.display = 'none';
+}
+</script>
+</body>
+</html>
