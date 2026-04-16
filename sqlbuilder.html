@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL Query Builder - Free Online Tool</title>
+<meta name="description" content="Build SQL queries visually with a drag-and-drop interface. SELECT, JOIN, WHERE, GROUP BY, ORDER BY — no syntax memorization needed. 100% client-side.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sqlbuilder.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .builder-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap}
+  .builder-row select,.builder-row input{min-width:0}
+  .builder-row select{flex:0 0 auto}
+  .builder-row input{flex:1}
+  .col-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .col-chip{padding:4px 10px;border-radius:99px;border:1px solid var(--border);background:var(--surface);font-size:.82rem;cursor:pointer;transition:border-color .15s,background .15s}
+  .col-chip.active{border-color:var(--accent);background:var(--accent);color:#fff}
+  .join-block,.where-block,.order-block{padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .remove-btn{background:none;border:none;color:var(--error);cursor:pointer;font-size:1.1rem;padding:2px 6px;flex-shrink:0}
+  .remove-btn:hover{opacity:.7}
+  .output-sql{font-family:var(--mono);font-size:.88rem;white-space:pre-wrap;word-break:break-all;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;min-height:60px;line-height:1.6}
+  .kw{color:#0550ae;font-weight:600}
+  .str-lit{color:#0a3069}
+  .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  @media(max-width:768px){.builder-row{flex-direction:column}.builder-row select,.builder-row input{width:100%}.join-block,.where-block,.order-block{flex-direction:column;align-items:stretch}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>SQL Query Builder</h1>
+<p class="subtitle">Build SQL queries visually — SELECT, JOIN, WHERE, GROUP BY, ORDER BY</p>
+
+<div class="card">
+<h2>📋 Table & Columns</h2>
+<div class="builder-row">
+  <label style="font-weight:600;white-space:nowrap;line-height:2.2">FROM</label>
+  <input type="text" id="table-name" placeholder="table_name" value="users" oninput="build()">
+  <label style="font-weight:600;white-space:nowrap;line-height:2.2">ALIAS</label>
+  <input type="text" id="table-alias" placeholder="u" value="" oninput="build()" style="max-width:80px">
+</div>
+<label style="font-size:.85rem;color:var(--muted);margin-bottom:6px;display:block">Columns (comma-separated):</label>
+<input type="text" id="columns-input" placeholder="id, name, email, created_at" value="id, name, email, created_at" oninput="updateChips()">
+<div class="col-chips" id="col-chips"></div>
+<label><input type="checkbox" id="select-all" checked onchange="toggleAll()"> Select all columns</label>
+<label style="margin-left:16px"><input type="checkbox" id="distinct" onchange="build()"> DISTINCT</label>
+</div>
+
+<div class="card">
+<h2>🔗 JOINs</h2>
+<div id="joins-container"></div>
+<button class="btn btn-secondary" onclick="addJoin()">+ Add JOIN</button>
+</div>
+
+<div class="card">
+<h2>🔍 WHERE Conditions</h2>
+<div id="where-container"></div>
+<button class="btn btn-secondary" onclick="addWhere()">+ Add Condition</button>
+</div>
+
+<div class="card">
+<h2>📊 GROUP BY & HAVING</h2>
+<div class="builder-row">
+  <label style="font-weight:600;white-space:nowrap;line-height:2.2">GROUP BY</label>
+  <input type="text" id="group-by" placeholder="column1, column2" oninput="build()">
+</div>
+<div class="builder-row">
+  <label style="font-weight:600;white-space:nowrap;line-height:2.2">HAVING</label>
+  <input type="text" id="having" placeholder="COUNT(*) > 5" oninput="build()">
+</div>
+</div>
+
+<div class="card">
+<h2>↕️ ORDER BY</h2>
+<div id="order-container"></div>
+<button class="btn btn-secondary" onclick="addOrder()">+ Add Order</button>
+</div>
+
+<div class="card">
+<h2>📏 LIMIT & OFFSET</h2>
+<div class="builder-row">
+  <label style="font-weight:600;white-space:nowrap;line-height:2.2">LIMIT</label>
+  <input type="number" id="limit-val" placeholder="100" oninput="build()" style="max-width:120px">
+  <label style="font-weight:600;white-space:nowrap;line-height:2.2">OFFSET</label>
+  <input type="number" id="offset-val" placeholder="0" oninput="build()" style="max-width:120px">
+</div>
+</div>
+
+<div class="card">
+<h2>🖥️ Generated SQL</h2>
+<div class="output-sql" id="sql-output"></div>
+<div class="actions">
+  <button class="btn" onclick="copySql()">📋 Copy SQL</button>
+  <button class="btn btn-secondary" onclick="resetAll()">🗑️ Reset</button>
+</div>
+</div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let selectedCols=new Set();
+
+function updateChips(){
+  const raw=$('columns-input').value;
+  const cols=raw.split(',').map(c=>c.trim()).filter(Boolean);
+  const chips=$('col-chips');
+  chips.innerHTML='';
+  const allChecked=$('select-all').checked;
+  if(allChecked){selectedCols=new Set(cols)}
+  cols.forEach(col=>{
+    const chip=document.createElement('span');
+    chip.className='col-chip'+(selectedCols.has(col)||allChecked?' active':'');
+    chip.textContent=col;
+    chip.onclick=()=>{
+      $('select-all').checked=false;
+      if(selectedCols.has(col))selectedCols.delete(col);else selectedCols.add(col);
+      updateChips();
+    };
+    chips.appendChild(chip);
+  });
+  build();
+}
+
+function toggleAll(){
+  const cols=$('columns-input').value.split(',').map(c=>c.trim()).filter(Boolean);
+  if($('select-all').checked)selectedCols=new Set(cols);
+  updateChips();
+}
+
+function addJoin(){
+  const c=$('joins-container');
+  const div=document.createElement('div');
+  div.className='join-block';
+  div.innerHTML=`
+    <select onchange="build()"><option>INNER JOIN</option><option>LEFT JOIN</option><option>RIGHT JOIN</option><option>FULL OUTER JOIN</option><option>CROSS JOIN</option></select>
+    <input type="text" placeholder="table_name" oninput="build()">
+    <span style="font-weight:600">ON</span>
+    <input type="text" placeholder="t1.id = t2.foreign_id" oninput="build()">
+    <button class="remove-btn" onclick="this.parentElement.remove();build()">✕</button>`;
+  c.appendChild(div);
+  build();
+}
+
+function addWhere(){
+  const c=$('where-container');
+  const isFirst=c.children.length===0;
+  const div=document.createElement('div');
+  div.className='where-block';
+  div.innerHTML=`
+    ${isFirst?'<span style="font-weight:600;min-width:44px">WHERE</span>':'<select onchange="build()" style="min-width:60px"><option>AND</option><option>OR</option></select>'}
+    <input type="text" placeholder="column" oninput="build()">
+    <select onchange="build()"><option>=</option><option>!=</option><option>&lt;</option><option>&gt;</option><option>&lt;=</option><option>&gt;=</option><option>LIKE</option><option>NOT LIKE</option><option>IN</option><option>NOT IN</option><option>IS NULL</option><option>IS NOT NULL</option><option>BETWEEN</option></select>
+    <input type="text" placeholder="value" oninput="build()">
+    <button class="remove-btn" onclick="this.parentElement.remove();renumberWhere();build()">✕</button>`;
+  c.appendChild(div);
+  build();
+}
+
+function renumberWhere(){
+  const blocks=$('where-container').querySelectorAll('.where-block');
+  blocks.forEach((b,i)=>{
+    const first=b.children[0];
+    if(i===0&&first.tagName==='SELECT'){
+      const span=document.createElement('span');
+      span.style.cssText='font-weight:600;min-width:44px';
+      span.textContent='WHERE';
+      b.replaceChild(span,first);
+    }
+  });
+}
+
+function addOrder(){
+  const c=$('order-container');
+  const div=document.createElement('div');
+  div.className='order-block';
+  div.innerHTML=`
+    <input type="text" placeholder="column" oninput="build()">
+    <select onchange="build()"><option>ASC</option><option>DESC</option></select>
+    <button class="remove-btn" onclick="this.parentElement.remove();build()">✕</button>`;
+  c.appendChild(div);
+  build();
+}
+
+function esc(s){return s.replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function kw(s){return'<span class="kw">'+s+'</span>'}
+
+function build(){
+  const table=$('table-name').value.trim()||'table_name';
+  const alias=$('table-alias').value.trim();
+  const distinct=$('distinct').checked;
+  const allChecked=$('select-all').checked;
+
+  const cols=$('columns-input').value.split(',').map(c=>c.trim()).filter(Boolean);
+  let selectCols;
+  if(allChecked||selectedCols.size===0||selectedCols.size===cols.length){
+    selectCols='*';
+  }else{
+    selectCols=[...selectedCols].join(', ');
+  }
+
+  let parts=[];
+  parts.push(kw('SELECT')+(distinct?' '+kw('DISTINCT'):'')+' '+esc(selectCols));
+  parts.push(kw('FROM')+' '+esc(table)+(alias?' '+esc(alias):''));
+
+  // JOINs
+  $('joins-container').querySelectorAll('.join-block').forEach(jb=>{
+    const sel=jb.querySelector('select').value;
+    const inputs=jb.querySelectorAll('input');
+    const tbl=inputs[0].value.trim();
+    const on=inputs[1].value.trim();
+    if(tbl)parts.push(kw(sel)+' '+esc(tbl)+(on?' '+kw('ON')+' '+esc(on):''));
+  });
+
+  // WHERE
+  const whereBlocks=$('where-container').querySelectorAll('.where-block');
+  whereBlocks.forEach((wb,i)=>{
+    const inputs=wb.querySelectorAll('input');
+    const selects=wb.querySelectorAll('select');
+    const col=inputs[0].value.trim();
+    if(!col)return;
+    const op=selects[selects.length-1].value;
+    const val=inputs[1]?inputs[1].value.trim():'';
+    let clause='';
+    if(i===0){
+      clause=kw('WHERE')+' ';
+    }else{
+      const conj=selects[0].value;
+      clause=kw(conj)+' ';
+    }
+    if(op==='IS NULL'||op==='IS NOT NULL'){
+      clause+=esc(col)+' '+kw(op);
+    }else{
+      clause+=esc(col)+' '+esc(op)+' '+esc(val);
+    }
+    parts.push(clause);
+  });
+
+  // GROUP BY
+  const groupBy=$('group-by').value.trim();
+  if(groupBy)parts.push(kw('GROUP BY')+' '+esc(groupBy));
+
+  // HAVING
+  const having=$('having').value.trim();
+  if(having)parts.push(kw('HAVING')+' '+esc(having));
+
+  // ORDER BY
+  const orderBlocks=$('order-container').querySelectorAll('.order-block');
+  const orderParts=[];
+  orderBlocks.forEach(ob=>{
+    const col=ob.querySelector('input').value.trim();
+    const dir=ob.querySelector('select').value;
+    if(col)orderParts.push(esc(col)+' '+kw(dir));
+  });
+  if(orderParts.length)parts.push(kw('ORDER BY')+' '+orderParts.join(', '));
+
+  // LIMIT / OFFSET
+  const limit=$('limit-val').value.trim();
+  const offset=$('offset-val').value.trim();
+  if(limit)parts.push(kw('LIMIT')+' '+esc(limit));
+  if(offset)parts.push(kw('OFFSET')+' '+esc(offset));
+
+  $('sql-output').innerHTML=parts.join('\n')+';';
+}
+
+function getPlainSql(){
+  return $('sql-output').textContent;
+}
+
+function copySql(){
+  navigator.clipboard.writeText(getPlainSql()).then(()=>{
+    const t=$('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+  });
+}
+
+function resetAll(){
+  $('table-name').value='users';
+  $('table-alias').value='';
+  $('columns-input').value='id, name, email, created_at';
+  $('select-all').checked=true;
+  $('distinct').checked=false;
+  $('joins-container').innerHTML='';
+  $('where-container').innerHTML='';
+  $('order-container').innerHTML='';
+  $('group-by').value='';
+  $('having').value='';
+  $('limit-val').value='';
+  $('offset-val').value='';
+  selectedCols.clear();
+  updateChips();
+}
+
+updateChips();
+</script>
+</body>
+</html>
