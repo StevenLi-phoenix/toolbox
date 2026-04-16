@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diff Stat Viewer - Parse Unified Diff Statistics</title>
+<meta name="description" content="Free online diff stat viewer. Paste a unified diff or patch and see per-file change statistics with visual bars. No data sent to any server.">
+<meta name="keywords" content="diff stat, diffstat, unified diff, patch statistics, git diff, code review, file changes">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/diffstat.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 250px; font-family: var(--mono); font-size: .85rem; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; }
+  .summary { display: flex; gap: 20px; flex-wrap: wrap; padding: 12px 0; font-size: .9rem; }
+  .summary-item { display: flex; align-items: center; gap: 6px; }
+  .summary-item strong { font-size: 1.2rem; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot-add { background: #22c55e; }
+  .dot-del { background: #ef4444; }
+  .dot-file { background: var(--accent); }
+  .file-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .file-table th { text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--border); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+  .file-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .file-table tr:hover { background: var(--surface2); }
+  .fname { font-family: var(--mono); word-break: break-all; }
+  .additions { color: #16a34a; font-weight: 600; font-family: var(--mono); }
+  .deletions { color: #dc2626; font-weight: 600; font-family: var(--mono); }
+  .bar-wrap { display: flex; align-items: center; gap: 6px; min-width: 200px; }
+  .bar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; flex: 1; background: var(--surface2); }
+  .bar-add { background: #22c55e; height: 100%; }
+  .bar-del { background: #ef4444; height: 100%; }
+  .sort-btn { cursor: pointer; background: none; border: none; color: var(--muted); font-size: .75rem; padding: 2px 4px; }
+  .sort-btn:hover { color: var(--text); }
+  .file-type-badge { display: inline-block; padding: 1px 6px; font-size: .7rem; border-radius: 3px; background: var(--surface2); color: var(--muted); margin-left: 6px; }
+  .table-wrap { max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .text-output { font-family: var(--mono); font-size: .82rem; white-space: pre; padding: 12px; background: var(--surface2); border-radius: var(--radius); overflow-x: auto; }
+  .tabs-row { display: flex; gap: 0; margin-bottom: 12px; }
+  .tab-btn { padding: 6px 16px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: .82rem; color: var(--muted); }
+  .tab-btn:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .tab-btn:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+  .tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  @media (max-width: 768px) {
+    .bar-wrap { min-width: 100px; }
+    .summary { gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Diff Stat Viewer</h1>
+<p class="subtitle">Paste a unified diff or patch to see per-file change statistics</p>
+
+<div class="card">
+<h2>📋 Paste Diff</h2>
+<textarea id="input" placeholder="Paste a unified diff / git diff output here...
+
+Example:
+diff --git a/src/app.js b/src/app.js
+--- a/src/app.js
++++ b/src/app.js
+@@ -10,6 +10,8 @@
+ const app = express();
++app.use(cors());
++app.use(helmet());
+ app.use(express.json());
+-app.listen(3000);
++app.listen(process.env.PORT || 3000);" oninput="parse()"></textarea>
+</div>
+
+<div class="card" id="results" style="display:none">
+<h2>📊 Statistics</h2>
+<div class="summary" id="summary"></div>
+<div class="tabs-row">
+  <button class="tab-btn active" onclick="showView('table')" id="tabTable">Table</button>
+  <button class="tab-btn" onclick="showView('text')" id="tabText">Text</button>
+</div>
+<div id="tableView">
+  <div class="table-wrap">
+    <table class="file-table" id="fileTable">
+      <thead><tr>
+        <th>File <button class="sort-btn" onclick="sortBy('name')">↕</button></th>
+        <th>Added <button class="sort-btn" onclick="sortBy('add')">↕</button></th>
+        <th>Removed <button class="sort-btn" onclick="sortBy('del')">↕</button></th>
+        <th>Changes</th>
+      </tr></thead>
+      <tbody id="fileBody"></tbody>
+    </table>
+  </div>
+</div>
+<div id="textView" style="display:none">
+  <div class="text-output" id="textOutput"></div>
+</div>
+<button class="btn btn-secondary" style="margin-top:12px" onclick="copyStats()">Copy Stats</button>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let files=[];
+let sortCol='name', sortAsc=true;
+
+function parse(){
+  const input=$('input').value;
+  if(!input.trim()){$('results').style.display='none';return;}
+
+  files=[];
+  const lines=input.split('\n');
+  let current=null;
+
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    if(line.startsWith('diff --git ')){
+      const m=line.match(/diff --git a\/.+ b\/(.+)/);
+      current={name:m?m[1]:line.slice(11),add:0,del:0};
+      files.push(current);
+    } else if(line.startsWith('--- ') && lines[i+1] && lines[i+1].startsWith('+++ ')){
+      if(!current){
+        const nm=lines[i+1].match(/^\+\+\+ [b\/]*(.+)/);
+        current={name:nm?nm[1]:'unknown',add:0,del:0};
+        files.push(current);
+      }
+      i++;
+    } else if(line.startsWith('+') && !line.startsWith('+++') && current){
+      current.add++;
+    } else if(line.startsWith('-') && !line.startsWith('---') && current){
+      current.del++;
+    }
+  }
+
+  if(files.length===0){
+    $('results').style.display='none';
+    return;
+  }
+
+  render();
+  $('results').style.display='';
+}
+
+function render(){
+  const totalAdd=files.reduce((s,f)=>s+f.add,0);
+  const totalDel=files.reduce((s,f)=>s+f.del,0);
+  const maxChange=Math.max(...files.map(f=>f.add+f.del),1);
+
+  $('summary').innerHTML=`
+    <div class="summary-item"><span class="dot dot-file"></span><strong>${files.length}</strong> file${files.length!==1?'s':''} changed</div>
+    <div class="summary-item"><span class="dot dot-add"></span><strong class="additions">+${totalAdd}</strong> insertions</div>
+    <div class="summary-item"><span class="dot dot-del"></span><strong class="deletions">-${totalDel}</strong> deletions</div>
+    <div class="summary-item">Net: <strong>${totalAdd-totalDel>=0?'+':''}${totalAdd-totalDel}</strong> lines</div>`;
+
+  const sorted=[...files];
+  sorted.sort((a,b)=>{
+    let v=0;
+    if(sortCol==='name') v=a.name.localeCompare(b.name);
+    else if(sortCol==='add') v=a.add-b.add;
+    else if(sortCol==='del') v=a.del-b.del;
+    else v=(a.add+a.del)-(b.add+b.del);
+    return sortAsc?v:-v;
+  });
+
+  let tbody='';
+  sorted.forEach(f=>{
+    const total=f.add+f.del;
+    const barW=Math.max((total/maxChange)*100,2);
+    const addPct=total?((f.add/total)*100):0;
+    const ext=f.name.includes('.')?f.name.split('.').pop():'';
+    tbody+=`<tr>
+      <td class="fname">${esc(f.name)}${ext?'<span class="file-type-badge">'+esc(ext)+'</span>':''}</td>
+      <td class="additions">+${f.add}</td>
+      <td class="deletions">-${f.del}</td>
+      <td><div class="bar-wrap"><div class="bar" style="width:${barW}%"><div class="bar-add" style="width:${addPct}%"></div><div class="bar-del" style="width:${100-addPct}%"></div></div><span style="font-size:.75rem;color:var(--muted)">${total}</span></div></td>
+    </tr>`;
+  });
+  $('fileBody').innerHTML=tbody;
+
+  const maxNameLen=Math.max(...files.map(f=>f.name.length),1);
+  const maxTotal=Math.max(...files.map(f=>f.add+f.del),1);
+  const barCols=40;
+  let text='';
+  sorted.forEach(f=>{
+    const total=f.add+f.del;
+    const barLen=Math.max(Math.round((total/maxTotal)*barCols),1);
+    const addLen=total?Math.round((f.add/total)*barLen):0;
+    const delLen=barLen-addLen;
+    const bar='+'.repeat(addLen)+'-'.repeat(delLen);
+    text+=` ${f.name.padEnd(maxNameLen)} | ${String(total).padStart(5)} ${bar}\n`;
+  });
+  text+=` ${String(files.length).padStart(maxNameLen)} file${files.length!==1?'s':''} changed, ${totalAdd} insertions(+), ${totalDel} deletions(-)`;
+  $('textOutput').textContent=text;
+}
+
+function sortBy(col){
+  if(sortCol===col) sortAsc=!sortAsc;
+  else { sortCol=col; sortAsc=true; }
+  render();
+}
+
+function showView(v){
+  $('tableView').style.display=v==='table'?'':'none';
+  $('textView').style.display=v==='text'?'':'none';
+  $('tabTable').className='tab-btn'+(v==='table'?' active':'');
+  $('tabText').className='tab-btn'+(v==='text'?' active':'');
+}
+
+function copyStats(){
+  const text=$('textOutput').textContent;
+  navigator.clipboard.writeText(text).then(()=>{
+    const t=$('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+  });
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+</script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Deduplicate - Remove Duplicate Lines Tool</title>
+<meta name="description" content="Free online text deduplication tool. Remove duplicate lines, count frequencies, extract unique or duplicate lines. No data sent to any server.">
+<meta name="keywords" content="deduplicate lines, remove duplicates, unique lines, line frequency, text dedup, duplicate remover">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/textdedupe.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+  .stat { font-size: .82rem; color: var(--muted); }
+  .stat strong { color: var(--text); }
+  textarea { width: 100%; min-height: 300px; font-family: var(--mono); font-size: .85rem; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; }
+  .freq-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .freq-table th { text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--border); font-weight: 600; }
+  .freq-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  .freq-table td:last-child { text-align: right; font-weight: 600; }
+  .freq-bar { background: var(--surface2); border-radius: 2px; height: 6px; margin-top: 3px; }
+  .freq-fill { background: var(--accent); height: 100%; border-radius: 2px; }
+  .options { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .options label { display: flex; align-items: center; gap: 4px; font-size: .82rem; cursor: pointer; }
+  .output-area { max-height: 400px; overflow-y: auto; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    textarea { min-height: 200px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Text Deduplicate</h1>
+<p class="subtitle">Remove duplicate lines, count frequencies, and extract unique or repeated lines</p>
+
+<div class="card">
+<h2>⚙️ Options</h2>
+<div class="options">
+  <label><input type="checkbox" id="caseSensitive" checked onchange="process()"> Case sensitive</label>
+  <label><input type="checkbox" id="trimWhitespace" checked onchange="process()"> Trim whitespace</label>
+  <label><input type="checkbox" id="skipEmpty" checked onchange="process()"> Skip empty lines</label>
+  <label><input type="checkbox" id="preserveOrder" checked onchange="process()"> Preserve order</label>
+</div>
+</div>
+
+<div class="panels">
+<div class="card">
+  <h2>📝 Input</h2>
+  <textarea id="input" placeholder="Paste your text here, one item per line...
+apple
+banana
+apple
+cherry
+banana
+apple" oninput="process()"></textarea>
+  <div class="stats" id="inputStats"></div>
+</div>
+
+<div class="card">
+  <h2>📋 Output</h2>
+  <div class="controls">
+    <button class="btn" onclick="setMode('unique')" id="btn-unique">Unique Lines</button>
+    <button class="btn btn-secondary" onclick="setMode('dedupe')" id="btn-dedupe">Deduplicated</button>
+    <button class="btn btn-secondary" onclick="setMode('dupes')" id="btn-dupes">Duplicates Only</button>
+    <button class="btn btn-secondary" onclick="setMode('freq')" id="btn-freq">Frequency</button>
+    <button class="btn btn-secondary" onclick="copyOutput()" id="copyBtn">Copy</button>
+  </div>
+  <div class="output-area" id="outputArea">
+    <textarea id="output" readonly></textarea>
+  </div>
+  <div class="stats" id="outputStats"></div>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let mode='unique';
+
+function setMode(m){
+  mode=m;
+  ['unique','dedupe','dupes','freq'].forEach(b=>{
+    $('btn-'+b).className=b===m?'btn':'btn btn-secondary';
+  });
+  process();
+}
+
+function process(){
+  const raw=$('input').value;
+  const lines=raw.split('\n');
+  const caseSensitive=$('caseSensitive').checked;
+  const trimWs=$('trimWhitespace').checked;
+  const skipEmpty=$('skipEmpty').checked;
+  const preserveOrder=$('preserveOrder').checked;
+
+  const totalLines=lines.length;
+  const processed=lines.map(l=>{
+    let p=l;
+    if(trimWs) p=p.trim();
+    return {original:l, key:caseSensitive?p:p.toLowerCase(), processed:p};
+  }).filter(l=>!(skipEmpty && l.key===''));
+
+  $('inputStats').innerHTML=`<span class="stat">Total: <strong>${totalLines}</strong></span><span class="stat">Non-empty: <strong>${processed.length}</strong></span>`;
+
+  const freq=new Map();
+  const firstSeen=new Map();
+  processed.forEach((l,i)=>{
+    freq.set(l.key,(freq.get(l.key)||0)+1);
+    if(!firstSeen.has(l.key)) firstSeen.set(l.key,i);
+  });
+
+  const uniqueCount=[...freq.values()].filter(v=>v===1).length;
+  const dupCount=freq.size-uniqueCount;
+
+  let result='';
+  if(mode==='unique'){
+    const seen=new Set();
+    const uniq=[];
+    processed.forEach(l=>{
+      if(!seen.has(l.key)){seen.add(l.key);uniq.push(l.processed);}
+    });
+    if(!preserveOrder) uniq.sort();
+    result=uniq.join('\n');
+    $('outputStats').innerHTML=`<span class="stat">Unique lines: <strong>${uniq.length}</strong></span><span class="stat">Removed: <strong>${processed.length-uniq.length}</strong></span>`;
+    showTextOutput(result);
+  } else if(mode==='dedupe'){
+    const onlyUniq=[];
+    processed.forEach(l=>{
+      if(freq.get(l.key)===1) onlyUniq.push(l.processed);
+    });
+    if(!preserveOrder) onlyUniq.sort();
+    result=onlyUniq.join('\n');
+    $('outputStats').innerHTML=`<span class="stat">Lines appearing exactly once: <strong>${onlyUniq.length}</strong></span>`;
+    showTextOutput(result);
+  } else if(mode==='dupes'){
+    const seen=new Set();
+    const dups=[];
+    processed.forEach(l=>{
+      if(freq.get(l.key)>1 && !seen.has(l.key)){seen.add(l.key);dups.push(l.processed);}
+    });
+    if(!preserveOrder) dups.sort();
+    result=dups.join('\n');
+    $('outputStats').innerHTML=`<span class="stat">Duplicate groups: <strong>${dups.length}</strong></span>`;
+    showTextOutput(result);
+  } else if(mode==='freq'){
+    const entries=[...freq.entries()].map(([k,v])=>{
+      const orig=processed.find(l=>l.key===k);
+      return {text:orig?orig.processed:k, count:v};
+    });
+    entries.sort((a,b)=>b.count-a.count);
+    const maxCount=entries.length?entries[0].count:1;
+    let html='<table class="freq-table"><thead><tr><th>Line</th><th>Count</th></tr></thead><tbody>';
+    entries.forEach(e=>{
+      const pct=Math.round((e.count/maxCount)*100);
+      html+=`<tr><td>${esc(e.text)}<div class="freq-bar"><div class="freq-fill" style="width:${pct}%"></div></div></td><td>${e.count}</td></tr>`;
+    });
+    html+='</tbody></table>';
+    $('outputArea').innerHTML=html;
+    $('outputStats').innerHTML=`<span class="stat">Distinct lines: <strong>${entries.length}</strong></span>`;
+    result=entries.map(e=>`${e.count}\t${e.text}`).join('\n');
+  }
+  window._lastResult=result;
+}
+
+function showTextOutput(text){
+  $('outputArea').innerHTML='<textarea id="output" readonly></textarea>';
+  $('output').value=text;
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function copyOutput(){
+  const text=window._lastResult||'';
+  navigator.clipboard.writeText(text).then(()=>{
+    const t=$('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);
+  });
+}
+
+process();
+</script>
+</body>
+</html>
