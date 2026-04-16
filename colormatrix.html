@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Color Contrast Matrix - Free Online Tool</title>
+<meta name="description" content="Test WCAG contrast ratios for multiple color combinations in a grid. Essential for design system color validation. 100% client-side.">
+<meta name="keywords" content="color contrast matrix, WCAG contrast, accessibility, a11y, color grid, contrast ratio, design system">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/colormatrix.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .color-inputs{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .color-chip{display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);font-size:.85rem}
+  .color-chip input[type="color"]{width:28px;height:28px;border:none;padding:0;cursor:pointer;border-radius:4px}
+  .color-chip input[type="text"]{width:75px;font-family:var(--mono);font-size:.82rem;border:1px solid var(--border);border-radius:4px;padding:2px 6px;background:var(--bg);color:var(--text)}
+  .color-chip .remove{cursor:pointer;color:var(--muted);font-size:1rem;line-height:1;padding:0 2px}
+  .color-chip .remove:hover{color:var(--error)}
+  .matrix-wrap{overflow-x:auto;margin-top:12px}
+  .matrix{border-collapse:collapse;width:100%}
+  .matrix th{font-size:.75rem;font-family:var(--mono);padding:6px 8px;background:var(--surface2);border:1px solid var(--border);white-space:nowrap}
+  .matrix td{text-align:center;padding:0;border:1px solid var(--border);position:relative;min-width:72px;height:56px}
+  .cell{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px;font-size:.75rem;font-weight:600;line-height:1.3}
+  .cell-ratio{font-family:var(--mono);font-size:.85rem}
+  .cell-badges{display:flex;gap:2px;margin-top:2px}
+  .cell-badge{font-size:.6rem;padding:1px 4px;border-radius:3px;font-weight:700;letter-spacing:.5px}
+  .pass{background:rgba(22,163,74,.15);color:#16a34a}
+  .fail{background:rgba(220,38,38,.1);color:#dc2626}
+  .same-cell{background:var(--surface2);color:var(--muted);font-size:.7rem}
+  .th-swatch{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:middle;margin-right:4px;border:1px solid var(--border)}
+  .summary{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}
+  .summary-stat{text-align:center;padding:12px 16px;background:var(--surface2);border-radius:var(--radius);min-width:80px}
+  .summary-num{font-size:1.5rem;font-weight:700;font-family:var(--mono)}
+  .summary-label{font-size:.75rem;color:var(--muted);margin-top:2px}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:.82rem;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:4px}
+  .preset-colors{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  @media(max-width:768px){
+    .matrix td{min-width:60px;height:48px}
+    .cell-ratio{font-size:.75rem}
+    .cell-badge{font-size:.55rem}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Color Contrast Matrix</h1>
+<p class="subtitle">Test WCAG contrast ratios for all foreground/background color pairs in one grid</p>
+
+<div class="card">
+<h2>Colors</h2>
+<div class="preset-colors">
+  <button class="btn btn-sm" onclick="loadPreset('basic')">Basic</button>
+  <button class="btn btn-sm" onclick="loadPreset('tailwind')">Tailwind Neutrals</button>
+  <button class="btn btn-sm" onclick="loadPreset('brand')">Brand Example</button>
+</div>
+<div class="color-inputs" id="color-inputs"></div>
+<div style="margin-top:8px">
+  <button class="btn btn-sm" onclick="addColor()">+ Add Color</button>
+  <button class="btn btn-sm btn-secondary" onclick="copyCSS()">Copy CSS</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Contrast Matrix</h2>
+<div class="legend">
+  <span><span class="cell-badge pass">AA</span> Normal text &ge; 4.5:1</span>
+  <span><span class="cell-badge pass">AA+</span> Large text &ge; 3:1</span>
+  <span><span class="cell-badge pass">AAA</span> Enhanced &ge; 7:1</span>
+</div>
+<div class="matrix-wrap" id="matrix-wrap"></div>
+<div class="summary" id="summary"></div>
+</div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+let colors = [];
+let nextId = 0;
+
+const presets = {
+  basic: [
+    {hex:'#000000',name:'Black'},{hex:'#FFFFFF',name:'White'},{hex:'#1a1a1a',name:'Dark'},
+    {hex:'#666666',name:'Gray'},{hex:'#f5f5f5',name:'Light'}
+  ],
+  tailwind: [
+    {hex:'#0a0a0a',name:'950'},{hex:'#171717',name:'900'},{hex:'#404040',name:'700'},
+    {hex:'#737373',name:'500'},{hex:'#d4d4d4',name:'300'},{hex:'#f5f5f5',name:'100'},
+    {hex:'#fafafa',name:'50'}
+  ],
+  brand: [
+    {hex:'#1e3a5f',name:'Primary'},{hex:'#2563eb',name:'Accent'},{hex:'#ffffff',name:'White'},
+    {hex:'#f8fafc',name:'Background'},{hex:'#64748b',name:'Muted'},{hex:'#0f172a',name:'Dark'}
+  ]
+};
+
+function loadPreset(name) {
+  colors = presets[name].map(c => ({id: nextId++, hex: c.hex, name: c.name}));
+  render();
+}
+
+function addColor() {
+  const hue = Math.floor(Math.random() * 360);
+  const hex = hslToHex(hue, 60, 50);
+  colors.push({id: nextId++, hex, name: 'Color ' + colors.length});
+  render();
+}
+
+function removeColor(id) {
+  colors = colors.filter(c => c.id !== id);
+  render();
+}
+
+function updateColor(id, hex) {
+  const c = colors.find(c => c.id === id);
+  if (c) { c.hex = hex; render(); }
+}
+
+function updateHex(id, val) {
+  if (/^#[0-9a-fA-F]{6}$/.test(val)) updateColor(id, val);
+}
+
+function updateName(id, name) {
+  const c = colors.find(c => c.id === id);
+  if (c) c.name = name;
+  renderMatrix();
+}
+
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => { const k = (n + h / 30) % 12; return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); };
+  return '#' + [f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return {r, g, b};
+}
+
+function relativeLuminance({r, g, b}) {
+  const [rs, gs, bs] = [r, g, b].map(c => {
+    c = c / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function contrastRatio(hex1, hex2) {
+  const l1 = relativeLuminance(hexToRgb(hex1));
+  const l2 = relativeLuminance(hexToRgb(hex2));
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function render() {
+  renderInputs();
+  renderMatrix();
+}
+
+function renderInputs() {
+  const container = document.getElementById('color-inputs');
+  container.innerHTML = colors.map(c => `
+    <div class="color-chip">
+      <input type="color" value="${c.hex}" oninput="updateColor(${c.id}, this.value)">
+      <input type="text" value="${c.hex}" oninput="updateHex(${c.id}, this.value)" maxlength="7">
+      <input type="text" value="${c.name}" style="width:80px;border:none;background:transparent;color:var(--text);font-size:.82rem" oninput="updateName(${c.id}, this.value)">
+      <span class="remove" onclick="removeColor(${c.id})">&times;</span>
+    </div>
+  `).join('');
+}
+
+function renderMatrix() {
+  if (colors.length < 2) {
+    document.getElementById('matrix-wrap').innerHTML = '<p class="empty">Add at least 2 colors to generate the matrix.</p>';
+    document.getElementById('summary').innerHTML = '';
+    return;
+  }
+
+  let totalPairs = 0, passAA = 0, passAAA = 0, passAALarge = 0;
+
+  let html = '<table class="matrix"><thead><tr><th>FG \\ BG</th>';
+  colors.forEach(c => {
+    html += `<th><span class="th-swatch" style="background:${c.hex}"></span>${esc(c.name)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  colors.forEach((fg, fi) => {
+    html += `<tr><th><span class="th-swatch" style="background:${fg.hex}"></span>${esc(fg.name)}</th>`;
+    colors.forEach((bg, bi) => {
+      if (fi === bi) {
+        html += '<td><div class="cell same-cell">—</div></td>';
+      } else {
+        totalPairs++;
+        const ratio = contrastRatio(fg.hex, bg.hex);
+        const isAA = ratio >= 4.5;
+        const isAAA = ratio >= 7;
+        const isAALarge = ratio >= 3;
+        if (isAA) passAA++;
+        if (isAAA) passAAA++;
+        if (isAALarge) passAALarge++;
+
+        let badges = '';
+        if (isAAA) badges += '<span class="cell-badge pass">AAA</span>';
+        else if (isAA) badges += '<span class="cell-badge pass">AA</span>';
+        else if (isAALarge) badges += '<span class="cell-badge pass">AA+</span>';
+        else badges += '<span class="cell-badge fail">FAIL</span>';
+
+        html += `<td><div class="cell" style="background:${bg.hex};color:${fg.hex}"><span class="cell-ratio">${ratio.toFixed(2)}</span><div class="cell-badges">${badges}</div></div></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('matrix-wrap').innerHTML = html;
+
+  const pct = totalPairs > 0 ? Math.round(passAA / totalPairs * 100) : 0;
+  document.getElementById('summary').innerHTML = `
+    <div class="summary-stat"><div class="summary-num">${totalPairs}</div><div class="summary-label">Pairs tested</div></div>
+    <div class="summary-stat"><div class="summary-num" style="color:var(--success)">${passAAA}</div><div class="summary-label">Pass AAA (7:1)</div></div>
+    <div class="summary-stat"><div class="summary-num" style="color:var(--success)">${passAA}</div><div class="summary-label">Pass AA (4.5:1)</div></div>
+    <div class="summary-stat"><div class="summary-num" style="color:var(--success)">${passAALarge}</div><div class="summary-label">Pass AA+ (3:1)</div></div>
+    <div class="summary-stat"><div class="summary-num">${pct}%</div><div class="summary-label">AA compliance</div></div>
+  `;
+}
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function copyCSS() {
+  const lines = colors.map(c => `  --${c.name.toLowerCase().replace(/\s+/g, '-')}: ${c.hex};`);
+  const css = `:root {\n${lines.join('\n')}\n}`;
+  navigator.clipboard.writeText(css).then(() => showToast('CSS copied!'));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg || 'Copied!';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+// Init
+loadPreset('basic');
+</script>
+</body>
+</html>

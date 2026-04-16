@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three-Way Merge Tool - Free Online Tool</title>
+<meta name="description" content="Perform three-way text merges with base, left, and right versions. Detect conflicts, auto-merge clean changes, and resolve conflicts interactively. 100% client-side.">
+<meta name="keywords" content="three-way merge, 3-way merge, diff merge, text merge, conflict resolution, git merge, diff3">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/diffmerge.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .merge-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .merge-grid textarea{min-height:250px;font-family:var(--mono);font-size:.85rem;resize:vertical}
+  .merge-label{font-weight:600;font-size:.85rem;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+  .merge-label .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .dot-base{background:var(--muted)}
+  .dot-left{background:#2563eb}
+  .dot-right{background:#16a34a}
+  .output-area{font-family:var(--mono);font-size:.85rem;white-space:pre-wrap;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);min-height:200px;max-height:500px;overflow:auto;line-height:1.6}
+  .line-base{background:transparent}
+  .line-left{background:rgba(37,99,235,.1)}
+  .line-right{background:rgba(22,163,74,.1)}
+  .line-conflict{background:rgba(220,38,38,.1)}
+  .conflict-marker{color:var(--error);font-weight:700}
+  .stats{display:flex;gap:16px;flex-wrap:wrap}
+  .stat{text-align:center;padding:12px 16px;background:var(--surface2);border-radius:var(--radius);min-width:80px}
+  .stat-num{font-size:1.5rem;font-weight:700;font-family:var(--mono)}
+  .stat-label{font-size:.75rem;color:var(--muted);margin-top:2px}
+  .conflict-nav{display:flex;align-items:center;gap:8px;margin-top:8px}
+  .chunk{border-left:3px solid var(--border);padding:2px 0 2px 8px;margin:2px 0}
+  .chunk-left{border-left-color:#2563eb}
+  .chunk-right{border-left-color:#16a34a}
+  .chunk-conflict{border-left-color:var(--error)}
+  .chunk-header{font-size:.75rem;font-weight:600;color:var(--muted);margin-bottom:2px}
+  .resolve-btns{display:flex;gap:4px;margin-top:4px}
+  @media(max-width:768px){
+    .merge-grid{grid-template-columns:1fr}
+    .merge-grid textarea{min-height:150px}
+    .stats{justify-content:center}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Three-Way Merge</h1>
+<p class="subtitle">Merge base, left, and right text versions with automatic conflict detection</p>
+
+<div class="card">
+<div class="merge-grid">
+  <div>
+    <div class="merge-label"><span class="dot dot-base"></span> Base (common ancestor)</div>
+    <textarea id="base" placeholder="Paste the original/base version here..."></textarea>
+  </div>
+  <div>
+    <div class="merge-label"><span class="dot dot-left"></span> Left (yours)</div>
+    <textarea id="left" placeholder="Paste your version here..."></textarea>
+  </div>
+  <div>
+    <div class="merge-label"><span class="dot dot-right"></span> Right (theirs)</div>
+    <textarea id="right" placeholder="Paste their version here..."></textarea>
+  </div>
+</div>
+<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  <button class="btn" onclick="doMerge()">Merge</button>
+  <button class="btn btn-secondary" onclick="loadExample()">Load Example</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+  <label style="font-size:.85rem;margin-left:auto;display:flex;align-items:center;gap:4px">
+    <input type="checkbox" id="show-markers" checked> Show conflict markers
+  </label>
+</div>
+</div>
+
+<div class="card" id="stats-card" style="display:none">
+<h2>Merge Statistics</h2>
+<div class="stats" id="stats"></div>
+</div>
+
+<div class="card" id="result-card" style="display:none">
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+  <h2>Merged Result</h2>
+  <div style="display:flex;gap:6px">
+    <button class="btn btn-sm" onclick="copyResult()">Copy</button>
+    <button class="btn btn-sm btn-secondary" onclick="downloadResult()">Download</button>
+  </div>
+</div>
+<div class="output-area" id="output"></div>
+</div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+function lcsMatrix(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m + 1}, () => new Uint16Array(n + 1));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+  return dp;
+}
+
+function diffLines(a, b) {
+  const dp = lcsMatrix(a, b);
+  const ops = [];
+  let i = a.length, j = b.length;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+      ops.unshift({type: 'equal', line: a[i-1]});
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.unshift({type: 'insert', line: b[j-1]});
+      j--;
+    } else {
+      ops.unshift({type: 'delete', line: a[i-1]});
+      i--;
+    }
+  }
+  return ops;
+}
+
+function threeWayMerge(base, left, right) {
+  const baseLines = base.split('\n');
+  const leftLines = left.split('\n');
+  const rightLines = right.split('\n');
+
+  const diffL = diffLines(baseLines, leftLines);
+  const diffR = diffLines(baseLines, rightLines);
+
+  // Build hunks from diffs
+  function buildHunks(diff) {
+    const hunks = [];
+    let baseIdx = 0;
+    let i = 0;
+    while (i < diff.length) {
+      if (diff[i].type === 'equal') {
+        hunks.push({type: 'equal', baseLine: baseIdx, lines: [diff[i].line]});
+        baseIdx++;
+        i++;
+      } else {
+        const deleted = [];
+        const inserted = [];
+        while (i < diff.length && diff[i].type !== 'equal') {
+          if (diff[i].type === 'delete') { deleted.push(diff[i].line); baseIdx++; }
+          if (diff[i].type === 'insert') inserted.push(diff[i].line);
+          i++;
+        }
+        hunks.push({type: 'change', deleted, inserted, baseStart: baseIdx - deleted.length, baseCount: deleted.length});
+      }
+    }
+    return hunks;
+  }
+
+  // Simpler approach: line-by-line merge using LCS alignment
+  const result = [];
+  const conflicts = [];
+  let autoMerged = 0;
+  let unchanged = 0;
+
+  // Use a chunk-based approach
+  const leftDiff = diffLines(baseLines, leftLines);
+  const rightDiff = diffLines(baseLines, rightLines);
+
+  // Map base line indices to changes
+  function getChanges(diff) {
+    const changes = new Map();
+    let baseIdx = 0;
+    let newIdx = 0;
+    let i = 0;
+    while (i < diff.length) {
+      if (diff[i].type === 'equal') {
+        baseIdx++;
+        newIdx++;
+        i++;
+      } else {
+        const start = baseIdx;
+        const insertedLines = [];
+        let delCount = 0;
+        while (i < diff.length && diff[i].type !== 'equal') {
+          if (diff[i].type === 'delete') { delCount++; baseIdx++; }
+          if (diff[i].type === 'insert') { insertedLines.push(diff[i].line); newIdx++; }
+          i++;
+        }
+        changes.set(start, {delCount, insertedLines});
+      }
+    }
+    return changes;
+  }
+
+  const leftChanges = getChanges(leftDiff);
+  const rightChanges = getChanges(rightDiff);
+
+  let bi = 0;
+  while (bi <= baseLines.length) {
+    const lc = leftChanges.get(bi);
+    const rc = rightChanges.get(bi);
+
+    if (!lc && !rc) {
+      if (bi < baseLines.length) {
+        result.push(baseLines[bi]);
+        unchanged++;
+      }
+      bi++;
+    } else if (lc && !rc) {
+      lc.insertedLines.forEach(l => result.push(l));
+      autoMerged++;
+      bi += lc.delCount || 1;
+      if (lc.delCount === 0) bi; // pure insert, don't skip base
+      if (lc.delCount === 0) { /* pure insert at this position, don't advance extra */ }
+    } else if (!lc && rc) {
+      rc.insertedLines.forEach(l => result.push(l));
+      autoMerged++;
+      bi += rc.delCount || 1;
+      if (rc.delCount === 0) { }
+    } else {
+      // Both sides changed at same position
+      const lDel = lc.delCount;
+      const rDel = rc.delCount;
+      const lIns = lc.insertedLines;
+      const rIns = rc.insertedLines;
+
+      if (lIns.join('\n') === rIns.join('\n') && lDel === rDel) {
+        // Same change on both sides
+        lIns.forEach(l => result.push(l));
+        autoMerged++;
+      } else {
+        // Real conflict
+        conflicts.push({
+          base: baseLines.slice(bi, bi + Math.max(lDel, rDel)),
+          left: lIns,
+          right: rIns
+        });
+        if (document.getElementById('show-markers').checked) {
+          result.push('<<<<<<< LEFT (yours)');
+          lIns.forEach(l => result.push(l));
+          result.push('=======');
+          rIns.forEach(l => result.push(l));
+          result.push('>>>>>>> RIGHT (theirs)');
+        } else {
+          lIns.forEach(l => result.push(l));
+        }
+      }
+      bi += Math.max(lDel, rDel) || 1;
+      if (lDel === 0 && rDel === 0) { } // both pure inserts
+    }
+  }
+
+  return {text: result.join('\n'), conflicts: conflicts.length, autoMerged, unchanged, total: result.length};
+}
+
+function doMerge() {
+  const base = document.getElementById('base').value;
+  const left = document.getElementById('left').value;
+  const right = document.getElementById('right').value;
+
+  if (!base && !left && !right) return;
+
+  const result = threeWayMerge(base, left, right);
+
+  document.getElementById('stats-card').style.display = '';
+  document.getElementById('result-card').style.display = '';
+
+  const statColors = {
+    conflicts: 'var(--error)',
+    auto: 'var(--success)',
+    unchanged: 'var(--muted)',
+    total: 'var(--text)'
+  };
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="stat-num" style="color:${result.conflicts > 0 ? statColors.conflicts : statColors.auto}">${result.conflicts}</div><div class="stat-label">Conflicts</div></div>
+    <div class="stat"><div class="stat-num" style="color:${statColors.auto}">${result.autoMerged}</div><div class="stat-label">Auto-merged</div></div>
+    <div class="stat"><div class="stat-num">${result.unchanged}</div><div class="stat-label">Unchanged</div></div>
+    <div class="stat"><div class="stat-num">${result.total}</div><div class="stat-label">Output lines</div></div>
+  `;
+
+  // Syntax highlight the output
+  const lines = result.text.split('\n');
+  const html = lines.map(line => {
+    if (line.startsWith('<<<<<<< ')) return `<div class="line-conflict"><span class="conflict-marker">${esc(line)}</span></div>`;
+    if (line === '=======') return `<div class="line-conflict"><span class="conflict-marker">${esc(line)}</span></div>`;
+    if (line.startsWith('>>>>>>> ')) return `<div class="line-conflict"><span class="conflict-marker">${esc(line)}</span></div>`;
+    return `<div>${esc(line) || '&nbsp;'}</div>`;
+  }).join('');
+  document.getElementById('output').innerHTML = html;
+}
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function loadExample() {
+  document.getElementById('base').value = `function greet(name) {
+  console.log("Hello, " + name);
+}
+
+function add(a, b) {
+  return a + b;
+}
+
+// Main
+greet("World");
+console.log(add(2, 3));`;
+
+  document.getElementById('left').value = `function greet(name) {
+  console.log(\`Hello, \${name}!\`);
+}
+
+function add(a, b) {
+  return a + b;
+}
+
+function multiply(a, b) {
+  return a * b;
+}
+
+// Main
+greet("World");
+console.log(add(2, 3));`;
+
+  document.getElementById('right').value = `function greet(name) {
+  console.log("Hi, " + name + "!");
+}
+
+function add(a, b) {
+  if (typeof a !== 'number') throw new Error('Invalid');
+  return a + b;
+}
+
+// Main
+greet("World");
+console.log(add(2, 3));`;
+
+  doMerge();
+}
+
+function clearAll() {
+  document.getElementById('base').value = '';
+  document.getElementById('left').value = '';
+  document.getElementById('right').value = '';
+  document.getElementById('stats-card').style.display = 'none';
+  document.getElementById('result-card').style.display = 'none';
+}
+
+function getResultText() {
+  const output = document.getElementById('output');
+  return output.innerText;
+}
+
+function copyResult() {
+  navigator.clipboard.writeText(getResultText()).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+
+function downloadResult() {
+  const blob = new Blob([getResultText()], {type: 'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'merged.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>

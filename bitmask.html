@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bitmask Calculator - Free Online Tool</title>
+<meta name="description" content="Define named bit flags, combine bitmask values, decode masks back to flag names. Perfect for permissions, feature flags, and binary protocols. 100% client-side.">
+<meta name="keywords" content="bitmask calculator, bit flags, bitwise, permissions, feature flags, binary, bitmask decoder">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bitmask.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .flag-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+  .flag-row:last-child{border-bottom:none}
+  .flag-bit{font-family:var(--mono);font-size:.85rem;color:var(--muted);min-width:50px}
+  .flag-name{flex:1;font-weight:500}
+  .flag-hex{font-family:var(--mono);font-size:.82rem;color:var(--muted);min-width:80px;text-align:right}
+  .flag-toggle{width:20px;height:20px;cursor:pointer;accent-color:var(--accent)}
+  .bits-display{font-family:var(--mono);font-size:1.3rem;letter-spacing:2px;text-align:center;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);word-break:break-all;line-height:1.6}
+  .bit-1{color:var(--success);font-weight:700}
+  .bit-0{color:var(--muted)}
+  .result-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+  .result-row:last-child{border-bottom:none}
+  .result-label{color:var(--muted);font-size:.85rem}
+  .result-value{font-family:var(--mono);font-weight:600}
+  .add-flag-row{display:flex;gap:8px;margin-top:8px}
+  .add-flag-row input{flex:1}
+  .preset-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .decode-input{font-family:var(--mono);font-size:1rem;text-align:center}
+  .active-flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .active-flag{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:2px 8px;font-size:.82rem;font-family:var(--mono)}
+  @media(max-width:768px){
+    .flag-hex{display:none}
+    .bits-display{font-size:1rem;letter-spacing:1px}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Bitmask Calculator</h1>
+<p class="subtitle">Define named bit flags, combine values, and decode bitmasks</p>
+
+<div class="card">
+<h2>Presets</h2>
+<div class="preset-row">
+  <button class="btn btn-sm" onclick="loadPreset('unix')">Unix Permissions</button>
+  <button class="btn btn-sm" onclick="loadPreset('http')">HTTP Methods</button>
+  <button class="btn btn-sm" onclick="loadPreset('features')">Feature Flags</button>
+  <button class="btn btn-sm" onclick="loadPreset('custom')">Clear All</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Bit Flags</h2>
+<div id="flags"></div>
+<div class="add-flag-row">
+  <input type="text" id="new-flag" placeholder="Flag name (e.g. CAN_WRITE)" onkeydown="if(event.key==='Enter')addFlag()">
+  <button class="btn" onclick="addFlag()">+ Add Flag</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Combined Value</h2>
+<div class="bits-display" id="bits"></div>
+<div style="margin-top:12px">
+  <div class="result-row"><span class="result-label">Decimal</span><span class="result-value" id="r-dec">0</span></div>
+  <div class="result-row"><span class="result-label">Hexadecimal</span><span class="result-value" id="r-hex">0x0</span></div>
+  <div class="result-row"><span class="result-label">Octal</span><span class="result-value" id="r-oct">0o0</span></div>
+  <div class="result-row"><span class="result-label">Binary</span><span class="result-value" id="r-bin">0b0</span></div>
+  <div class="result-row"><span class="result-label">Active flags</span><span class="result-value" id="r-count">0 / 0</span></div>
+</div>
+<div style="margin-top:8px;text-align:center">
+  <button class="btn btn-sm" onclick="selectAll()">Select All</button>
+  <button class="btn btn-sm" onclick="selectNone()">Clear All</button>
+  <button class="btn btn-sm" onclick="invertAll()">Invert</button>
+  <button class="btn btn-sm" onclick="copyResult()">Copy Value</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Decode Bitmask</h2>
+<p style="color:var(--muted);font-size:.85rem;margin-bottom:8px">Enter a numeric value to see which flags are set</p>
+<input type="text" class="decode-input" id="decode-input" placeholder="e.g. 7, 0xFF, 0b1010, 0o77" oninput="decode()" style="width:100%">
+<div class="active-flags" id="decoded-flags"></div>
+</div>
+</div>
+
+<footer>
+  <a href="https://buymeacoffee.com/stevenli.phoenix" target="_blank">☕ Buy Me a Coffee</a> ·
+  <a href="index.html">More Tools</a> ·
+  Built with ☕ by <a href="https://github.com/StevenLi-phoenix" target="_blank">Steven Li</a> · No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+let flags = [];
+
+const presets = {
+  unix: [
+    {name:'EXEC_OTHER',bit:0},{name:'WRITE_OTHER',bit:1},{name:'READ_OTHER',bit:2},
+    {name:'EXEC_GROUP',bit:3},{name:'WRITE_GROUP',bit:4},{name:'READ_GROUP',bit:5},
+    {name:'EXEC_OWNER',bit:6},{name:'WRITE_OWNER',bit:7},{name:'READ_OWNER',bit:8},
+    {name:'STICKY',bit:9},{name:'SETGID',bit:10},{name:'SETUID',bit:11}
+  ],
+  http: [
+    {name:'GET',bit:0},{name:'POST',bit:1},{name:'PUT',bit:2},{name:'DELETE',bit:3},
+    {name:'PATCH',bit:4},{name:'HEAD',bit:5},{name:'OPTIONS',bit:6}
+  ],
+  features: [
+    {name:'DARK_MODE',bit:0},{name:'NOTIFICATIONS',bit:1},{name:'BETA_UI',bit:2},
+    {name:'ANALYTICS',bit:3},{name:'EXPORT_CSV',bit:4},{name:'API_ACCESS',bit:5},
+    {name:'ADMIN_PANEL',bit:6},{name:'SSO_LOGIN',bit:7}
+  ],
+  custom: []
+};
+
+function loadPreset(name) {
+  flags = presets[name].map(f => ({...f, active: false}));
+  render();
+}
+
+function addFlag() {
+  const input = document.getElementById('new-flag');
+  const name = input.value.trim().replace(/\s+/g, '_').toUpperCase();
+  if (!name) return;
+  if (flags.some(f => f.name === name)) return;
+  const bit = flags.length > 0 ? Math.max(...flags.map(f => f.bit)) + 1 : 0;
+  flags.push({name, bit, active: false});
+  input.value = '';
+  render();
+}
+
+function removeFlag(i) {
+  flags.splice(i, 1);
+  render();
+}
+
+function toggleFlag(i) {
+  flags[i].active = !flags[i].active;
+  render();
+}
+
+function selectAll() { flags.forEach(f => f.active = true); render(); }
+function selectNone() { flags.forEach(f => f.active = false); render(); }
+function invertAll() { flags.forEach(f => f.active = !f.active); render(); }
+
+function getValue() {
+  let v = 0;
+  flags.forEach(f => { if (f.active) v |= (1 << f.bit); });
+  return v;
+}
+
+function render() {
+  const container = document.getElementById('flags');
+  container.innerHTML = flags.map((f, i) => `
+    <div class="flag-row">
+      <input type="checkbox" class="flag-toggle" ${f.active ? 'checked' : ''} onchange="toggleFlag(${i})">
+      <span class="flag-bit">bit ${f.bit}</span>
+      <span class="flag-name">${f.name}</span>
+      <span class="flag-hex">0x${(1 << f.bit).toString(16).toUpperCase()}</span>
+      <button class="btn btn-sm btn-ghost" onclick="removeFlag(${i})" title="Remove">&times;</button>
+    </div>
+  `).join('');
+
+  const val = getValue();
+  const maxBit = flags.length > 0 ? Math.max(...flags.map(f => f.bit)) : 0;
+  const bitLen = Math.max(8, maxBit + 1);
+  const binStr = val.toString(2).padStart(bitLen, '0');
+  const bitsHtml = [...binStr].map(b =>
+    `<span class="${b === '1' ? 'bit-1' : 'bit-0'}">${b}</span>`
+  ).join('');
+  document.getElementById('bits').innerHTML = bitsHtml || '<span class="bit-0">00000000</span>';
+
+  document.getElementById('r-dec').textContent = val;
+  document.getElementById('r-hex').textContent = '0x' + val.toString(16).toUpperCase();
+  document.getElementById('r-oct').textContent = '0o' + val.toString(8);
+  document.getElementById('r-bin').textContent = '0b' + val.toString(2);
+  const active = flags.filter(f => f.active).length;
+  document.getElementById('r-count').textContent = `${active} / ${flags.length}`;
+}
+
+function decode() {
+  const raw = document.getElementById('decode-input').value.trim();
+  const container = document.getElementById('decoded-flags');
+  if (!raw) { container.innerHTML = ''; return; }
+  let val;
+  try {
+    if (raw.startsWith('0x') || raw.startsWith('0X')) val = parseInt(raw, 16);
+    else if (raw.startsWith('0b') || raw.startsWith('0B')) val = parseInt(raw.slice(2), 2);
+    else if (raw.startsWith('0o') || raw.startsWith('0O')) val = parseInt(raw.slice(2), 8);
+    else val = parseInt(raw, 10);
+  } catch(e) { val = NaN; }
+  if (isNaN(val)) { container.innerHTML = '<span style="color:var(--error);font-size:.85rem">Invalid number</span>'; return; }
+
+  const matched = flags.filter(f => (val & (1 << f.bit)) !== 0);
+  const remaining = val & ~flags.reduce((m, f) => m | (1 << f.bit), 0);
+  let html = matched.map(f => `<span class="active-flag">${f.name}</span>`).join('');
+  if (remaining > 0) html += `<span class="active-flag" style="color:var(--warning)">+unknown bits (0x${remaining.toString(16).toUpperCase()})</span>`;
+  if (!html && val === 0) html = '<span style="color:var(--muted);font-size:.85rem">No flags set</span>';
+  container.innerHTML = html;
+}
+
+function copyResult() {
+  navigator.clipboard.writeText(getValue().toString()).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+
+loadPreset('unix');
+</script>
+</body>
+</html>
