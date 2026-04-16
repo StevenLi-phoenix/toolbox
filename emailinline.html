@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML Email CSS Inliner - Free Online Tool</title>
+<meta name="description" content="Inline CSS styles for HTML emails. Convert style blocks to inline style attributes for maximum email client compatibility. 100% client-side, free.">
+<meta name="keywords" content="css inliner, email css inline, html email, inline styles, email development, email client compatibility, css to inline">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/emailinline.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel textarea {
+    width: 100%; min-height: 340px; padding: 12px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .82rem;
+    background: var(--surface); color: var(--text); resize: vertical; line-height: 1.5;
+    tab-size: 2;
+  }
+  .panel-label { font-size: .82rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+  .options { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .option { display: flex; align-items: center; gap: 6px; font-size: .85rem; cursor: pointer; }
+  .option input { accent-color: var(--accent); }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .preview-frame {
+    width: 100%; min-height: 300px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: #fff;
+  }
+  .stats { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+  .stat { font-size: .82rem; color: var(--muted); }
+  .stat strong { color: var(--text); }
+  .warn-list { margin-top: 10px; padding: 10px 14px; border: 1px solid var(--warning); border-radius: var(--radius); background: #fffbeb; }
+  .warn-list h4 { font-size: .85rem; color: var(--warning); margin-bottom: 6px; }
+  .warn-list ul { margin: 0; padding-left: 18px; font-size: .82rem; color: var(--muted); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HTML Email CSS Inliner</h1>
+<p class="subtitle">Convert &lt;style&gt; blocks to inline style attributes for email client compatibility</p>
+
+<div class="card">
+<h2>⚙️ Options</h2>
+<div class="options">
+  <label class="option"><input type="checkbox" id="removeStyle" checked><span>Remove &lt;style&gt; blocks after inlining</span></label>
+  <label class="option"><input type="checkbox" id="keepMedia" checked><span>Preserve @media queries</span></label>
+  <label class="option"><input type="checkbox" id="keepImportant"><span>Keep !important flags</span></label>
+</div>
+<div class="btn-row">
+  <button class="btn btn-primary" onclick="inlineCSS()">Inline CSS</button>
+  <button class="btn btn-secondary" onclick="loadSample()">Load Sample</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <div class="panel-label"><span>Input HTML</span><span class="stat" id="inputSize"></span></div>
+    <textarea id="input" placeholder="Paste your HTML with <style> blocks here…" spellcheck="false" oninput="updateInputSize()"></textarea>
+  </div>
+  <div class="panel">
+    <div class="panel-label"><span>Output HTML</span>
+      <button class="btn btn-secondary" style="padding:3px 10px;font-size:.78rem" onclick="copyOutput()">Copy</button>
+    </div>
+    <textarea id="output" placeholder="Inlined HTML will appear here…" spellcheck="false" readonly></textarea>
+  </div>
+</div>
+
+<div id="warnings"></div>
+
+<div class="stats" id="stats"></div>
+
+<div class="card" style="margin-top:16px">
+<h2>👁️ Preview</h2>
+<iframe id="previewFrame" class="preview-frame" sandbox="allow-same-origin" title="Email preview"></iframe>
+</div>
+
+<footer class="footer">Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+function $(id) { return document.getElementById(id); }
+
+function updateInputSize() {
+  const len = $('input').value.length;
+  $('inputSize').textContent = len > 0 ? formatBytes(len) : '';
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  return (b / 1024).toFixed(1) + ' KB';
+}
+
+function parseCSS(cssText) {
+  const rules = [];
+  const mediaBlocks = [];
+  let cleaned = cssText;
+
+  // Extract @media blocks first
+  const mediaRegex = /@media\s+[^{]+\{([\s\S]*?\})\s*\}/g;
+  let mm;
+  while ((mm = mediaRegex.exec(cssText)) !== null) {
+    mediaBlocks.push(mm[0]);
+    cleaned = cleaned.replace(mm[0], '');
+  }
+
+  // Remove CSS comments
+  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // Parse remaining rules
+  const ruleRegex = /([^{}]+)\{([^{}]+)\}/g;
+  let m;
+  while ((m = ruleRegex.exec(cleaned)) !== null) {
+    const selectors = m[1].trim().split(',').map(s => s.trim()).filter(Boolean);
+    const propsStr = m[2].trim();
+    const props = {};
+
+    propsStr.split(';').forEach(decl => {
+      const colon = decl.indexOf(':');
+      if (colon === -1) return;
+      const prop = decl.slice(0, colon).trim();
+      const val = decl.slice(colon + 1).trim();
+      if (prop && val) props[prop] = val;
+    });
+
+    if (Object.keys(props).length > 0) {
+      selectors.forEach(sel => {
+        rules.push({ selector: sel, properties: props });
+      });
+    }
+  }
+
+  return { rules, mediaBlocks };
+}
+
+function specificity(sel) {
+  let a = 0, b = 0, c = 0;
+  // Remove pseudo-elements
+  const cleaned = sel.replace(/::[a-z-]+/g, '');
+  // Count IDs
+  a = (cleaned.match(/#[a-zA-Z_-][\w-]*/g) || []).length;
+  // Count classes, attributes, pseudo-classes
+  b = (cleaned.match(/\.[a-zA-Z_-][\w-]*/g) || []).length +
+      (cleaned.match(/\[[^\]]+\]/g) || []).length +
+      (cleaned.match(/:[a-zA-Z_-][\w-]*/g) || []).length;
+  // Count element types
+  c = (cleaned.match(/(^|[\s+>~])([a-zA-Z][\w-]*)/g) || []).length;
+  return a * 10000 + b * 100 + c;
+}
+
+function inlineCSS() {
+  const html = $('input').value.trim();
+  if (!html) return;
+
+  const removeStyle = $('removeStyle').checked;
+  const keepMedia = $('keepMedia').checked;
+  const keepImportant = $('keepImportant').checked;
+  const warnings = [];
+
+  // Parse HTML
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  // Collect all <style> elements
+  const styleEls = doc.querySelectorAll('style');
+  let allRules = [];
+  let allMedia = [];
+
+  styleEls.forEach(el => {
+    const { rules, mediaBlocks } = parseCSS(el.textContent);
+    allRules = allRules.concat(rules);
+    allMedia = allMedia.concat(mediaBlocks);
+  });
+
+  // Sort rules by specificity for proper cascade
+  allRules.sort((a, b) => specificity(a.selector) - specificity(b.selector));
+
+  let inlinedCount = 0;
+  let skippedSelectors = [];
+
+  // Apply rules to elements
+  allRules.forEach(rule => {
+    const sel = rule.selector;
+
+    // Skip pseudo selectors
+    if (sel.match(/::?(?:hover|focus|active|visited|before|after|first-child|last-child|nth-child|first-line|first-letter|placeholder|selection)/)) {
+      skippedSelectors.push(sel);
+      return;
+    }
+
+    try {
+      const elements = doc.querySelectorAll(sel);
+      elements.forEach(el => {
+        const existing = el.getAttribute('style') || '';
+        const existingProps = {};
+
+        // Parse existing inline styles
+        existing.split(';').forEach(decl => {
+          const colon = decl.indexOf(':');
+          if (colon === -1) return;
+          const p = decl.slice(0, colon).trim();
+          const v = decl.slice(colon + 1).trim();
+          if (p) existingProps[p] = v;
+        });
+
+        // Merge new properties (existing inline wins unless !important)
+        for (const [prop, val] of Object.entries(rule.properties)) {
+          let cleanVal = val;
+          const isImportant = val.includes('!important');
+          if (!keepImportant) {
+            cleanVal = val.replace(/\s*!important\s*/g, '');
+          }
+
+          // Existing inline styles take precedence unless new rule has !important
+          if (!existingProps[prop] || isImportant) {
+            existingProps[prop] = cleanVal;
+          }
+        }
+
+        // Rebuild style string
+        const styleStr = Object.entries(existingProps)
+          .map(([p, v]) => `${p}: ${v}`)
+          .join('; ');
+        el.setAttribute('style', styleStr);
+        inlinedCount++;
+      });
+    } catch (e) {
+      skippedSelectors.push(sel);
+    }
+  });
+
+  // Handle <style> removal
+  if (removeStyle) {
+    styleEls.forEach(el => {
+      if (keepMedia && allMedia.length > 0) {
+        el.textContent = '\n' + allMedia.join('\n') + '\n';
+      } else {
+        el.remove();
+      }
+    });
+  }
+
+  // Serialize back to HTML
+  let output = '';
+  const doctype = html.match(/<!DOCTYPE[^>]*>/i);
+  if (doctype) output += doctype[0] + '\n';
+
+  // Get the serialized HTML
+  const serializer = new XMLSerializer();
+  const htmlEl = doc.documentElement;
+
+  // Use a simpler approach - get outerHTML
+  output = doc.documentElement.outerHTML;
+
+  // Clean up xmlns that XMLSerializer adds
+  output = output.replace(/\s+xmlns="[^"]*"/g, '');
+
+  // Re-add doctype if present
+  if (doctype) {
+    output = doctype[0] + '\n' + output;
+  }
+
+  $('output').value = output;
+
+  // Unique skipped selectors
+  const uniqueSkipped = [...new Set(skippedSelectors)];
+
+  // Show warnings
+  const warnEl = $('warnings');
+  if (uniqueSkipped.length > 0) {
+    warnings.push(...uniqueSkipped.map(s => `Pseudo-selector skipped (cannot be inlined): <code>${escHtml(s)}</code>`));
+  }
+  if (allMedia.length > 0 && keepMedia) {
+    warnings.push(`${allMedia.length} @media block(s) preserved in &lt;style&gt; (cannot be inlined).`);
+  }
+
+  if (warnings.length > 0) {
+    warnEl.innerHTML = `<div class="warn-list"><h4>⚠️ Warnings</h4><ul>${warnings.map(w => `<li>${w}</li>`).join('')}</ul></div>`;
+  } else {
+    warnEl.innerHTML = '';
+  }
+
+  // Stats
+  $('stats').innerHTML = `
+    <div class="stat">Rules processed: <strong>${allRules.length}</strong></div>
+    <div class="stat">Elements styled: <strong>${inlinedCount}</strong></div>
+    <div class="stat">Selectors skipped: <strong>${uniqueSkipped.length}</strong></div>
+    <div class="stat">Media queries: <strong>${allMedia.length}</strong></div>
+    <div class="stat">Output size: <strong>${formatBytes(output.length)}</strong></div>
+  `;
+
+  // Update preview
+  const frame = $('previewFrame');
+  const blob = new Blob([output], { type: 'text/html' });
+  frame.src = URL.createObjectURL(blob);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function copyOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = $('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+
+function clearAll() {
+  $('input').value = '';
+  $('output').value = '';
+  $('warnings').innerHTML = '';
+  $('stats').innerHTML = '';
+  $('inputSize').textContent = '';
+  $('previewFrame').src = 'about:blank';
+}
+
+function loadSample() {
+  $('input').value = `<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #f4f4f4; }
+  .wrapper { max-width: 600px; margin: 0 auto; background: #ffffff; }
+  .header { background: #2563eb; color: #ffffff; padding: 24px; text-align: center; }
+  .header h1 { margin: 0; font-size: 24px; }
+  .content { padding: 24px; color: #333333; line-height: 1.6; }
+  .content h2 { color: #1e40af; margin-top: 0; }
+  .btn { display: inline-block; padding: 12px 24px; background: #2563eb; color: #ffffff; text-decoration: none; border-radius: 4px; font-weight: bold; }
+  .btn:hover { background: #1d4ed8; }
+  .footer { background: #f8fafc; padding: 16px 24px; text-align: center; color: #94a3b8; font-size: 12px; }
+  .footer a { color: #2563eb; }
+  @media (max-width: 600px) {
+    .content { padding: 16px !important; }
+    .header { padding: 16px !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>Welcome to Our Newsletter</h1>
+  </div>
+  <div class="content">
+    <h2>Hello there!</h2>
+    <p>Thanks for subscribing to our newsletter. We're excited to have you on board.</p>
+    <p>Check out our latest features:</p>
+    <a href="https://example.com" class="btn">Get Started</a>
+  </div>
+  <div class="footer">
+    <p>You received this because you signed up at example.com</p>
+    <p><a href="#">Unsubscribe</a> · <a href="#">View in browser</a></p>
+  </div>
+</div>
+</body>
+</html>`;
+  updateInputSize();
+}
+
+updateInputSize();
+</script>
+</body>
+</html>
