@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSONC to JSON Converter — Strip Comments & Trailing Commas</title>
+<meta name="description" content="Convert JSONC (JSON with Comments) to valid JSON. Strip single-line //, block /* */ comments, and trailing commas. Perfect for tsconfig.json and VS Code settings.">
+<meta name="keywords" content="jsonc converter, json with comments, strip comments json, tsconfig parser, jsonc to json, trailing commas">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonc.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel textarea { width: 100%; min-height: 340px; font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .panel-header h2 { font-size: 1rem; margin: 0; }
+  .stats { font-size: .8rem; color: var(--muted); margin-top: 8px; }
+  .stats span { margin-right: 12px; }
+  .error-msg { color: var(--error); font-size: .85rem; margin-top: 8px; font-family: var(--mono); }
+  .success-msg { color: var(--success); font-size: .85rem; margin-top: 8px; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .sample-btn { font-size: .8rem; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSONC to JSON Converter</h1>
+<p class="subtitle">Strip // comments, /* block comments */, and trailing commas from JSONC files (tsconfig.json, .vscode/settings.json, etc.)</p>
+
+<div class="btn-row">
+  <button class="btn btn-secondary sample-btn" onclick="loadSample('tsconfig')">tsconfig.json</button>
+  <button class="btn btn-secondary sample-btn" onclick="loadSample('vscode')">VS Code settings</button>
+  <button class="btn btn-secondary sample-btn" onclick="loadSample('eslint')">ESLint config</button>
+</div>
+
+<div class="panels">
+  <div class="panel card">
+    <div class="panel-header">
+      <h2>📝 JSONC Input</h2>
+      <button class="btn" onclick="clearInput()">Clear</button>
+    </div>
+    <textarea id="input" placeholder='Paste JSONC here...&#10;&#10;{&#10;  // This is a comment&#10;  "key": "value", /* inline */&#10;  "list": [1, 2, 3,], // trailing comma&#10;}' oninput="convert()"></textarea>
+    <div class="stats" id="inputStats"></div>
+  </div>
+  <div class="panel card">
+    <div class="panel-header">
+      <h2>✅ Clean JSON</h2>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="copyOutput()">📋 Copy</button>
+        <button class="btn" onclick="downloadOutput()">⬇ Download</button>
+      </div>
+    </div>
+    <textarea id="output" readonly placeholder="Clean JSON will appear here..."></textarea>
+    <div id="message"></div>
+    <div class="stats" id="outputStats"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>⚙️ Options</h2>
+  <div class="row" style="gap:16px;flex-wrap:wrap">
+    <label><input type="checkbox" id="minify"> Minify output</label>
+    <label>Indent:
+      <select id="indent" onchange="convert()">
+        <option value="2" selected>2 spaces</option>
+        <option value="4">4 spaces</option>
+        <option value="tab">Tab</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="sortKeys"> Sort keys</label>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+function stripJsonc(str) {
+  let result = '';
+  let i = 0;
+  let inString = false;
+  let strChar = '';
+
+  while (i < str.length) {
+    if (inString) {
+      if (str[i] === '\\') {
+        result += str[i] + str[i+1];
+        i += 2;
+        continue;
+      }
+      if (str[i] === strChar) {
+        inString = false;
+      }
+      result += str[i];
+      i++;
+      continue;
+    }
+
+    if (str[i] === '"') {
+      inString = true;
+      strChar = '"';
+      result += str[i];
+      i++;
+      continue;
+    }
+
+    if (str[i] === '/' && str[i+1] === '/') {
+      while (i < str.length && str[i] !== '\n') i++;
+      continue;
+    }
+
+    if (str[i] === '/' && str[i+1] === '*') {
+      i += 2;
+      while (i < str.length && !(str[i] === '*' && str[i+1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+
+    result += str[i];
+    i++;
+  }
+
+  result = result.replace(/,(\s*[\]}])/g, '$1');
+  return result;
+}
+
+function convert() {
+  const input = $('input').value.trim();
+  const msgEl = $('message');
+  const outEl = $('output');
+
+  if (!input) {
+    outEl.value = '';
+    msgEl.innerHTML = '';
+    $('inputStats').innerHTML = '';
+    $('outputStats').innerHTML = '';
+    return;
+  }
+
+  const lines = input.split('\n').length;
+  const bytes = new Blob([input]).size;
+  $('inputStats').innerHTML = `<span>${lines} lines</span><span>${bytes.toLocaleString()} bytes</span>`;
+
+  try {
+    const stripped = stripJsonc(input);
+    const parsed = JSON.parse(stripped);
+
+    const minify = $('minify').checked;
+    const sortKeys = $('sortKeys').checked;
+    const indentVal = $('indent').value;
+    const indent = minify ? undefined : (indentVal === 'tab' ? '\t' : parseInt(indentVal));
+
+    let output;
+    if (sortKeys) {
+      output = JSON.stringify(sortObject(parsed), null, indent);
+    } else {
+      output = JSON.stringify(parsed, null, indent);
+    }
+
+    outEl.value = output;
+    const outBytes = new Blob([output]).size;
+    const outLines = output.split('\n').length;
+    const saved = bytes - outBytes;
+    $('outputStats').innerHTML = `<span>${outLines} lines</span><span>${outBytes.toLocaleString()} bytes</span>` +
+      (saved > 0 ? `<span style="color:var(--success)">↓ ${saved} bytes removed</span>` : '');
+    msgEl.innerHTML = '<span class="success-msg">✓ Valid JSON</span>';
+  } catch (e) {
+    outEl.value = '';
+    $('outputStats').innerHTML = '';
+    msgEl.innerHTML = `<span class="error-msg">✗ ${e.message}</span>`;
+  }
+}
+
+function sortObject(obj) {
+  if (Array.isArray(obj)) return obj.map(sortObject);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.keys(obj).sort().reduce((acc, key) => {
+      acc[key] = sortObject(obj[key]);
+      return acc;
+    }, {});
+  }
+  return obj;
+}
+
+function copyOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text);
+  const t = $('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+function downloadOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  const blob = new Blob([text], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'output.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function clearInput() {
+  $('input').value = '';
+  convert();
+}
+
+$('minify').addEventListener('change', convert);
+$('sortKeys').addEventListener('change', convert);
+
+const SAMPLES = {
+  tsconfig: `{
+  // TypeScript compiler options
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true, // speed up compilation
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true,
+    /* Path aliases */
+    "paths": {
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/components/*"],
+    },
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.spec.ts", // test files
+  ],
+}`,
+  vscode: `{
+  // Editor settings
+  "editor.fontSize": 14,
+  "editor.tabSize": 2,
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  /* File associations */
+  "files.associations": {
+    "*.jsonc": "jsonc",
+    "*.env.*": "dotenv",
+  },
+  // Terminal
+  "terminal.integrated.fontSize": 13,
+  "terminal.integrated.defaultProfile.osx": "zsh",
+  // Extensions
+  "eslint.validate": [
+    "javascript",
+    "typescript",
+    "javascriptreact",
+    "typescriptreact",
+  ],
+}`,
+  eslint: `{
+  // ESLint flat config (JSONC)
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2024": true,
+    "node": true,
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    // Prettier must be last
+    "prettier",
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module",
+  },
+  "rules": {
+    "no-console": "warn",
+    "no-unused-vars": "off", /* handled by TS */
+    "@typescript-eslint/no-unused-vars": ["error", {
+      "argsIgnorePattern": "^_",
+    }],
+  },
+}`
+};
+
+function loadSample(name) {
+  $('input').value = SAMPLES[name];
+  convert();
+}
+</script>
+</body>
+</html>

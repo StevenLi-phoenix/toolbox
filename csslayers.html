@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS @layer Builder — Cascade Layers Generator</title>
+<meta name="description" content="Build CSS @layer cascade layers visually. Define layer order, nest layers, add styles, and preview cascade resolution. Export clean CSS code.">
+<meta name="keywords" content="css layer, cascade layers, @layer, css specificity, css cascade, layer order, css generator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/csslayers.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layer-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .layer-item { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: grab; }
+  .layer-item.dragging { opacity: 0.5; }
+  .layer-item .grip { color: var(--muted); font-size: 1.1rem; cursor: grab; user-select: none; }
+  .layer-item .name { flex: 1; font-family: var(--mono); font-size: .9rem; font-weight: 600; }
+  .layer-item .priority { font-size: .75rem; color: var(--muted); background: var(--surface2); padding: 2px 8px; border-radius: 99px; }
+  .layer-item .remove-btn { padding: 2px 8px; border: none; background: none; color: var(--error); cursor: pointer; font-size: 1rem; }
+  .add-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .add-row input { flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .85rem; background: var(--bg); color: var(--text); }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel textarea { width: 100%; min-height: 260px; font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .preview-box { border: 2px solid var(--border); border-radius: var(--radius); padding: 24px; min-height: 120px; text-align: center; }
+  .preview-el { padding: 16px 24px; border-radius: 8px; font-size: 1.1rem; font-weight: 600; transition: all .3s; display: inline-block; }
+  .cascade-viz { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
+  .cascade-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--radius); font-size: .8rem; font-family: var(--mono); }
+  .cascade-bar .idx { width: 20px; text-align: center; color: var(--muted); }
+  .cascade-bar .bar-name { flex: 1; }
+  .cascade-bar .bar-label { font-size: .7rem; color: var(--muted); }
+  .info-box { font-size: .82rem; color: var(--muted); line-height: 1.6; padding: 12px; background: var(--surface); border-radius: var(--radius); margin-top: 12px; }
+  .info-box code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-size: .8rem; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .add-row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CSS @layer Builder</h1>
+<p class="subtitle">Build CSS cascade layers visually. Drag to reorder — lower layers are overridden by higher ones regardless of specificity.</p>
+
+<div class="card">
+  <h2>📋 Layer Order</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">First declared = lowest priority. Drag layers to reorder. Unlayered styles always win.</p>
+  <div class="layer-list" id="layerList"></div>
+  <div class="add-row">
+    <input type="text" id="newLayer" placeholder="Layer name (e.g. reset, base, components, utilities)" onkeydown="if(event.key==='Enter')addLayer()">
+    <button class="btn" onclick="addLayer()">+ Add Layer</button>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px">
+    <button class="btn btn-secondary" onclick="loadPreset('basic')" style="font-size:.8rem">Basic (3 layers)</button>
+    <button class="btn btn-secondary" onclick="loadPreset('itcss')" style="font-size:.8rem">ITCSS (7 layers)</button>
+    <button class="btn btn-secondary" onclick="loadPreset('tailwind')" style="font-size:.8rem">Tailwind-style</button>
+    <button class="btn btn-secondary" onclick="loadPreset('designsystem')" style="font-size:.8rem">Design System</button>
+  </div>
+</div>
+
+<div class="panels">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h2>🎨 Generated CSS</h2>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="copyOutput()">📋 Copy</button>
+      </div>
+    </div>
+    <textarea id="output" readonly placeholder="Add layers above..."></textarea>
+  </div>
+
+  <div class="card">
+    <h2>📊 Cascade Priority</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">Higher number = higher priority. Unlayered styles override all layers.</p>
+    <div class="cascade-viz" id="cascadeViz"></div>
+    <div class="info-box">
+      <strong>How @layer works:</strong><br>
+      Layers declared first have <strong>lowest</strong> priority. A <code>color: red</code> in a higher layer beats <code>#id .class element { color: blue }</code> in a lower layer — specificity only matters <em>within</em> the same layer. Styles outside any layer always win.
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>🖥️ Live Preview</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">See how cascade layers resolve conflicting styles on the same element.</p>
+  <div id="previewContainer">
+    <div class="preview-box">
+      <div class="preview-el" id="previewEl">Preview Element</div>
+    </div>
+  </div>
+  <div id="previewLayers" style="margin-top:12px"></div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let layers = [];
+
+const PRESETS = {
+  basic: ['reset', 'base', 'components'],
+  itcss: ['settings', 'tools', 'generic', 'elements', 'objects', 'components', 'utilities'],
+  tailwind: ['base', 'components', 'utilities'],
+  designsystem: ['reset', 'tokens', 'base', 'layout', 'components', 'patterns', 'overrides'],
+};
+
+const LAYER_COLORS = [
+  '#3b82f6', '#8b5cf6', '#ec4899', '#f97316',
+  '#10b981', '#06b6d4', '#f59e0b', '#6366f1',
+];
+
+function addLayer() {
+  const input = $('newLayer');
+  const name = input.value.trim().replace(/[^a-zA-Z0-9_.-]/g, '');
+  if (!name || layers.includes(name)) { input.focus(); return; }
+  layers.push(name);
+  input.value = '';
+  render();
+}
+
+function removeLayer(i) {
+  layers.splice(i, 1);
+  render();
+}
+
+function loadPreset(name) {
+  layers = [...PRESETS[name]];
+  render();
+}
+
+function render() {
+  renderList();
+  renderOutput();
+  renderCascade();
+  renderPreview();
+}
+
+function renderList() {
+  const el = $('layerList');
+  el.innerHTML = layers.map((name, i) => `
+    <div class="layer-item" draggable="true" data-index="${i}">
+      <span class="grip">⠿</span>
+      <span class="name">${esc(name)}</span>
+      <span class="priority">#${i + 1} priority</span>
+      <button class="remove-btn" onclick="removeLayer(${i})">✕</button>
+    </div>
+  `).join('');
+
+  el.querySelectorAll('.layer-item').forEach(item => {
+    item.addEventListener('dragstart', handleDragStart);
+    item.addEventListener('dragover', handleDragOver);
+    item.addEventListener('drop', handleDrop);
+    item.addEventListener('dragend', handleDragEnd);
+  });
+}
+
+let dragIdx = null;
+
+function handleDragStart(e) {
+  dragIdx = +this.dataset.index;
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  const targetIdx = +this.dataset.index;
+  if (dragIdx === null || dragIdx === targetIdx) return;
+  const item = layers.splice(dragIdx, 1)[0];
+  layers.splice(targetIdx, 0, item);
+  render();
+}
+
+function handleDragEnd() {
+  this.classList.remove('dragging');
+  dragIdx = null;
+}
+
+function renderOutput() {
+  if (layers.length === 0) {
+    $('output').value = '';
+    return;
+  }
+
+  let css = `/* Layer order declaration — first = lowest priority */\n`;
+  css += `@layer ${layers.join(', ')};\n\n`;
+
+  layers.forEach((name, i) => {
+    css += `@layer ${name} {\n`;
+    css += `  /* ${name} styles */\n`;
+    css += `}\n\n`;
+  });
+
+  $('output').value = css.trimEnd() + '\n';
+}
+
+function renderCascade() {
+  const el = $('cascadeViz');
+  if (layers.length === 0) { el.innerHTML = '<span style="color:var(--muted);font-size:.85rem">No layers defined</span>'; return; }
+
+  const all = [...layers.map((name, i) => ({name, idx: i + 1})), {name: '(unlayered)', idx: layers.length + 1}];
+
+  el.innerHTML = all.map((item, i) => {
+    const pct = ((item.idx) / all.length) * 100;
+    const color = item.name === '(unlayered)' ? 'var(--success)' : LAYER_COLORS[i % LAYER_COLORS.length];
+    return `
+      <div class="cascade-bar" style="background:${color}15;border-left:3px solid ${color}">
+        <span class="idx">${item.idx}</span>
+        <span class="bar-name" style="color:${color};font-weight:600">${esc(item.name)}</span>
+        <span class="bar-label">${item.name === '(unlayered)' ? 'Always wins' : `Priority ${item.idx}`}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderPreview() {
+  const container = $('previewLayers');
+  if (layers.length === 0) { container.innerHTML = ''; return; }
+
+  const previewColors = ['#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899'];
+
+  container.innerHTML = '<p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">Each layer sets a different color. The highest-priority layer wins:</p>' +
+    layers.map((name, i) => {
+      const c = previewColors[i % previewColors.length];
+      return `<div style="font-size:.82rem;font-family:var(--mono);margin-bottom:4px">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${c};vertical-align:middle;margin-right:6px"></span>
+        @layer ${esc(name)} → color: <span style="color:${c};font-weight:600">${c}</span>
+      </div>`;
+    }).join('');
+
+  const winColor = previewColors[(layers.length - 1) % previewColors.length];
+  const winLayer = layers[layers.length - 1];
+
+  const styleEl = document.getElementById('previewStyle') || document.createElement('style');
+  styleEl.id = 'previewStyle';
+
+  let css = `@layer ${layers.join(', ')};\n`;
+  layers.forEach((name, i) => {
+    const c = previewColors[i % previewColors.length];
+    css += `@layer ${name} { #previewEl { color: ${c}; background: ${c}15; border: 2px solid ${c}; } }\n`;
+  });
+
+  styleEl.textContent = css;
+  if (!styleEl.parentNode) document.head.appendChild(styleEl);
+
+  container.innerHTML += `<p style="font-size:.85rem;margin-top:8px;font-weight:600">Winner: <code style="color:${winColor}">@layer ${esc(winLayer)}</code> (highest priority)</p>`;
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function copyOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text);
+  const t = $('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+loadPreset('basic');
+</script>
+</body>
+</html>

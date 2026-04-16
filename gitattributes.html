@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>.gitattributes Builder — Configure Line Endings, Diffs & Linguist</title>
+<meta name="description" content="Build .gitattributes files visually. Configure line endings (CRLF/LF), diff drivers, merge strategies, binary detection, and GitHub Linguist overrides.">
+<meta name="keywords" content="gitattributes generator, git line endings, CRLF LF, linguist override, git diff driver, gitattributes builder">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/gitattributes.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .rule-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; }
+  .rule-row input, .rule-row select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .85rem; background: var(--bg); color: var(--text); }
+  .rule-row .remove-btn { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: none; color: var(--error); cursor: pointer; font-size: .9rem; }
+  .rule-row .remove-btn:hover { background: #fef2f2; }
+  .template-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .output-area { position: relative; }
+  .output-area textarea { width: 100%; min-height: 200px; font-family: var(--mono); font-size: .85rem; }
+  .attr-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .attr-tag { font-size: .75rem; padding: 2px 8px; border-radius: 99px; background: var(--surface2); color: var(--muted); cursor: pointer; }
+  .attr-tag:hover { background: var(--border); }
+  .attr-tag.active { background: var(--accent); color: #fff; }
+  .attr-builder { display: grid; grid-template-columns: 1fr 200px auto; gap: 8px; align-items: start; margin-bottom: 12px; }
+  .attr-builder input { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; font-size: .85rem; background: var(--bg); color: var(--text); }
+  @media (max-width: 768px) {
+    .rule-row { grid-template-columns: 1fr; }
+    .attr-builder { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>.gitattributes Builder</h1>
+<p class="subtitle">Configure line endings, diff drivers, merge strategies, and GitHub Linguist overrides for your repo.</p>
+
+<div class="card">
+  <h2>🚀 Quick Templates</h2>
+  <div class="template-grid">
+    <button class="btn btn-secondary" onclick="loadTemplate('web')">Web Project</button>
+    <button class="btn btn-secondary" onclick="loadTemplate('python')">Python</button>
+    <button class="btn btn-secondary" onclick="loadTemplate('dotnet')">C# / .NET</button>
+    <button class="btn btn-secondary" onclick="loadTemplate('unity')">Unity</button>
+    <button class="btn btn-secondary" onclick="loadTemplate('cross')">Cross-Platform</button>
+    <button class="btn btn-secondary" onclick="loadTemplate('linguist')">Linguist Only</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>📝 Rules</h2>
+  <div id="rules"></div>
+  <div class="attr-builder">
+    <input type="text" id="newPattern" placeholder="Pattern (e.g. *.js, *.png, docs/)">
+    <select id="newAttrs">
+      <option value="text=auto">text=auto (auto detect)</option>
+      <option value="text eol=lf">text eol=lf (force LF)</option>
+      <option value="text eol=crlf">text eol=crlf (force CRLF)</option>
+      <option value="binary">binary (no diff/merge)</option>
+      <option value="-text">-text (leave as-is)</option>
+      <option value="text diff=php">text diff=php</option>
+      <option value="text diff=python">text diff=python</option>
+      <option value="text diff=ruby">text diff=ruby</option>
+      <option value="text diff=html">text diff=html</option>
+      <option value="text diff=css">text diff=css</option>
+      <option value="merge=union">merge=union (keep both)</option>
+      <option value="export-ignore">export-ignore</option>
+      <option value="linguist-vendored">linguist-vendored</option>
+      <option value="linguist-generated">linguist-generated</option>
+      <option value="linguist-documentation">linguist-documentation</option>
+      <option value="linguist-detectable">linguist-detectable</option>
+      <option value="custom">Custom attributes...</option>
+    </select>
+    <button class="btn" onclick="addRule()">+ Add</button>
+  </div>
+  <input type="text" id="customAttrs" placeholder="Custom attributes (e.g. text eol=lf diff=javascript)" style="display:none;width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.85rem;background:var(--bg);color:var(--text);margin-bottom:12px">
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <h2>📄 .gitattributes</h2>
+    <div style="display:flex;gap:6px">
+      <button class="btn" onclick="copyOutput()">📋 Copy</button>
+      <button class="btn" onclick="downloadOutput()">⬇ Download</button>
+    </div>
+  </div>
+  <div class="output-area">
+    <textarea id="output" readonly placeholder="Add rules above to generate .gitattributes..."></textarea>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let rules = [];
+
+$('newAttrs').addEventListener('change', function() {
+  $('customAttrs').style.display = this.value === 'custom' ? 'block' : 'none';
+});
+
+function addRule() {
+  const pattern = $('newPattern').value.trim();
+  if (!pattern) { $('newPattern').focus(); return; }
+  const sel = $('newAttrs').value;
+  const attrs = sel === 'custom' ? $('customAttrs').value.trim() : sel;
+  if (!attrs) return;
+  rules.push({ pattern, attrs });
+  $('newPattern').value = '';
+  $('customAttrs').value = '';
+  $('customAttrs').style.display = 'none';
+  $('newAttrs').value = 'text=auto';
+  render();
+}
+
+function removeRule(i) {
+  rules.splice(i, 1);
+  render();
+}
+
+function render() {
+  const rulesEl = $('rules');
+  rulesEl.innerHTML = rules.map((r, i) => `
+    <div class="rule-row">
+      <code style="font-size:.85rem;color:var(--text)">${esc(r.pattern)}</code>
+      <code style="font-size:.85rem;color:var(--muted)">${esc(r.attrs)}</code>
+      <button class="remove-btn" onclick="removeRule(${i})">✕</button>
+    </div>
+  `).join('');
+
+  if (rules.length === 0) {
+    $('output').value = '';
+    return;
+  }
+
+  const maxPat = Math.max(...rules.map(r => r.pattern.length));
+  const lines = [
+    '# Auto-generated .gitattributes',
+    '# https://stevenli-phoenix.github.io/toolbox/gitattributes.html',
+    '',
+  ];
+
+  let lastCategory = '';
+  for (const r of rules) {
+    const cat = categorize(r.attrs);
+    if (cat !== lastCategory) {
+      if (lines[lines.length-1] !== '') lines.push('');
+      lines.push(`# ${cat}`);
+      lastCategory = cat;
+    }
+    lines.push(r.pattern.padEnd(maxPat + 2) + r.attrs);
+  }
+
+  $('output').value = lines.join('\n') + '\n';
+}
+
+function categorize(attrs) {
+  if (attrs.includes('linguist')) return 'GitHub Linguist';
+  if (attrs.includes('export-ignore')) return 'Archive Export';
+  if (attrs.includes('merge')) return 'Merge Strategy';
+  if (attrs.includes('binary') || attrs === '-text') return 'Binary Files';
+  if (attrs.includes('diff=')) return 'Diff Drivers';
+  return 'Line Endings';
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function copyOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text);
+  const t = $('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+function downloadOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '.gitattributes';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+const TEMPLATES = {
+  web: [
+    { pattern: '*', attrs: 'text=auto' },
+    { pattern: '*.js', attrs: 'text eol=lf' },
+    { pattern: '*.jsx', attrs: 'text eol=lf' },
+    { pattern: '*.ts', attrs: 'text eol=lf' },
+    { pattern: '*.tsx', attrs: 'text eol=lf' },
+    { pattern: '*.css', attrs: 'text eol=lf diff=css' },
+    { pattern: '*.scss', attrs: 'text eol=lf diff=css' },
+    { pattern: '*.html', attrs: 'text eol=lf diff=html' },
+    { pattern: '*.json', attrs: 'text eol=lf' },
+    { pattern: '*.md', attrs: 'text eol=lf' },
+    { pattern: '*.yaml', attrs: 'text eol=lf' },
+    { pattern: '*.yml', attrs: 'text eol=lf' },
+    { pattern: '*.png', attrs: 'binary' },
+    { pattern: '*.jpg', attrs: 'binary' },
+    { pattern: '*.gif', attrs: 'binary' },
+    { pattern: '*.ico', attrs: 'binary' },
+    { pattern: '*.svg', attrs: 'text eol=lf' },
+    { pattern: '*.woff', attrs: 'binary' },
+    { pattern: '*.woff2', attrs: 'binary' },
+    { pattern: 'package-lock.json', attrs: '-diff linguist-generated' },
+    { pattern: 'yarn.lock', attrs: '-diff linguist-generated' },
+  ],
+  python: [
+    { pattern: '*', attrs: 'text=auto' },
+    { pattern: '*.py', attrs: 'text eol=lf diff=python' },
+    { pattern: '*.pyi', attrs: 'text eol=lf diff=python' },
+    { pattern: '*.pyx', attrs: 'text eol=lf diff=python' },
+    { pattern: '*.ipynb', attrs: 'text eol=lf' },
+    { pattern: '*.txt', attrs: 'text eol=lf' },
+    { pattern: '*.md', attrs: 'text eol=lf' },
+    { pattern: '*.toml', attrs: 'text eol=lf' },
+    { pattern: '*.cfg', attrs: 'text eol=lf' },
+    { pattern: '*.ini', attrs: 'text eol=lf' },
+    { pattern: '*.sh', attrs: 'text eol=lf' },
+    { pattern: '*.png', attrs: 'binary' },
+    { pattern: '*.pkl', attrs: 'binary' },
+    { pattern: '*.h5', attrs: 'binary' },
+    { pattern: 'poetry.lock', attrs: '-diff linguist-generated' },
+    { pattern: 'Pipfile.lock', attrs: '-diff linguist-generated' },
+  ],
+  dotnet: [
+    { pattern: '*', attrs: 'text=auto' },
+    { pattern: '*.cs', attrs: 'text eol=crlf diff=csharp' },
+    { pattern: '*.csx', attrs: 'text eol=crlf diff=csharp' },
+    { pattern: '*.csproj', attrs: 'text eol=crlf' },
+    { pattern: '*.sln', attrs: 'text eol=crlf' },
+    { pattern: '*.xaml', attrs: 'text eol=crlf' },
+    { pattern: '*.config', attrs: 'text eol=crlf' },
+    { pattern: '*.json', attrs: 'text eol=lf' },
+    { pattern: '*.md', attrs: 'text eol=lf' },
+    { pattern: '*.sh', attrs: 'text eol=lf' },
+    { pattern: '*.cmd', attrs: 'text eol=crlf' },
+    { pattern: '*.bat', attrs: 'text eol=crlf' },
+    { pattern: '*.ps1', attrs: 'text eol=crlf' },
+    { pattern: '*.dll', attrs: 'binary' },
+    { pattern: '*.exe', attrs: 'binary' },
+    { pattern: '*.png', attrs: 'binary' },
+  ],
+  unity: [
+    { pattern: '*', attrs: 'text=auto' },
+    { pattern: '*.cs', attrs: 'text eol=lf diff=csharp' },
+    { pattern: '*.shader', attrs: 'text eol=lf' },
+    { pattern: '*.cginc', attrs: 'text eol=lf' },
+    { pattern: '*.hlsl', attrs: 'text eol=lf' },
+    { pattern: '*.unity', attrs: 'binary merge=unityyamlmerge' },
+    { pattern: '*.prefab', attrs: 'binary merge=unityyamlmerge' },
+    { pattern: '*.asset', attrs: 'binary merge=unityyamlmerge' },
+    { pattern: '*.mat', attrs: 'binary merge=unityyamlmerge' },
+    { pattern: '*.meta', attrs: 'text eol=lf' },
+    { pattern: '*.png', attrs: 'binary' },
+    { pattern: '*.psd', attrs: 'binary' },
+    { pattern: '*.fbx', attrs: 'binary' },
+    { pattern: '*.obj', attrs: 'binary' },
+    { pattern: '*.wav', attrs: 'binary' },
+    { pattern: '*.mp3', attrs: 'binary' },
+    { pattern: '*.dll', attrs: 'binary' },
+  ],
+  cross: [
+    { pattern: '*', attrs: 'text=auto' },
+    { pattern: '*.sh', attrs: 'text eol=lf' },
+    { pattern: '*.bash', attrs: 'text eol=lf' },
+    { pattern: '*.zsh', attrs: 'text eol=lf' },
+    { pattern: 'Makefile', attrs: 'text eol=lf' },
+    { pattern: 'Dockerfile', attrs: 'text eol=lf' },
+    { pattern: '*.cmd', attrs: 'text eol=crlf' },
+    { pattern: '*.bat', attrs: 'text eol=crlf' },
+    { pattern: '*.ps1', attrs: 'text eol=crlf' },
+    { pattern: '*.md', attrs: 'text eol=lf' },
+    { pattern: '*.json', attrs: 'text eol=lf' },
+    { pattern: '*.yaml', attrs: 'text eol=lf' },
+    { pattern: '*.yml', attrs: 'text eol=lf' },
+    { pattern: '*.xml', attrs: 'text eol=lf' },
+    { pattern: '*.png', attrs: 'binary' },
+    { pattern: '*.jpg', attrs: 'binary' },
+    { pattern: '*.zip', attrs: 'binary' },
+    { pattern: '*.gz', attrs: 'binary' },
+    { pattern: '*.tar', attrs: 'binary' },
+  ],
+  linguist: [
+    { pattern: 'vendor/**', attrs: 'linguist-vendored' },
+    { pattern: 'third_party/**', attrs: 'linguist-vendored' },
+    { pattern: 'docs/**', attrs: 'linguist-documentation' },
+    { pattern: '*.lock', attrs: 'linguist-generated' },
+    { pattern: '*.min.js', attrs: 'linguist-generated' },
+    { pattern: '*.min.css', attrs: 'linguist-generated' },
+    { pattern: 'dist/**', attrs: 'linguist-generated' },
+    { pattern: 'build/**', attrs: 'linguist-generated' },
+  ],
+};
+
+function loadTemplate(name) {
+  rules = JSON.parse(JSON.stringify(TEMPLATES[name]));
+  render();
+}
+</script>
+</body>
+</html>
