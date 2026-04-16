@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sieve of Eratosthenes Visualizer — Free Online Prime Explorer</title>
+<meta name="description" content="Watch the Sieve of Eratosthenes find primes step by step. Adjustable range up to 10,000, animated crossing-out, twin prime highlighting, and exportable prime list.">
+<meta name="keywords" content="sieve of eratosthenes, prime numbers, prime sieve, visualizer, number theory">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sieve.html">
+<meta property="og:title" content="Sieve of Eratosthenes Visualizer">
+<meta property="og:description" content="Animate the Sieve of Eratosthenes across any range up to 10,000 and explore twin primes.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/sieve.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .controls label { font-size: .78rem; color: var(--muted); display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: .5px; }
+  .controls input[type="range"] { width: 140px; }
+  .controls input[type="number"] { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; }
+  .sieve-grid {
+    display: grid;
+    gap: 2px;
+    padding: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    max-height: 460px;
+    overflow-y: auto;
+  }
+  .num {
+    text-align: center;
+    font-family: var(--mono);
+    font-size: .72rem;
+    padding: 4px 0;
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text);
+    transition: background-color .2s, color .2s;
+    user-select: none;
+  }
+  .num.composite { background: var(--surface2); color: var(--muted); text-decoration: line-through; }
+  .num.prime { background: #dcfce7; color: #166534; font-weight: 600; }
+  .num.active { background: var(--accent); color: #fff; font-weight: 600; transform: scale(1.08); }
+  .num.multiple { background: #fef3c7; color: #92400e; }
+  .num.one { background: var(--surface2); color: var(--muted); }
+  .num.twin { box-shadow: inset 0 0 0 2px #2563eb; }
+  :root.dark .num.prime { background: #064e3b; color: #86efac; }
+  :root.dark .num.multiple { background: #78350f; color: #fde68a; }
+  .stats { display: flex; flex-wrap: wrap; gap: 18px; margin: 10px 0; font-size: .85rem; color: var(--muted); }
+  .stats b { color: var(--text); font-family: var(--mono); }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: .78rem; color: var(--muted); margin-bottom: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
+  .prime-list {
+    font-family: var(--mono); font-size: .8rem; color: var(--muted);
+    padding: 10px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); max-height: 200px; overflow-y: auto;
+    line-height: 1.6; word-break: break-all;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Sieve of Eratosthenes Visualizer</h1>
+<p class="subtitle">Watch the classic prime-finding algorithm strike out composite numbers one factor at a time. Pick a range, press Run, and see primes emerge from the grid. Twin primes are highlighted in blue.</p>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <div class="controls">
+    <button class="btn" id="runBtn">▶ Run</button>
+    <button class="btn btn-secondary" id="stepBtn">Step</button>
+    <button class="btn btn-secondary" id="resetBtn">Reset</button>
+    <button class="btn btn-secondary" id="instantBtn">Instant</button>
+    <label>Limit <input type="number" id="limit" min="10" max="10000" value="200" step="10"></label>
+    <label>Speed <input type="range" id="speed" min="1" max="60" value="10"></label>
+    <label>Columns <input type="number" id="cols" min="5" max="30" value="10"></label>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:#dcfce7"></i>Prime</span>
+    <span><i style="background:var(--surface2);border:1px solid var(--border)"></i>Composite (struck out)</span>
+    <span><i style="background:var(--accent)"></i>Current prime</span>
+    <span><i style="background:#fef3c7"></i>Multiple being crossed</span>
+    <span><i style="background:#dcfce7;box-shadow:inset 0 0 0 2px #2563eb"></i>Twin prime</span>
+  </div>
+
+  <div class="sieve-grid" id="grid"></div>
+  <div class="stats" id="stats"></div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <h3 style="margin:0 0 8px;font-size:.95rem">Primes found</h3>
+  <div class="prime-list" id="primeList">—</div>
+  <div class="row" style="margin-top:10px">
+    <button class="btn btn-secondary" id="copyBtn">Copy primes</button>
+    <button class="btn btn-secondary" id="downloadBtn">Download .txt</button>
+  </div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <h3 style="margin:0 0 8px;font-size:.95rem">About the algorithm</h3>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55;margin:0">
+    The Sieve of Eratosthenes (c. 240 BCE) finds all primes up to <i>n</i> by repeatedly taking the next unmarked number
+    as prime and marking all its multiples (starting from p²) as composite. Its time complexity is
+    O(n log log n) — among the fastest classical ways to generate primes in a range.
+    Twin primes are pairs (p, p+2) that are both prime; the twin prime conjecture (whether infinitely many exist)
+    remains famously unresolved.
+  </p>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const runBtn = document.getElementById('runBtn');
+const stepBtn = document.getElementById('stepBtn');
+const resetBtn = document.getElementById('resetBtn');
+const instantBtn = document.getElementById('instantBtn');
+const limitEl = document.getElementById('limit');
+const speedEl = document.getElementById('speed');
+const colsEl = document.getElementById('cols');
+const gridEl = document.getElementById('grid');
+const statsEl = document.getElementById('stats');
+const primeListEl = document.getElementById('primeList');
+const copyBtn = document.getElementById('copyBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+
+let N = 200;
+let status; // 0=unmarked, 1=prime, 2=composite
+let currentPrime = 0;
+let multiplier = 0;
+let running = false;
+let timer = 0;
+
+function build() {
+  N = Math.max(10, Math.min(10000, +limitEl.value || 200));
+  const cols = Math.max(5, Math.min(30, +colsEl.value || 10));
+  status = new Uint8Array(N + 1);
+  currentPrime = 0;
+  multiplier = 0;
+  gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(36px, 1fr))`;
+  gridEl.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for (let i = 1; i <= N; i++) {
+    const d = document.createElement('div');
+    d.className = 'num';
+    d.id = 'n' + i;
+    d.textContent = i;
+    if (i === 1) d.classList.add('one');
+    frag.appendChild(d);
+  }
+  gridEl.appendChild(frag);
+  updateStats();
+  updatePrimeList();
+}
+
+function nextPrime(from) {
+  for (let i = from; i * i <= N; i++) {
+    if (status[i] !== 2) return i;
+  }
+  return -1;
+}
+
+function markCell(i) {
+  const el = document.getElementById('n' + i);
+  if (!el) return;
+  el.classList.remove('active','multiple');
+  if (status[i] === 1) el.classList.add('prime');
+  else if (status[i] === 2) el.classList.add('composite');
+}
+
+function step() {
+  // If we have an active prime being processed, cross out next multiple
+  if (currentPrime > 0) {
+    // clear previous multiple highlight
+    if (multiplier > 0) {
+      const prev = document.getElementById('n' + multiplier);
+      if (prev) prev.classList.remove('multiple');
+    }
+    let next = multiplier === 0 ? currentPrime * currentPrime : multiplier + currentPrime;
+    if (next > N) {
+      // done with this prime
+      const pEl = document.getElementById('n' + currentPrime);
+      if (pEl) pEl.classList.remove('active');
+      pEl.classList.add('prime');
+      currentPrime = 0;
+      multiplier = 0;
+      updateStats();
+      updatePrimeList();
+      return true;
+    }
+    multiplier = next;
+    if (status[next] !== 2) {
+      status[next] = 2;
+      const el = document.getElementById('n' + next);
+      if (el) {
+        el.classList.remove('prime');
+        el.classList.add('multiple');
+      }
+    }
+    updateStats();
+    return true;
+  }
+
+  // Find next prime to process
+  const p = nextPrime(2);
+  if (p === -1) {
+    // finalize remaining unmarked as primes
+    for (let i = 2; i <= N; i++) {
+      if (status[i] === 0) {
+        status[i] = 1;
+        const el = document.getElementById('n' + i);
+        if (el) el.classList.add('prime');
+      }
+    }
+    running = false;
+    runBtn.textContent = '▶ Run';
+    clearInterval(timer);
+    updateStats();
+    updatePrimeList();
+    return false;
+  }
+  status[p] = 1;
+  currentPrime = p;
+  multiplier = 0;
+  const pEl = document.getElementById('n' + p);
+  if (pEl) {
+    pEl.classList.remove('composite');
+    pEl.classList.add('active');
+  }
+  updateStats();
+  return true;
+}
+
+function instant() {
+  stop();
+  build();
+  for (let i = 2; i * i <= N; i++) {
+    if (status[i] === 2) continue;
+    status[i] = 1;
+    for (let j = i * i; j <= N; j += i) {
+      if (status[j] !== 2) status[j] = 2;
+    }
+  }
+  for (let i = 2; i <= N; i++) {
+    if (status[i] === 0) status[i] = 1;
+  }
+  for (let i = 2; i <= N; i++) markCell(i);
+  updateStats();
+  updatePrimeList();
+}
+
+function collectPrimes() {
+  const p = [];
+  for (let i = 2; i <= N; i++) if (status[i] === 1) p.push(i);
+  return p;
+}
+
+function updateStats() {
+  let primes = 0, composites = 0, unknown = 0;
+  for (let i = 2; i <= N; i++) {
+    if (status[i] === 1) primes++;
+    else if (status[i] === 2) composites++;
+    else unknown++;
+  }
+  statsEl.innerHTML =
+    '<span>Limit: <b>' + N + '</b></span>' +
+    '<span>Primes: <b>' + primes + '</b></span>' +
+    '<span>Composites: <b>' + composites + '</b></span>' +
+    '<span>Unmarked: <b>' + unknown + '</b></span>' +
+    '<span>Current: <b>' + (currentPrime || '—') + '</b></span>';
+}
+
+function updatePrimeList() {
+  const p = collectPrimes();
+  // highlight twin primes
+  const twinSet = new Set();
+  for (let i = 0; i < p.length - 1; i++) {
+    if (p[i + 1] - p[i] === 2) { twinSet.add(p[i]); twinSet.add(p[i + 1]); }
+  }
+  document.querySelectorAll('.num.twin').forEach(el => el.classList.remove('twin'));
+  for (const t of twinSet) {
+    const el = document.getElementById('n' + t);
+    if (el) el.classList.add('twin');
+  }
+  primeListEl.textContent = p.length ? p.join(', ') : '—';
+  if (p.length >= 2) {
+    const twinPairs = [];
+    for (let i = 0; i < p.length - 1; i++) {
+      if (p[i + 1] - p[i] === 2) twinPairs.push('(' + p[i] + ',' + p[i+1] + ')');
+    }
+    if (twinPairs.length) {
+      primeListEl.textContent += '\n\nTwin primes (' + twinPairs.length + '): ' + twinPairs.join(', ');
+    }
+  }
+}
+
+function stop() {
+  running = false;
+  runBtn.textContent = '▶ Run';
+  clearInterval(timer);
+}
+
+runBtn.onclick = () => {
+  if (running) { stop(); return; }
+  running = true;
+  runBtn.textContent = '⏸ Pause';
+  const tick = () => {
+    const fps = +speedEl.value;
+    const delay = Math.max(8, 1000 / fps);
+    clearInterval(timer);
+    timer = setInterval(() => {
+      if (!running) { clearInterval(timer); return; }
+      if (!step()) { stop(); return; }
+    }, delay);
+  };
+  tick();
+  speedEl.oninput = () => { if (running) tick(); };
+};
+
+stepBtn.onclick = () => step();
+resetBtn.onclick = () => { stop(); build(); };
+instantBtn.onclick = () => instant();
+
+copyBtn.onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(collectPrimes().join(', '));
+    copyBtn.textContent = 'Copied!';
+    setTimeout(() => copyBtn.textContent = 'Copy primes', 1200);
+  } catch (e) {}
+};
+
+downloadBtn.onclick = () => {
+  const blob = new Blob([collectPrimes().join('\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'primes_up_to_' + N + '.txt';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+limitEl.onchange = () => { stop(); build(); };
+colsEl.onchange = () => { stop(); build(); };
+
+build();
+</script>
+</body>
+</html>

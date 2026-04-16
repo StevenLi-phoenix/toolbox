@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Karnaugh Map Simplifier — Free Online Boolean Minimizer</title>
+<meta name="description" content="Simplify 2 to 5 variable Boolean expressions with a Karnaugh map and Quine–McCluskey minimization. Enter minterms, don't-cares, or a truth table and get the minimal SOP.">
+<meta name="keywords" content="karnaugh map, k-map, boolean minimizer, quine mccluskey, sop simplifier">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/kmap.html">
+<meta property="og:title" content="Karnaugh Map Simplifier">
+<meta property="og:description" content="Simplify Boolean expressions with K-map visualization and Quine–McCluskey minimization.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/kmap.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .kmap-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .kmap-layout { grid-template-columns: 1fr; } }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .controls label { font-size: .78rem; color: var(--muted); display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: .5px; }
+  .controls input[type="text"], .controls select {
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem;
+  }
+  .controls input[type="text"] { min-width: 160px; }
+  table.kmap { border-collapse: collapse; font-family: var(--mono); font-size: .85rem; }
+  table.kmap th, table.kmap td {
+    border: 1px solid var(--border);
+    width: 52px; height: 46px; text-align: center; padding: 0;
+  }
+  table.kmap th { background: var(--surface2); color: var(--muted); font-weight: 600; }
+  table.kmap td { cursor: pointer; background: var(--bg); user-select: none; position: relative; }
+  table.kmap td .idx { display: block; font-size: .62rem; color: var(--muted); line-height: 1; margin-top: 3px; }
+  table.kmap td .val { font-size: 1rem; font-weight: 600; }
+  table.kmap td.one { background: #dcfce7; color: #166534; }
+  table.kmap td.dc { background: #fef3c7; color: #92400e; }
+  table.kmap td.zero { color: var(--muted); }
+  :root.dark table.kmap td.one { background: #064e3b; color: #86efac; }
+  :root.dark table.kmap td.dc { background: #78350f; color: #fde68a; }
+  .expr {
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 1rem;
+    word-break: break-word;
+    min-height: 22px;
+  }
+  .expr b { color: var(--accent); }
+  h3 { margin: 0 0 10px; font-size: .95rem; }
+  .pi-list { font-family: var(--mono); font-size: .82rem; color: var(--muted); margin-top: 10px; }
+  .pi-list div { padding: 2px 0; }
+  .pi-list b { color: var(--text); }
+  .two-maps { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .two-maps > div { text-align: center; }
+  .two-maps h4 { margin: 0 0 6px; font-size: .8rem; color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Karnaugh Map Simplifier</h1>
+<p class="subtitle">Minimize Boolean expressions with an interactive Karnaugh map and the Quine–McCluskey algorithm. Click cells, paste minterms, or type a truth table. Supports 2 to 5 variables and don't-cares.</p>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <div class="controls">
+    <label>Variables
+      <select id="vars">
+        <option value="2">2 (A, B)</option>
+        <option value="3">3 (A, B, C)</option>
+        <option value="4" selected>4 (A, B, C, D)</option>
+        <option value="5">5 (A, B, C, D, E)</option>
+      </select>
+    </label>
+    <label>Minterms <input type="text" id="minterms" placeholder="e.g. 0,2,5,7,8,10,13,15"></label>
+    <label>Don't-cares <input type="text" id="dcs" placeholder="e.g. 1,3"></label>
+    <button class="btn" id="applyBtn">Apply</button>
+    <button class="btn btn-secondary" id="clearBtn">Clear</button>
+    <button class="btn btn-secondary" id="fillBtn">All 1s</button>
+  </div>
+
+  <div class="kmap-layout">
+    <div>
+      <h3>Karnaugh Map</h3>
+      <p style="font-size:.8rem;color:var(--muted);margin:0 0 8px">Click a cell to cycle 0 → 1 → X (don't-care) → 0.</p>
+      <div id="kmapArea"></div>
+    </div>
+    <div>
+      <h3>Minimized SOP</h3>
+      <div class="expr" id="sopExpr">—</div>
+      <h3 style="margin-top:12px">Minimized POS</h3>
+      <div class="expr" id="posExpr">—</div>
+      <div class="pi-list" id="piList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <h3>How it works</h3>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55;margin:0">
+    The tool runs the Quine–McCluskey algorithm to generate all prime implicants, then uses Petrick's method to select a
+    minimal cover of the required minterms. Don't-cares may be included in prime implicants but are never required to be
+    covered. SOP (sum of products) uses 1-minterms; POS (product of sums) is derived from the complement via the same
+    algorithm applied to 0-cells. Input variables are labelled A–E from most significant to least significant bit.
+  </p>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+
+<script>
+const varsSel = document.getElementById('vars');
+const mintermsEl = document.getElementById('minterms');
+const dcsEl = document.getElementById('dcs');
+const applyBtn = document.getElementById('applyBtn');
+const clearBtn = document.getElementById('clearBtn');
+const fillBtn = document.getElementById('fillBtn');
+const kmapArea = document.getElementById('kmapArea');
+const sopExpr = document.getElementById('sopExpr');
+const posExpr = document.getElementById('posExpr');
+const piList = document.getElementById('piList');
+
+// cells[i] = 0, 1, or 2 (dc)
+let N = 4;
+let cells = new Array(16).fill(0);
+
+const VAR_NAMES = ['A','B','C','D','E'];
+
+// Gray code sequences
+const GRAY2 = [0,1];
+const GRAY4 = [0,1,3,2];
+
+function renderMap() {
+  const numCells = 1 << N;
+  if (cells.length !== numCells) cells = new Array(numCells).fill(0);
+
+  kmapArea.innerHTML = '';
+
+  if (N === 5) {
+    // Two 4x4 maps: E=0 and E=1 (A is MSB, E is LSB)
+    const wrap = document.createElement('div');
+    wrap.className = 'two-maps';
+    for (let e = 0; e <= 1; e++) {
+      const div = document.createElement('div');
+      const h = document.createElement('h4');
+      h.textContent = 'E = ' + e;
+      div.appendChild(h);
+      div.appendChild(buildTable(4, i => {
+        // 4-var map uses AB (rows) × CD (cols) -> bits A B C D
+        // Full index: A B C D E -> shift left 1 and OR e
+        return (i << 1) | e;
+      }));
+      wrap.appendChild(div);
+    }
+    kmapArea.appendChild(wrap);
+  } else {
+    kmapArea.appendChild(buildTable(N, i => i));
+  }
+  compute();
+}
+
+function buildTable(n, indexFn) {
+  const t = document.createElement('table');
+  t.className = 'kmap';
+  let rows, cols, rowGray, colGray, rowLabel, colLabel;
+  if (n === 2) { rows = 2; cols = 2; rowGray = GRAY2; colGray = GRAY2; rowLabel = 'A'; colLabel = 'B'; }
+  else if (n === 3) { rows = 2; cols = 4; rowGray = GRAY2; colGray = GRAY4; rowLabel = 'A'; colLabel = 'BC'; }
+  else { rows = 4; cols = 4; rowGray = GRAY4; colGray = GRAY4; rowLabel = 'AB'; colLabel = 'CD'; }
+
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  const corner = document.createElement('th');
+  corner.textContent = rowLabel + ' \\ ' + colLabel;
+  hr.appendChild(corner);
+  for (const c of colGray) {
+    const th = document.createElement('th');
+    th.textContent = c.toString(2).padStart(colLabel.length, '0');
+    hr.appendChild(th);
+  }
+  thead.appendChild(hr);
+  t.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (const r of rowGray) {
+    const tr = document.createElement('tr');
+    const th = document.createElement('th');
+    th.textContent = r.toString(2).padStart(rowLabel.length, '0');
+    tr.appendChild(th);
+    for (const c of colGray) {
+      const td = document.createElement('td');
+      const inner = r * cols + c;
+      const idx = indexFn(inner);
+      td.dataset.idx = idx;
+      td.innerHTML = '<span class="idx">' + idx + '</span><span class="val"></span>';
+      td.onclick = () => {
+        cells[idx] = (cells[idx] + 1) % 3;
+        refreshCells();
+        compute();
+        syncInputs();
+      };
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  t.appendChild(tbody);
+  // render initial cell values
+  setTimeout(() => refreshCells(), 0);
+  return t;
+}
+
+function refreshCells() {
+  document.querySelectorAll('table.kmap td[data-idx]').forEach(td => {
+    const idx = +td.dataset.idx;
+    const v = cells[idx];
+    td.classList.remove('one','zero','dc');
+    const valEl = td.querySelector('.val');
+    if (v === 1) { td.classList.add('one'); valEl.textContent = '1'; }
+    else if (v === 2) { td.classList.add('dc'); valEl.textContent = 'X'; }
+    else { td.classList.add('zero'); valEl.textContent = '0'; }
+  });
+}
+
+function syncInputs() {
+  const mins = [], dcs = [];
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] === 1) mins.push(i);
+    else if (cells[i] === 2) dcs.push(i);
+  }
+  mintermsEl.value = mins.join(',');
+  dcsEl.value = dcs.join(',');
+}
+
+// --- Quine-McCluskey ---
+function popcount(x) { let c = 0; while (x) { c += x & 1; x >>>= 1; } return c; }
+
+function bitsOf(val, mask, n) {
+  // returns string like "10-1" with - for don't care bits in mask
+  let s = '';
+  for (let i = n - 1; i >= 0; i--) {
+    const bit = 1 << i;
+    if (mask & bit) s += '-';
+    else s += (val & bit) ? '1' : '0';
+  }
+  return s;
+}
+
+function qm(minterms, dontCares, n) {
+  const all = [...new Set([...minterms, ...dontCares])].sort((a,b) => a-b);
+  if (all.length === 0) return { primes: [], cover: [] };
+  // Each implicant: { val, mask, covers: Set of original minterms }
+  // mask bits = 1 mean "don't care"
+  let implicants = all.map(m => ({ val: m, mask: 0, covers: new Set([m]), used: false }));
+  const primes = [];
+  while (implicants.length) {
+    // group by popcount of val (with mask bits counted as 0)
+    const groups = new Map();
+    for (const imp of implicants) {
+      const key = popcount(imp.val & ~imp.mask);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(imp);
+    }
+    const keys = [...groups.keys()].sort((a,b) => a-b);
+    const next = [];
+    const seen = new Set();
+    for (let k = 0; k < keys.length - 1; k++) {
+      const a = groups.get(keys[k]);
+      const b = groups.get(keys[k+1]);
+      if (keys[k+1] !== keys[k] + 1) continue;
+      for (const x of a) for (const y of b) {
+        if (x.mask !== y.mask) continue;
+        const diff = (x.val ^ y.val) & ~x.mask;
+        if (popcount(diff) !== 1) continue;
+        if ((x.val & ~diff & ~x.mask) !== (y.val & ~diff & ~y.mask)) continue;
+        x.used = true; y.used = true;
+        const newVal = x.val & ~diff;
+        const newMask = x.mask | diff;
+        const key = newVal + ':' + newMask;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const covers = new Set([...x.covers, ...y.covers]);
+        next.push({ val: newVal, mask: newMask, covers, used: false });
+      }
+    }
+    for (const imp of implicants) if (!imp.used) primes.push(imp);
+    implicants = next;
+  }
+  // Remove duplicate primes
+  const dedupMap = new Map();
+  for (const p of primes) {
+    const key = p.val + ':' + p.mask;
+    if (!dedupMap.has(key)) dedupMap.set(key, p);
+  }
+  const primeList = [...dedupMap.values()];
+
+  // Find essential primes & use Petrick's method for small cases
+  const mintermSet = new Set(minterms);
+  // chart: minterm -> [prime indices that cover it]
+  const chart = new Map();
+  for (const m of minterms) chart.set(m, []);
+  primeList.forEach((p, i) => {
+    for (const m of p.covers) if (mintermSet.has(m)) chart.get(m).push(i);
+  });
+
+  const selected = new Set();
+  const covered = new Set();
+  // essential primes
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [m, list] of chart) {
+      if (covered.has(m)) continue;
+      const avail = list.filter(i => !selected.has(i));
+      if (avail.length === 1) {
+        selected.add(avail[0]);
+        for (const c of primeList[avail[0]].covers) covered.add(c);
+        changed = true;
+      }
+    }
+  }
+  // Remaining minterms: brute-force Petrick for small remainders (up to ~12 uncovered).
+  const remaining = minterms.filter(m => !covered.has(m));
+  if (remaining.length) {
+    // Petrick: AND of (OR of primes that cover m) for each remaining m
+    // Build sets-of-sets, then distribute. Use bitmask for prime indices.
+    let products = [0n]; // each BigInt is a bitmask of selected primes
+    for (const m of remaining) {
+      const options = chart.get(m).map(i => 1n << BigInt(i));
+      const next = new Set();
+      for (const p of products) for (const o of options) next.add(p | o);
+      // absorb: remove supersets
+      const arr = [...next];
+      const minimal = [];
+      for (const x of arr) {
+        let keep = true;
+        for (const y of arr) {
+          if (x !== y && (x & y) === y && x !== y) { keep = false; break; }
+        }
+        if (keep) minimal.push(x);
+      }
+      products = minimal;
+      if (products.length > 4000) break;
+    }
+    // pick product with fewest primes, then fewest literals
+    let best = null, bestCount = Infinity, bestLits = Infinity;
+    for (const p of products) {
+      let count = 0, lits = 0;
+      let x = p, idx = 0;
+      while (x) {
+        if (x & 1n) {
+          count++;
+          lits += n - popcount(primeList[idx].mask);
+        }
+        x >>= 1n;
+        idx++;
+      }
+      if (count < bestCount || (count === bestCount && lits < bestLits)) {
+        best = p; bestCount = count; bestLits = lits;
+      }
+    }
+    if (best !== null) {
+      let x = best, idx = 0;
+      while (x) {
+        if (x & 1n) selected.add(idx);
+        x >>= 1n;
+        idx++;
+      }
+    }
+  }
+  return { primes: primeList, cover: [...selected].map(i => primeList[i]) };
+}
+
+function termToString(imp, n, varNames) {
+  if (imp.mask === (1 << n) - 1) return '1';
+  let s = '';
+  for (let i = n - 1; i >= 0; i--) {
+    const bit = 1 << i;
+    if (imp.mask & bit) continue;
+    const name = varNames[n - 1 - i];
+    s += (imp.val & bit) ? name : name + "'";
+  }
+  return s;
+}
+
+function compute() {
+  const numCells = 1 << N;
+  const minterms = [];
+  const dcs = [];
+  const zeros = [];
+  for (let i = 0; i < numCells; i++) {
+    if (cells[i] === 1) minterms.push(i);
+    else if (cells[i] === 2) dcs.push(i);
+    else zeros.push(i);
+  }
+
+  const varNames = VAR_NAMES.slice(0, N);
+
+  if (minterms.length === 0 && zeros.length === numCells) {
+    sopExpr.innerHTML = '<b>0</b>';
+    posExpr.innerHTML = '<b>1</b>';
+    piList.innerHTML = '';
+    return;
+  }
+  if (minterms.length + dcs.length === numCells && minterms.length > 0) {
+    sopExpr.innerHTML = '<b>1</b>';
+    posExpr.innerHTML = '<b>1</b>';
+    piList.innerHTML = '';
+    return;
+  }
+
+  // SOP
+  const sop = qm(minterms, dcs, N);
+  const sopTerms = sop.cover.map(t => termToString(t, N, varNames));
+  sopExpr.innerHTML = sopTerms.length
+    ? sopTerms.map(t => '<b>' + t + '</b>').join(' + ')
+    : '<b>0</b>';
+
+  // POS: minimize complement as SOP, then convert via De Morgan
+  const pos = qm(zeros, dcs, N);
+  // Each term in pos cover = minterm of F' -> becomes a maxterm (OR of complemented literals)
+  const posTerms = pos.cover.map(imp => {
+    if (imp.mask === (1 << N) - 1) return '0'; // always true complement
+    let lits = [];
+    for (let i = N - 1; i >= 0; i--) {
+      const bit = 1 << i;
+      if (imp.mask & bit) continue;
+      const name = varNames[N - 1 - i];
+      // In F': val bit 1 means A; we negate to get A' in POS
+      lits.push((imp.val & bit) ? name + "'" : name);
+    }
+    return '(' + lits.join(' + ') + ')';
+  });
+  posExpr.innerHTML = posTerms.length
+    ? posTerms.map(t => '<b>' + t + '</b>').join(' · ')
+    : '<b>1</b>';
+
+  // Prime implicants listing
+  const piStrs = sop.primes.map(p => termToString(p, N, varNames) + '  [' + [...p.covers].sort((a,b)=>a-b).join(',') + ']');
+  piList.innerHTML = '<b>Prime implicants (SOP):</b>' + piStrs.map(s => '<div>' + s + '</div>').join('');
+}
+
+function parseList(s) {
+  return s.split(/[\s,]+/).map(x => x.trim()).filter(Boolean).map(Number).filter(x => Number.isFinite(x) && x >= 0 && x < (1 << N));
+}
+
+applyBtn.onclick = () => {
+  const numCells = 1 << N;
+  cells = new Array(numCells).fill(0);
+  for (const m of parseList(mintermsEl.value)) cells[m] = 1;
+  for (const d of parseList(dcsEl.value)) cells[d] = 2;
+  refreshCells();
+  compute();
+};
+
+clearBtn.onclick = () => {
+  cells = new Array(1 << N).fill(0);
+  refreshCells();
+  compute();
+  syncInputs();
+};
+
+fillBtn.onclick = () => {
+  cells = new Array(1 << N).fill(1);
+  refreshCells();
+  compute();
+  syncInputs();
+};
+
+varsSel.onchange = () => {
+  N = +varsSel.value;
+  cells = new Array(1 << N).fill(0);
+  mintermsEl.value = '';
+  dcsEl.value = '';
+  renderMap();
+};
+
+// initial demo
+mintermsEl.value = '0,2,5,7,8,10,13,15';
+cells = new Array(16).fill(0);
+for (const m of [0,2,5,7,8,10,13,15]) cells[m] = 1;
+renderMap();
+</script>
+</body>
+</html>
