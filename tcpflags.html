@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCP Flags Calculator - Free Online Tool</title>
+<meta name="description" content="Visualize and calculate TCP flag bytes interactively. Toggle CWR, ECE, URG, ACK, PSH, RST, SYN, FIN flags and see hex/decimal/binary values. 100% client-side.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tcpflags.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .flags-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: .75rem; margin: 1.5rem 0; }
+  .flag-cell {
+    display: flex; flex-direction: column; align-items: center; gap: .5rem;
+    padding: 1rem .5rem; border: 2px solid var(--border); border-radius: var(--radius);
+    cursor: pointer; user-select: none; transition: all .15s;
+    background: var(--surface);
+  }
+  .flag-cell:hover { border-color: var(--accent); }
+  .flag-cell.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .flag-cell .bit-pos { font-size: .7rem; color: var(--muted); }
+  .flag-cell.active .bit-pos { color: rgba(255,255,255,.7); }
+  .flag-cell .flag-name { font-size: 1.1rem; font-weight: 700; font-family: var(--mono); }
+  .flag-cell .flag-full { font-size: .7rem; color: var(--muted); }
+  .flag-cell.active .flag-full { color: rgba(255,255,255,.8); }
+  .values-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .value-box { padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .value-box label { display: block; font-size: .75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; margin-bottom: .35rem; }
+  .value-box input {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1rem;
+  }
+  .binary-visual { font-family: var(--mono); font-size: 1.4rem; text-align: center; padding: 1rem; letter-spacing: .3rem; }
+  .binary-visual .bit-on { color: var(--accent); font-weight: 700; }
+  .binary-visual .bit-off { color: var(--muted); }
+  .presets { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.5rem; }
+  .desc-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .desc-table th, .desc-table td { padding: .5rem .75rem; border-bottom: 1px solid var(--border); text-align: left; }
+  .desc-table th { font-weight: 600; color: var(--muted); font-size: .75rem; text-transform: uppercase; }
+  .desc-table code { font-family: var(--mono); font-size: .85rem; }
+  .active-flag { color: var(--accent); font-weight: 600; }
+  @media (max-width: 768px) {
+    .flags-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>TCP Flags Calculator</h1>
+<p class="subtitle">Toggle TCP flags to calculate byte values, or enter a hex/decimal value to see which flags are set. Useful for packet analysis, firewall rules, and network debugging.</p>
+
+<div class="card">
+  <h2>Presets</h2>
+  <div class="presets">
+    <button class="btn btn-secondary" onclick="setFlags(0x02)">SYN</button>
+    <button class="btn btn-secondary" onclick="setFlags(0x12)">SYN+ACK</button>
+    <button class="btn btn-secondary" onclick="setFlags(0x10)">ACK</button>
+    <button class="btn btn-secondary" onclick="setFlags(0x18)">PSH+ACK</button>
+    <button class="btn btn-secondary" onclick="setFlags(0x11)">FIN+ACK</button>
+    <button class="btn btn-secondary" onclick="setFlags(0x04)">RST</button>
+    <button class="btn btn-secondary" onclick="setFlags(0x14)">RST+ACK</button>
+    <button class="btn btn-secondary" onclick="setFlags(0xC2)">SYN+ECE+CWR</button>
+    <button class="btn btn-secondary" onclick="setFlags(0x00)">Clear All</button>
+  </div>
+</div>
+
+<div id="binaryVisual" class="binary-visual card"></div>
+
+<div id="flagsGrid" class="flags-grid"></div>
+
+<div class="values-grid">
+  <div class="value-box">
+    <label>Decimal</label>
+    <input type="text" id="decVal" oninput="fromDecimal(this.value)">
+  </div>
+  <div class="value-box">
+    <label>Hexadecimal</label>
+    <input type="text" id="hexVal" oninput="fromHex(this.value)">
+  </div>
+  <div class="value-box">
+    <label>Binary</label>
+    <input type="text" id="binVal" oninput="fromBinary(this.value)">
+  </div>
+  <div class="value-box">
+    <label>Tcpdump Filter</label>
+    <input type="text" id="tcpdumpVal" readonly onclick="copyField(this)">
+  </div>
+</div>
+
+<div class="card" style="margin-top:1.5rem">
+  <h2>Flag Reference</h2>
+  <table class="desc-table">
+    <thead><tr><th>Bit</th><th>Flag</th><th>Full Name</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>7</td><td><code>CWR</code></td><td>Congestion Window Reduced</td><td>Sender reduced its congestion window (ECN response)</td></tr>
+      <tr><td>6</td><td><code>ECE</code></td><td>ECN-Echo</td><td>Peer supports ECN / congestion experienced</td></tr>
+      <tr><td>5</td><td><code>URG</code></td><td>Urgent</td><td>Urgent pointer field is valid</td></tr>
+      <tr><td>4</td><td><code>ACK</code></td><td>Acknowledgment</td><td>Acknowledgment number field is valid</td></tr>
+      <tr><td>3</td><td><code>PSH</code></td><td>Push</td><td>Push buffered data to the application</td></tr>
+      <tr><td>2</td><td><code>RST</code></td><td>Reset</td><td>Reset the connection</td></tr>
+      <tr><td>1</td><td><code>SYN</code></td><td>Synchronize</td><td>Synchronize sequence numbers (start connection)</td></tr>
+      <tr><td>0</td><td><code>FIN</code></td><td>Finish</td><td>No more data from sender (close connection)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+
+<script>
+const FLAGS = [
+  { name: 'CWR', full: 'Congestion Window Reduced', bit: 7 },
+  { name: 'ECE', full: 'ECN-Echo', bit: 6 },
+  { name: 'URG', full: 'Urgent', bit: 5 },
+  { name: 'ACK', full: 'Acknowledgment', bit: 4 },
+  { name: 'PSH', full: 'Push', bit: 3 },
+  { name: 'RST', full: 'Reset', bit: 2 },
+  { name: 'SYN', full: 'Synchronize', bit: 1 },
+  { name: 'FIN', full: 'Finish', bit: 0 },
+];
+
+let value = 0;
+
+function renderFlags() {
+  const grid = document.getElementById('flagsGrid');
+  grid.innerHTML = '';
+  FLAGS.forEach(f => {
+    const on = (value >> f.bit) & 1;
+    const cell = document.createElement('div');
+    cell.className = 'flag-cell' + (on ? ' active' : '');
+    cell.innerHTML = `<span class="bit-pos">bit ${f.bit}</span><span class="flag-name">${f.name}</span><span class="flag-full">${f.full}</span>`;
+    cell.onclick = () => { value ^= (1 << f.bit); update(); };
+    grid.appendChild(cell);
+  });
+}
+
+function renderBinary() {
+  const el = document.getElementById('binaryVisual');
+  let html = '';
+  for (let i = 7; i >= 0; i--) {
+    const on = (value >> i) & 1;
+    html += `<span class="${on ? 'bit-on' : 'bit-off'}">${on}</span>`;
+  }
+  el.innerHTML = html;
+}
+
+function update(source) {
+  value = Math.max(0, Math.min(255, value | 0));
+  if (source !== 'dec') document.getElementById('decVal').value = value;
+  if (source !== 'hex') document.getElementById('hexVal').value = '0x' + value.toString(16).toUpperCase().padStart(2, '0');
+  if (source !== 'bin') document.getElementById('binVal').value = value.toString(2).padStart(8, '0');
+  const activeFlags = FLAGS.filter(f => (value >> f.bit) & 1).map(f => f.name);
+  document.getElementById('tcpdumpVal').value = activeFlags.length
+    ? `tcp[tcpflags] & (${activeFlags.map(n => 'tcp-' + n.toLowerCase()).join('|')}) != 0`
+    : 'tcp[tcpflags] == 0';
+  renderFlags();
+  renderBinary();
+}
+
+function setFlags(v) { value = v; update(); }
+function fromDecimal(s) { const v = parseInt(s, 10); if (!isNaN(v)) { value = v; update('dec'); } }
+function fromHex(s) { const v = parseInt(s.replace(/^0x/i, ''), 16); if (!isNaN(v)) { value = v; update('hex'); } }
+function fromBinary(s) { const v = parseInt(s.replace(/\s/g, ''), 2); if (!isNaN(v)) { value = v; update('bin'); } }
+
+function copyField(input) {
+  navigator.clipboard.writeText(input.value).then(() => {
+    const orig = input.style.borderColor;
+    input.style.borderColor = 'var(--success)';
+    setTimeout(() => input.style.borderColor = orig, 800);
+  });
+}
+
+setFlags(0x02);
+</script>
+</body>
+</html>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZIP File Inspector - Free Online Tool</title>
+<meta name="description" content="Browse and inspect ZIP file contents in your browser. View file list, sizes, compression ratio, and preview text files. No upload — 100% client-side.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/zipviewer.html">
+<link rel="stylesheet" href="toolbox.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius); padding: 3rem; text-align: center;
+    cursor: pointer; transition: all .2s; margin-bottom: 1.5rem;
+  }
+  .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: var(--surface); }
+  .drop-zone p { color: var(--muted); margin: .5rem 0 0; font-size: .9rem; }
+  .drop-zone .icon { font-size: 2.5rem; }
+  .summary-bar { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .summary-stat { text-align: center; }
+  .summary-stat .val { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+  .summary-stat .lbl { font-size: .75rem; color: var(--muted); text-transform: uppercase; }
+  .file-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .file-table th, .file-table td { padding: .5rem .75rem; border-bottom: 1px solid var(--border); text-align: left; }
+  .file-table th { font-weight: 600; color: var(--muted); font-size: .75rem; text-transform: uppercase; position: sticky; top: 0; background: var(--bg); }
+  .file-table tr:hover { background: var(--surface); }
+  .file-table .dir { color: var(--accent); font-weight: 600; }
+  .file-table .size-col { text-align: right; font-family: var(--mono); }
+  .file-table .ratio-col { text-align: right; font-family: var(--mono); }
+  .table-wrap { max-height: 500px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .preview-modal {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100;
+    align-items: center; justify-content: center; padding: 2rem;
+  }
+  .preview-modal.open { display: flex; }
+  .preview-content {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    max-width: 800px; width: 100%; max-height: 80vh; display: flex; flex-direction: column;
+  }
+  .preview-header {
+    display: flex; justify-content: space-between; align-items: center; padding: .75rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .preview-header h3 { font-size: .9rem; margin: 0; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preview-body { padding: 1rem; overflow: auto; flex: 1; font-family: var(--mono); font-size: .82rem; white-space: pre-wrap; word-break: break-all; }
+  .preview-body img { max-width: 100%; height: auto; }
+  .toolbar { display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  .toolbar input[type="search"] {
+    flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-size: .85rem;
+  }
+  .sort-btn { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; font-size: .8rem; }
+  .sort-btn:hover, .sort-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .hidden { display: none !important; }
+  @media (max-width: 768px) {
+    .summary-bar { gap: 1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>ZIP File Inspector</h1>
+<p class="subtitle">Drop a ZIP file to browse its contents &mdash; view file list, sizes, compression ratios, dates, and preview text files. Nothing is uploaded.</p>
+
+<div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+  <div class="icon">📦</div>
+  <strong>Drop ZIP file here or click to browse</strong>
+  <p>Supports .zip files — processed entirely in your browser</p>
+  <input type="file" id="fileInput" accept=".zip,application/zip" style="display:none">
+</div>
+
+<div id="results" class="hidden">
+  <div class="card">
+    <div class="summary-bar" id="summary"></div>
+  </div>
+
+  <div class="toolbar">
+    <input type="search" id="filterInput" placeholder="Filter files…" oninput="filterFiles()">
+    <button class="sort-btn active" data-sort="name" onclick="sortBy('name',this)">Name</button>
+    <button class="sort-btn" data-sort="size" onclick="sortBy('size',this)">Size</button>
+    <button class="sort-btn" data-sort="compressed" onclick="sortBy('compressed',this)">Compressed</button>
+    <button class="sort-btn" data-sort="date" onclick="sortBy('date',this)">Date</button>
+  </div>
+
+  <div class="table-wrap">
+    <table class="file-table">
+      <thead>
+        <tr><th>Name</th><th class="size-col">Original</th><th class="size-col">Compressed</th><th class="ratio-col">Ratio</th><th>Modified</th><th></th></tr>
+      </thead>
+      <tbody id="fileList"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="preview-modal" id="previewModal" onclick="if(event.target===this)closePreview()">
+  <div class="preview-content">
+    <div class="preview-header">
+      <h3 id="previewTitle"></h3>
+      <button class="btn btn-secondary" onclick="closePreview()">&times; Close</button>
+    </div>
+    <div class="preview-body" id="previewBody"></div>
+  </div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+
+<script>
+let zipData = null;
+let entries = [];
+let currentSort = 'name';
+let sortAsc = true;
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files[0]) loadZip(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadZip(e.target.files[0]); });
+
+function formatSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const units = ['B','KB','MB','GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+async function loadZip(file) {
+  try {
+    zipData = await JSZip.loadAsync(file);
+    entries = [];
+    let totalOrig = 0, totalComp = 0, dirs = 0, files = 0;
+
+    zipData.forEach((path, entry) => {
+      const isDir = entry.dir;
+      const origSize = entry._data ? (entry._data.uncompressedSize || 0) : 0;
+      const compSize = entry._data ? (entry._data.compressedSize || 0) : 0;
+      entries.push({
+        path, isDir, origSize, compSize,
+        date: entry.date || null,
+        entry
+      });
+      if (isDir) dirs++; else { files++; totalOrig += origSize; totalComp += compSize; }
+    });
+
+    const ratio = totalOrig > 0 ? ((1 - totalComp / totalOrig) * 100).toFixed(1) : '0';
+    document.getElementById('summary').innerHTML =
+      `<div class="summary-stat"><div class="val">${files}</div><div class="lbl">Files</div></div>` +
+      `<div class="summary-stat"><div class="val">${dirs}</div><div class="lbl">Directories</div></div>` +
+      `<div class="summary-stat"><div class="val">${formatSize(totalOrig)}</div><div class="lbl">Original</div></div>` +
+      `<div class="summary-stat"><div class="val">${formatSize(totalComp)}</div><div class="lbl">Compressed</div></div>` +
+      `<div class="summary-stat"><div class="val">${ratio}%</div><div class="lbl">Saved</div></div>` +
+      `<div class="summary-stat"><div class="val">${formatSize(file.size)}</div><div class="lbl">ZIP Size</div></div>`;
+
+    document.getElementById('results').classList.remove('hidden');
+    renderEntries();
+  } catch (err) {
+    alert('Failed to read ZIP: ' + err.message);
+  }
+}
+
+function renderEntries() {
+  const filter = document.getElementById('filterInput').value.toLowerCase();
+  let list = entries.filter(e => !filter || e.path.toLowerCase().includes(filter));
+
+  list.sort((a, b) => {
+    let cmp = 0;
+    switch (currentSort) {
+      case 'name': cmp = a.path.localeCompare(b.path); break;
+      case 'size': cmp = a.origSize - b.origSize; break;
+      case 'compressed': cmp = a.compSize - b.compSize; break;
+      case 'date': cmp = (a.date || 0) - (b.date || 0); break;
+    }
+    return sortAsc ? cmp : -cmp;
+  });
+
+  const tbody = document.getElementById('fileList');
+  tbody.innerHTML = '';
+  list.forEach((e, i) => {
+    const ratio = !e.isDir && e.origSize > 0 ? ((1 - e.compSize / e.origSize) * 100).toFixed(1) + '%' : '—';
+    const dateStr = e.date ? e.date.toISOString().slice(0, 16).replace('T', ' ') : '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td class="${e.isDir ? 'dir' : ''}">${e.isDir ? '📁 ' : '📄 '}${escHtml(e.path)}</td>` +
+      `<td class="size-col">${e.isDir ? '—' : formatSize(e.origSize)}</td>` +
+      `<td class="size-col">${e.isDir ? '—' : formatSize(e.compSize)}</td>` +
+      `<td class="ratio-col">${ratio}</td>` +
+      `<td>${dateStr}</td>` +
+      `<td>${!e.isDir ? '<button class="btn btn-secondary" style="padding:2px 8px;font-size:.75rem" onclick="previewFile('+i+')">Preview</button>' : ''}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function filterFiles() { renderEntries(); }
+
+function sortBy(field, btn) {
+  if (currentSort === field) sortAsc = !sortAsc;
+  else { currentSort = field; sortAsc = true; }
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderEntries();
+}
+
+const TEXT_EXTS = /\.(txt|md|json|xml|html|css|js|ts|py|rb|go|rs|java|c|cpp|h|hpp|sh|bash|yml|yaml|toml|ini|cfg|conf|log|csv|tsv|sql|graphql|env|gitignore|dockerfile|makefile|LICENSE|README)$/i;
+const IMG_EXTS = /\.(png|jpg|jpeg|gif|bmp|ico|webp|svg)$/i;
+
+async function previewFile(idx) {
+  const filter = document.getElementById('filterInput').value.toLowerCase();
+  const list = entries.filter(e => !filter || e.path.toLowerCase().includes(filter));
+  list.sort((a, b) => {
+    let cmp = 0;
+    switch (currentSort) {
+      case 'name': cmp = a.path.localeCompare(b.path); break;
+      case 'size': cmp = a.origSize - b.origSize; break;
+      case 'compressed': cmp = a.compSize - b.compSize; break;
+      case 'date': cmp = (a.date || 0) - (b.date || 0); break;
+    }
+    return sortAsc ? cmp : -cmp;
+  });
+  const e = list[idx];
+  if (!e) return;
+
+  document.getElementById('previewTitle').textContent = e.path;
+  const body = document.getElementById('previewBody');
+
+  if (IMG_EXTS.test(e.path)) {
+    const blob = await e.entry.async('blob');
+    const url = URL.createObjectURL(blob);
+    body.innerHTML = `<img src="${url}" alt="${escHtml(e.path)}">`;
+  } else if (TEXT_EXTS.test(e.path) || e.origSize < 500000) {
+    try {
+      const text = await e.entry.async('string');
+      body.textContent = text;
+    } catch {
+      body.textContent = '(binary file — cannot display as text)';
+    }
+  } else {
+    body.textContent = '(file too large or binary — cannot preview)';
+  }
+
+  document.getElementById('previewModal').classList.add('open');
+}
+
+function closePreview() {
+  document.getElementById('previewModal').classList.remove('open');
+  document.getElementById('previewBody').innerHTML = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreview(); });
+</script>
+</body>
+</html>

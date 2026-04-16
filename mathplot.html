@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Math Function Plotter - Free Online Tool</title>
+<meta name="description" content="Plot mathematical functions interactively. Supports sin, cos, tan, log, sqrt, abs, and more. Zoom, pan, and compare multiple functions. 100% client-side.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mathplot.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; align-items: start; }
+  .func-list { display: flex; flex-direction: column; gap: .5rem; }
+  .func-row { display: flex; gap: .5rem; align-items: center; }
+  .func-row input[type="text"] { flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; }
+  .func-row .color-dot { width: 28px; height: 28px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; padding: 0; }
+  .func-row .remove-btn { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--error); cursor: pointer; font-size: .85rem; }
+  .func-row .remove-btn:hover { background: var(--surface2); }
+  .canvas-wrap { position: relative; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--bg); }
+  canvas { display: block; width: 100%; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .controls { display: flex; gap: .5rem; margin-top: .75rem; flex-wrap: wrap; }
+  .zoom-info { font-size: .8rem; color: var(--muted); margin-top: .5rem; }
+  .range-group { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .75rem; }
+  .range-group label { font-size: .8rem; color: var(--muted); }
+  .range-group input { width: 100%; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .82rem; }
+  .error-msg { color: var(--error); font-size: .8rem; margin-top: .25rem; min-height: 1.2em; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Math Function Plotter</h1>
+<p class="subtitle">Plot mathematical functions interactively &mdash; supports sin, cos, tan, log, sqrt, pow, abs, and arithmetic. Zoom and pan with mouse or touch.</p>
+
+<div class="panels">
+<div>
+  <div class="card">
+    <h2>Functions</h2>
+    <div id="funcList" class="func-list"></div>
+    <button class="btn btn-secondary" onclick="addFunction()" style="margin-top:.75rem">+ Add Function</button>
+    <div id="errorMsg" class="error-msg"></div>
+  </div>
+  <div class="card">
+    <h2>View Range</h2>
+    <div class="range-group">
+      <div><label>X min</label><input id="xmin" type="number" value="-10" onchange="updateRange()"></div>
+      <div><label>X max</label><input id="xmax" type="number" value="10" onchange="updateRange()"></div>
+      <div><label>Y min</label><input id="ymin" type="number" value="-10" onchange="updateRange()"></div>
+      <div><label>Y max</label><input id="ymax" type="number" value="10" onchange="updateRange()"></div>
+    </div>
+    <div class="controls" style="margin-top:.75rem">
+      <button class="btn btn-secondary" onclick="resetView()">Reset View</button>
+      <label style="display:flex;align-items:center;gap:.35rem;font-size:.85rem;cursor:pointer"><input type="checkbox" id="gridToggle" checked onchange="draw()"> Grid</label>
+    </div>
+  </div>
+</div>
+<div>
+  <div class="canvas-wrap">
+    <canvas id="plotCanvas" width="800" height="600"></canvas>
+  </div>
+  <div class="zoom-info">Scroll to zoom · Drag to pan · Click to read coordinates</div>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+
+<script>
+const canvas = document.getElementById('plotCanvas');
+const ctx = canvas.getContext('2d');
+const COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#a855f7','#ec4899','#14b8a6','#f97316'];
+let functions = [];
+let view = { xmin: -10, xmax: 10, ymin: -10, ymax: 10 };
+let dragging = false, dragStart = null, viewStart = null;
+
+function addFunction(expr) {
+  const idx = functions.length;
+  const color = COLORS[idx % COLORS.length];
+  functions.push({ expr: expr || (idx === 0 ? 'sin(x)' : ''), color, enabled: true });
+  renderFuncList();
+  draw();
+}
+
+function removeFunction(i) {
+  functions.splice(i, 1);
+  renderFuncList();
+  draw();
+}
+
+function renderFuncList() {
+  const el = document.getElementById('funcList');
+  el.innerHTML = '';
+  functions.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'func-row';
+    row.innerHTML = `<input type="color" class="color-dot" value="${f.color}" data-i="${i}">` +
+      `<input type="text" value="${f.expr}" placeholder="e.g. x^2 + 1" data-i="${i}">` +
+      `<button class="remove-btn" data-i="${i}">&times;</button>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('input[type="text"]').forEach(inp => {
+    inp.addEventListener('input', e => { functions[+e.target.dataset.i].expr = e.target.value; draw(); });
+  });
+  el.querySelectorAll('input[type="color"]').forEach(inp => {
+    inp.addEventListener('input', e => { functions[+e.target.dataset.i].color = e.target.value; draw(); });
+  });
+  el.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', e => removeFunction(+e.target.dataset.i));
+  });
+}
+
+function safeEval(expr, x) {
+  const sanitized = expr
+    .replace(/\^/g, '**')
+    .replace(/\b(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|sqrt|cbrt|abs|log|log2|log10|exp|ceil|floor|round|sign|min|max)\b/g, 'Math.$1')
+    .replace(/\bpi\b/gi, 'Math.PI')
+    .replace(/\be\b/g, 'Math.E')
+    .replace(/\bln\b/g, 'Math.log');
+  try {
+    const fn = new Function('x', `"use strict"; return (${sanitized});`);
+    return fn(x);
+  } catch { return NaN; }
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width;
+  const h = Math.round(w * 0.6);
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.height = h + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const { xmin, xmax, ymin, ymax } = view;
+  const xRange = xmax - xmin;
+  const yRange = ymax - ymin;
+
+  const toCanvasX = x => ((x - xmin) / xRange) * w;
+  const toCanvasY = y => ((ymax - y) / yRange) * h;
+
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#fff';
+  ctx.fillRect(0, 0, w, h);
+
+  const showGrid = document.getElementById('gridToggle').checked;
+  if (showGrid) {
+    const gridStep = x => {
+      const raw = x / 8;
+      const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+      const norm = raw / mag;
+      if (norm < 1.5) return mag;
+      if (norm < 3.5) return 2 * mag;
+      if (norm < 7.5) return 5 * mag;
+      return 10 * mag;
+    };
+
+    const xStep = gridStep(xRange);
+    const yStep = gridStep(yRange);
+    const gridColor = getComputedStyle(document.body).getPropertyValue('--border').trim() || '#ddd';
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 0.5;
+    ctx.globalAlpha = 0.5;
+
+    for (let gx = Math.ceil(xmin / xStep) * xStep; gx <= xmax; gx += xStep) {
+      const cx = toCanvasX(gx);
+      ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+    }
+    for (let gy = Math.ceil(ymin / yStep) * yStep; gy <= ymax; gy += yStep) {
+      const cy = toCanvasY(gy);
+      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted').trim() || '#888';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    for (let gx = Math.ceil(xmin / xStep) * xStep; gx <= xmax; gx += xStep) {
+      if (Math.abs(gx) < xStep * 0.01) continue;
+      const label = +gx.toPrecision(6);
+      ctx.fillText(label, toCanvasX(gx), Math.min(Math.max(toCanvasY(0) + 14, 14), h - 4));
+    }
+    ctx.textAlign = 'right';
+    for (let gy = Math.ceil(ymin / yStep) * yStep; gy <= ymax; gy += yStep) {
+      if (Math.abs(gy) < yStep * 0.01) continue;
+      const label = +gy.toPrecision(6);
+      ctx.fillText(label, Math.min(Math.max(toCanvasX(0) - 6, 30), w - 4), toCanvasY(gy) + 4);
+    }
+  }
+
+  // Axes
+  ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--text').trim() || '#333';
+  ctx.lineWidth = 1.5;
+  if (ymin <= 0 && ymax >= 0) {
+    const y0 = toCanvasY(0);
+    ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(w, y0); ctx.stroke();
+  }
+  if (xmin <= 0 && xmax >= 0) {
+    const x0 = toCanvasX(0);
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, h); ctx.stroke();
+  }
+
+  // Plot functions
+  const errEl = document.getElementById('errorMsg');
+  let errors = [];
+  functions.forEach((f, fi) => {
+    if (!f.expr.trim()) return;
+    ctx.strokeStyle = f.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let started = false;
+    const steps = w * 2;
+    for (let i = 0; i <= steps; i++) {
+      const x = xmin + (i / steps) * xRange;
+      let y;
+      try { y = safeEval(f.expr, x); } catch { continue; }
+      if (!isFinite(y)) { started = false; continue; }
+      const cx = toCanvasX(x);
+      const cy = toCanvasY(y);
+      if (cy < -1000 || cy > h + 1000) { started = false; continue; }
+      if (!started) { ctx.moveTo(cx, cy); started = true; }
+      else ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+  });
+  errEl.textContent = errors.join('; ');
+}
+
+function updateRange() {
+  view.xmin = +document.getElementById('xmin').value;
+  view.xmax = +document.getElementById('xmax').value;
+  view.ymin = +document.getElementById('ymin').value;
+  view.ymax = +document.getElementById('ymax').value;
+  draw();
+}
+
+function syncRangeInputs() {
+  document.getElementById('xmin').value = +view.xmin.toPrecision(6);
+  document.getElementById('xmax').value = +view.xmax.toPrecision(6);
+  document.getElementById('ymin').value = +view.ymin.toPrecision(6);
+  document.getElementById('ymax').value = +view.ymax.toPrecision(6);
+}
+
+function resetView() {
+  view = { xmin: -10, xmax: 10, ymin: -10, ymax: 10 };
+  syncRangeInputs();
+  draw();
+}
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / rect.width;
+  const my = (e.clientY - rect.top) / rect.height;
+  const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+  const xRange = view.xmax - view.xmin;
+  const yRange = view.ymax - view.ymin;
+  const cx = view.xmin + mx * xRange;
+  const cy = view.ymax - my * yRange;
+  view.xmin = cx - (cx - view.xmin) * factor;
+  view.xmax = cx + (view.xmax - cx) * factor;
+  view.ymin = cy - (cy - view.ymin) * factor;
+  view.ymax = cy + (view.ymax - cy) * factor;
+  syncRangeInputs();
+  draw();
+}, { passive: false });
+
+canvas.addEventListener('mousedown', e => { dragging = true; dragStart = { x: e.clientX, y: e.clientY }; viewStart = { ...view }; });
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const rect = canvas.getBoundingClientRect();
+  const dx = (e.clientX - dragStart.x) / rect.width * (viewStart.xmax - viewStart.xmin);
+  const dy = (e.clientY - dragStart.y) / rect.height * (viewStart.ymax - viewStart.ymin);
+  view.xmin = viewStart.xmin - dx;
+  view.xmax = viewStart.xmax - dx;
+  view.ymin = viewStart.ymin + dy;
+  view.ymax = viewStart.ymax + dy;
+  syncRangeInputs();
+  draw();
+});
+window.addEventListener('mouseup', () => { dragging = false; });
+
+canvas.addEventListener('click', e => {
+  if (dragging) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / rect.width;
+  const my = (e.clientY - rect.top) / rect.height;
+  const x = view.xmin + mx * (view.xmax - view.xmin);
+  const y = view.ymax - my * (view.ymax - view.ymin);
+  document.getElementById('errorMsg').textContent = `(${x.toFixed(4)}, ${y.toFixed(4)})`;
+});
+
+let touchStart = null, touchDist = null;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    viewStart = { ...view };
+    dragging = true;
+  } else if (e.touches.length === 2) {
+    dragging = false;
+    touchDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+    viewStart = { ...view };
+  }
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1 && dragging) {
+    const rect = canvas.getBoundingClientRect();
+    const dx = (e.touches[0].clientX - dragStart.x) / rect.width * (viewStart.xmax - viewStart.xmin);
+    const dy = (e.touches[0].clientY - dragStart.y) / rect.height * (viewStart.ymax - viewStart.ymin);
+    view.xmin = viewStart.xmin - dx;
+    view.xmax = viewStart.xmax - dx;
+    view.ymin = viewStart.ymin + dy;
+    view.ymax = viewStart.ymax + dy;
+    syncRangeInputs();
+    draw();
+  } else if (e.touches.length === 2 && touchDist) {
+    const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+    const factor = touchDist / dist;
+    const xc = (viewStart.xmin + viewStart.xmax) / 2;
+    const yc = (viewStart.ymin + viewStart.ymax) / 2;
+    const hw = (viewStart.xmax - viewStart.xmin) / 2 * factor;
+    const hh = (viewStart.ymax - viewStart.ymin) / 2 * factor;
+    view.xmin = xc - hw; view.xmax = xc + hw;
+    view.ymin = yc - hh; view.ymax = yc + hh;
+    syncRangeInputs();
+    draw();
+  }
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => { dragging = false; touchDist = null; });
+
+window.addEventListener('resize', draw);
+addFunction('sin(x)');
+addFunction('x^2 / 10');
+</script>
+</body>
+</html>
