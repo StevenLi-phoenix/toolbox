@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebGL Shader Playground - Free Online Tool</title>
+<meta name="description" content="Write and preview GLSL fragment shaders in real-time with WebGL. Includes preset shaders, uniform controls, error highlighting, and code export.">
+<meta name="keywords" content="glsl, shader, webgl, fragment shader, shader playground, glsl editor, shader art">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/glsl.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .editor-wrap { position: relative; }
+  .editor-wrap textarea {
+    width: 100%; height: 420px; font-family: var(--mono); font-size: .82rem;
+    line-height: 1.5; tab-size: 2; resize: vertical; background: #0d1117;
+    color: #c9d1d9; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: .75rem; outline: none;
+  }
+  .editor-wrap textarea:focus { border-color: var(--accent); }
+  .canvas-wrap { position: relative; }
+  .canvas-wrap canvas {
+    width: 100%; aspect-ratio: 1; border: 1px solid var(--border);
+    border-radius: var(--radius); display: block; background: #000;
+  }
+  .error-box {
+    background: #3d0000; color: #ff6b6b; border: 1px solid #5c0000;
+    border-radius: var(--radius); padding: .75rem; font-family: var(--mono);
+    font-size: .78rem; line-height: 1.4; margin-top: .5rem; display: none;
+    max-height: 120px; overflow-y: auto; white-space: pre-wrap;
+  }
+  .error-box.show { display: block; }
+  .uniforms { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .75rem; }
+  .uniform-item { display: flex; flex-direction: column; gap: .15rem; }
+  .uniform-item label { font-size: .72rem; color: var(--muted); font-weight: 600; }
+  .uniform-item code { font-size: .72rem; color: var(--muted); }
+  .presets { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+  .preset-btn {
+    padding: .3rem .7rem; font-size: .78rem; border-radius: 99px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); cursor: pointer; transition: all .15s;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--text); }
+  .preset-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls-bar { display: flex; gap: .5rem; align-items: center; margin-top: .5rem; flex-wrap: wrap; }
+  .fps { font-family: var(--mono); font-size: .78rem; color: var(--muted); }
+  .resolution { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-top: .35rem; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .editor-wrap textarea { height: 280px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>WebGL Shader Playground</h1>
+  <p class="subtitle">Write GLSL fragment shaders and see them render in real-time. Available uniforms: <code>u_time</code>, <code>u_resolution</code>, <code>u_mouse</code>.</p>
+
+  <div class="presets" id="presets"></div>
+
+  <div class="panels">
+    <div>
+      <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.5rem">Fragment Shader</h3>
+      <div class="editor-wrap">
+        <textarea id="shaderCode" spellcheck="false"></textarea>
+      </div>
+      <div class="error-box" id="errorBox"></div>
+      <div class="controls-bar">
+        <button class="btn" id="compileBtn" onclick="compile()">Compile</button>
+        <button class="btn btn-secondary" id="pauseBtn" onclick="togglePause()">Pause</button>
+        <button class="btn btn-secondary" onclick="resetTime()">Reset Time</button>
+        <button class="btn btn-secondary" onclick="copyShader()">Copy</button>
+        <label style="font-size:.78rem;display:flex;align-items:center;gap:.25rem;margin-left:auto">
+          <input type="checkbox" id="autoCompile" checked> Auto-compile
+        </label>
+      </div>
+      <div class="uniforms">
+        <div class="uniform-item"><label>u_time</label><code id="uTime">0.00</code></div>
+        <div class="uniform-item"><label>u_resolution</label><code id="uRes">512 x 512</code></div>
+        <div class="uniform-item"><label>u_mouse</label><code id="uMouse">0.0, 0.0</code></div>
+        <div class="uniform-item"><label>FPS</label><code class="fps" id="fpsDisplay">0</code></div>
+      </div>
+    </div>
+    <div>
+      <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.5rem">Preview</h3>
+      <div class="canvas-wrap">
+        <canvas id="glCanvas" width="512" height="512"></canvas>
+      </div>
+      <div class="resolution" id="resInfo">512 x 512 px</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Built with &#9749; by Steven Li &middot; No data leaves your browser
+</footer>
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const shaderPresets = {
+  'Gradient': `precision mediump float;
+uniform float u_time;
+uniform vec2 u_resolution;
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec3 col = 0.5 + 0.5 * cos(u_time + uv.xyx + vec3(0, 2, 4));
+  gl_FragColor = vec4(col, 1.0);
+}`,
+  'Circles': `precision mediump float;
+uniform float u_time;
+uniform vec2 u_resolution;
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = length(uv);
+  float c = sin(d * 10.0 - u_time * 3.0) * 0.5 + 0.5;
+  vec3 col = mix(vec3(0.1, 0.0, 0.3), vec3(0.0, 0.8, 1.0), c);
+  gl_FragColor = vec4(col, 1.0);
+}`,
+  'Plasma': `precision mediump float;
+uniform float u_time;
+uniform vec2 u_resolution;
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  float v = sin(uv.x * 10.0 + u_time);
+  v += sin(uv.y * 10.0 + u_time);
+  v += sin((uv.x + uv.y) * 10.0 + u_time);
+  v += sin(length(uv - 0.5) * 20.0 - u_time * 2.0);
+  vec3 col = vec3(
+    sin(v * 3.14159) * 0.5 + 0.5,
+    sin(v * 3.14159 + 2.094) * 0.5 + 0.5,
+    sin(v * 3.14159 + 4.189) * 0.5 + 0.5
+  );
+  gl_FragColor = vec4(col, 1.0);
+}`,
+  'Noise': `precision mediump float;
+uniform float u_time;
+uniform vec2 u_resolution;
+
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+    mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+    f.y
+  );
+}
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  float n = noise(uv * 6.0 + u_time * 0.5);
+  n += 0.5 * noise(uv * 12.0 + u_time * 0.3);
+  n += 0.25 * noise(uv * 24.0 + u_time * 0.7);
+  vec3 col = vec3(n * 0.8, n * 0.6, n * 1.2);
+  gl_FragColor = vec4(col, 1.0);
+}`,
+  'Voronoi': `precision mediump float;
+uniform float u_time;
+uniform vec2 u_resolution;
+
+vec2 hash2(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return fract(sin(p) * 43758.5453);
+}
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution * 4.0;
+  vec2 ip = floor(uv);
+  vec2 fp = fract(uv);
+
+  float minDist = 1.0;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 neighbor = vec2(float(x), float(y));
+      vec2 point = hash2(ip + neighbor);
+      point = 0.5 + 0.5 * sin(u_time + 6.2831 * point);
+      float d = length(neighbor + point - fp);
+      minDist = min(minDist, d);
+    }
+  }
+
+  vec3 col = vec3(minDist);
+  col = mix(vec3(0.0, 0.4, 0.8), vec3(1.0, 0.6, 0.1), minDist);
+  gl_FragColor = vec4(col, 1.0);
+}`,
+  'Mouse': `precision mediump float;
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 mouse = u_mouse / u_resolution;
+  float d = distance(uv, mouse);
+  float glow = 0.02 / (d * d + 0.01);
+  vec3 col = glow * vec3(0.3, 0.6, 1.0);
+  col += 0.5 + 0.5 * cos(u_time + uv.xyx * 3.0 + vec3(0, 2, 4));
+  col *= 0.5;
+  gl_FragColor = vec4(col, 1.0);
+}`,
+};
+
+// Build preset buttons
+const presetsEl = document.getElementById('presets');
+Object.keys(shaderPresets).forEach((name, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn' + (i === 0 ? ' active' : '');
+  btn.textContent = name;
+  btn.onclick = () => {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('shaderCode').value = shaderPresets[name];
+    compile();
+  };
+  presetsEl.appendChild(btn);
+});
+
+// WebGL setup
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl');
+let program = null;
+let startTime = performance.now();
+let paused = false;
+let pauseTime = 0;
+let mouseX = 0, mouseY = 0;
+let animId = null;
+let lastFrameTime = 0;
+let frameCount = 0;
+let fpsAccum = 0;
+
+const vertexShaderSource = `
+attribute vec4 a_position;
+void main() { gl_Position = a_position; }
+`;
+
+function createShader(type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(shader);
+    gl.deleteShader(shader);
+    return { error: log };
+  }
+  return { shader };
+}
+
+function createProgram(fragSource) {
+  const vert = createShader(gl.VERTEX_SHADER, vertexShaderSource);
+  if (vert.error) return { error: 'Vertex: ' + vert.error };
+
+  const frag = createShader(gl.FRAGMENT_SHADER, fragSource);
+  if (frag.error) return { error: frag.error };
+
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vert.shader);
+  gl.attachShader(prog, frag.shader);
+  gl.linkProgram(prog);
+
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(prog);
+    gl.deleteProgram(prog);
+    return { error: 'Link: ' + log };
+  }
+  return { program: prog };
+}
+
+// Fullscreen quad
+const posBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+
+function compile() {
+  const source = document.getElementById('shaderCode').value;
+  const errorBox = document.getElementById('errorBox');
+
+  const result = createProgram(source);
+  if (result.error) {
+    errorBox.textContent = result.error;
+    errorBox.classList.add('show');
+    return;
+  }
+
+  errorBox.classList.remove('show');
+  if (program) gl.deleteProgram(program);
+  program = result.program;
+}
+
+function render(time) {
+  animId = requestAnimationFrame(render);
+
+  if (paused) return;
+
+  const elapsed = (time - startTime) / 1000;
+
+  // FPS counter
+  frameCount++;
+  fpsAccum += time - lastFrameTime;
+  lastFrameTime = time;
+  if (fpsAccum >= 500) {
+    document.getElementById('fpsDisplay').textContent = Math.round(frameCount / (fpsAccum / 1000));
+    frameCount = 0;
+    fpsAccum = 0;
+  }
+
+  if (!program) return;
+
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.useProgram(program);
+
+  const posLoc = gl.getAttribLocation(program, 'a_position');
+  gl.enableVertexAttribArray(posLoc);
+  gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+  const timeLoc = gl.getUniformLocation(program, 'u_time');
+  if (timeLoc) gl.uniform1f(timeLoc, elapsed);
+
+  const resLoc = gl.getUniformLocation(program, 'u_resolution');
+  if (resLoc) gl.uniform2f(resLoc, canvas.width, canvas.height);
+
+  const mouseLoc = gl.getUniformLocation(program, 'u_mouse');
+  if (mouseLoc) gl.uniform2f(mouseLoc, mouseX, mouseY);
+
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  document.getElementById('uTime').textContent = elapsed.toFixed(2);
+  document.getElementById('uMouse').textContent = `${mouseX.toFixed(0)}, ${mouseY.toFixed(0)}`;
+}
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pauseBtn');
+  if (paused) {
+    pauseTime = performance.now();
+    btn.textContent = 'Resume';
+  } else {
+    startTime += performance.now() - pauseTime;
+    btn.textContent = 'Pause';
+  }
+}
+
+function resetTime() {
+  startTime = performance.now();
+}
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = (e.clientX - rect.left) / rect.width * canvas.width;
+  mouseY = (1 - (e.clientY - rect.top) / rect.height) * canvas.height;
+});
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  mouseX = (e.touches[0].clientX - rect.left) / rect.width * canvas.width;
+  mouseY = (1 - (e.touches[0].clientY - rect.top) / rect.height) * canvas.height;
+}, { passive: false });
+
+// Auto-compile on edit with debounce
+let compileTimeout;
+document.getElementById('shaderCode').addEventListener('input', () => {
+  if (!document.getElementById('autoCompile').checked) return;
+  clearTimeout(compileTimeout);
+  compileTimeout = setTimeout(compile, 400);
+});
+
+// Tab key support in textarea
+document.getElementById('shaderCode').addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const ta = e.target;
+    const start = ta.selectionStart;
+    ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(ta.selectionEnd);
+    ta.selectionStart = ta.selectionEnd = start + 2;
+    if (document.getElementById('autoCompile').checked) {
+      clearTimeout(compileTimeout);
+      compileTimeout = setTimeout(compile, 400);
+    }
+  }
+});
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+function copyShader() {
+  navigator.clipboard.writeText(document.getElementById('shaderCode').value)
+    .then(() => showToast('Shader copied!'));
+}
+
+// Canvas resize handling
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  document.getElementById('uRes').textContent = `${canvas.width} x ${canvas.height}`;
+  document.getElementById('resInfo').textContent = `${canvas.width} x ${canvas.height} px (${dpr}x DPR)`;
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+// Init
+document.getElementById('shaderCode').value = shaderPresets['Gradient'];
+resizeCanvas();
+compile();
+lastFrameTime = performance.now();
+render(performance.now());
+</script>
+</body>
+</html>
