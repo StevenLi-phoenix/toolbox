@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS ↔ JS Style Converter — Free Online Tool</title>
+<meta name="description" content="Convert CSS properties to JavaScript style objects and back. Perfect for React inline styles, styled-components, and CSS-in-JS. Free, private, runs in your browser.">
+<meta name="keywords" content="css to js, css to javascript, react inline styles, style object, css-in-js, styled-components, converter, developer tool">
+<meta property="og:title" content="CSS ↔ JS Style Converter — Free Online Tool">
+<meta property="og:description" content="Convert between CSS and JavaScript style objects instantly. Perfect for React and CSS-in-JS workflows.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/css2js.html">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="CSS ↔ JS Style Converter">
+<meta name="twitter:description" content="Convert between CSS and JavaScript style objects instantly in your browser.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/css2js.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .editor-pane { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+  .pane-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: .85rem; font-weight: 600; color: var(--muted); }
+  .editor-pane textarea { flex: 1; min-height: 300px; border: none; border-radius: 0; font-family: var(--mono); font-size: .85rem; padding: 14px; resize: vertical; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; width: 100%; }
+  .editor-pane textarea[readonly] { background: var(--surface2); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .options-bar { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; font-size: .85rem; }
+  .options-bar label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .options-bar select { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: .85rem; background: var(--bg); color: var(--text); }
+  .stats-bar { display: flex; gap: 20px; flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-top: 12px; }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .stat-value { font-size: .95rem; font-weight: 600; font-family: var(--mono); }
+  .error-msg { color: var(--error); font-size: .85rem; padding: 8px 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius); margin-top: 8px; }
+  @media (max-width: 768px) { .editor-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CSS ↔ JS Style Converter</h1>
+<p class="subtitle">Convert between CSS properties and JavaScript/React style objects. Handles camelCase, units, vendor prefixes, and more.</p>
+
+<div class="options-bar">
+  <label>Output format:
+    <select id="outputFormat">
+      <option value="object">JS Object</option>
+      <option value="react-inline">React Inline</option>
+      <option value="styled">Styled-Components</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="optQuotes" checked> Quote string values</label>
+  <label><input type="checkbox" id="optSemicolons"> Trailing commas</label>
+</div>
+
+<div class="editor-grid">
+  <div class="editor-pane">
+    <div class="pane-header">
+      <span>CSS Input</span>
+      <button class="btn btn-ghost" onclick="clearInput()">Clear</button>
+    </div>
+    <textarea id="cssInput" placeholder="background-color: #333;
+font-size: 16px;
+border-radius: 8px;
+margin-top: 1rem;
+-webkit-transform: rotate(45deg);
+display: flex;
+justify-content: center;" spellcheck="false"></textarea>
+  </div>
+  <div class="editor-pane">
+    <div class="pane-header">
+      <span>JS Output</span>
+      <button class="btn btn-ghost" id="copyBtn" onclick="copyOutput()">Copy</button>
+    </div>
+    <textarea id="jsOutput" readonly placeholder="JavaScript style object will appear here..." spellcheck="false"></textarea>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn btn-primary" onclick="cssToJs()">CSS → JS</button>
+  <button class="btn btn-secondary" onclick="jsToCss()">JS → CSS</button>
+  <button class="btn btn-secondary" onclick="swapPanels()">&#8646; Swap</button>
+  <button class="btn btn-secondary" onclick="loadExample()">Example</button>
+</div>
+
+<div class="stats-bar" id="stats" style="display:none">
+  <div class="stat"><span class="stat-label">Properties</span><span class="stat-value" id="statProps">—</span></div>
+  <div class="stat"><span class="stat-label">Direction</span><span class="stat-value" id="statDir">—</span></div>
+  <div class="stat"><span class="stat-label">Warnings</span><span class="stat-value" id="statWarnings">—</span></div>
+</div>
+<div id="error"></div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+// CSS property to camelCase
+function cssPropToJs(prop) {
+  prop = prop.trim();
+  // Vendor prefixes: -webkit-foo → WebkitFoo, -moz-foo → MozFoo
+  if (prop.startsWith('-ms-')) {
+    return 'ms' + prop.slice(4).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+  }
+  if (/^-(webkit|moz|o)-/.test(prop)) {
+    return prop.replace(/^-/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+              .replace(/^(webkit|moz|o)/, m => m.charAt(0).toUpperCase() + m.slice(1));
+  }
+  return prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+// camelCase to CSS property
+function jsPropToCss(prop) {
+  // Handle vendor prefixes: WebkitFoo → -webkit-foo, MozFoo → -moz-foo
+  if (/^(Webkit|Moz|O|ms)/.test(prop)) {
+    const match = prop.match(/^(Webkit|Moz|O|ms)(.*)/);
+    if (match) {
+      const prefix = match[1].toLowerCase();
+      const rest = match[2];
+      return '-' + prefix + '-' + rest.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+    }
+  }
+  return prop.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+}
+
+// Check if a CSS value should be a number in JS
+function parseValue(val) {
+  val = val.trim();
+  // Pure numbers (e.g. z-index, opacity, flex)
+  if (/^-?\d+(\.\d+)?$/.test(val)) {
+    return { raw: parseFloat(val), isNum: true };
+  }
+  // Pixel values — React convention: use numbers for px
+  if (/^-?\d+(\.\d+)?px$/.test(val)) {
+    return { raw: parseFloat(val), isNum: true };
+  }
+  return { raw: val, isNum: false };
+}
+
+function cssToJs() {
+  $('error').innerHTML = '';
+  const css = $('cssInput').value.trim();
+  if (!css) return;
+
+  const format = $('outputFormat').value;
+  const trailingCommas = $('optSemicolons').checked;
+  let warnings = 0;
+  const lines = [];
+
+  // Strip wrapping selector { }
+  let cleaned = css;
+  const selectorMatch = cleaned.match(/^[^{]*\{([\s\S]*)\}\s*$/);
+  if (selectorMatch) cleaned = selectorMatch[1];
+
+  // Parse CSS declarations
+  const declarations = cleaned.split(';').filter(d => d.trim());
+  const props = [];
+
+  for (const decl of declarations) {
+    const colonIdx = decl.indexOf(':');
+    if (colonIdx === -1) { warnings++; continue; }
+    const prop = decl.slice(0, colonIdx).trim();
+    const val = decl.slice(colonIdx + 1).trim();
+    if (!prop || !val) { warnings++; continue; }
+
+    const jsProp = cssPropToJs(prop);
+    const parsed = parseValue(val);
+    props.push({ jsProp, val: parsed.raw, isNum: parsed.isNum });
+  }
+
+  // Build output based on format
+  const comma = trailingCommas ? ',' : '';
+  if (format === 'object') {
+    lines.push('{');
+    props.forEach((p, i) => {
+      const trail = (i < props.length - 1 || trailingCommas) ? ',' : '';
+      if (p.isNum) {
+        lines.push(`  ${p.jsProp}: ${p.val}${trail}`);
+      } else {
+        lines.push(`  ${p.jsProp}: '${p.val}'${trail}`);
+      }
+    });
+    lines.push('}');
+  } else if (format === 'react-inline') {
+    lines.push('style={{');
+    props.forEach((p, i) => {
+      const trail = (i < props.length - 1 || trailingCommas) ? ',' : '';
+      if (p.isNum) {
+        lines.push(`  ${p.jsProp}: ${p.val}${trail}`);
+      } else {
+        lines.push(`  ${p.jsProp}: '${p.val}'${trail}`);
+      }
+    });
+    lines.push('}}');
+  } else if (format === 'styled') {
+    lines.push('css`');
+    props.forEach(p => {
+      const cssProp = jsPropToCss(p.jsProp);
+      lines.push(`  ${cssProp}: ${typeof p.val === 'number' ? p.val + 'px' : p.val};`);
+    });
+    lines.push('`');
+  }
+
+  $('jsOutput').value = lines.join('\n');
+  showStats(props.length, 'CSS → JS', warnings);
+}
+
+function jsToCss() {
+  $('error').innerHTML = '';
+  const js = $('jsOutput').value.trim() || $('cssInput').value.trim();
+  if (!js) return;
+
+  let warnings = 0;
+  const lines = [];
+
+  // Try to extract key-value pairs from JS object
+  let content = js;
+  // Remove style={{ }} wrapper
+  content = content.replace(/^style=\{\{/, '{').replace(/\}\}$/, '}');
+  // Remove css` ` wrapper
+  if (content.startsWith('css`')) {
+    // It's already CSS-like, just clean it
+    content = content.replace(/^css`/, '').replace(/`$/, '');
+    $('cssInput').value = content.trim();
+    showStats(content.split(';').filter(l => l.trim()).length, 'JS → CSS', 0);
+    return;
+  }
+  // Remove outer braces
+  content = content.replace(/^\{/, '').replace(/\}$/, '');
+
+  // Parse JS object properties
+  const propRegex = /(\w+)\s*:\s*(?:'([^']*)'|"([^"]*)"|(-?\d+(?:\.\d+)?))\s*,?/g;
+  let match;
+  let count = 0;
+
+  while ((match = propRegex.exec(content)) !== null) {
+    const jsProp = match[1];
+    const val = match[2] ?? match[3] ?? match[4];
+    const cssProp = jsPropToCss(jsProp);
+
+    // If the value is a pure number, append px (common convention)
+    if (/^-?\d+(\.\d+)?$/.test(val) && !['opacity', 'zIndex', 'flex', 'flexGrow', 'flexShrink', 'order', 'fontWeight', 'lineHeight', 'widows', 'orphans', 'tabSize', 'columns', 'columnCount', 'fillOpacity', 'strokeOpacity', 'strokeWidth'].includes(jsProp)) {
+      lines.push(`${cssProp}: ${val}px;`);
+    } else {
+      lines.push(`${cssProp}: ${val};`);
+    }
+    count++;
+  }
+
+  if (count === 0) {
+    $('error').innerHTML = '<div class="error-msg">Could not parse any JS style properties. Make sure the input is a valid JS style object.</div>';
+    return;
+  }
+
+  $('cssInput').value = lines.join('\n');
+  showStats(count, 'JS → CSS', warnings);
+}
+
+function showStats(props, dir, warnings) {
+  $('statProps').textContent = props;
+  $('statDir').textContent = dir;
+  $('statWarnings').textContent = warnings || 'None';
+  $('stats').style.display = 'flex';
+}
+
+function swapPanels() {
+  const css = $('cssInput').value;
+  $('cssInput').value = $('jsOutput').value;
+  $('jsOutput').value = css;
+}
+
+function clearInput() {
+  $('cssInput').value = '';
+  $('jsOutput').value = '';
+  $('stats').style.display = 'none';
+  $('error').innerHTML = '';
+}
+
+function copyOutput() {
+  const text = $('jsOutput').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+function loadExample() {
+  $('cssInput').value = `background-color: #1a1a2e;
+color: #eaeaea;
+font-size: 16px;
+font-weight: 600;
+border-radius: 8px;
+padding: 12px 24px;
+margin-top: 1rem;
+display: flex;
+justify-content: center;
+align-items: center;
+-webkit-transform: rotate(45deg);
+-moz-transition: all 0.3s ease;
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+z-index: 10;
+opacity: 0.95;`;
+  cssToJs();
+}
+
+// Auto-convert on option change
+document.querySelectorAll('.options-bar input, .options-bar select').forEach(el => {
+  el.addEventListener('change', () => {
+    if ($('cssInput').value.trim()) cssToJs();
+  });
+});
+
+// Auto-convert on input
+$('cssInput').addEventListener('input', () => {
+  if ($('cssInput').value.trim()) cssToJs();
+});
+</script>
+</body>
+</html>

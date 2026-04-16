@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Diff — Compare URLs Side by Side</title>
+<meta name="description" content="Compare two URLs and see differences in protocol, host, path, query parameters, and fragments highlighted side by side. Free, private, runs in your browser.">
+<meta name="keywords" content="url diff, url compare, url comparison, query parameter diff, developer tool, free online tool">
+<meta property="og:title" content="URL Diff — Compare URLs Side by Side">
+<meta property="og:description" content="Compare two URLs and see differences in protocol, host, path, query parameters, and fragments.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/urldiff.html">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="URL Diff — Compare URLs Side by Side">
+<meta name="twitter:description" content="Compare two URLs and see differences in protocol, host, path, query params, and fragments.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/urldiff.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .url-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .url-input { display: flex; flex-direction: column; gap: 6px; }
+  .url-input label { font-size: .85rem; font-weight: 600; color: var(--muted); }
+  .url-input input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
+  .url-input input:focus { border-color: var(--accent); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .diff-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-bottom: 16px; }
+  .diff-table th { text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border); font-weight: 600; color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+  .diff-table td { padding: 8px 14px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: .82rem; word-break: break-all; vertical-align: top; }
+  .diff-table tr.same td { color: var(--muted); }
+  .diff-table tr.diff td { background: #fffbeb; }
+  .diff-table tr.added td { background: #f0fdf4; }
+  .diff-table tr.removed td { background: #fef2f2; }
+  .diff-label { font-family: var(--sans); font-weight: 600; color: var(--text); }
+  .badge-same { background: var(--surface2); color: var(--muted); padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 600; }
+  .badge-diff { background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 600; }
+  .badge-added { background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 600; }
+  .badge-removed { background: #fecaca; color: #991b1b; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 600; }
+  .summary { display: flex; gap: 16px; flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 16px; }
+  .summary-item { font-size: .85rem; }
+  .summary-item strong { font-weight: 600; }
+  .highlight-add { background: #bbf7d0; padding: 1px 2px; border-radius: 2px; }
+  .highlight-del { background: #fecaca; padding: 1px 2px; border-radius: 2px; text-decoration: line-through; }
+  .empty-state { text-align: center; color: var(--muted); padding: 3rem; font-size: .9rem; }
+  @media (max-width: 768px) { .url-inputs { grid-template-columns: 1fr; } }
+  @media (prefers-color-scheme: dark) {
+    .diff-table tr.diff td { background: #422006; }
+    .diff-table tr.added td { background: #052e16; }
+    .diff-table tr.removed td { background: #450a0a; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>URL Diff</h1>
+<p class="subtitle">Compare two URLs component by component — protocol, host, path, query parameters, and fragments.</p>
+
+<div class="url-inputs">
+  <div class="url-input">
+    <label for="url1">URL A</label>
+    <input type="text" id="url1" placeholder="https://example.com/api/v1/users?page=1&sort=name" spellcheck="false">
+  </div>
+  <div class="url-input">
+    <label for="url2">URL B</label>
+    <input type="text" id="url2" placeholder="https://example.com/api/v2/users?page=2&sort=name&limit=50" spellcheck="false">
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn btn-primary" onclick="compare()">Compare</button>
+  <button class="btn btn-secondary" onclick="swapUrls()">&#8646; Swap</button>
+  <button class="btn btn-secondary" onclick="loadExample()">Example</button>
+  <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+
+<div id="results"></div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+function parseUrl(str) {
+  try {
+    // Add protocol if missing for parsing
+    let normalized = str.trim();
+    if (!/^[a-z]+:\/\//i.test(normalized)) normalized = 'https://' + normalized;
+    const u = new URL(normalized);
+    const params = {};
+    u.searchParams.forEach((v, k) => { params[k] = v; });
+    return {
+      protocol: u.protocol.replace(':', ''),
+      host: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? '443' : u.protocol === 'http:' ? '80' : ''),
+      path: u.pathname,
+      params,
+      hash: u.hash.replace('#', ''),
+      username: u.username,
+      password: u.password,
+      valid: true
+    };
+  } catch(e) {
+    return { valid: false, error: e.message };
+  }
+}
+
+function badge(type) {
+  const labels = { same: 'Same', diff: 'Changed', added: 'Added', removed: 'Removed' };
+  return `<span class="badge-${type}">${labels[type]}</span>`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function compare() {
+  const raw1 = $('url1').value.trim();
+  const raw2 = $('url2').value.trim();
+  if (!raw1 || !raw2) {
+    $('results').innerHTML = '<div class="empty-state">Enter two URLs above to compare them.</div>';
+    return;
+  }
+
+  const a = parseUrl(raw1);
+  const b = parseUrl(raw2);
+
+  if (!a.valid) {
+    $('results').innerHTML = `<div class="error-msg">URL A is not valid: ${escHtml(a.error)}</div>`;
+    return;
+  }
+  if (!b.valid) {
+    $('results').innerHTML = `<div class="error-msg">URL B is not valid: ${escHtml(b.error)}</div>`;
+    return;
+  }
+
+  const rows = [];
+  let diffs = 0, same = 0;
+
+  // Compare basic components
+  const components = [
+    ['Protocol', a.protocol, b.protocol],
+    ['Host', a.host, b.host],
+    ['Port', a.port, b.port],
+    ['Path', a.path, b.path],
+    ['Fragment', a.hash, b.hash],
+  ];
+
+  if (a.username || b.username) components.push(['Username', a.username, b.username]);
+  if (a.password || b.password) components.push(['Password', a.password, b.password]);
+
+  for (const [label, va, vb] of components) {
+    const isDiff = va !== vb;
+    if (isDiff) diffs++; else same++;
+    rows.push(`<tr class="${isDiff ? 'diff' : 'same'}">
+      <td class="diff-label">${label}</td>
+      <td>${escHtml(va || '(empty)')}</td>
+      <td>${escHtml(vb || '(empty)')}</td>
+      <td>${badge(isDiff ? 'diff' : 'same')}</td>
+    </tr>`);
+  }
+
+  // Compare query parameters
+  const allKeys = new Set([...Object.keys(a.params), ...Object.keys(b.params)]);
+  const sortedKeys = [...allKeys].sort();
+
+  for (const key of sortedKeys) {
+    const va = a.params[key];
+    const vb = b.params[key];
+    let type, valA, valB;
+
+    if (va !== undefined && vb !== undefined) {
+      type = va === vb ? 'same' : 'diff';
+      valA = va;
+      valB = vb;
+      if (type === 'diff') diffs++; else same++;
+    } else if (va !== undefined) {
+      type = 'removed';
+      valA = va;
+      valB = '—';
+      diffs++;
+    } else {
+      type = 'added';
+      valA = '—';
+      valB = vb;
+      diffs++;
+    }
+
+    rows.push(`<tr class="${type}">
+      <td class="diff-label">?${escHtml(key)}</td>
+      <td>${escHtml(valA)}</td>
+      <td>${escHtml(valB)}</td>
+      <td>${badge(type)}</td>
+    </tr>`);
+  }
+
+  const summaryHtml = `<div class="summary">
+    <div class="summary-item"><strong>${same + diffs}</strong> components compared</div>
+    <div class="summary-item"><strong style="color:var(--success)">${same}</strong> identical</div>
+    <div class="summary-item"><strong style="color:var(--error)">${diffs}</strong> different</div>
+  </div>`;
+
+  const tableHtml = `<table class="diff-table">
+    <thead><tr><th>Component</th><th>URL A</th><th>URL B</th><th>Status</th></tr></thead>
+    <tbody>${rows.join('')}</tbody>
+  </table>`;
+
+  $('results').innerHTML = summaryHtml + tableHtml;
+}
+
+function swapUrls() {
+  const a = $('url1').value;
+  $('url1').value = $('url2').value;
+  $('url2').value = a;
+  if ($('url1').value && $('url2').value) compare();
+}
+
+function loadExample() {
+  $('url1').value = 'https://api.example.com/v1/users?page=1&sort=name&order=asc#section1';
+  $('url2').value = 'https://api.example.com/v2/users?page=2&sort=name&limit=50#section2';
+  compare();
+}
+
+function clearAll() {
+  $('url1').value = '';
+  $('url2').value = '';
+  $('results').innerHTML = '';
+}
+
+// Auto-compare on input
+$('url1').addEventListener('input', () => { if ($('url1').value && $('url2').value) compare(); });
+$('url2').addEventListener('input', () => { if ($('url1').value && $('url2').value) compare(); });
+</script>
+</body>
+</html>
