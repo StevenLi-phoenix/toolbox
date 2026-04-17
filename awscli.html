@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS CLI Command Builder - Free Online AWS Command Generator</title>
+<meta name="description" content="Build AWS CLI commands visually for S3, EC2, Lambda, IAM, ECS, and more. Generate copy-ready commands with proper flags. No data leaves your browser.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/awscli.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.service-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:16px}
+.service-btn{padding:10px 8px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;text-align:center;background:var(--surface);font-size:.82rem;transition:all .15s}
+.service-btn:hover{background:var(--surface2);border-color:var(--border2)}
+.service-btn.active{background:var(--text);color:var(--bg);border-color:var(--text)}
+.service-btn .svc-icon{font-size:1.3rem;margin-bottom:4px;display:block}
+.form-row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.form-row label{font-size:.82rem;font-weight:600;min-width:100px;color:var(--muted)}
+.form-row select,.form-row input{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem;flex:1}
+.output-box{font-family:var(--mono);font-size:.9rem;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);white-space:pre-wrap;word-break:break-all;min-height:60px;line-height:1.5}
+.flag-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.flag-row input{padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.82rem}
+.flag-row input:first-child{flex:1}
+.flag-row input:nth-child(2){flex:2}
+.flag-row button{flex-shrink:0;padding:4px 8px;font-size:.75rem}
+.help-text{font-size:.78rem;color:var(--muted);margin-top:4px;line-height:1.4}
+.cmd-history{display:flex;flex-direction:column;gap:4px}
+.cmd-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--mono);font-size:.8rem;cursor:pointer}
+.cmd-item:hover{background:var(--surface2)}
+.cmd-item .cmd-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:768px){.form-row{flex-direction:column;align-items:stretch}.form-row label{min-width:auto}.service-grid{grid-template-columns:repeat(auto-fill,minmax(90px,1fr))}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>AWS CLI Command Builder</h1>
+<p class="subtitle">Build AWS CLI commands visually — select a service and operation, configure flags, and get copy-ready commands</p>
+
+<div class="card">
+<h2>&#9729;&#65039; Select Service</h2>
+<div class="service-grid" id="serviceGrid"></div>
+</div>
+
+<div class="card">
+<h2>&#9881;&#65039; Command Configuration</h2>
+<div class="form-row">
+<label>Operation</label>
+<select id="operation" onchange="updateFields()"></select>
+</div>
+<div id="dynamicFields"></div>
+<div class="form-row">
+<label>Profile</label>
+<input type="text" id="profile" placeholder="default" oninput="buildCommand()">
+</div>
+<div class="form-row">
+<label>Region</label>
+<select id="region" onchange="buildCommand()">
+<option value="">Default</option>
+<option value="us-east-1">us-east-1 (N. Virginia)</option>
+<option value="us-east-2">us-east-2 (Ohio)</option>
+<option value="us-west-1">us-west-1 (N. California)</option>
+<option value="us-west-2">us-west-2 (Oregon)</option>
+<option value="eu-west-1">eu-west-1 (Ireland)</option>
+<option value="eu-west-2">eu-west-2 (London)</option>
+<option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+<option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+<option value="ap-southeast-2">ap-southeast-2 (Sydney)</option>
+<option value="ap-northeast-1">ap-northeast-1 (Tokyo)</option>
+<option value="ap-south-1">ap-south-1 (Mumbai)</option>
+<option value="sa-east-1">sa-east-1 (São Paulo)</option>
+<option value="ca-central-1">ca-central-1 (Canada)</option>
+</select>
+</div>
+<div class="form-row">
+<label>Output</label>
+<select id="outputFmt" onchange="buildCommand()">
+<option value="">Default</option>
+<option value="json">json</option>
+<option value="text">text</option>
+<option value="table">table</option>
+<option value="yaml">yaml</option>
+</select>
+</div>
+
+<h3 style="font-size:.85rem;margin-top:16px;margin-bottom:8px">Extra Flags</h3>
+<div id="extraFlags"></div>
+<button class="btn btn-secondary" onclick="addFlag()" style="font-size:.8rem;padding:4px 12px">+ Add Flag</button>
+</div>
+
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+<h2>&#128196; Generated Command</h2>
+<div style="display:flex;gap:8px">
+<button class="btn" onclick="copyCmd()">Copy</button>
+<button class="btn btn-secondary" onclick="saveToHistory()">Save</button>
+</div>
+</div>
+<div class="output-box" id="output">Select a service and operation to begin.</div>
+</div>
+
+<div class="card" id="historyCard" style="display:none">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+<h2>&#128203; Saved Commands</h2>
+<button class="btn btn-secondary" onclick="clearHistory()" style="font-size:.78rem;padding:4px 10px">Clear</button>
+</div>
+<div class="cmd-history" id="history"></div>
+</div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const services = {
+  s3: {
+    icon: '&#128230;', label: 'S3',
+    ops: {
+      'ls': {desc:'List buckets or objects', fields:[{id:'path',label:'S3 URI',ph:'s3://bucket/prefix/',help:'Leave empty to list all buckets'}]},
+      'cp': {desc:'Copy files', fields:[{id:'src',label:'Source',ph:'./file.txt or s3://bucket/key'},{id:'dst',label:'Destination',ph:'s3://bucket/key or ./file.txt'},{id:'recursive',label:'Recursive',type:'checkbox'}]},
+      'sync': {desc:'Sync directories', fields:[{id:'src',label:'Source',ph:'./local-dir/'},{id:'dst',label:'Destination',ph:'s3://bucket/prefix/'},{id:'delete',label:'Delete removed',type:'checkbox'},{id:'exclude',label:'Exclude',ph:'*.log'}]},
+      'mb': {desc:'Create bucket', fields:[{id:'bucket',label:'Bucket',ph:'s3://my-new-bucket'}]},
+      'rb': {desc:'Remove bucket', fields:[{id:'bucket',label:'Bucket',ph:'s3://my-bucket'},{id:'force',label:'Force',type:'checkbox'}]},
+      'rm': {desc:'Remove objects', fields:[{id:'path',label:'S3 URI',ph:'s3://bucket/key'},{id:'recursive',label:'Recursive',type:'checkbox'}]},
+      'presign': {desc:'Generate presigned URL', fields:[{id:'path',label:'S3 URI',ph:'s3://bucket/key'},{id:'expires',label:'Expires (sec)',ph:'3600'}]}
+    }
+  },
+  ec2: {
+    icon: '&#128421;', label: 'EC2',
+    ops: {
+      'describe-instances': {desc:'List instances', fields:[{id:'ids',label:'Instance IDs',ph:'i-1234567890abcdef0 (optional)'},{id:'filters',label:'Filters',ph:'Name=tag:Name,Values=my-server'}]},
+      'start-instances': {desc:'Start instances', fields:[{id:'ids',label:'Instance IDs',ph:'i-1234567890abcdef0',required:true}]},
+      'stop-instances': {desc:'Stop instances', fields:[{id:'ids',label:'Instance IDs',ph:'i-1234567890abcdef0',required:true}]},
+      'terminate-instances': {desc:'Terminate instances', fields:[{id:'ids',label:'Instance IDs',ph:'i-1234567890abcdef0',required:true}]},
+      'describe-security-groups': {desc:'List security groups', fields:[{id:'ids',label:'Group IDs',ph:'sg-12345678 (optional)'}]},
+      'run-instances': {desc:'Launch instance', fields:[{id:'ami',label:'AMI ID',ph:'ami-0abcdef1234567890',required:true},{id:'type',label:'Instance Type',ph:'t3.micro'},{id:'keyname',label:'Key Pair',ph:'my-key'},{id:'count',label:'Count',ph:'1'},{id:'sg',label:'Security Group',ph:'sg-12345678'}]}
+    }
+  },
+  lambda: {
+    icon: '&#9889;', label: 'Lambda',
+    ops: {
+      'list-functions': {desc:'List functions', fields:[]},
+      'invoke': {desc:'Invoke function', fields:[{id:'name',label:'Function Name',ph:'my-function',required:true},{id:'payload',label:'Payload',ph:'{"key":"value"}'},{id:'outfile',label:'Output File',ph:'response.json'}]},
+      'create-function': {desc:'Create function', fields:[{id:'name',label:'Function Name',ph:'my-function',required:true},{id:'runtime',label:'Runtime',ph:'nodejs20.x'},{id:'role',label:'Role ARN',ph:'arn:aws:iam::123456789012:role/lambda-role',required:true},{id:'handler',label:'Handler',ph:'index.handler'},{id:'zip',label:'Zip File',ph:'fileb://function.zip'}]},
+      'update-function-code': {desc:'Update function code', fields:[{id:'name',label:'Function Name',ph:'my-function',required:true},{id:'zip',label:'Zip File',ph:'fileb://function.zip'},{id:'s3bucket',label:'S3 Bucket',ph:'my-deploy-bucket'},{id:'s3key',label:'S3 Key',ph:'function.zip'}]},
+      'delete-function': {desc:'Delete function', fields:[{id:'name',label:'Function Name',ph:'my-function',required:true}]}
+    }
+  },
+  iam: {
+    icon: '&#128274;', label: 'IAM',
+    ops: {
+      'list-users': {desc:'List IAM users', fields:[]},
+      'list-roles': {desc:'List IAM roles', fields:[]},
+      'list-policies': {desc:'List IAM policies', fields:[{id:'scope',label:'Scope',ph:'Local or AWS'}]},
+      'create-user': {desc:'Create user', fields:[{id:'username',label:'User Name',ph:'johndoe',required:true}]},
+      'create-role': {desc:'Create role', fields:[{id:'rolename',label:'Role Name',ph:'my-role',required:true},{id:'policy',label:'Trust Policy',ph:'file://trust-policy.json',required:true}]},
+      'attach-user-policy': {desc:'Attach policy to user', fields:[{id:'username',label:'User Name',ph:'johndoe',required:true},{id:'policyarn',label:'Policy ARN',ph:'arn:aws:iam::aws:policy/ReadOnlyAccess',required:true}]},
+      'get-user': {desc:'Get user details', fields:[{id:'username',label:'User Name',ph:'johndoe'}]}
+    }
+  },
+  ecs: {
+    icon: '&#128736;', label: 'ECS',
+    ops: {
+      'list-clusters': {desc:'List clusters', fields:[]},
+      'list-services': {desc:'List services', fields:[{id:'cluster',label:'Cluster',ph:'my-cluster',required:true}]},
+      'list-tasks': {desc:'List tasks', fields:[{id:'cluster',label:'Cluster',ph:'my-cluster',required:true},{id:'service',label:'Service',ph:'my-service'}]},
+      'describe-services': {desc:'Describe services', fields:[{id:'cluster',label:'Cluster',ph:'my-cluster',required:true},{id:'services',label:'Services',ph:'my-service',required:true}]},
+      'update-service': {desc:'Update service', fields:[{id:'cluster',label:'Cluster',ph:'my-cluster',required:true},{id:'service',label:'Service',ph:'my-service',required:true},{id:'desiredcount',label:'Desired Count',ph:'2'},{id:'taskdef',label:'Task Definition',ph:'my-task:3'}]},
+      'execute-command': {desc:'Exec into container', fields:[{id:'cluster',label:'Cluster',ph:'my-cluster',required:true},{id:'task',label:'Task ID',ph:'abc123',required:true},{id:'container',label:'Container',ph:'app'},{id:'execcmd',label:'Command',ph:'/bin/bash'}]}
+    }
+  },
+  cloudformation: {
+    icon: '&#127959;', label: 'CloudFormation',
+    ops: {
+      'list-stacks': {desc:'List stacks', fields:[{id:'status',label:'Status Filter',ph:'CREATE_COMPLETE'}]},
+      'describe-stacks': {desc:'Describe stack', fields:[{id:'stackname',label:'Stack Name',ph:'my-stack'}]},
+      'create-stack': {desc:'Create stack', fields:[{id:'stackname',label:'Stack Name',ph:'my-stack',required:true},{id:'template',label:'Template',ph:'file://template.yaml',required:true},{id:'params',label:'Parameters',ph:'Key=Value,Key2=Value2'},{id:'caps',label:'Capabilities',ph:'CAPABILITY_IAM'}]},
+      'delete-stack': {desc:'Delete stack', fields:[{id:'stackname',label:'Stack Name',ph:'my-stack',required:true}]},
+      'deploy': {desc:'Deploy stack', fields:[{id:'stackname',label:'Stack Name',ph:'my-stack',required:true},{id:'template',label:'Template File',ph:'template.yaml',required:true},{id:'caps',label:'Capabilities',ph:'CAPABILITY_IAM'}]}
+    }
+  },
+  dynamodb: {
+    icon: '&#128451;', label: 'DynamoDB',
+    ops: {
+      'list-tables': {desc:'List tables', fields:[]},
+      'describe-table': {desc:'Describe table', fields:[{id:'table',label:'Table Name',ph:'my-table',required:true}]},
+      'scan': {desc:'Scan table', fields:[{id:'table',label:'Table Name',ph:'my-table',required:true},{id:'maxitems',label:'Max Items',ph:'100'},{id:'filterexpr',label:'Filter Expression',ph:'age > :min'}]},
+      'get-item': {desc:'Get item', fields:[{id:'table',label:'Table Name',ph:'my-table',required:true},{id:'key',label:'Key (JSON)',ph:'{"id":{"S":"123"}}',required:true}]},
+      'put-item': {desc:'Put item', fields:[{id:'table',label:'Table Name',ph:'my-table',required:true},{id:'item',label:'Item (JSON)',ph:'{"id":{"S":"123"},"name":{"S":"test"}}',required:true}]},
+      'delete-item': {desc:'Delete item', fields:[{id:'table',label:'Table Name',ph:'my-table',required:true},{id:'key',label:'Key (JSON)',ph:'{"id":{"S":"123"}}',required:true}]}
+    }
+  },
+  logs: {
+    icon: '&#128220;', label: 'CloudWatch',
+    ops: {
+      'describe-log-groups': {desc:'List log groups', fields:[{id:'prefix',label:'Prefix',ph:'/aws/lambda/'}]},
+      'tail': {desc:'Tail log group', fields:[{id:'group',label:'Log Group',ph:'/aws/lambda/my-function',required:true},{id:'follow',label:'Follow',type:'checkbox'},{id:'since',label:'Since',ph:'1h or 2024-01-01'}]},
+      'filter-log-events': {desc:'Filter events', fields:[{id:'group',label:'Log Group',ph:'/aws/lambda/my-function',required:true},{id:'filterpattern',label:'Filter Pattern',ph:'"ERROR"'}]}
+    }
+  }
+};
+
+let currentService = null;
+let extraFlags = [];
+const history = [];
+
+function init() {
+  const grid = document.getElementById('serviceGrid');
+  grid.innerHTML = Object.entries(services).map(([k,v]) =>
+    `<div class="service-btn" onclick="selectService('${k}')" id="svc-${k}"><span class="svc-icon">${v.icon}</span>${v.label}</div>`
+  ).join('');
+}
+
+function selectService(svc) {
+  currentService = svc;
+  document.querySelectorAll('.service-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('svc-' + svc).classList.add('active');
+
+  const ops = services[svc].ops;
+  const sel = document.getElementById('operation');
+  sel.innerHTML = Object.entries(ops).map(([k,v]) =>
+    `<option value="${k}">${k} — ${v.desc}</option>`
+  ).join('');
+
+  updateFields();
+}
+
+function updateFields() {
+  if (!currentService) return;
+  const op = document.getElementById('operation').value;
+  const fields = services[currentService].ops[op]?.fields || [];
+  const container = document.getElementById('dynamicFields');
+  container.innerHTML = fields.map(f => {
+    if (f.type === 'checkbox') {
+      return `<div class="form-row"><label>${f.label}</label><input type="checkbox" id="f-${f.id}" onchange="buildCommand()" style="flex:0;width:18px;height:18px"><span class="help-text" style="flex:1">${f.help||''}</span></div>`;
+    }
+    return `<div class="form-row"><label>${f.label}${f.required?'*':''}</label><input type="text" id="f-${f.id}" placeholder="${f.ph||''}" oninput="buildCommand()"></div>${f.help?'<div class="help-text" style="margin-top:-6px;margin-bottom:6px;padding-left:110px">'+f.help+'</div>':''}`;
+  }).join('');
+  buildCommand();
+}
+
+function buildCommand() {
+  if (!currentService) return;
+  const svc = currentService;
+  const op = document.getElementById('operation').value;
+  const profile = document.getElementById('profile').value.trim();
+  const region = document.getElementById('region').value;
+  const outputFmt = document.getElementById('outputFmt').value;
+  const fields = services[svc].ops[op]?.fields || [];
+
+  let cmd = 'aws';
+  const svcName = svc === 'logs' ? 'logs' : svc;
+  cmd += ` ${svcName} ${op}`;
+
+  fields.forEach(f => {
+    const el = document.getElementById('f-' + f.id);
+    if (!el) return;
+    if (f.type === 'checkbox') {
+      if (el.checked) {
+        const flagMap = {recursive:'--recursive', delete:'--delete', force:'--force', follow:'--follow'};
+        cmd += ` ${flagMap[f.id] || '--' + f.id}`;
+      }
+      return;
+    }
+    const val = el.value.trim();
+    if (!val) return;
+
+    const flagMap = {
+      path:'', src:'', dst:'', bucket:'',
+      ids:'--instance-ids', ami:'--image-id', type:'--instance-type',
+      keyname:'--key-name', count:'--count', sg:'--security-group-ids',
+      name:'--function-name', payload:'--payload', outfile:'',
+      runtime:'--runtime', role:'--role', handler:'--handler', zip:'--zip-file',
+      s3bucket:'--s3-bucket', s3key:'--s3-key',
+      username:'--user-name', rolename:'--role-name', policy:'--assume-role-policy-document',
+      policyarn:'--policy-arn',
+      cluster:'--cluster', service:'--service', services:'--services',
+      task:'--task', container:'--container', execcmd:'--command',
+      desiredcount:'--desired-count', taskdef:'--task-definition',
+      stackname:'--stack-name', template:'--template-body', params:'--parameters',
+      caps:'--capabilities',
+      table:'--table-name', key:'--key', item:'--item',
+      maxitems:'--max-items', filterexpr:'--filter-expression',
+      group:'--log-group-name', prefix:'--log-group-name-prefix',
+      filterpattern:'--filter-pattern', since:'--since',
+      scope:'--scope', status:'--stack-status-filter',
+      filters:'--filters', exclude:'--exclude',
+      expires:'--expires-in'
+    };
+
+    const flag = flagMap[f.id];
+    if (flag === undefined) {
+      cmd += ` --${f.id} ${val}`;
+    } else if (flag === '') {
+      cmd += ` ${val}`;
+    } else {
+      cmd += ` ${flag} ${val}`;
+    }
+  });
+
+  if (svc === 'cloudformation' && op === 'deploy') {
+    cmd = cmd.replace('aws cloudformation deploy', 'aws cloudformation deploy');
+    const stackIdx = cmd.indexOf('--stack-name');
+    const templateIdx = cmd.indexOf('--template-body');
+    if (templateIdx > -1) cmd = cmd.replace('--template-body', '--template-file');
+  }
+
+  if (svc === 'ecs' && op === 'execute-command') {
+    cmd += ' --interactive';
+  }
+
+  extraFlags.forEach(f => {
+    if (f.flag) cmd += f.val ? ` ${f.flag} ${f.val}` : ` ${f.flag}`;
+  });
+
+  if (profile && profile !== 'default') cmd += ` --profile ${profile}`;
+  if (region) cmd += ` --region ${region}`;
+  if (outputFmt) cmd += ` --output ${outputFmt}`;
+
+  document.getElementById('output').textContent = cmd;
+}
+
+function addFlag(flag='', val='') {
+  extraFlags.push({flag, val});
+  renderFlags();
+}
+
+function renderFlags() {
+  const el = document.getElementById('extraFlags');
+  el.innerHTML = extraFlags.map((f,i) =>
+    `<div class="flag-row"><input value="${esc(f.flag)}" oninput="extraFlags[${i}].flag=this.value;buildCommand()" placeholder="--flag"><input value="${esc(f.val)}" oninput="extraFlags[${i}].val=this.value;buildCommand()" placeholder="value (optional)"><button class="btn btn-secondary" onclick="extraFlags.splice(${i},1);renderFlags();buildCommand()">&#10005;</button></div>`
+  ).join('');
+  buildCommand();
+}
+
+function copyCmd() {
+  const text = document.getElementById('output').textContent;
+  navigator.clipboard.writeText(text);
+  showToast('Copied!');
+}
+
+function saveToHistory() {
+  const cmd = document.getElementById('output').textContent;
+  if (!cmd || cmd.startsWith('Select')) return;
+  history.unshift(cmd);
+  renderHistory();
+}
+
+function renderHistory() {
+  const card = document.getElementById('historyCard');
+  const el = document.getElementById('history');
+  if (history.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  el.innerHTML = history.map((cmd,i) =>
+    `<div class="cmd-item" onclick="navigator.clipboard.writeText(this.querySelector('.cmd-text').textContent);showToast('Copied!')"><span class="cmd-text">${esc(cmd)}</span></div>`
+  ).join('');
+}
+
+function clearHistory() {
+  history.length = 0;
+  renderHistory();
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2000);
+}
+
+init();
+selectService('s3');
+</script>
+</body>
+</html>

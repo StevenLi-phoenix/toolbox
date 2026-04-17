@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iptables Rule Builder - Free Online Linux Firewall Rule Generator</title>
+<meta name="description" content="Visually build iptables firewall rules with chains, tables, protocols, and targets. Generate copy-ready commands. No data leaves your browser.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/iptables.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.rule-form{display:flex;flex-direction:column;gap:14px}
+.form-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.form-row label{font-size:.82rem;font-weight:600;min-width:80px;color:var(--muted)}
+.form-row select,.form-row input{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem;flex:1;min-width:120px}
+.form-row select{cursor:pointer}
+.output-box{font-family:var(--mono);font-size:.9rem;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);white-space:pre-wrap;word-break:break-all;min-height:40px;position:relative}
+.rules-list{display:flex;flex-direction:column;gap:6px}
+.rule-item{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--mono);font-size:.82rem}
+.rule-item .rule-text{flex:1;word-break:break-all}
+.rule-item button{flex-shrink:0}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.preset-tag{padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:.78rem;cursor:pointer;background:var(--surface);font-family:var(--sans)}
+.preset-tag:hover{background:var(--surface2);border-color:var(--border2)}
+.extra-fields{display:none;flex-direction:column;gap:10px;margin-top:8px;padding-top:10px;border-top:1px dashed var(--border)}
+.extra-fields.show{display:flex}
+.toggle-extra{font-size:.8rem;color:var(--accent);cursor:pointer;text-decoration:underline;align-self:flex-start}
+.comment-input{width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem}
+@media(max-width:768px){.form-row{flex-direction:column;align-items:stretch}.form-row label{min-width:auto}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>iptables Rule Builder</h1>
+<p class="subtitle">Visually build Linux iptables firewall rules — select table, chain, protocol, ports, and target to generate copy-ready commands</p>
+
+<div class="card">
+<h2>&#128272; Quick Presets</h2>
+<div class="presets">
+<span class="preset-tag" onclick="applyPreset('ssh')">Allow SSH (22)</span>
+<span class="preset-tag" onclick="applyPreset('http')">Allow HTTP (80)</span>
+<span class="preset-tag" onclick="applyPreset('https')">Allow HTTPS (443)</span>
+<span class="preset-tag" onclick="applyPreset('web')">Allow HTTP+HTTPS</span>
+<span class="preset-tag" onclick="applyPreset('ping')">Allow Ping</span>
+<span class="preset-tag" onclick="applyPreset('dropall')">Drop All Incoming</span>
+<span class="preset-tag" onclick="applyPreset('loopback')">Allow Loopback</span>
+<span class="preset-tag" onclick="applyPreset('established')">Allow Established</span>
+<span class="preset-tag" onclick="applyPreset('nat')">NAT Masquerade</span>
+<span class="preset-tag" onclick="applyPreset('portfwd')">Port Forward</span>
+<span class="preset-tag" onclick="applyPreset('ratelimit')">Rate Limit SSH</span>
+<span class="preset-tag" onclick="applyPreset('logdrop')">Log & Drop</span>
+</div>
+</div>
+
+<div class="card">
+<h2>&#9881;&#65039; Rule Configuration</h2>
+<div class="rule-form">
+<div class="form-row">
+<label>Action</label>
+<select id="action">
+<option value="-A">Append (-A)</option>
+<option value="-I">Insert (-I)</option>
+<option value="-D">Delete (-D)</option>
+<option value="-P">Policy (-P)</option>
+</select>
+</div>
+<div class="form-row">
+<label>Table</label>
+<select id="table" onchange="updateChains()">
+<option value="">filter (default)</option>
+<option value="nat">nat</option>
+<option value="mangle">mangle</option>
+<option value="raw">raw</option>
+</select>
+</div>
+<div class="form-row">
+<label>Chain</label>
+<select id="chain">
+<option value="INPUT">INPUT</option>
+<option value="OUTPUT">OUTPUT</option>
+<option value="FORWARD">FORWARD</option>
+</select>
+</div>
+<div class="form-row">
+<label>Protocol</label>
+<select id="protocol" onchange="updateProtocolFields()">
+<option value="">Any</option>
+<option value="tcp">TCP</option>
+<option value="udp">UDP</option>
+<option value="icmp">ICMP</option>
+<option value="all">All</option>
+</select>
+</div>
+<div class="form-row">
+<label>Source IP</label>
+<input type="text" id="src" placeholder="e.g. 192.168.1.0/24 or any">
+</div>
+<div class="form-row">
+<label>Dest IP</label>
+<input type="text" id="dst" placeholder="e.g. 10.0.0.1 or any">
+</div>
+<div class="form-row" id="sportRow">
+<label>Src Port</label>
+<input type="text" id="sport" placeholder="e.g. 1024:65535">
+</div>
+<div class="form-row" id="dportRow">
+<label>Dest Port</label>
+<input type="text" id="dport" placeholder="e.g. 80,443 or 8000:9000">
+</div>
+<div class="form-row">
+<label>Interface In</label>
+<input type="text" id="iface_in" placeholder="e.g. eth0">
+</div>
+<div class="form-row">
+<label>Interface Out</label>
+<input type="text" id="iface_out" placeholder="e.g. eth1">
+</div>
+<div class="form-row">
+<label>Target</label>
+<select id="target">
+<option value="ACCEPT">ACCEPT</option>
+<option value="DROP">DROP</option>
+<option value="REJECT">REJECT</option>
+<option value="LOG">LOG</option>
+<option value="MASQUERADE">MASQUERADE</option>
+<option value="SNAT">SNAT</option>
+<option value="DNAT">DNAT</option>
+<option value="REDIRECT">REDIRECT</option>
+<option value="RETURN">RETURN</option>
+</select>
+</div>
+
+<span class="toggle-extra" onclick="toggleExtra()">&#9660; Advanced options</span>
+<div class="extra-fields" id="extraFields">
+<div class="form-row">
+<label>State</label>
+<select id="state">
+<option value="">None</option>
+<option value="NEW">NEW</option>
+<option value="ESTABLISHED">ESTABLISHED</option>
+<option value="RELATED">RELATED</option>
+<option value="NEW,ESTABLISHED">NEW,ESTABLISHED</option>
+<option value="ESTABLISHED,RELATED">ESTABLISHED,RELATED</option>
+<option value="NEW,ESTABLISHED,RELATED">NEW,ESTABLISHED,RELATED</option>
+</select>
+</div>
+<div class="form-row">
+<label>Limit</label>
+<input type="text" id="limit" placeholder="e.g. 3/min or 10/sec">
+</div>
+<div class="form-row">
+<label>Log Prefix</label>
+<input type="text" id="logprefix" placeholder="e.g. DROPPED: ">
+</div>
+<div class="form-row">
+<label>To Dest</label>
+<input type="text" id="todest" placeholder="e.g. 192.168.1.5:8080 (for DNAT)">
+</div>
+<div class="form-row">
+<label>To Source</label>
+<input type="text" id="tosource" placeholder="e.g. 203.0.113.1 (for SNAT)">
+</div>
+<div class="form-row">
+<label>Comment</label>
+<input type="text" class="comment-input" id="comment" placeholder="Optional rule comment">
+</div>
+</div>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+<button class="btn" onclick="buildAndAdd()">Add Rule</button>
+<button class="btn btn-secondary" onclick="resetForm()">Reset</button>
+</div>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128203; Generated Rules</h2>
+<div class="rules-list" id="rulesList">
+<p class="empty" id="emptyMsg">No rules yet. Configure a rule above and click "Add Rule".</p>
+</div>
+<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn" onclick="copyAll()">Copy All</button>
+<button class="btn btn-secondary" onclick="copyScript()">Copy as Script</button>
+<button class="btn btn-secondary" onclick="clearRules()">Clear All</button>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128196; Full Script Preview</h2>
+<div class="output-box" id="scriptPreview">#!/bin/bash
+# iptables rules generated by toolbox
+# No rules added yet</div>
+</div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const rules = [];
+
+function updateChains() {
+  const table = document.getElementById('table').value;
+  const chain = document.getElementById('chain');
+  const chains = {
+    '': ['INPUT','OUTPUT','FORWARD'],
+    'nat': ['PREROUTING','INPUT','OUTPUT','POSTROUTING'],
+    'mangle': ['PREROUTING','INPUT','FORWARD','OUTPUT','POSTROUTING'],
+    'raw': ['PREROUTING','OUTPUT']
+  };
+  const prev = chain.value;
+  chain.innerHTML = '';
+  (chains[table] || chains['']).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    chain.appendChild(opt);
+  });
+  if ([...chain.options].some(o => o.value === prev)) chain.value = prev;
+}
+
+function updateProtocolFields() {
+  const proto = document.getElementById('protocol').value;
+  const show = proto === 'tcp' || proto === 'udp';
+  document.getElementById('sportRow').style.display = show ? '' : 'none';
+  document.getElementById('dportRow').style.display = show ? '' : 'none';
+}
+
+function toggleExtra() {
+  const el = document.getElementById('extraFields');
+  el.classList.toggle('show');
+}
+
+function buildRule() {
+  const action = document.getElementById('action').value;
+  const table = document.getElementById('table').value;
+  const chain = document.getElementById('chain').value;
+  const protocol = document.getElementById('protocol').value;
+  const src = document.getElementById('src').value.trim();
+  const dst = document.getElementById('dst').value.trim();
+  const sport = document.getElementById('sport').value.trim();
+  const dport = document.getElementById('dport').value.trim();
+  const iface_in = document.getElementById('iface_in').value.trim();
+  const iface_out = document.getElementById('iface_out').value.trim();
+  const target = document.getElementById('target').value;
+  const state = document.getElementById('state').value;
+  const limit = document.getElementById('limit').value.trim();
+  const logprefix = document.getElementById('logprefix').value.trim();
+  const todest = document.getElementById('todest').value.trim();
+  const tosource = document.getElementById('tosource').value.trim();
+  const comment = document.getElementById('comment').value.trim();
+
+  let cmd = 'iptables';
+  if (table) cmd += ` -t ${table}`;
+  cmd += ` ${action} ${chain}`;
+  if (protocol) cmd += ` -p ${protocol}`;
+  if (src && src !== 'any') cmd += ` -s ${src}`;
+  if (dst && dst !== 'any') cmd += ` -d ${dst}`;
+  if (iface_in) cmd += ` -i ${iface_in}`;
+  if (iface_out) cmd += ` -o ${iface_out}`;
+  if (sport && (protocol === 'tcp' || protocol === 'udp')) cmd += ` --sport ${sport}`;
+  if (dport && (protocol === 'tcp' || protocol === 'udp')) cmd += ` --dport ${dport}`;
+  if (state) cmd += ` -m state --state ${state}`;
+  if (limit) cmd += ` -m limit --limit ${limit}`;
+  if (comment) cmd += ` -m comment --comment "${comment}"`;
+  cmd += ` -j ${target}`;
+  if (logprefix && target === 'LOG') cmd += ` --log-prefix "${logprefix}"`;
+  if (todest && target === 'DNAT') cmd += ` --to-destination ${todest}`;
+  if (tosource && target === 'SNAT') cmd += ` --to-source ${tosource}`;
+
+  return cmd;
+}
+
+function buildAndAdd() {
+  const cmd = buildRule();
+  rules.push(cmd);
+  renderRules();
+}
+
+function removeRule(i) {
+  rules.splice(i, 1);
+  renderRules();
+}
+
+function renderRules() {
+  const list = document.getElementById('rulesList');
+  const empty = document.getElementById('emptyMsg');
+  if (rules.length === 0) {
+    list.innerHTML = '';
+    list.appendChild(empty);
+    empty.style.display = '';
+    updatePreview();
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = rules.map((r, i) => `<div class="rule-item"><span class="rule-text">${escHtml(r)}</span><button class="btn btn-secondary" onclick="removeRule(${i})" style="padding:3px 8px;font-size:.75rem">&#10005;</button></div>`).join('');
+  updatePreview();
+}
+
+function updatePreview() {
+  const preview = document.getElementById('scriptPreview');
+  if (rules.length === 0) {
+    preview.textContent = '#!/bin/bash\n# iptables rules generated by toolbox\n# No rules added yet';
+    return;
+  }
+  let script = '#!/bin/bash\n# iptables rules generated by toolbox\nset -e\n\n';
+  script += '# Flush existing rules\niptables -F\niptables -X\niptables -t nat -F\niptables -t nat -X\n\n';
+  script += '# Default policies\niptables -P INPUT DROP\niptables -P FORWARD DROP\niptables -P OUTPUT ACCEPT\n\n';
+  script += '# Custom rules\n';
+  rules.forEach(r => script += r + '\n');
+  script += '\necho "iptables rules applied successfully."';
+  preview.textContent = script;
+}
+
+function copyAll() {
+  if (rules.length === 0) return;
+  navigator.clipboard.writeText(rules.join('\n'));
+  showToast('Rules copied!');
+}
+
+function copyScript() {
+  const text = document.getElementById('scriptPreview').textContent;
+  navigator.clipboard.writeText(text);
+  showToast('Script copied!');
+}
+
+function clearRules() {
+  rules.length = 0;
+  renderRules();
+}
+
+function resetForm() {
+  ['src','dst','sport','dport','iface_in','iface_out','limit','logprefix','todest','tosource','comment'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('action').value = '-A';
+  document.getElementById('table').value = '';
+  document.getElementById('protocol').value = '';
+  document.getElementById('target').value = 'ACCEPT';
+  document.getElementById('state').value = '';
+  updateChains();
+  updateProtocolFields();
+}
+
+function applyPreset(name) {
+  const presets = {
+    ssh: () => { setFields({protocol:'tcp',dport:'22',target:'ACCEPT',chain:'INPUT'}); },
+    http: () => { setFields({protocol:'tcp',dport:'80',target:'ACCEPT',chain:'INPUT'}); },
+    https: () => { setFields({protocol:'tcp',dport:'443',target:'ACCEPT',chain:'INPUT'}); },
+    web: () => {
+      rules.push('iptables -A INPUT -p tcp --dport 80 -j ACCEPT');
+      rules.push('iptables -A INPUT -p tcp --dport 443 -j ACCEPT');
+      renderRules(); return;
+    },
+    ping: () => { setFields({protocol:'icmp',target:'ACCEPT',chain:'INPUT'}); },
+    dropall: () => {
+      document.getElementById('action').value = '-P';
+      setFields({chain:'INPUT',target:'DROP',protocol:''});
+    },
+    loopback: () => { setFields({iface_in:'lo',target:'ACCEPT',chain:'INPUT',protocol:''}); },
+    established: () => { setFields({chain:'INPUT',target:'ACCEPT',protocol:'',state:'ESTABLISHED,RELATED'}); document.getElementById('extraFields').classList.add('show'); },
+    nat: () => {
+      document.getElementById('table').value = 'nat';
+      updateChains();
+      setFields({chain:'POSTROUTING',target:'MASQUERADE',iface_out:'eth0',protocol:''});
+    },
+    portfwd: () => {
+      document.getElementById('table').value = 'nat';
+      updateChains();
+      setFields({chain:'PREROUTING',protocol:'tcp',dport:'8080',target:'DNAT',todest:'192.168.1.5:80'});
+      document.getElementById('extraFields').classList.add('show');
+    },
+    ratelimit: () => {
+      setFields({chain:'INPUT',protocol:'tcp',dport:'22',target:'ACCEPT',limit:'3/min'});
+      document.getElementById('extraFields').classList.add('show');
+    },
+    logdrop: () => {
+      rules.push('iptables -A INPUT -j LOG --log-prefix "DROPPED: "');
+      rules.push('iptables -A INPUT -j DROP');
+      renderRules(); return;
+    }
+  };
+  resetForm();
+  if (presets[name]) presets[name]();
+  if (!['web','logdrop'].includes(name)) buildAndAdd();
+}
+
+function setFields(obj) {
+  if (obj.protocol !== undefined) { document.getElementById('protocol').value = obj.protocol; updateProtocolFields(); }
+  if (obj.chain) document.getElementById('chain').value = obj.chain;
+  if (obj.target) document.getElementById('target').value = obj.target;
+  if (obj.dport) document.getElementById('dport').value = obj.dport;
+  if (obj.sport) document.getElementById('sport').value = obj.sport || '';
+  if (obj.src) document.getElementById('src').value = obj.src;
+  if (obj.dst) document.getElementById('dst').value = obj.dst;
+  if (obj.iface_in) document.getElementById('iface_in').value = obj.iface_in;
+  if (obj.iface_out) document.getElementById('iface_out').value = obj.iface_out;
+  if (obj.state) document.getElementById('state').value = obj.state;
+  if (obj.limit) document.getElementById('limit').value = obj.limit;
+  if (obj.todest) document.getElementById('todest').value = obj.todest;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2000);
+}
+
+updateProtocolFields();
+</script>
+</body>
+</html>
