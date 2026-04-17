@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNS Zone File Builder — Free Online Tool</title>
+<meta name="description" content="Build DNS zone files visually. Add A, AAAA, CNAME, MX, TXT, SRV, NS, CAA, and PTR records — then copy or download the zone file. 100% client-side.">
+<meta name="keywords" content="dns zone file, dns records, bind zone, dns builder, A record, MX record, TXT record, CNAME">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="DNS Zone File Builder">
+<meta property="og:description" content="Build DNS zone files visually with all common record types.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/dnszone.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dnszone.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .soa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field.full { grid-column: 1 / -1; }
+  .field label { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  input[type="text"], input[type="number"], select {
+    padding: 8px 10px; font-family: var(--mono); font-size: .85rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+  }
+  .record-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .record-table th {
+    text-align: left; font-size: .75rem; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .record-table td {
+    padding: 6px 8px; font-family: var(--mono); font-size: .82rem;
+    border-bottom: 1px solid var(--border); vertical-align: middle;
+  }
+  .record-table tr:hover { background: var(--surface2); }
+  .add-row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin-top: 12px; }
+  .add-row .field { min-width: 100px; }
+  .add-row input, .add-row select { padding: 7px 8px; }
+  .btn-sm {
+    padding: 6px 12px; font-size: .78rem; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--surface); cursor: pointer; color: var(--text);
+  }
+  .btn-sm:hover { border-color: var(--accent); }
+  .btn-rm { color: var(--error); border-color: var(--error); }
+  .btn-rm:hover { background: var(--error); color: #fff; }
+  .output-box {
+    position: relative; margin-top: 14px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 48px 14px 14px; font-family: var(--mono); font-size: .82rem;
+    white-space: pre-wrap; word-break: break-all; min-height: 80px; line-height: 1.6;
+  }
+  .copy-btn {
+    position: absolute; top: 8px; right: 8px; padding: 4px 10px; font-size: .78rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  .copy-btn.copied { background: var(--success); border-color: var(--success); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .preset {
+    padding: 6px 12px; border-radius: 99px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: .82rem; cursor: pointer;
+  }
+  .preset:hover { border-color: var(--accent); }
+  .section-title {
+    font-size: .82rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted); margin: 16px 0 8px;
+    padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .section-title:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  @media (max-width: 768px) {
+    .soa-grid { grid-template-columns: 1fr; }
+    .add-row { flex-direction: column; }
+    .add-row .field { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>DNS Zone File Builder</h1>
+<p class="subtitle">Build BIND-compatible DNS zone files visually. Add records, configure SOA, and export.</p>
+
+<div class="card">
+<div class="section-title">Presets</div>
+<div class="presets">
+  <button class="preset" onclick="loadPreset('basic')">Basic Website</button>
+  <button class="preset" onclick="loadPreset('email')">Email (MX + SPF + DKIM)</button>
+  <button class="preset" onclick="loadPreset('full')">Full Stack App</button>
+  <button class="preset" onclick="loadPreset('clear')">Clear All</button>
+</div>
+
+<div class="section-title">SOA Record</div>
+<div class="soa-grid">
+  <div class="field"><label>Domain (Origin)</label><input type="text" id="origin" value="example.com." oninput="generate()"></div>
+  <div class="field"><label>Primary NS</label><input type="text" id="primaryns" value="ns1.example.com." oninput="generate()"></div>
+  <div class="field"><label>Admin Email</label><input type="text" id="admin" value="admin.example.com." oninput="generate()"></div>
+  <div class="field"><label>Serial</label><input type="text" id="serial" value="" placeholder="auto" oninput="generate()"></div>
+  <div class="field"><label>Refresh</label><input type="text" id="refresh" value="3600" oninput="generate()"></div>
+  <div class="field"><label>Retry</label><input type="text" id="retry" value="900" oninput="generate()"></div>
+  <div class="field"><label>Expire</label><input type="text" id="expire" value="1209600" oninput="generate()"></div>
+  <div class="field"><label>Minimum (Negative Cache TTL)</label><input type="text" id="minimum" value="86400" oninput="generate()"></div>
+</div>
+
+<div class="section-title">Default TTL</div>
+<div class="field" style="max-width:200px">
+  <input type="text" id="defaultttl" value="3600" oninput="generate()">
+</div>
+
+<div class="section-title">Records</div>
+<table class="record-table">
+  <thead><tr><th>Name</th><th>TTL</th><th>Type</th><th>Value</th><th></th></tr></thead>
+  <tbody id="records"></tbody>
+</table>
+
+<div class="add-row">
+  <div class="field"><label>Name</label><input type="text" id="r-name" value="@" placeholder="@ or subdomain"></div>
+  <div class="field"><label>TTL</label><input type="text" id="r-ttl" value="" placeholder="(default)"></div>
+  <div class="field"><label>Type</label>
+    <select id="r-type" onchange="updateValueHint()">
+      <option>A</option><option>AAAA</option><option>CNAME</option><option>MX</option>
+      <option>TXT</option><option>NS</option><option>SRV</option><option>CAA</option><option>PTR</option>
+    </select>
+  </div>
+  <div class="field" style="flex:1"><label>Value</label><input type="text" id="r-value" placeholder="IP address"></div>
+  <button class="btn" onclick="addRecord()">Add</button>
+</div>
+
+<div class="section-title">Zone File Output</div>
+<div class="output-box" id="output"></div>
+<button class="copy-btn" onclick="copyOutput()">Copy</button>
+
+<div class="actions">
+  <button class="btn-secondary" onclick="downloadZone()">Download .zone</button>
+</div>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let records = [];
+
+function updateValueHint() {
+  const hints = {
+    A: 'IP address (e.g. 93.184.216.34)',
+    AAAA: 'IPv6 address',
+    CNAME: 'Canonical name (e.g. example.com.)',
+    MX: '10 mail.example.com.',
+    TXT: '"v=spf1 include:_spf.google.com ~all"',
+    NS: 'ns1.example.com.',
+    SRV: '10 5 443 server.example.com.',
+    CAA: '0 issue "letsencrypt.org"',
+    PTR: 'host.example.com.'
+  };
+  $('r-value').placeholder = hints[$('r-type').value] || 'Value';
+}
+
+function addRecord() {
+  const name = $('r-name').value.trim() || '@';
+  const ttl = $('r-ttl').value.trim();
+  const type = $('r-type').value;
+  const value = $('r-value').value.trim();
+  if (!value) return;
+  records.push({ name, ttl, type, value });
+  $('r-value').value = '';
+  renderRecords();
+  generate();
+}
+
+function removeRecord(i) {
+  records.splice(i, 1);
+  renderRecords();
+  generate();
+}
+
+function renderRecords() {
+  $('records').innerHTML = records.map((r, i) =>
+    `<tr><td>${esc(r.name)}</td><td>${esc(r.ttl || '—')}</td><td>${esc(r.type)}</td><td>${esc(r.value)}</td><td><button class="btn-sm btn-rm" onclick="removeRecord(${i})">×</button></td></tr>`
+  ).join('');
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function autoSerial() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}01`;
+}
+
+function generate() {
+  const origin = $('origin').value.trim() || 'example.com.';
+  const serial = $('serial').value.trim() || autoSerial();
+  const primaryns = $('primaryns').value.trim();
+  const admin = $('admin').value.trim();
+  const refresh = $('refresh').value.trim();
+  const retry = $('retry').value.trim();
+  const expire = $('expire').value.trim();
+  const minimum = $('minimum').value.trim();
+  const ttl = $('defaultttl').value.trim() || '3600';
+
+  let out = '';
+  out += `; Zone file for ${origin}\n`;
+  out += `; Generated ${new Date().toISOString().slice(0,10)}\n\n`;
+  out += `$ORIGIN ${origin}\n`;
+  out += `$TTL ${ttl}\n\n`;
+  out += `; SOA Record\n`;
+  out += `@  IN  SOA  ${primaryns} ${admin} (\n`;
+  out += `    ${serial}   ; Serial\n`;
+  out += `    ${refresh}       ; Refresh\n`;
+  out += `    ${retry}        ; Retry\n`;
+  out += `    ${expire}    ; Expire\n`;
+  out += `    ${minimum}      ; Minimum (Negative Cache TTL)\n`;
+  out += `)\n\n`;
+
+  const grouped = {};
+  for (const r of records) {
+    if (!grouped[r.type]) grouped[r.type] = [];
+    grouped[r.type].push(r);
+  }
+
+  const typeOrder = ['NS', 'A', 'AAAA', 'CNAME', 'MX', 'TXT', 'SRV', 'CAA', 'PTR'];
+  for (const type of typeOrder) {
+    if (!grouped[type]) continue;
+    out += `; ${type} Records\n`;
+    for (const r of grouped[type]) {
+      const ttlStr = r.ttl ? `${r.ttl} ` : '';
+      out += `${r.name.padEnd(20)} ${ttlStr}IN  ${r.type.padEnd(6)} ${r.value}\n`;
+    }
+    out += '\n';
+  }
+
+  $('output').textContent = out;
+}
+
+function copyOutput() {
+  const btn = document.querySelector('.copy-btn');
+  navigator.clipboard.writeText($('output').textContent).then(() => {
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+function downloadZone() {
+  const origin = $('origin').value.trim().replace(/\.$/, '') || 'example.com';
+  const blob = new Blob([$('output').textContent], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${origin}.zone`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function loadPreset(name) {
+  records = [];
+  switch (name) {
+    case 'basic':
+      $('origin').value = 'example.com.';
+      $('primaryns').value = 'ns1.example.com.';
+      $('admin').value = 'admin.example.com.';
+      records = [
+        { name: '@', ttl: '', type: 'NS', value: 'ns1.example.com.' },
+        { name: '@', ttl: '', type: 'NS', value: 'ns2.example.com.' },
+        { name: '@', ttl: '', type: 'A', value: '93.184.216.34' },
+        { name: 'www', ttl: '', type: 'CNAME', value: 'example.com.' }
+      ];
+      break;
+    case 'email':
+      $('origin').value = 'example.com.';
+      $('primaryns').value = 'ns1.example.com.';
+      $('admin').value = 'admin.example.com.';
+      records = [
+        { name: '@', ttl: '', type: 'NS', value: 'ns1.example.com.' },
+        { name: '@', ttl: '', type: 'NS', value: 'ns2.example.com.' },
+        { name: '@', ttl: '', type: 'A', value: '93.184.216.34' },
+        { name: '@', ttl: '', type: 'MX', value: '10 mail.example.com.' },
+        { name: '@', ttl: '', type: 'MX', value: '20 mail2.example.com.' },
+        { name: 'mail', ttl: '', type: 'A', value: '93.184.216.35' },
+        { name: '@', ttl: '', type: 'TXT', value: '"v=spf1 mx a ~all"' },
+        { name: 'default._domainkey', ttl: '', type: 'TXT', value: '"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3..."' },
+        { name: '_dmarc', ttl: '', type: 'TXT', value: '"v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com"' }
+      ];
+      break;
+    case 'full':
+      $('origin').value = 'example.com.';
+      $('primaryns').value = 'ns1.example.com.';
+      $('admin').value = 'admin.example.com.';
+      records = [
+        { name: '@', ttl: '', type: 'NS', value: 'ns1.example.com.' },
+        { name: '@', ttl: '', type: 'NS', value: 'ns2.example.com.' },
+        { name: '@', ttl: '', type: 'A', value: '93.184.216.34' },
+        { name: '@', ttl: '', type: 'AAAA', value: '2606:2800:220:1:248:1893:25c8:1946' },
+        { name: 'www', ttl: '', type: 'CNAME', value: 'example.com.' },
+        { name: 'api', ttl: '', type: 'A', value: '93.184.216.40' },
+        { name: 'staging', ttl: '300', type: 'A', value: '93.184.216.41' },
+        { name: '@', ttl: '', type: 'MX', value: '10 mail.example.com.' },
+        { name: 'mail', ttl: '', type: 'A', value: '93.184.216.35' },
+        { name: '@', ttl: '', type: 'TXT', value: '"v=spf1 mx a ~all"' },
+        { name: '@', ttl: '', type: 'CAA', value: '0 issue "letsencrypt.org"' },
+        { name: '_https._tcp.www', ttl: '', type: 'SRV', value: '1 1 443 www.example.com.' }
+      ];
+      break;
+    case 'clear':
+      $('origin').value = 'example.com.';
+      $('primaryns').value = 'ns1.example.com.';
+      $('admin').value = 'admin.example.com.';
+      break;
+  }
+  renderRecords();
+  generate();
+}
+
+updateValueHint();
+generate();
+</script>
+</body>
+</html>
