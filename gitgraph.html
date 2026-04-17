@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Git Branch Graph Visualizer - Free Online Tool</title>
+<meta name="description" content="Visualize Git branch history as a graph. Input commit logs, see branch topology, merges, and divergence points rendered visually.">
+<meta name="keywords" content="git graph, git branch visualizer, git log graph, git commit graph, branch topology, git visualization">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/gitgraph.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .input-section textarea { width: 100%; height: 300px; font-family: var(--mono); font-size: .85rem; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; }
+  .toolbar { display: flex; gap: .5rem; margin-bottom: .75rem; flex-wrap: wrap; }
+  #graphCanvas { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); display: block; }
+  .commit-list { max-height: 400px; overflow-y: auto; }
+  .commit-row { display: flex; align-items: center; gap: .75rem; padding: .5rem .75rem; border-bottom: 1px solid var(--border); font-size: .82rem; }
+  .commit-row:last-child { border-bottom: none; }
+  .commit-hash { font-family: var(--mono); color: var(--accent); font-weight: 600; min-width: 60px; }
+  .commit-branch { font-size: .72rem; padding: 2px 6px; border-radius: 3px; font-weight: 600; white-space: nowrap; }
+  .commit-msg { flex: 1; color: var(--text); }
+  .commit-author { color: var(--muted); white-space: nowrap; }
+  .branch-colors { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; font-size: .8rem; }
+  .branch-tag { padding: 3px 8px; border-radius: 3px; font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin-bottom: 1rem; }
+  .stat { padding: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+  .stat .num { font-size: 1.5rem; font-weight: 700; }
+  .stat .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Git Branch Graph Visualizer</h1>
+  <p class="subtitle">Paste git log output or define branches manually to visualize commit history as a graph.</p>
+
+  <div class="stats" id="stats" style="display:none">
+    <div class="stat"><div class="num" id="statCommits">0</div><div class="label">Commits</div></div>
+    <div class="stat"><div class="num" id="statBranches">0</div><div class="label">Branches</div></div>
+    <div class="stat"><div class="num" id="statMerges">0</div><div class="label">Merges</div></div>
+    <div class="stat"><div class="num" id="statAuthors">0</div><div class="label">Authors</div></div>
+  </div>
+
+  <div class="panels">
+    <div class="input-section">
+      <div class="toolbar">
+        <button class="btn" onclick="renderGraph()">Render Graph</button>
+        <button class="btn-secondary" onclick="loadExample('simple')">Simple</button>
+        <button class="btn-secondary" onclick="loadExample('feature')">Feature Branch</button>
+        <button class="btn-secondary" onclick="loadExample('complex')">Complex</button>
+        <button class="btn-secondary" onclick="clearAll()">Clear</button>
+      </div>
+      <textarea id="input" placeholder="Paste git log output or use a preset.
+
+Format: one commit per line
+  hash | parent1 [parent2] | branch | author | message
+
+Example:
+  a1b2c3d | f4e5d6c | main | Alice | Initial commit
+  f4e5d6c | a1b2c3d | main | Bob | Add README
+  c7d8e9f | a1b2c3d | feature | Alice | Add login page
+  b1c2d3e | f4e5d6c c7d8e9f | main | Bob | Merge feature into main
+
+Or paste `git log --oneline --graph` output." spellcheck="false"></textarea>
+      <div class="branch-colors" id="branchColors"></div>
+    </div>
+    <div>
+      <canvas id="graphCanvas" width="540" height="400"></canvas>
+      <div class="card" style="margin-top:1rem; padding:0;">
+        <div class="commit-list" id="commitList">
+          <div class="empty" style="padding:2rem;text-align:center">Render a graph to see commit details</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Done!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+const COLORS=['#e74c3c','#3498db','#2ecc71','#9b59b6','#e67e22','#1abc9c','#f39c12','#e84393','#00b894','#6c5ce7'];
+
+const EXAMPLES = {
+  simple: `a1b2c3d | - | main | Alice | Initial commit
+f4e5d6c | a1b2c3d | main | Bob | Add README
+d9e0f1a | f4e5d6c | main | Alice | Add license
+b2c3d4e | d9e0f1a | main | Bob | Update docs
+e5f6a7b | b2c3d4e | main | Alice | Fix typo`,
+
+  feature: `a000001 | - | main | Alice | Initial commit
+a000002 | a000001 | main | Bob | Setup project
+a000003 | a000002 | feature/login | Alice | Add login page
+a000004 | a000002 | main | Bob | Fix homepage
+a000005 | a000003 | feature/login | Alice | Add auth logic
+a000006 | a000004 a000005 | main | Bob | Merge feature/login into main
+a000007 | a000006 | main | Alice | Release v1.0`,
+
+  complex: `c000001 | - | main | Alice | Initial commit
+c000002 | c000001 | main | Bob | Project setup
+c000003 | c000002 | feature/auth | Alice | Add auth module
+c000004 | c000002 | feature/api | Charlie | Start API layer
+c000005 | c000003 | feature/auth | Alice | OAuth integration
+c000006 | c000004 | feature/api | Charlie | REST endpoints
+c000007 | c000002 | main | Bob | Hotfix: security patch
+c000008 | c000005 | feature/auth | Alice | Tests for auth
+c000009 | c000007 c000008 | main | Bob | Merge feature/auth
+c000010 | c000006 | feature/api | Charlie | API docs
+c000011 | c000009 c000010 | main | Bob | Merge feature/api
+c000012 | c000011 | release/v2 | Alice | Prepare v2.0
+c000013 | c000011 | main | Bob | Post-merge cleanup
+c000014 | c000012 | release/v2 | Alice | Bump version
+c000015 | c000013 c000014 | main | Bob | Merge release/v2`
+};
+
+function loadExample(name) {
+  $('input').value = EXAMPLES[name] || '';
+  renderGraph();
+}
+
+function clearAll() {
+  $('input').value = '';
+  $('commitList').innerHTML = '<div class="empty" style="padding:2rem;text-align:center">Render a graph to see commit details</div>';
+  $('branchColors').innerHTML = '';
+  $('stats').style.display = 'none';
+  const canvas = $('graphCanvas');
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function parseInput(text) {
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  const commits = [];
+  for (const line of lines) {
+    const parts = line.split('|').map(s => s.trim());
+    if (parts.length >= 5) {
+      const hash = parts[0];
+      const parents = parts[1] === '-' ? [] : parts[1].split(/\s+/);
+      const branch = parts[2];
+      const author = parts[3];
+      const message = parts.slice(4).join('|').trim();
+      commits.push({ hash, parents, branch, author, message });
+    }
+  }
+  return commits;
+}
+
+function renderGraph() {
+  const text = $('input').value.trim();
+  if (!text) return;
+
+  const commits = parseInput(text);
+  if (commits.length === 0) return;
+
+  const branches = [...new Set(commits.map(c => c.branch))];
+  const authors = [...new Set(commits.map(c => c.author))];
+  const merges = commits.filter(c => c.parents.length > 1);
+  const branchColorMap = {};
+  branches.forEach((b, i) => { branchColorMap[b] = COLORS[i % COLORS.length]; });
+
+  $('statCommits').textContent = commits.length;
+  $('statBranches').textContent = branches.length;
+  $('statMerges').textContent = merges.length;
+  $('statAuthors').textContent = authors.length;
+  $('stats').style.display = 'grid';
+
+  $('branchColors').innerHTML = branches.map(b =>
+    `<span class="branch-tag" style="background:${branchColorMap[b]}22;color:${branchColorMap[b]};border:1px solid ${branchColorMap[b]}44">${b}</span>`
+  ).join('');
+
+  drawCanvas(commits, branches, branchColorMap);
+  renderCommitList(commits, branchColorMap);
+}
+
+function drawCanvas(commits, branches, colorMap) {
+  const canvas = $('graphCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  const rowH = 40;
+  const colW = 30;
+  const padLeft = 20;
+  const padTop = 30;
+  const nodeR = 5;
+  const totalH = padTop + commits.length * rowH + 20;
+  const totalW = Math.max(540, padLeft + branches.length * colW + 350);
+
+  canvas.width = totalW * dpr;
+  canvas.height = totalH * dpr;
+  canvas.style.width = totalW + 'px';
+  canvas.style.height = totalH + 'px';
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, totalW, totalH);
+
+  const commitIdx = {};
+  commits.forEach((c, i) => { commitIdx[c.hash] = i; });
+
+  const branchCol = {};
+  branches.forEach((b, i) => { branchCol[b] = i; });
+
+  function pos(commit) {
+    const i = commitIdx[commit.hash];
+    const col = branchCol[commit.branch];
+    return { x: padLeft + col * colW + 15, y: padTop + i * rowH };
+  }
+
+  for (const commit of commits) {
+    const { x: cx, y: cy } = pos(commit);
+    for (const ph of commit.parents) {
+      if (commitIdx[ph] !== undefined) {
+        const parent = commits[commitIdx[ph]];
+        const { x: px, y: py } = pos(parent);
+        ctx.beginPath();
+        ctx.strokeStyle = colorMap[commit.branch] || '#999';
+        ctx.lineWidth = 2;
+        if (cx === px) {
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(px, py);
+        } else {
+          ctx.moveTo(cx, cy);
+          ctx.bezierCurveTo(cx, cy + (py - cy) * 0.5, px, py - (py - cy) * 0.5, px, py);
+        }
+        ctx.stroke();
+      }
+    }
+  }
+
+  for (const commit of commits) {
+    const { x, y } = pos(commit);
+    const color = colorMap[commit.branch] || '#999';
+    const isMerge = commit.parents.length > 1;
+
+    ctx.beginPath();
+    if (isMerge) {
+      ctx.rect(x - nodeR, y - nodeR, nodeR * 2, nodeR * 2);
+    } else {
+      ctx.arc(x, y, nodeR, 0, Math.PI * 2);
+    }
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const textX = padLeft + branches.length * colW + 30;
+    ctx.font = '600 11px ' + getComputedStyle(document.body).getPropertyValue('--mono');
+    ctx.fillStyle = color;
+    ctx.fillText(commit.hash.slice(0, 7), textX, y + 4);
+
+    ctx.font = '12px ' + getComputedStyle(document.body).getPropertyValue('--sans');
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text');
+    ctx.fillText(commit.message.slice(0, 40), textX + 70, y + 4);
+  }
+}
+
+function renderCommitList(commits, colorMap) {
+  $('commitList').innerHTML = commits.map(c => {
+    const color = colorMap[c.branch] || '#999';
+    const isMerge = c.parents.length > 1;
+    return `<div class="commit-row">
+      <span class="commit-hash">${c.hash.slice(0, 7)}</span>
+      <span class="commit-branch" style="background:${color}22;color:${color};border:1px solid ${color}44">${c.branch}</span>
+      <span class="commit-msg">${isMerge ? '🔀 ' : ''}${esc(c.message)}</span>
+      <span class="commit-author">${esc(c.author)}</span>
+    </div>`;
+  }).join('');
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+$('input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) renderGraph();
+});
+</script>
+</body>
+</html>

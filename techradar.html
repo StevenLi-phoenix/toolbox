@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Technology Radar Builder - Free Online Tool</title>
+<meta name="description" content="Build a Technology Radar to visualize your team's technology choices across Adopt, Trial, Assess, and Hold rings. Export as SVG or JSON.">
+<meta name="keywords" content="tech radar, technology radar, thoughtworks radar, tech stack, technology assessment, architecture decision">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/techradar.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 340px 1fr; gap: 1.5rem; }
+  .controls { display: flex; flex-direction: column; gap: 1rem; }
+  .control-group { padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); }
+  .control-group h3 { font-size: .85rem; margin-bottom: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .add-form { display: grid; gap: .5rem; }
+  .add-form input, .add-form select { padding: .5rem .6rem; font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: inherit; }
+  .add-row { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+  .blip-list { max-height: 300px; overflow-y: auto; }
+  .blip-item { display: flex; align-items: center; gap: .5rem; padding: .4rem .6rem; border-bottom: 1px solid var(--border); font-size: .82rem; }
+  .blip-item:last-child { border-bottom: none; }
+  .blip-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .blip-name { flex: 1; }
+  .blip-ring { font-size: .72rem; color: var(--muted); }
+  .blip-remove { cursor: pointer; color: var(--error); font-weight: 700; padding: 0 4px; }
+  #radarCanvas { display: block; margin: 0 auto; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: 1rem; }
+  .legend-item { display: flex; align-items: center; gap: .5rem; font-size: .82rem; padding: .4rem .6rem; border: 1px solid var(--border); border-radius: var(--radius); }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .toolbar { display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .filter-bar { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .75rem; }
+  .filter-btn { padding: .3rem .6rem; font-size: .75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; color: var(--muted); }
+  .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .legend { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Technology Radar Builder</h1>
+  <p class="subtitle">Visualize your team's technology choices across Adopt, Trial, Assess, and Hold rings. Export as SVG or JSON.</p>
+
+  <div class="toolbar">
+    <button class="btn" onclick="render()">Render</button>
+    <button class="btn-secondary" onclick="exportSVG()">Export SVG</button>
+    <button class="btn-secondary" onclick="exportJSON()">Export JSON</button>
+    <button class="btn-secondary" onclick="importJSON()">Import JSON</button>
+    <button class="btn-secondary" onclick="loadExample()">Load Example</button>
+    <button class="btn-secondary" onclick="clearAll()">Clear</button>
+  </div>
+
+  <div class="panels">
+    <div class="controls">
+      <div class="control-group">
+        <h3>Add Technology</h3>
+        <div class="add-form">
+          <input type="text" id="blipName" placeholder="Technology name (e.g. React, Rust)" />
+          <div class="add-row">
+            <select id="blipRing">
+              <option value="adopt">Adopt</option>
+              <option value="trial">Trial</option>
+              <option value="assess">Assess</option>
+              <option value="hold">Hold</option>
+            </select>
+            <select id="blipQuadrant">
+              <option value="languages">Languages & Frameworks</option>
+              <option value="tools">Tools</option>
+              <option value="techniques">Techniques</option>
+              <option value="platforms">Platforms</option>
+            </select>
+          </div>
+          <button class="btn" onclick="addBlip()">Add</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <h3>Technologies (<span id="blipCount">0</span>)</h3>
+        <div class="filter-bar">
+          <button class="filter-btn active" data-filter="all" onclick="setFilter(this,'all')">All</button>
+          <button class="filter-btn" data-filter="adopt" onclick="setFilter(this,'adopt')">Adopt</button>
+          <button class="filter-btn" data-filter="trial" onclick="setFilter(this,'trial')">Trial</button>
+          <button class="filter-btn" data-filter="assess" onclick="setFilter(this,'assess')">Assess</button>
+          <button class="filter-btn" data-filter="hold" onclick="setFilter(this,'hold')">Hold</button>
+        </div>
+        <div class="blip-list" id="blipList">
+          <div class="empty" style="padding:1rem;text-align:center;font-size:.85rem">No technologies added yet</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <canvas id="radarCanvas" width="600" height="600"></canvas>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#3498db"></div>Languages & Frameworks</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#2ecc71"></div>Tools</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e67e22"></div>Techniques</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#9b59b6"></div>Platforms</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Done!</div>
+<input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleImport(event)">
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const QUADRANTS = {
+  languages: { label: 'Languages & Frameworks', color: '#3498db', angle: 0 },
+  tools: { label: 'Tools', color: '#2ecc71', angle: 1 },
+  techniques: { label: 'Techniques', color: '#e67e22', angle: 2 },
+  platforms: { label: 'Platforms', color: '#9b59b6', angle: 3 }
+};
+
+const RINGS = {
+  adopt: { label: 'Adopt', radius: 0.25 },
+  trial: { label: 'Trial', radius: 0.5 },
+  assess: { label: 'Assess', radius: 0.75 },
+  hold: { label: 'Hold', radius: 1.0 }
+};
+
+let blips = [];
+let currentFilter = 'all';
+
+function addBlip() {
+  const name = $('blipName').value.trim();
+  if (!name) return;
+  const ring = $('blipRing').value;
+  const quadrant = $('blipQuadrant').value;
+  blips.push({ name, ring, quadrant, id: Date.now() });
+  $('blipName').value = '';
+  renderList();
+  render();
+}
+
+function removeBlip(id) {
+  blips = blips.filter(b => b.id !== id);
+  renderList();
+  render();
+}
+
+function setFilter(btn, filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderList();
+}
+
+function renderList() {
+  const filtered = currentFilter === 'all' ? blips : blips.filter(b => b.ring === currentFilter);
+  $('blipCount').textContent = blips.length;
+  if (filtered.length === 0) {
+    $('blipList').innerHTML = '<div class="empty" style="padding:1rem;text-align:center;font-size:.85rem">No technologies to show</div>';
+    return;
+  }
+  $('blipList').innerHTML = filtered.map(b => {
+    const q = QUADRANTS[b.quadrant];
+    return `<div class="blip-item">
+      <div class="blip-dot" style="background:${q.color}"></div>
+      <span class="blip-name">${esc(b.name)}</span>
+      <span class="blip-ring">${RINGS[b.ring].label}</span>
+      <span class="blip-remove" onclick="removeBlip(${b.id})">&times;</span>
+    </div>`;
+  }).join('');
+}
+
+function render() {
+  const canvas = $('radarCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const size = Math.min(600, canvas.parentElement.offsetWidth - 20);
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const maxR = size / 2 - 30;
+
+  ctx.clearRect(0, 0, size, size);
+
+  const ringKeys = ['hold', 'assess', 'trial', 'adopt'];
+  for (const key of ringKeys) {
+    const r = RINGS[key].radius * maxR;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = key === 'adopt' ? '#f0fdf4' : key === 'trial' ? '#fefce8' : key === 'assess' ? '#fff7ed' : '#fef2f2';
+    ctx.fill();
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  for (const key of ringKeys) {
+    const r = RINGS[key].radius * maxR;
+    ctx.font = '11px ' + getComputedStyle(document.body).getPropertyValue('--sans');
+    ctx.fillStyle = '#999';
+    ctx.textAlign = 'center';
+    ctx.fillText(RINGS[key].label, cx, cy - r + 14);
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - maxR);
+  ctx.lineTo(cx, cy + maxR);
+  ctx.strokeStyle = '#ddd';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx - maxR, cy);
+  ctx.lineTo(cx + maxR, cy);
+  ctx.stroke();
+
+  const quadKeys = Object.keys(QUADRANTS);
+  const quadLabelPos = [
+    { x: cx + maxR / 2, y: cy - maxR - 10 },
+    { x: cx - maxR - 10, y: cy - maxR / 2 + 60 },
+    { x: cx - maxR / 2, y: cy + maxR + 18 },
+    { x: cx + maxR + 10, y: cy + maxR / 2 - 40 }
+  ];
+  quadKeys.forEach((key, i) => {
+    ctx.font = 'bold 12px ' + getComputedStyle(document.body).getPropertyValue('--sans');
+    ctx.fillStyle = QUADRANTS[key].color;
+    ctx.textAlign = 'center';
+    const lp = quadLabelPos[i];
+    ctx.fillText(QUADRANTS[key].label, lp.x, lp.y);
+  });
+
+  const seedRng = (s) => {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    return () => { h = (h * 16807) % 2147483647; return (h & 0x7fffffff) / 0x7fffffff; };
+  };
+
+  for (const blip of blips) {
+    const q = QUADRANTS[blip.quadrant];
+    const ring = RINGS[blip.ring];
+    const prevRing = blip.ring === 'adopt' ? 0 : RINGS[ringKeys[ringKeys.indexOf(blip.ring) + 1]].radius;
+    const rng = seedRng(blip.name + blip.quadrant);
+
+    const r = (prevRing + rng() * (ring.radius - prevRing)) * maxR;
+    const qIdx = quadKeys.indexOf(blip.quadrant);
+    const aStart = (qIdx * Math.PI / 2) - Math.PI / 2 + 0.1;
+    const aEnd = ((qIdx + 1) * Math.PI / 2) - Math.PI / 2 - 0.1;
+    const angle = aStart + rng() * (aEnd - aStart);
+
+    const bx = cx + r * Math.cos(angle);
+    const by = cy + r * Math.sin(angle);
+
+    ctx.beginPath();
+    ctx.arc(bx, by, 6, 0, Math.PI * 2);
+    ctx.fillStyle = q.color;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.font = '10px ' + getComputedStyle(document.body).getPropertyValue('--sans');
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text');
+    ctx.textAlign = 'left';
+    ctx.fillText(blip.name, bx + 10, by + 4);
+  }
+}
+
+function exportSVG() {
+  const canvas = $('radarCanvas');
+  const dataUrl = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = 'tech-radar.png';
+  a.click();
+  showToast('Exported as PNG');
+}
+
+function exportJSON() {
+  const json = JSON.stringify({ blips }, null, 2);
+  navigator.clipboard.writeText(json).then(() => showToast('JSON copied!'));
+}
+
+function importJSON() {
+  $('fileInput').click();
+}
+
+function handleImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (data.blips && Array.isArray(data.blips)) {
+        blips = data.blips.map(b => ({ ...b, id: Date.now() + Math.random() }));
+        renderList();
+        render();
+        showToast('Imported ' + blips.length + ' items');
+      }
+    } catch { showToast('Invalid JSON file'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function loadExample() {
+  blips = [
+    { name: 'TypeScript', ring: 'adopt', quadrant: 'languages', id: 1 },
+    { name: 'Rust', ring: 'trial', quadrant: 'languages', id: 2 },
+    { name: 'Go', ring: 'adopt', quadrant: 'languages', id: 3 },
+    { name: 'Zig', ring: 'assess', quadrant: 'languages', id: 4 },
+    { name: 'React', ring: 'adopt', quadrant: 'languages', id: 5 },
+    { name: 'Svelte', ring: 'trial', quadrant: 'languages', id: 6 },
+    { name: 'jQuery', ring: 'hold', quadrant: 'languages', id: 7 },
+    { name: 'Docker', ring: 'adopt', quadrant: 'tools', id: 8 },
+    { name: 'Podman', ring: 'trial', quadrant: 'tools', id: 9 },
+    { name: 'Terraform', ring: 'adopt', quadrant: 'tools', id: 10 },
+    { name: 'Pulumi', ring: 'trial', quadrant: 'tools', id: 11 },
+    { name: 'Nix', ring: 'assess', quadrant: 'tools', id: 12 },
+    { name: 'Jenkins', ring: 'hold', quadrant: 'tools', id: 13 },
+    { name: 'Trunk-Based Dev', ring: 'adopt', quadrant: 'techniques', id: 14 },
+    { name: 'Feature Flags', ring: 'adopt', quadrant: 'techniques', id: 15 },
+    { name: 'Micro Frontends', ring: 'assess', quadrant: 'techniques', id: 16 },
+    { name: 'Event Sourcing', ring: 'trial', quadrant: 'techniques', id: 17 },
+    { name: 'Long-Lived Branches', ring: 'hold', quadrant: 'techniques', id: 18 },
+    { name: 'Kubernetes', ring: 'adopt', quadrant: 'platforms', id: 19 },
+    { name: 'Cloudflare Workers', ring: 'trial', quadrant: 'platforms', id: 20 },
+    { name: 'Deno Deploy', ring: 'assess', quadrant: 'platforms', id: 21 },
+    { name: 'Heroku', ring: 'hold', quadrant: 'platforms', id: 22 },
+    { name: 'Vercel', ring: 'adopt', quadrant: 'platforms', id: 23 },
+    { name: 'Fly.io', ring: 'trial', quadrant: 'platforms', id: 24 }
+  ];
+  renderList();
+  render();
+  showToast('Example loaded');
+}
+
+function clearAll() {
+  blips = [];
+  renderList();
+  render();
+}
+
+function showToast(msg) {
+  const toast = $('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1500);
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+$('blipName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addBlip();
+});
+
+render();
+</script>
+</body>
+</html>
