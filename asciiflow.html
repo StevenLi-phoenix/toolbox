@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII Flowchart Editor - Free Online Tool</title>
+<meta name="description" content="Draw flowcharts and diagrams using ASCII/Unicode box characters. Export as plain text. 100% client-side.">
+<meta name="keywords" content="ascii flowchart, ascii diagram, box drawing, text diagram, ascii art flowchart, unicode diagram">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/asciiflow.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
+  .toolbar button {
+    padding: 6px 12px;
+    font-size: .82rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .toolbar button:hover { background: var(--surface2); }
+  .toolbar button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .canvas-wrap {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: auto;
+    position: relative;
+    background: var(--bg);
+    cursor: crosshair;
+  }
+  canvas {
+    display: block;
+  }
+  .output-area {
+    width: 100%;
+    min-height: 200px;
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.2;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    white-space: pre;
+    overflow: auto;
+    resize: vertical;
+  }
+  .size-info { font-size: .78rem; color: var(--muted); margin-top: 6px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 1rem; }
+  @media (max-width: 768px) {
+    .toolbar { gap: 4px; }
+    .toolbar button { padding: 4px 8px; font-size: .75rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>ASCII Flowchart Editor</h1>
+<p class="subtitle">Draw boxes, arrows, and lines using ASCII characters. Click &amp; drag to draw.</p>
+
+<div class="card">
+<h2>🎨 Draw</h2>
+<div class="toolbar">
+  <button class="active" data-tool="box" onclick="setTool('box')">□ Box</button>
+  <button data-tool="line-h" onclick="setTool('line-h')">─ H-Line</button>
+  <button data-tool="line-v" onclick="setTool('line-v')">│ V-Line</button>
+  <button data-tool="arrow-r" onclick="setTool('arrow-r')">→ Arrow R</button>
+  <button data-tool="arrow-l" onclick="setTool('arrow-l')">← Arrow L</button>
+  <button data-tool="arrow-d" onclick="setTool('arrow-d')">↓ Arrow D</button>
+  <button data-tool="arrow-u" onclick="setTool('arrow-u')">↑ Arrow U</button>
+  <button data-tool="text" onclick="setTool('text')">T Text</button>
+  <button data-tool="erase" onclick="setTool('erase')">✕ Erase</button>
+</div>
+<div class="canvas-wrap">
+  <canvas id="canvas" width="800" height="400"></canvas>
+</div>
+<div class="size-info" id="sizeInfo">80 × 25 chars</div>
+<div class="actions">
+  <button class="btn" onclick="clearCanvas()">Clear All</button>
+  <button class="btn-secondary" onclick="undo()">Undo</button>
+</div>
+</div>
+
+<div class="card">
+<h2>📋 Output</h2>
+<div class="output-area" id="output"></div>
+<div class="actions">
+  <button class="btn" onclick="copyOutput()">Copy to Clipboard</button>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const COLS = 80, ROWS = 25;
+const CELL_W = 10, CELL_H = 16;
+const canvas = $('canvas');
+const ctx = canvas.getContext('2d');
+
+canvas.width = COLS * CELL_W;
+canvas.height = ROWS * CELL_H;
+
+let grid = Array.from({ length: ROWS }, () => Array(COLS).fill(' '));
+let history = [JSON.stringify(grid)];
+let tool = 'box';
+let drawing = false;
+let startCell = null;
+
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.toolbar button').forEach(b =>
+    b.classList.toggle('active', b.dataset.tool === t)
+  );
+}
+
+function cellAt(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  return { col: Math.floor(x / CELL_W), row: Math.floor(y / CELL_H) };
+}
+
+function setCell(r, c, ch) {
+  if (r >= 0 && r < ROWS && c >= 0 && c < COLS) grid[r][c] = ch;
+}
+
+function getCell(r, c) {
+  if (r >= 0 && r < ROWS && c >= 0 && c < COLS) return grid[r][c];
+  return ' ';
+}
+
+canvas.addEventListener('mousedown', e => {
+  drawing = true;
+  startCell = cellAt(e);
+  if (tool === 'text') {
+    const txt = prompt('Enter text:');
+    if (txt) {
+      pushHistory();
+      for (let i = 0; i < txt.length && startCell.col + i < COLS; i++) {
+        setCell(startCell.row, startCell.col + i, txt[i]);
+      }
+      render();
+    }
+    drawing = false;
+  } else if (tool === 'erase') {
+    pushHistory();
+    setCell(startCell.row, startCell.col, ' ');
+    render();
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!drawing || tool === 'text') return;
+  if (tool === 'erase') {
+    const c = cellAt(e);
+    setCell(c.row, c.col, ' ');
+    render();
+  }
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (!drawing || tool === 'text' || tool === 'erase') { drawing = false; return; }
+  drawing = false;
+  const end = cellAt(e);
+  pushHistory();
+  applyTool(startCell, end);
+  render();
+});
+
+canvas.addEventListener('mouseleave', () => { drawing = false; });
+
+function applyTool(s, e) {
+  const r1 = Math.min(s.row, e.row), r2 = Math.max(s.row, e.row);
+  const c1 = Math.min(s.col, e.col), c2 = Math.max(s.col, e.col);
+
+  if (tool === 'box') {
+    for (let c = c1; c <= c2; c++) { setCell(r1, c, '─'); setCell(r2, c, '─'); }
+    for (let r = r1; r <= r2; r++) { setCell(r, c1, '│'); setCell(r, c2, '│'); }
+    setCell(r1, c1, '┌'); setCell(r1, c2, '┐');
+    setCell(r2, c1, '└'); setCell(r2, c2, '┘');
+  } else if (tool === 'line-h') {
+    for (let c = c1; c <= c2; c++) setCell(s.row, c, '─');
+  } else if (tool === 'line-v') {
+    for (let r = r1; r <= r2; r++) setCell(r, s.col, '│');
+  } else if (tool === 'arrow-r') {
+    for (let c = c1; c < c2; c++) setCell(s.row, c, '─');
+    setCell(s.row, c2, '→');
+  } else if (tool === 'arrow-l') {
+    for (let c = c1 + 1; c <= c2; c++) setCell(s.row, c, '─');
+    setCell(s.row, c1, '←');
+  } else if (tool === 'arrow-d') {
+    for (let r = r1; r < r2; r++) setCell(r, s.col, '│');
+    setCell(r2, s.col, '↓');
+  } else if (tool === 'arrow-u') {
+    for (let r = r1 + 1; r <= r2; r++) setCell(r, s.col, '│');
+    setCell(r1, s.col, '↑');
+  }
+}
+
+function render() {
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg') || '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+  for (let r = 0; r <= ROWS; r++) {
+    ctx.fillRect(0, r * CELL_H, canvas.width, 0.5);
+  }
+  for (let c = 0; c <= COLS; c++) {
+    ctx.fillRect(c * CELL_W, 0, 0.5, canvas.height);
+  }
+
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#333';
+  ctx.font = '14px monospace';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (grid[r][c] !== ' ') {
+        ctx.fillText(grid[r][c], c * CELL_W + CELL_W / 2, r * CELL_H + CELL_H / 2);
+      }
+    }
+  }
+
+  updateOutput();
+}
+
+function updateOutput() {
+  const lines = grid.map(row => row.join('').replace(/\s+$/, ''));
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  $('output').textContent = lines.join('\n');
+}
+
+function pushHistory() {
+  history.push(JSON.stringify(grid));
+  if (history.length > 50) history.shift();
+}
+
+function undo() {
+  if (history.length > 1) {
+    history.pop();
+    grid = JSON.parse(history[history.length - 1]);
+    render();
+  }
+}
+
+function clearCanvas() {
+  pushHistory();
+  grid = Array.from({ length: ROWS }, () => Array(COLS).fill(' '));
+  render();
+}
+
+function copyOutput() {
+  const text = $('output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+render();
+</script>
+</body>
+</html>

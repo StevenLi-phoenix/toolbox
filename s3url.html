@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S3 URL Parser & Converter - Free Online Tool</title>
+<meta name="description" content="Parse and convert between AWS S3 URL formats: s3://, virtual-hosted, path-style, ARN, and CLI commands. 100% client-side.">
+<meta name="keywords" content="s3 url parser, aws s3 url converter, s3 uri, s3 arn, virtual hosted, path style, s3 cli">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/s3url.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .format-grid { display: grid; gap: 10px; margin-top: 1rem; }
+  .format-row {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .format-row .label {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--muted);
+    min-width: 120px;
+    flex-shrink: 0;
+  }
+  .format-row .value {
+    font-family: var(--mono);
+    font-size: .82rem;
+    word-break: break-all;
+    flex: 1;
+    color: var(--text);
+  }
+  .format-row button {
+    padding: 3px 10px;
+    font-size: .75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .format-row button:hover { background: var(--surface2); }
+  .details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 1rem;
+  }
+  .detail-item {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .detail-item .label {
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .detail-item .value {
+    font-family: var(--mono);
+    font-size: .85rem;
+    word-break: break-all;
+  }
+  .error-msg { color: var(--error); font-size: .85rem; margin-top: 6px; min-height: 1.2em; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .examples button {
+    padding: 4px 10px;
+    font-size: .75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .examples button:hover { background: var(--surface2); }
+  @media (max-width: 768px) {
+    .details-grid { grid-template-columns: 1fr; }
+    .format-row { flex-direction: column; align-items: stretch; }
+    .format-row .label { min-width: unset; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>S3 URL Parser & Converter</h1>
+<p class="subtitle">Parse and convert between AWS S3 URL formats: s3://, virtual-hosted, path-style, ARN</p>
+
+<div class="card">
+<h2>📥 Input S3 URL</h2>
+<textarea id="input" placeholder="s3://my-bucket/path/to/file.txt&#10;https://my-bucket.s3.amazonaws.com/key&#10;https://s3.us-east-1.amazonaws.com/bucket/key&#10;arn:aws:s3:::my-bucket/key" oninput="parse()"></textarea>
+<div class="error-msg" id="error"></div>
+<div class="examples">
+  <button onclick="setExample('s3://my-bucket/data/report.csv')">s3://</button>
+  <button onclick="setExample('https://my-bucket.s3.amazonaws.com/data/report.csv')">Virtual-hosted</button>
+  <button onclick="setExample('https://s3.us-west-2.amazonaws.com/my-bucket/data/report.csv')">Path-style</button>
+  <button onclick="setExample('arn:aws:s3:::my-bucket/data/report.csv')">ARN</button>
+  <button onclick="setExample('https://my-bucket.s3.us-west-2.amazonaws.com/data/report.csv')">Region virtual-hosted</button>
+</div>
+</div>
+
+<div id="results" style="display:none">
+<div class="card">
+<h2>📊 Parsed Details</h2>
+<div class="details-grid" id="details"></div>
+</div>
+
+<div class="card">
+<h2>🔄 All Formats</h2>
+<div class="format-grid" id="formats"></div>
+</div>
+
+<div class="card">
+<h2>🖥️ CLI Commands</h2>
+<div class="format-grid" id="cli"></div>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+function setExample(v) {
+  $('input').value = v;
+  parse();
+}
+
+function parse() {
+  const raw = $('input').value.trim();
+  $('error').textContent = '';
+  if (!raw) { $('results').style.display = 'none'; return; }
+
+  const parsed = parseS3Url(raw);
+  if (!parsed) {
+    $('error').textContent = 'Could not parse S3 URL. Try one of the example formats.';
+    $('results').style.display = 'none';
+    return;
+  }
+
+  $('results').style.display = '';
+  renderDetails(parsed);
+  renderFormats(parsed);
+  renderCli(parsed);
+}
+
+function parseS3Url(url) {
+  let bucket = '', key = '', region = '';
+
+  // s3://bucket/key
+  const s3Proto = url.match(/^s3:\/\/([^/]+)\/?(.*)$/);
+  if (s3Proto) {
+    bucket = s3Proto[1];
+    key = s3Proto[2] || '';
+    return { bucket, key, region };
+  }
+
+  // arn:aws:s3:::bucket/key
+  const arnMatch = url.match(/^arn:aws:s3:::([^/]+)\/?(.*)$/);
+  if (arnMatch) {
+    bucket = arnMatch[1];
+    key = arnMatch[2] || '';
+    return { bucket, key, region };
+  }
+
+  // Virtual-hosted: https://bucket.s3[.region].amazonaws.com/key
+  const vhost = url.match(/^https?:\/\/(.+?)\.s3(?:[.-]([\w-]+))?\.amazonaws\.com\/?(.*)$/);
+  if (vhost) {
+    bucket = vhost[1];
+    region = (vhost[2] && vhost[2] !== 'amazonaws') ? vhost[2] : '';
+    key = vhost[3] || '';
+    return { bucket, key, region };
+  }
+
+  // Path-style: https://s3[.region].amazonaws.com/bucket/key
+  const pstyle = url.match(/^https?:\/\/s3(?:[.-]([\w-]+))?\.amazonaws\.com\/([^/]+)\/?(.*)$/);
+  if (pstyle) {
+    region = (pstyle[1] && pstyle[1] !== 'amazonaws') ? pstyle[1] : '';
+    bucket = pstyle[2];
+    key = pstyle[3] || '';
+    return { bucket, key, region };
+  }
+
+  return null;
+}
+
+function renderDetails(p) {
+  const items = [
+    { label: 'Bucket', value: p.bucket },
+    { label: 'Key', value: p.key || '(none)' },
+    { label: 'Region', value: p.region || '(not specified)' },
+    { label: 'File Name', value: p.key ? p.key.split('/').pop() : '(none)' },
+    { label: 'Extension', value: p.key && p.key.includes('.') ? '.' + p.key.split('.').pop() : '(none)' },
+    { label: 'Prefix/Path', value: p.key && p.key.includes('/') ? p.key.substring(0, p.key.lastIndexOf('/') + 1) : '(root)' },
+  ];
+  $('details').innerHTML = items.map(i =>
+    `<div class="detail-item"><div class="label">${i.label}</div><div class="value">${esc(i.value)}</div></div>`
+  ).join('');
+}
+
+function renderFormats(p) {
+  const r = p.region || 'us-east-1';
+  const keyPart = p.key ? '/' + p.key : '';
+  const formats = [
+    { label: 'S3 URI', value: `s3://${p.bucket}${keyPart}` },
+    { label: 'Virtual-hosted', value: `https://${p.bucket}.s3.${r}.amazonaws.com${keyPart}` },
+    { label: 'Path-style', value: `https://s3.${r}.amazonaws.com/${p.bucket}${keyPart}` },
+    { label: 'ARN', value: `arn:aws:s3:::${p.bucket}${keyPart}` },
+    { label: 'Console URL', value: `https://s3.console.aws.amazon.com/s3/object/${p.bucket}?prefix=${encodeURIComponent(p.key || '')}` },
+  ];
+  $('formats').innerHTML = formats.map(f =>
+    `<div class="format-row"><span class="label">${f.label}</span><span class="value">${esc(f.value)}</span><button onclick="cp('${esc4attr(f.value)}')">Copy</button></div>`
+  ).join('');
+}
+
+function renderCli(p) {
+  const s3uri = `s3://${p.bucket}${p.key ? '/' + p.key : ''}`;
+  const regionFlag = p.region ? ` --region ${p.region}` : '';
+  const cmds = [
+    { label: 'Download', value: `aws s3 cp ${s3uri} ./${p.key ? p.key.split('/').pop() : p.bucket}${regionFlag}` },
+    { label: 'List', value: `aws s3 ls ${s3uri}${regionFlag}` },
+    { label: 'Presign (1hr)', value: `aws s3 presign ${s3uri} --expires-in 3600${regionFlag}` },
+    { label: 'Head object', value: p.key ? `aws s3api head-object --bucket ${p.bucket} --key "${p.key}"${regionFlag}` : '(need a key to head-object)' },
+  ];
+  $('cli').innerHTML = cmds.map(c =>
+    `<div class="format-row"><span class="label">${c.label}</span><span class="value">${esc(c.value)}</span><button onclick="cp(\`${esc4attr(c.value)}\`)">Copy</button></div>`
+  ).join('');
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc4attr(s) { return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/`/g,'\\`'); }
+function cp(t) { navigator.clipboard.writeText(t).then(() => { const el=$('toast'); el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1500); }); }
+</script>
+</body>
+</html>

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Env File Merger - Free Online Tool</title>
+<meta name="description" content="Merge multiple .env files together. Detect conflicts, choose resolution strategy, and export the merged result. 100% client-side.">
+<meta name="keywords" content="env file merger, dotenv merge, env combine, environment variables merge, env conflict resolver">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/envmerge.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .panel textarea { min-height: 250px; }
+  .panel h3 { font-size: .9rem; margin-bottom: .5rem; }
+  .conflict-list { display: grid; gap: 8px; margin-top: 1rem; }
+  .conflict-item {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: .85rem;
+  }
+  .conflict-item .key { font-weight: 600; font-family: var(--mono); margin-bottom: 6px; }
+  .conflict-item .values { display: grid; gap: 4px; }
+  .conflict-item .val-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: .82rem;
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .conflict-item .val-row:hover { background: var(--surface2); }
+  .conflict-item .val-row.selected { border-color: var(--accent); background: var(--surface2); }
+  .conflict-item .val-row .src { color: var(--muted); font-size: .75rem; }
+  .stat-bar { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .5rem; }
+  .stat { font-size: .82rem; color: var(--muted); }
+  .stat strong { color: var(--text); }
+  .strategy-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .strategy-row button {
+    padding: 6px 12px;
+    font-size: .82rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .strategy-row button:hover { background: var(--surface2); }
+  .strategy-row button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .result-area {
+    width: 100%;
+    min-height: 250px;
+    font-family: var(--mono);
+    font-size: .85rem;
+    line-height: 1.5;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    white-space: pre;
+    overflow: auto;
+    resize: vertical;
+  }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Env File Merger</h1>
+<p class="subtitle">Merge multiple .env files, resolve conflicts, and export the result</p>
+
+<div class="card">
+<h2>📥 Input .env Files</h2>
+<div class="panels">
+  <div class="panel">
+    <h3>File A (base)</h3>
+    <textarea id="fileA" placeholder="DB_HOST=localhost&#10;DB_PORT=5432&#10;API_KEY=secret123&#10;DEBUG=true" oninput="merge()"></textarea>
+  </div>
+  <div class="panel">
+    <h3>File B (override)</h3>
+    <textarea id="fileB" placeholder="DB_HOST=production.db.example.com&#10;DB_PORT=5432&#10;API_KEY=prod-key-456&#10;LOG_LEVEL=info" oninput="merge()"></textarea>
+  </div>
+</div>
+</div>
+
+<div id="results" style="display:none">
+<div class="card">
+<h2>📊 Summary</h2>
+<div class="stat-bar" id="stats"></div>
+</div>
+
+<div class="card" id="conflictsCard" style="display:none">
+<h2>⚠️ Conflicts</h2>
+<p style="font-size:.82rem;color:var(--muted);margin-bottom:.5rem">Click a value to pick it for the merged result.</p>
+<div class="conflict-list" id="conflicts"></div>
+</div>
+
+<div class="card">
+<h2>🔀 Merged Result</h2>
+<div class="strategy-row">
+  <button class="active" data-s="b-wins" onclick="setStrategy('b-wins')">B wins conflicts</button>
+  <button data-s="a-wins" onclick="setStrategy('a-wins')">A wins conflicts</button>
+  <button data-s="manual" onclick="setStrategy('manual')">Manual picks</button>
+</div>
+<div class="result-area" id="result"></div>
+<div style="margin-top:.5rem">
+  <button class="btn" onclick="copyResult()">Copy to Clipboard</button>
+</div>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast">✓ Copied!</div>
+
+<footer>
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> · No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let strategy = 'b-wins';
+let manualPicks = {};
+
+function setStrategy(s) {
+  strategy = s;
+  document.querySelectorAll('.strategy-row button').forEach(b =>
+    b.classList.toggle('active', b.dataset.s === s)
+  );
+  renderResult();
+}
+
+function parseEnv(text) {
+  const entries = [];
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.substring(0, eqIdx).trim();
+    let val = trimmed.substring(eqIdx + 1);
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    entries.push({ key, val });
+  }
+  return entries;
+}
+
+function merge() {
+  const a = parseEnv($('fileA').value);
+  const b = parseEnv($('fileB').value);
+
+  if (!a.length && !b.length) { $('results').style.display = 'none'; return; }
+  $('results').style.display = '';
+
+  const mapA = new Map(a.map(e => [e.key, e.val]));
+  const mapB = new Map(b.map(e => [e.key, e.val]));
+
+  const allKeys = [...new Set([...a.map(e => e.key), ...b.map(e => e.key)])];
+
+  let onlyA = 0, onlyB = 0, same = 0, conflicts = 0;
+  const conflictList = [];
+
+  for (const key of allKeys) {
+    const inA = mapA.has(key);
+    const inB = mapB.has(key);
+    if (inA && !inB) onlyA++;
+    else if (!inA && inB) onlyB++;
+    else if (mapA.get(key) === mapB.get(key)) same++;
+    else {
+      conflicts++;
+      conflictList.push({ key, valA: mapA.get(key), valB: mapB.get(key) });
+    }
+  }
+
+  $('stats').innerHTML = [
+    `<span class="stat">Total: <strong>${allKeys.length}</strong></span>`,
+    `<span class="stat">Only in A: <strong>${onlyA}</strong></span>`,
+    `<span class="stat">Only in B: <strong>${onlyB}</strong></span>`,
+    `<span class="stat">Same: <strong>${same}</strong></span>`,
+    `<span class="stat" style="color:${conflicts ? 'var(--error)' : 'var(--success)'}">Conflicts: <strong>${conflicts}</strong></span>`,
+  ].join('');
+
+  if (conflictList.length) {
+    $('conflictsCard').style.display = '';
+    $('conflicts').innerHTML = conflictList.map(c => `
+      <div class="conflict-item">
+        <div class="key">${esc(c.key)}</div>
+        <div class="values">
+          <div class="val-row ${manualPicks[c.key] === 'a' ? 'selected' : ''}" onclick="pick('${esc4attr(c.key)}','a')">
+            <span>${esc(c.valA)}</span><span class="src">File A</span>
+          </div>
+          <div class="val-row ${manualPicks[c.key] === 'b' ? 'selected' : ''}" onclick="pick('${esc4attr(c.key)}','b')">
+            <span>${esc(c.valB)}</span><span class="src">File B</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } else {
+    $('conflictsCard').style.display = 'none';
+  }
+
+  renderResult();
+}
+
+function pick(key, source) {
+  manualPicks[key] = source;
+  merge();
+}
+
+function renderResult() {
+  const a = parseEnv($('fileA').value);
+  const b = parseEnv($('fileB').value);
+
+  const mapA = new Map(a.map(e => [e.key, e.val]));
+  const mapB = new Map(b.map(e => [e.key, e.val]));
+
+  const allKeys = [...new Set([...a.map(e => e.key), ...b.map(e => e.key)])];
+  const lines = [];
+
+  for (const key of allKeys) {
+    const inA = mapA.has(key);
+    const inB = mapB.has(key);
+
+    if (inA && !inB) {
+      lines.push(`${key}=${mapA.get(key)}`);
+    } else if (!inA && inB) {
+      lines.push(`${key}=${mapB.get(key)}`);
+    } else if (mapA.get(key) === mapB.get(key)) {
+      lines.push(`${key}=${mapA.get(key)}`);
+    } else {
+      let val;
+      if (strategy === 'b-wins') val = mapB.get(key);
+      else if (strategy === 'a-wins') val = mapA.get(key);
+      else val = manualPicks[key] === 'a' ? mapA.get(key) : mapB.get(key);
+      lines.push(`${key}=${val}`);
+    }
+  }
+
+  $('result').textContent = lines.join('\n');
+}
+
+function copyResult() {
+  navigator.clipboard.writeText($('result').textContent).then(() => {
+    const el = $('toast');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1500);
+  });
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc4attr(s) { return s.replace(/'/g, "\\'"); }
+</script>
+</body>
+</html>
