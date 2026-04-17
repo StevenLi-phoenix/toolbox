@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rsync Command Builder — Free Online Tool</title>
+<meta name="description" content="Build rsync commands visually. Configure source, destination, flags, excludes, and SSH options — then copy the command. 100% client-side.">
+<meta name="keywords" content="rsync builder, rsync command, file sync, remote copy, backup tool, ssh sync">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="Rsync Command Builder">
+<meta property="og:description" content="Build rsync commands visually. No memorizing flags.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/rsynccmd.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/rsynccmd.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field.full { grid-column: 1 / -1; }
+  .field label { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  input[type="text"], select, textarea {
+    padding: 8px 10px; font-family: var(--mono); font-size: .85rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+  }
+  textarea { resize: vertical; min-height: 60px; line-height: 1.5; }
+  .output-box {
+    position: relative; margin-top: 14px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 48px 14px 14px; font-family: var(--mono); font-size: .88rem;
+    white-space: pre-wrap; word-break: break-all; min-height: 48px; line-height: 1.6;
+  }
+  .copy-btn {
+    position: absolute; top: 8px; right: 8px; padding: 4px 10px; font-size: .78rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  .copy-btn.copied { background: var(--success); border-color: var(--success); }
+  .section-title {
+    font-size: .82rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted); margin: 16px 0 8px;
+    padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .section-title:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+  .flag-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 6px 12px; border-radius: 99px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: .82rem; cursor: pointer;
+    transition: all .15s;
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .preset {
+    padding: 6px 12px; border-radius: 99px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: .82rem; cursor: pointer;
+  }
+  .preset:hover { border-color: var(--accent); }
+  .hint { font-size: .78rem; color: var(--muted); margin-top: 6px; }
+  .exclude-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .exclude-row input { flex: 1; }
+  .btn-sm {
+    padding: 6px 12px; font-size: .78rem; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--surface); cursor: pointer; color: var(--text);
+  }
+  .btn-sm:hover { border-color: var(--accent); }
+  .btn-rm { color: var(--error); border-color: var(--error); }
+  .btn-rm:hover { background: var(--error); color: #fff; }
+  @media (max-width: 768px) {
+    .form-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Rsync Command Builder</h1>
+<p class="subtitle">Build rsync commands visually &mdash; configure source, destination, flags, excludes, and SSH options, then copy the command.</p>
+
+<div class="card" style="padding:20px; margin-top:16px;">
+  <div class="section-title" style="border-top:none;margin-top:0;padding-top:0;">Presets</div>
+  <div class="presets">
+    <button class="preset" onclick="loadPreset('local')">Local Copy</button>
+    <button class="preset" onclick="loadPreset('push')">Push to Remote</button>
+    <button class="preset" onclick="loadPreset('pull')">Pull from Remote</button>
+    <button class="preset" onclick="loadPreset('backup')">Backup</button>
+    <button class="preset" onclick="loadPreset('mirror')">Mirror / Deploy</button>
+    <button class="preset" onclick="loadPreset('dryrun')">Dry Run</button>
+  </div>
+
+  <div class="section-title">Source & Destination</div>
+  <div class="form-grid">
+    <div class="field">
+      <label>Source</label>
+      <input type="text" id="source" value="/home/user/project/" oninput="generate()">
+    </div>
+    <div class="field">
+      <label>Destination</label>
+      <input type="text" id="dest" value="user@server:/var/www/project/" oninput="generate()">
+    </div>
+  </div>
+
+  <div class="section-title">Common Flags</div>
+  <div class="flag-chips" id="flags">
+    <button class="chip active" data-flag="-a" title="Archive mode (recursive, preserves symlinks, perms, times, group, owner)">-a archive</button>
+    <button class="chip active" data-flag="-v" title="Verbose output">-v verbose</button>
+    <button class="chip" data-flag="-z" title="Compress data during transfer">-z compress</button>
+    <button class="chip" data-flag="-P" title="Show progress + allow partial transfers">-P progress</button>
+    <button class="chip" data-flag="--delete" title="Delete files in dest that don't exist in source">--delete</button>
+    <button class="chip" data-flag="-n" title="Dry run — show what would be done without making changes">-n dry-run</button>
+    <button class="chip" data-flag="-h" title="Human-readable output">-h human</button>
+    <button class="chip" data-flag="--stats" title="Show transfer statistics">--stats</button>
+    <button class="chip" data-flag="-u" title="Skip files that are newer on the receiver">-u update</button>
+    <button class="chip" data-flag="--checksum" title="Use checksum instead of time+size for comparison">--checksum</button>
+    <button class="chip" data-flag="-r" title="Recurse into directories (included in -a)">-r recursive</button>
+    <button class="chip" data-flag="-l" title="Copy symlinks as symlinks (included in -a)">-l symlinks</button>
+    <button class="chip" data-flag="-c" title="Skip based on checksum, not mod-time & size">-c checksum</button>
+    <button class="chip" data-flag="--partial" title="Keep partially transferred files">--partial</button>
+    <button class="chip" data-flag="--bwlimit" title="Limit bandwidth (KB/s)">--bwlimit</button>
+  </div>
+
+  <div id="bwlimit-row" style="display:none; margin-top:8px;">
+    <div class="field" style="max-width:200px;">
+      <label>Bandwidth Limit (KB/s)</label>
+      <input type="text" id="bwlimit" value="1000" oninput="generate()">
+    </div>
+  </div>
+
+  <div class="section-title">SSH Options</div>
+  <div class="form-grid">
+    <div class="field">
+      <label>SSH Port (leave empty for default 22)</label>
+      <input type="text" id="sshport" value="" placeholder="22" oninput="generate()">
+    </div>
+    <div class="field">
+      <label>SSH Key Path (optional)</label>
+      <input type="text" id="sshkey" value="" placeholder="~/.ssh/id_rsa" oninput="generate()">
+    </div>
+  </div>
+
+  <div class="section-title">Exclude Patterns</div>
+  <div id="excludes"></div>
+  <div style="margin-top:8px;">
+    <button class="btn-sm" onclick="addExclude()">+ Add Exclude</button>
+    <button class="btn-sm" onclick="addExclude('.git')">+ .git</button>
+    <button class="btn-sm" onclick="addExclude('node_modules')">+ node_modules</button>
+    <button class="btn-sm" onclick="addExclude('*.log')">+ *.log</button>
+    <button class="btn-sm" onclick="addExclude('.env')">+ .env</button>
+    <button class="btn-sm" onclick="addExclude('__pycache__')">+ __pycache__</button>
+  </div>
+
+  <div class="section-title">Generated Command</div>
+  <div class="output-box" id="output">rsync -av /home/user/project/ user@server:/var/www/project/</div>
+  <button class="copy-btn" id="copyBtn" onclick="copyCmd()">Copy</button>
+  <p class="hint">Tip: a trailing slash on the source means "copy the contents of this directory" — without it, rsync copies the directory itself.</p>
+</div>
+
+<footer style="text-align:center; padding:2rem 0; color:var(--muted); font-size:.85rem;">
+  Built with ☕ by Steven Li · No data leaves your browser
+</footer>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const flagEls = document.querySelectorAll('.chip[data-flag]');
+flagEls.forEach(el => {
+  el.addEventListener('click', () => {
+    el.classList.toggle('active');
+    if (el.dataset.flag === '--bwlimit') {
+      $('bwlimit-row').style.display = el.classList.contains('active') ? 'block' : 'none';
+    }
+    generate();
+  });
+});
+
+let excludes = [];
+
+function addExclude(val) {
+  if (val && excludes.includes(val)) return;
+  excludes.push(val || '');
+  renderExcludes();
+  generate();
+}
+
+function removeExclude(i) {
+  excludes.splice(i, 1);
+  renderExcludes();
+  generate();
+}
+
+function renderExcludes() {
+  const container = $('excludes');
+  container.innerHTML = '';
+  excludes.forEach((ex, i) => {
+    const row = document.createElement('div');
+    row.className = 'exclude-row';
+    row.innerHTML = `<input type="text" value="${ex}" placeholder="pattern" oninput="excludes[${i}]=this.value;generate()">
+      <button class="btn-sm btn-rm" onclick="removeExclude(${i})">✕</button>`;
+    container.appendChild(row);
+  });
+}
+
+function generate() {
+  const parts = ['rsync'];
+  const activeFlags = [];
+
+  flagEls.forEach(el => {
+    if (el.classList.contains('active')) {
+      const f = el.dataset.flag;
+      if (f === '--bwlimit') {
+        activeFlags.push(`--bwlimit=${$('bwlimit').value || '1000'}`);
+      } else {
+        activeFlags.push(f);
+      }
+    }
+  });
+
+  const shortFlags = activeFlags.filter(f => /^-[a-zA-Z]$/.test(f));
+  const longFlags = activeFlags.filter(f => !(/^-[a-zA-Z]$/.test(f)));
+
+  if (shortFlags.length > 0) {
+    parts.push(shortFlags.map(f => f.replace('-', '')).join('').replace(/^/, '-'));
+  }
+  longFlags.forEach(f => parts.push(f));
+
+  const sshParts = [];
+  const port = $('sshport').value.trim();
+  const key = $('sshkey').value.trim();
+  if (port) sshParts.push(`-p ${port}`);
+  if (key) sshParts.push(`-i ${key}`);
+  if (sshParts.length > 0) {
+    parts.push(`-e 'ssh ${sshParts.join(' ')}'`);
+  }
+
+  excludes.forEach(ex => {
+    if (ex.trim()) parts.push(`--exclude='${ex.trim()}'`);
+  });
+
+  const src = $('source').value.trim() || './src/';
+  const dst = $('dest').value.trim() || './dest/';
+  parts.push(src);
+  parts.push(dst);
+
+  if (parts.length <= 4) {
+    $('output').textContent = parts.join(' ');
+  } else {
+    $('output').textContent = parts.join(' \\\n  ');
+  }
+}
+
+function copyCmd() {
+  navigator.clipboard.writeText($('output').textContent).then(() => {
+    const btn = $('copyBtn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    const t = $('toast'); t.classList.add('show');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); t.classList.remove('show'); }, 1500);
+  });
+}
+
+function loadPreset(name) {
+  flagEls.forEach(el => el.classList.remove('active'));
+  excludes = [];
+  $('sshport').value = '';
+  $('sshkey').value = '';
+  $('bwlimit-row').style.display = 'none';
+
+  function activate(...flags) {
+    flags.forEach(f => {
+      const el = document.querySelector(`.chip[data-flag="${f}"]`);
+      if (el) el.classList.add('active');
+    });
+  }
+
+  switch (name) {
+    case 'local':
+      $('source').value = '/home/user/documents/';
+      $('dest').value = '/backup/documents/';
+      activate('-a', '-v', '-h', '-P');
+      break;
+    case 'push':
+      $('source').value = '/home/user/project/';
+      $('dest').value = 'user@server:/var/www/project/';
+      activate('-a', '-v', '-z', '-P');
+      break;
+    case 'pull':
+      $('source').value = 'user@server:/var/www/project/';
+      $('dest').value = '/home/user/project/';
+      activate('-a', '-v', '-z', '-P');
+      break;
+    case 'backup':
+      $('source').value = '/home/user/';
+      $('dest').value = '/mnt/backup/home/';
+      activate('-a', '-v', '-h', '--stats');
+      excludes = ['.cache', 'node_modules', '.git', '*.tmp'];
+      break;
+    case 'mirror':
+      $('source').value = './dist/';
+      $('dest').value = 'user@server:/var/www/html/';
+      activate('-a', '-v', '-z', '--delete');
+      excludes = ['.git', '.env'];
+      break;
+    case 'dryrun':
+      $('source').value = '/home/user/project/';
+      $('dest').value = 'user@server:/var/www/project/';
+      activate('-a', '-v', '-n', '-h', '--stats');
+      break;
+  }
+
+  renderExcludes();
+  generate();
+}
+
+generate();
+</script>
+</body>
+</html>
