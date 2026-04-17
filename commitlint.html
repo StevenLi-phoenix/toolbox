@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Message Linter - Free Online Conventional Commits Validator</title>
+<meta name="description" content="Validate commit messages against the Conventional Commits specification. Check types, scopes, descriptions, and formatting. No data leaves your browser.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/commitlint.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+textarea{width:100%;height:180px;font-family:var(--mono);font-size:.9rem;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);resize:vertical}
+.results{display:flex;flex-direction:column;gap:6px}
+.rule{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-radius:var(--radius);font-size:.85rem;line-height:1.4}
+.rule.pass{background:#ecfdf5;color:#166534;border:1px solid #bbf7d0}
+.rule.fail{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.rule.warn{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+.rule.info{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+.rule-icon{flex-shrink:0;font-size:1rem;width:20px;text-align:center}
+.rule-text{flex:1}
+.types-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.type-tag{padding:3px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--mono);font-size:.78rem;cursor:pointer;background:var(--surface)}
+.type-tag:hover{background:var(--surface2)}
+.type-tag.active{background:var(--text);color:var(--bg);border-color:var(--text)}
+.example{font-family:var(--mono);font-size:.82rem;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);margin-top:6px;cursor:pointer}
+.example:hover{border-color:var(--border2)}
+.parsed{font-family:var(--mono);font-size:.85rem;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);margin-bottom:12px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.parsed-part{padding:2px 8px;border-radius:4px;font-size:.82rem}
+.score-bar{height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;transition:width .3s}
+@media(max-width:768px){textarea{height:140px}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Commit Message Linter</h1>
+<p class="subtitle">Validate commit messages against the <a href="https://www.conventionalcommits.org/" target="_blank" rel="noopener">Conventional Commits</a> specification</p>
+
+<div class="card">
+<h2>&#128221; Commit Message</h2>
+<textarea id="inp" placeholder="feat(auth): add OAuth 2.0 login flow" oninput="lint()">feat(auth): add OAuth 2.0 login flow
+
+Implement Google and GitHub OAuth providers with PKCE.
+Session tokens are stored in httpOnly cookies.
+
+BREAKING CHANGE: removed legacy /api/login endpoint</textarea>
+<div style="margin-top:8px">
+<span style="font-size:.82rem;color:var(--muted)">Try an example:</span>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+<span class="example" onclick="setExample(0)">feat(ui): add dark mode toggle</span>
+<span class="example" onclick="setExample(1)">fix: resolve null pointer in parser</span>
+<span class="example" onclick="setExample(2)">bad commit message here</span>
+</div>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128269; Parsed Structure</h2>
+<div class="parsed" id="parsed"></div>
+</div>
+
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<h2>&#9989; Validation Results</h2>
+<div id="scoreLabel" style="font-size:.85rem;font-weight:600"></div>
+</div>
+<div class="score-bar"><div class="score-fill" id="scoreBar"></div></div>
+<div class="results" id="results" style="margin-top:12px"></div>
+</div>
+
+<div class="card">
+<h2>&#128218; Allowed Types</h2>
+<p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">Click a type to insert it into your message:</p>
+<div class="types-grid" id="types"></div>
+</div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const TYPES={
+  feat:'A new feature',
+  fix:'A bug fix',
+  docs:'Documentation only changes',
+  style:'Formatting, missing semicolons, etc. (no code change)',
+  refactor:'Code change that neither fixes a bug nor adds a feature',
+  perf:'A code change that improves performance',
+  test:'Adding or correcting tests',
+  build:'Changes to build system or external dependencies',
+  ci:'Changes to CI configuration files and scripts',
+  chore:'Other changes that don\'t modify src or test files',
+  revert:'Reverts a previous commit',
+};
+
+const EXAMPLES=[
+  'feat(ui): add dark mode toggle\n\nAdd a toggle button in the settings panel that switches\nbetween light and dark themes using CSS custom properties.',
+  'fix: resolve null pointer in parser\n\nThe YAML parser crashed when encountering an empty\ndocument separator. Added a null check before accessing\nthe node type.',
+  'bad commit message here',
+];
+
+function setExample(i){$('inp').value=EXAMPLES[i];lint();}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function lint(){
+  const raw=$('inp').value;
+  const lines=raw.split('\n');
+  const subject=lines[0]||'';
+  const rest=lines.slice(1);
+
+  const re=/^(\w+)(\(([^)]*)\))?(!)?\s*:\s*(.*)$/;
+  const m=subject.match(re);
+
+  const rules=[];
+  let parsedHtml='';
+
+  if(m){
+    const [,type,,scope,bang,desc]=m;
+    parsedHtml+=`<span class="parsed-part" style="background:#dbeafe;color:#1e40af">${esc(type)}</span>`;
+    if(scope!=null)parsedHtml+=`<span class="parsed-part" style="background:#fce7f3;color:#9d174d">(${esc(scope)})</span>`;
+    if(bang)parsedHtml+=`<span class="parsed-part" style="background:#fef3c7;color:#92400e">!</span>`;
+    parsedHtml+=`<span style="color:var(--muted)">:</span> `;
+    parsedHtml+=`<span class="parsed-part" style="background:#f0fdf4;color:#166534">${esc(desc)}</span>`;
+
+    const validType=type.toLowerCase() in TYPES;
+    rules.push({
+      ok:validType,level:validType?'pass':'fail',
+      msg:validType?`Type "${type}" is valid.`:`Type "${type}" is not a recognized Conventional Commits type. Use one of: ${Object.keys(TYPES).join(', ')}`
+    });
+    rules.push({ok:true,level:'pass',msg:'Subject line matches pattern: type(scope): description'});
+    if(desc.length===0){
+      rules.push({ok:false,level:'fail',msg:'Description is empty. Add a short summary after the colon.'});
+    }else{
+      rules.push({ok:true,level:'pass',msg:`Description provided: "${desc}"`});
+      if(desc[0]===desc[0].toUpperCase()&&/[A-Z]/.test(desc[0])){
+        rules.push({ok:false,level:'warn',msg:'Description starts with uppercase. Conventional Commits recommends lowercase.'});
+      }else{
+        rules.push({ok:true,level:'pass',msg:'Description starts with lowercase.'});
+      }
+      if(desc.endsWith('.')){
+        rules.push({ok:false,level:'warn',msg:'Description ends with a period. Omit trailing punctuation.'});
+      }
+    }
+    if(scope!=null&&scope.length===0){
+      rules.push({ok:false,level:'warn',msg:'Scope is empty. Either provide a scope or remove the parentheses.'});
+    }
+    if(bang){
+      rules.push({ok:true,level:'info',msg:'Breaking change indicated by "!" before the colon.'});
+    }
+  }else{
+    parsedHtml=`<span style="color:var(--error)">Could not parse subject line</span>`;
+    rules.push({ok:false,level:'fail',msg:'Subject does not match Conventional Commits format: type(scope): description'});
+  }
+
+  if(subject.length>72){
+    rules.push({ok:false,level:'fail',msg:`Subject line is ${subject.length} characters (max 72). Shorten it.`});
+  }else if(subject.length>50){
+    rules.push({ok:true,level:'warn',msg:`Subject line is ${subject.length} characters. Ideally keep it under 50.`});
+  }else if(subject.length>0){
+    rules.push({ok:true,level:'pass',msg:`Subject line length is good (${subject.length} characters).`});
+  }
+
+  if(rest.length>0){
+    if(rest[0].trim()!==''){
+      rules.push({ok:false,level:'fail',msg:'Missing blank line between subject and body.'});
+    }else{
+      rules.push({ok:true,level:'pass',msg:'Blank line separates subject from body.'});
+    }
+    const bodyLines=rest.slice(1).filter(l=>l.trim());
+    if(bodyLines.length>0){
+      rules.push({ok:true,level:'pass',msg:`Body has ${bodyLines.length} non-empty line(s).`});
+      const longLines=bodyLines.filter(l=>l.length>100);
+      if(longLines.length>0){
+        rules.push({ok:false,level:'warn',msg:`${longLines.length} body line(s) exceed 100 characters. Consider wrapping.`});
+      }
+    }
+    const hasBreaking=rest.some(l=>/^BREAKING[ -]CHANGE\s*:/.test(l.trim()));
+    if(hasBreaking){
+      rules.push({ok:true,level:'info',msg:'BREAKING CHANGE footer detected.'});
+    }
+    const footerRe=/^[\w-]+(-by)?\s*:\s*.+|^BREAKING[ -]CHANGE\s*:\s*.+/;
+    const footerStart=rest.findIndex((l,i)=>i>0&&rest[i-1].trim()===''&&footerRe.test(l.trim()));
+    if(footerStart>0){
+      rules.push({ok:true,level:'pass',msg:'Git trailer / footer section detected.'});
+    }
+  }else{
+    rules.push({ok:true,level:'info',msg:'No body or footer. Single-line commit messages are valid for small changes.'});
+  }
+
+  $('parsed').innerHTML=parsedHtml;
+
+  const icons={pass:'\u2705',fail:'\u274C',warn:'\u26A0\uFE0F',info:'\u2139\uFE0F'};
+  $('results').innerHTML=rules.map(r=>`<div class="rule ${r.level}"><span class="rule-icon">${icons[r.level]}</span><span class="rule-text">${esc(r.msg)}</span></div>`).join('');
+
+  const total=rules.length;
+  const passing=rules.filter(r=>r.level==='pass'||r.level==='info').length;
+  const pct=total?Math.round(passing/total*100):0;
+  const color=pct>=80?'var(--success)':pct>=50?'var(--warning)':'var(--error)';
+  $('scoreLabel').textContent=`${pct}% (${passing}/${total})`;
+  $('scoreLabel').style.color=color;
+  $('scoreBar').style.width=pct+'%';
+  $('scoreBar').style.background=color;
+}
+
+$('types').innerHTML=Object.entries(TYPES).map(([k,v])=>
+  `<span class="type-tag" onclick="insertType('${k}')" title="${esc(v)}">${k}</span>`
+).join('');
+
+function insertType(t){
+  const ta=$('inp');
+  const cur=ta.value;
+  const re=/^(\w+)(\([^)]*\))?(!)?\s*:\s*/;
+  if(re.test(cur)){
+    ta.value=cur.replace(re,t+'$2$3: ');
+  }else{
+    ta.value=t+': '+cur;
+  }
+  lint();
+  ta.focus();
+}
+
+lint();
+</script>
+</body>
+</html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL Query Explainer - Free Online SQL Clause Analyzer</title>
+<meta name="description" content="Paste a SQL query and see each clause highlighted and explained. Understand SELECT, JOIN, WHERE, GROUP BY, and more. No data leaves your browser.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sqlexplain.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+textarea{width:100%;height:320px;font-family:var(--mono);font-size:.9rem;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);resize:vertical;tab-size:2}
+.highlighted{font-family:var(--mono);font-size:.9rem;line-height:1.6;white-space:pre-wrap;word-break:break-word;padding:12px;border:1px solid var(--border);border-radius:var(--radius);min-height:320px;background:var(--surface2);overflow-y:auto}
+.clause-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.clause-item{padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:flex-start;gap:10px}
+.clause-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-family:var(--mono);font-size:.78rem;font-weight:700;white-space:nowrap;flex-shrink:0}
+.clause-desc{font-size:.85rem;color:var(--muted);line-height:1.4}
+.exec-order{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.exec-step{padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:.78rem;font-family:var(--mono);background:var(--surface2)}
+.exec-step .num{font-weight:700;margin-right:4px}
+.kw{font-weight:700;border-radius:3px;padding:1px 4px}
+@media(max-width:768px){.panels{grid-template-columns:1fr}textarea{height:200px}.highlighted{min-height:200px}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>SQL Query Explainer</h1>
+<p class="subtitle">Paste a SQL query to see each clause highlighted, explained, and ordered by execution sequence</p>
+
+<div class="panels">
+<div class="card">
+<h2>&#128221; SQL Input</h2>
+<textarea id="inp" placeholder="Paste your SQL query here..." oninput="explain()"
+>SELECT u.name, COUNT(o.id) AS order_count
+FROM users u
+INNER JOIN orders o ON o.user_id = u.id
+WHERE u.active = true
+  AND o.created_at > '2024-01-01'
+GROUP BY u.name
+HAVING COUNT(o.id) > 5
+ORDER BY order_count DESC
+LIMIT 20</textarea>
+</div>
+<div class="card">
+<h2>&#127912; Highlighted</h2>
+<div class="highlighted" id="hl"></div>
+</div>
+</div>
+
+<div class="card" style="margin-top:16px">
+<h2>&#128218; Clause Breakdown</h2>
+<div class="clause-list" id="clauses"></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+<h2>&#9889; Logical Execution Order</h2>
+<p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">SQL doesn't execute top-to-bottom. Here's the actual logical order for your query:</p>
+<div class="exec-order" id="execOrder"></div>
+</div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const COLORS={
+'SELECT':'#2563eb','SELECT DISTINCT':'#2563eb',
+'FROM':'#059669','DELETE FROM':'#dc2626',
+'INNER JOIN':'#7c3aed','LEFT JOIN':'#7c3aed','RIGHT JOIN':'#7c3aed',
+'FULL JOIN':'#7c3aed','CROSS JOIN':'#7c3aed','JOIN':'#7c3aed',
+'LEFT OUTER JOIN':'#7c3aed','RIGHT OUTER JOIN':'#7c3aed','FULL OUTER JOIN':'#7c3aed',
+'ON':'#6d28d9',
+'WHERE':'#d97706',
+'AND':'#d97706','OR':'#d97706',
+'GROUP BY':'#dc2626',
+'HAVING':'#be123c',
+'ORDER BY':'#0891b2',
+'LIMIT':'#4f46e5','OFFSET':'#4f46e5',
+'INSERT INTO':'#15803d','VALUES':'#15803d',
+'UPDATE':'#b45309','SET':'#b45309',
+'CREATE TABLE':'#7e22ce','ALTER TABLE':'#7e22ce','DROP TABLE':'#7e22ce',
+'WITH':'#0369a1','AS':'#64748b',
+'UNION':'#9333ea','UNION ALL':'#9333ea','INTERSECT':'#9333ea','EXCEPT':'#9333ea',
+'CASE':'#c026d3','WHEN':'#c026d3','THEN':'#c026d3','ELSE':'#c026d3','END':'#c026d3',
+'EXISTS':'#d97706','IN':'#d97706','BETWEEN':'#d97706','LIKE':'#d97706',
+'IS NULL':'#d97706','IS NOT NULL':'#d97706','NOT':'#d97706',
+'DISTINCT':'#2563eb','TOP':'#2563eb','INTO':'#15803d',
+'RETURNING':'#059669','OVER':'#7c3aed','PARTITION BY':'#7c3aed',
+'WINDOW':'#7c3aed','ROWS':'#7c3aed','RANGE':'#7c3aed',
+'FETCH':'#4f46e5','NEXT':'#4f46e5','FIRST':'#4f46e5',
+};
+
+const DESCS={
+'SELECT':'Specifies which columns or expressions to include in the result set.',
+'SELECT DISTINCT':'Returns only unique rows, removing all duplicates from the result.',
+'FROM':'Specifies the source table(s) to read data from.',
+'INNER JOIN':'Combines rows from two tables where the join condition matches in both.',
+'LEFT JOIN':'Returns all rows from the left table and matching rows from the right (NULLs for non-matches).',
+'RIGHT JOIN':'Returns all rows from the right table and matching rows from the left.',
+'FULL JOIN':'Returns all rows from both tables, with NULLs where there is no match.',
+'CROSS JOIN':'Returns the cartesian product — every combination of rows from both tables.',
+'LEFT OUTER JOIN':'Same as LEFT JOIN — returns all left rows plus matching right rows.',
+'RIGHT OUTER JOIN':'Same as RIGHT JOIN — returns all right rows plus matching left rows.',
+'FULL OUTER JOIN':'Same as FULL JOIN — returns all rows from both sides.',
+'JOIN':'Combines rows from two tables (defaults to INNER JOIN).',
+'ON':'Specifies the condition for joining two tables.',
+'WHERE':'Filters individual rows before grouping. Only rows matching the condition are kept.',
+'AND':'Logical AND — both conditions must be true.',
+'OR':'Logical OR — at least one condition must be true.',
+'GROUP BY':'Groups rows with identical values in specified columns into summary rows.',
+'HAVING':'Filters groups after GROUP BY. Like WHERE but operates on aggregated data.',
+'ORDER BY':'Sorts the final result set by one or more columns (ASC or DESC).',
+'LIMIT':'Restricts the maximum number of rows returned.',
+'OFFSET':'Skips a specified number of rows before returning results.',
+'INSERT INTO':'Adds new rows into a table.',
+'VALUES':'Specifies the data values to insert.',
+'UPDATE':'Modifies existing rows in a table.',
+'SET':'Specifies which columns to update and their new values.',
+'DELETE FROM':'Removes rows from a table that match the WHERE condition.',
+'CREATE TABLE':'Defines and creates a new table with specified columns and types.',
+'ALTER TABLE':'Modifies the structure of an existing table (add/drop/rename columns).',
+'DROP TABLE':'Permanently deletes a table and all its data.',
+'WITH':'Defines a Common Table Expression (CTE) — a named temporary result set.',
+'AS':'Creates an alias for a table, column, or subquery.',
+'UNION':'Combines results from two queries, removing duplicates.',
+'UNION ALL':'Combines results from two queries, keeping all duplicates.',
+'INTERSECT':'Returns only rows that appear in both query results.',
+'EXCEPT':'Returns rows from the first query that don\'t appear in the second.',
+'CASE':'Begins a conditional expression (like if/else in SQL).',
+'WHEN':'Defines a condition branch inside a CASE expression.',
+'THEN':'Specifies the result value when a WHEN condition is true.',
+'ELSE':'Default result if no WHEN conditions match.',
+'END':'Closes a CASE expression.',
+'EXISTS':'Returns true if a subquery produces any rows.',
+'IN':'Checks if a value matches any value in a list or subquery.',
+'BETWEEN':'Checks if a value falls within a range (inclusive).',
+'LIKE':'Matches a string pattern using % (any chars) and _ (single char).',
+'IS NULL':'Tests whether a value is NULL.',
+'IS NOT NULL':'Tests whether a value is not NULL.',
+'NOT':'Negates a condition.',
+'DISTINCT':'Removes duplicate values from the result.',
+'RETURNING':'Returns data from rows affected by INSERT/UPDATE/DELETE (PostgreSQL).',
+'OVER':'Defines a window for a window function (e.g., ROW_NUMBER, SUM).',
+'PARTITION BY':'Divides rows into partitions for window functions.',
+};
+
+const EXEC_ORDER=[
+  {kw:'WITH',label:'WITH (CTE)'},
+  {kw:'FROM',label:'FROM'},
+  {kw:'JOIN',label:'JOIN',match:['JOIN','INNER JOIN','LEFT JOIN','RIGHT JOIN','FULL JOIN','CROSS JOIN','LEFT OUTER JOIN','RIGHT OUTER JOIN','FULL OUTER JOIN']},
+  {kw:'WHERE',label:'WHERE'},
+  {kw:'GROUP BY',label:'GROUP BY'},
+  {kw:'HAVING',label:'HAVING'},
+  {kw:'SELECT',label:'SELECT'},
+  {kw:'DISTINCT',label:'DISTINCT',match:['SELECT DISTINCT','DISTINCT']},
+  {kw:'UNION',label:'UNION/INTERSECT/EXCEPT',match:['UNION','UNION ALL','INTERSECT','EXCEPT']},
+  {kw:'ORDER BY',label:'ORDER BY'},
+  {kw:'LIMIT',label:'LIMIT/OFFSET',match:['LIMIT','OFFSET','FETCH']},
+];
+
+const KW_LIST=[
+  'SELECT DISTINCT','INSERT INTO','DELETE FROM','CREATE TABLE','ALTER TABLE','DROP TABLE',
+  'INNER JOIN','LEFT OUTER JOIN','RIGHT OUTER JOIN','FULL OUTER JOIN',
+  'LEFT JOIN','RIGHT JOIN','FULL JOIN','CROSS JOIN',
+  'UNION ALL','IS NOT NULL','IS NULL','NOT IN','NOT EXISTS','NOT LIKE','NOT BETWEEN',
+  'GROUP BY','ORDER BY','PARTITION BY',
+  'SELECT','FROM','JOIN','ON','WHERE','AND','OR','HAVING',
+  'LIMIT','OFFSET','UPDATE','SET','VALUES','WITH','AS',
+  'UNION','INTERSECT','EXCEPT',
+  'CASE','WHEN','THEN','ELSE','END',
+  'EXISTS','IN','BETWEEN','LIKE','NOT',
+  'DISTINCT','RETURNING','OVER','INTO','FETCH','NEXT','FIRST','ROWS','RANGE','WINDOW',
+  'ASC','DESC','NULLS','TOP',
+];
+
+function tokenize(sql){
+  const tokens=[];
+  let i=0;
+  const upper=sql.toUpperCase();
+  while(i<sql.length){
+    if(/\s/.test(sql[i])){
+      let j=i;
+      while(j<sql.length&&/\s/.test(sql[j]))j++;
+      tokens.push({type:'ws',text:sql.slice(i,j)});
+      i=j;continue;
+    }
+    if(sql[i]==="'"||sql[i]==='"'){
+      const q=sql[i];let j=i+1;
+      while(j<sql.length&&sql[j]!==q){if(sql[j]==='\\')j++;j++;}
+      j++;
+      tokens.push({type:'str',text:sql.slice(i,j)});
+      i=j;continue;
+    }
+    if(sql[i]==='-'&&sql[i+1]==='-'){
+      let j=i;while(j<sql.length&&sql[j]!=='\n')j++;
+      tokens.push({type:'comment',text:sql.slice(i,j)});
+      i=j;continue;
+    }
+    if(sql[i]==='/'&&sql[i+1]==='*'){
+      let j=i+2;while(j<sql.length-1&&!(sql[j]==='*'&&sql[j+1]==='/'))j++;
+      j+=2;
+      tokens.push({type:'comment',text:sql.slice(i,j)});
+      i=j;continue;
+    }
+    let matched=false;
+    for(const kw of KW_LIST){
+      const len=kw.length;
+      if(upper.slice(i,i+len)===kw){
+        const after=sql[i+len];
+        if(!after||/[\s,;()\n\r]/.test(after)){
+          tokens.push({type:'kw',text:sql.slice(i,i+len),kw:kw});
+          i+=len;matched=true;break;
+        }
+      }
+    }
+    if(matched)continue;
+    if(/[0-9]/.test(sql[i])){
+      let j=i;while(j<sql.length&&/[0-9.]/.test(sql[j]))j++;
+      tokens.push({type:'num',text:sql.slice(i,j)});
+      i=j;continue;
+    }
+    if(/[a-zA-Z_]/.test(sql[i])){
+      let j=i;while(j<sql.length&&/[a-zA-Z0-9_.]/.test(sql[j]))j++;
+      tokens.push({type:'ident',text:sql.slice(i,j)});
+      i=j;continue;
+    }
+    tokens.push({type:'sym',text:sql[i]});
+    i++;
+  }
+  return tokens;
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function explain(){
+  const sql=$('inp').value;
+  if(!sql.trim()){
+    $('hl').innerHTML='<span style="color:var(--muted)">Paste a SQL query on the left...</span>';
+    $('clauses').innerHTML='';
+    $('execOrder').innerHTML='';
+    return;
+  }
+  const tokens=tokenize(sql);
+  const found=new Map();
+  let html='';
+  for(const t of tokens){
+    if(t.type==='kw'){
+      const c=COLORS[t.kw]||'#64748b';
+      html+=`<span class="kw" style="color:${c};background:${c}15">${esc(t.text)}</span>`;
+      if(!found.has(t.kw))found.set(t.kw,DESCS[t.kw]||'SQL keyword.');
+    }else if(t.type==='str'){
+      html+=`<span style="color:#16a34a">${esc(t.text)}</span>`;
+    }else if(t.type==='num'){
+      html+=`<span style="color:#2563eb">${esc(t.text)}</span>`;
+    }else if(t.type==='comment'){
+      html+=`<span style="color:var(--muted);font-style:italic">${esc(t.text)}</span>`;
+    }else{
+      html+=esc(t.text);
+    }
+  }
+  $('hl').innerHTML=html;
+
+  let clauseHtml='';
+  for(const [kw,desc] of found){
+    const c=COLORS[kw]||'#64748b';
+    clauseHtml+=`<div class="clause-item"><span class="clause-badge" style="color:${c};background:${c}15;border:1px solid ${c}30">${esc(kw)}</span><span class="clause-desc">${esc(desc)}</span></div>`;
+  }
+  if(!clauseHtml)clauseHtml='<div class="empty">No SQL clauses detected.</div>';
+  $('clauses').innerHTML=clauseHtml;
+
+  let orderHtml='';
+  let step=1;
+  for(const e of EXEC_ORDER){
+    const matches=e.match||[e.kw];
+    if(matches.some(m=>found.has(m))){
+      orderHtml+=`<div class="exec-step"><span class="num">${step}.</span>${e.label}</div>`;
+      step++;
+    }
+  }
+  $('execOrder').innerHTML=orderHtml||'<span style="color:var(--muted)">Enter a query to see execution order.</span>';
+}
+
+explain();
+</script>
+</body>
+</html>
