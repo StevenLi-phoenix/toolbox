@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event Timeline Builder - Free Online Tool</title>
+<meta name="description" content="Create visual event timelines for projects, incidents, or releases. Add events with dates and descriptions, then export as SVG or HTML.">
+<meta name="keywords" content="timeline builder, event timeline, project timeline, incident timeline, visual timeline generator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/timeline.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .tl-layout { display: grid; grid-template-columns: 380px 1fr; gap: 1.5rem; }
+  .event-form {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1rem; background: var(--surface);
+  }
+  .event-form .field { margin-bottom: .75rem; }
+  .event-form label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+  .event-form input, .event-form textarea, .event-form select {
+    width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-size: .85rem; font-family: var(--sans);
+  }
+  .event-form textarea { resize: vertical; min-height: 60px; }
+  .color-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+  .color-swatch {
+    width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
+    cursor: pointer; transition: border-color .15s;
+  }
+  .color-swatch.active, .color-swatch:hover { border-color: var(--text); }
+  .event-list { margin-top: 1rem; }
+  .event-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 6px; font-size: .82rem; background: var(--bg);
+  }
+  .event-item .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
+  .event-item .info { flex: 1; }
+  .event-item .date { color: var(--muted); font-size: .78rem; }
+  .event-item .actions { display: flex; gap: 4px; }
+  .event-item button {
+    padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: none; color: var(--muted); cursor: pointer; font-size: .75rem;
+  }
+  .event-item button:hover { color: var(--error); border-color: var(--error); }
+  .timeline-preview {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 2rem 1.5rem; min-height: 300px;
+    overflow-x: auto;
+  }
+  .tl-container { position: relative; padding-left: 30px; }
+  .tl-line {
+    position: absolute; left: 14px; top: 0; bottom: 0; width: 2px;
+    background: var(--border);
+  }
+  .tl-event { position: relative; margin-bottom: 2rem; padding-left: 24px; }
+  .tl-event:last-child { margin-bottom: 0; }
+  .tl-dot {
+    position: absolute; left: -24px; top: 4px; width: 16px; height: 16px;
+    border-radius: 50%; border: 3px solid var(--surface);
+    box-shadow: 0 0 0 2px var(--border);
+  }
+  .tl-date { font-size: .78rem; color: var(--muted); margin-bottom: 2px; font-family: var(--mono); }
+  .tl-title { font-weight: 600; font-size: .9rem; margin-bottom: 2px; }
+  .tl-desc { font-size: .82rem; color: var(--muted); line-height: 1.4; }
+  .empty-state { text-align: center; color: var(--muted); padding: 3rem; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+  @media (max-width: 768px) {
+    .tl-layout { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Event Timeline Builder</h1>
+  <p class="subtitle">Add events with dates, titles, and descriptions to create a visual timeline. Export as SVG or copy as HTML.</p>
+
+  <div class="tl-layout">
+    <div>
+      <div class="event-form">
+        <h3 style="margin-bottom:.75rem">Add Event</h3>
+        <div class="field">
+          <label for="evDate">Date</label>
+          <input id="evDate" type="datetime-local">
+        </div>
+        <div class="field">
+          <label for="evTitle">Title</label>
+          <input id="evTitle" placeholder="Event title">
+        </div>
+        <div class="field">
+          <label for="evDesc">Description (optional)</label>
+          <textarea id="evDesc" placeholder="Brief description"></textarea>
+        </div>
+        <div class="field">
+          <label>Color</label>
+          <div class="color-picker" id="colorPicker"></div>
+        </div>
+        <button class="btn" style="width:100%" onclick="addEvent()">Add Event</button>
+      </div>
+
+      <div class="event-list" id="eventList">
+        <h3 style="margin-bottom:.5rem">Events (<span id="eventCount">0</span>)</h3>
+        <div id="eventItems"></div>
+      </div>
+
+      <div class="toolbar" style="margin-top:1rem">
+        <button class="btn-secondary" onclick="sortEvents()">Sort by Date</button>
+        <button class="btn-secondary" onclick="clearAll()">Clear All</button>
+        <button class="btn-secondary" onclick="loadSample()">Load Sample</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="toolbar">
+        <button class="btn" onclick="exportSVG()">Export SVG</button>
+        <button class="btn-secondary" onclick="copyHTML()">Copy HTML</button>
+      </div>
+      <div class="timeline-preview" id="preview"></div>
+    </div>
+  </div>
+
+  <footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+<script>
+const COLORS = ['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#34495e'];
+let events = [];
+let selectedColor = COLORS[0];
+
+function initColorPicker() {
+  const el = document.getElementById('colorPicker');
+  el.innerHTML = COLORS.map(c =>
+    `<div class="color-swatch${c === selectedColor ? ' active' : ''}" style="background:${c}" data-color="${c}" onclick="pickColor('${c}')"></div>`
+  ).join('');
+}
+
+function pickColor(c) {
+  selectedColor = c;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('active', s.dataset.color === c));
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function addEvent() {
+  const date = document.getElementById('evDate').value;
+  const title = document.getElementById('evTitle').value.trim();
+  if (!title) return;
+  events.push({
+    id: Date.now(),
+    date: date || '',
+    title,
+    desc: document.getElementById('evDesc').value.trim(),
+    color: selectedColor
+  });
+  document.getElementById('evTitle').value = '';
+  document.getElementById('evDesc').value = '';
+  render();
+}
+
+function removeEvent(id) {
+  events = events.filter(e => e.id !== id);
+  render();
+}
+
+function sortEvents() {
+  events.sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return new Date(a.date) - new Date(b.date);
+  });
+  render();
+}
+
+function clearAll() {
+  events = [];
+  render();
+}
+
+function formatDate(d) {
+  if (!d) return 'No date';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderEventList() {
+  document.getElementById('eventCount').textContent = events.length;
+  const el = document.getElementById('eventItems');
+  if (!events.length) { el.innerHTML = '<p class="empty" style="color:var(--muted);font-size:.82rem">No events yet.</p>'; return; }
+  el.innerHTML = events.map(e => `
+    <div class="event-item">
+      <div class="dot" style="background:${e.color}"></div>
+      <div class="info">
+        <strong>${esc(e.title)}</strong>
+        <div class="date">${formatDate(e.date)}</div>
+      </div>
+      <div class="actions">
+        <button onclick="removeEvent(${e.id})">&times;</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderPreview() {
+  const el = document.getElementById('preview');
+  if (!events.length) {
+    el.innerHTML = '<div class="empty-state">Add events to see the timeline</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="tl-container">
+      <div class="tl-line"></div>
+      ${events.map(e => `
+        <div class="tl-event">
+          <div class="tl-dot" style="background:${e.color};box-shadow:0 0 0 3px var(--surface),0 0 0 5px ${e.color}40"></div>
+          <div class="tl-date">${formatDate(e.date)}</div>
+          <div class="tl-title">${esc(e.title)}</div>
+          ${e.desc ? `<div class="tl-desc">${esc(e.desc)}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function render() {
+  renderEventList();
+  renderPreview();
+}
+
+function exportSVG() {
+  if (!events.length) return;
+  const W = 600, rowH = 80, pad = 40;
+  const H = pad * 2 + events.length * rowH;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="font-family:system-ui,-apple-system,sans-serif">`;
+  svg += `<rect width="${W}" height="${H}" fill="#1a1a2e"/>`;
+  svg += `<line x1="60" y1="${pad}" x2="60" y2="${H - pad}" stroke="#444" stroke-width="2"/>`;
+  events.forEach((e, i) => {
+    const y = pad + i * rowH + rowH / 2;
+    svg += `<circle cx="60" cy="${y}" r="8" fill="${e.color}"/>`;
+    svg += `<text x="84" y="${y - 8}" fill="#aaa" font-size="12">${esc(formatDate(e.date))}</text>`;
+    svg += `<text x="84" y="${y + 8}" fill="#eee" font-size="14" font-weight="600">${esc(e.title)}</text>`;
+    if (e.desc) svg += `<text x="84" y="${y + 24}" fill="#888" font-size="11">${esc(e.desc.slice(0, 80))}</text>`;
+  });
+  svg += '</svg>';
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'timeline.svg';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function copyHTML() {
+  const el = document.getElementById('preview');
+  navigator.clipboard.writeText(el.innerHTML);
+  const btn = document.querySelector('.toolbar .btn-secondary:nth-child(2)');
+  if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy HTML', 1500); }
+}
+
+function loadSample() {
+  const now = new Date();
+  const samples = [
+    { title: 'Project Kickoff', desc: 'Initial planning and team alignment', color: COLORS[0], offset: -7 },
+    { title: 'Design Review', desc: 'UI/UX mockups approved by stakeholders', color: COLORS[1], offset: -5 },
+    { title: 'Sprint 1 Start', desc: 'Core feature development begins', color: COLORS[2], offset: -3 },
+    { title: 'Alpha Release', desc: 'Internal testing build deployed', color: COLORS[3], offset: -1 },
+    { title: 'Bug Fix Sprint', desc: 'Critical issues from QA resolved', color: COLORS[4], offset: 0 },
+    { title: 'Beta Release', desc: 'External beta testing opens', color: COLORS[5], offset: 2 },
+  ];
+  events = samples.map(s => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + s.offset);
+    return { id: Date.now() + Math.random(), date: d.toISOString().slice(0, 16), title: s.title, desc: s.desc, color: s.color };
+  });
+  render();
+}
+
+initColorPicker();
+render();
+</script>
+</body>
+</html>
