@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Latency Calculator - Free Online Distributed Systems Tool</title>
+<meta name="description" content="Estimate network latency for distributed systems. Calculate round-trip times, propagation delay, bandwidth impact, and multi-hop latency chains. No data leaves your browser.">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/networklatency.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.calc-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group label{font-size:.82rem;font-weight:600;color:var(--muted)}
+.form-group input,.form-group select{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem}
+.form-group select{cursor:pointer}
+.result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px}
+.result-box{padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center}
+.result-box .value{font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--accent)}
+.result-box .label{font-size:.78rem;color:var(--muted);margin-top:4px}
+.latency-bar{height:24px;border-radius:var(--radius);position:relative;overflow:hidden;margin:4px 0}
+.latency-bar .fill{height:100%;border-radius:var(--radius);transition:width .3s}
+.latency-bar .fill.good{background:var(--success)}
+.latency-bar .fill.ok{background:#f59e0b}
+.latency-bar .fill.bad{background:var(--error)}
+.hop-list{display:flex;flex-direction:column;gap:8px}
+.hop-row{display:flex;gap:8px;align-items:center}
+.hop-row input,.hop-row select{padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.82rem;flex:1;min-width:0}
+.hop-row .hop-label{font-size:.78rem;font-weight:600;color:var(--muted);min-width:50px}
+.hop-row button{flex-shrink:0}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.preset-tag{padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:.78rem;cursor:pointer;background:var(--surface);font-family:var(--sans)}
+.preset-tag:hover{background:var(--surface2);border-color:var(--border2)}
+.breakdown{font-family:var(--mono);font-size:.82rem;line-height:1.8}
+.breakdown .component{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border)}
+.breakdown .component:last-child{border-bottom:none}
+.breakdown .total{font-weight:700;color:var(--accent);border-top:2px solid var(--border);padding-top:8px;margin-top:4px}
+.sla-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.sla-table th,.sla-table td{padding:8px 10px;border:1px solid var(--border);text-align:left}
+.sla-table th{background:var(--surface);font-weight:600}
+.sla-table .highlight{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+@media(max-width:768px){.calc-grid{grid-template-columns:1fr}.hop-row{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Network Latency Calculator</h1>
+<p class="subtitle">Estimate round-trip latency for distributed systems — propagation delay, serialization, processing, and multi-hop chains</p>
+
+<div class="card">
+<h2>&#9889; Quick Scenarios</h2>
+<div class="presets">
+<span class="preset-tag" onclick="applyPreset('samedc')">Same Datacenter</span>
+<span class="preset-tag" onclick="applyPreset('crossregion')">Cross-Region (US)</span>
+<span class="preset-tag" onclick="applyPreset('transatlantic')">Transatlantic</span>
+<span class="preset-tag" onclick="applyPreset('transpacific')">Transpacific</span>
+<span class="preset-tag" onclick="applyPreset('cdn')">CDN Edge → Origin</span>
+<span class="preset-tag" onclick="applyPreset('mobile')">Mobile 4G</span>
+<span class="preset-tag" onclick="applyPreset('satellite')">Satellite (LEO)</span>
+<span class="preset-tag" onclick="applyPreset('geo')">Geostationary Sat</span>
+<span class="preset-tag" onclick="applyPreset('microservice')">Microservice Chain</span>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128225; Single Hop Calculator</h2>
+<div class="calc-grid">
+<div class="form-group">
+<label>Distance (km)</label>
+<input type="number" id="distance" value="5000" oninput="calcSingle()">
+</div>
+<div class="form-group">
+<label>Medium</label>
+<select id="medium" onchange="calcSingle()">
+<option value="0.67">Fiber Optic (⅔c)</option>
+<option value="0.9">Copper Cable (0.9c)</option>
+<option value="1.0">Vacuum / Wireless (c)</option>
+<option value="0.77">Undersea Cable (0.77c)</option>
+</select>
+</div>
+<div class="form-group">
+<label>Payload Size (KB)</label>
+<input type="number" id="payload" value="50" oninput="calcSingle()">
+</div>
+<div class="form-group">
+<label>Bandwidth (Mbps)</label>
+<input type="number" id="bandwidth" value="1000" oninput="calcSingle()">
+</div>
+<div class="form-group">
+<label>Processing Time (ms)</label>
+<input type="number" id="processing" value="5" step="0.1" oninput="calcSingle()">
+</div>
+<div class="form-group">
+<label>Queuing Delay (ms)</label>
+<input type="number" id="queuing" value="1" step="0.1" oninput="calcSingle()">
+</div>
+</div>
+
+<div class="breakdown" id="breakdown" style="margin-top:16px"></div>
+
+<div class="result-grid" id="singleResults"></div>
+</div>
+
+<div class="card">
+<h2>&#128279; Multi-Hop Chain</h2>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Model a request path through multiple services (e.g., CDN → LB → App → Cache → DB)</p>
+<div class="hop-list" id="hopList"></div>
+<div style="margin-top:10px;display:flex;gap:8px">
+<button class="btn" onclick="addHop()">+ Add Hop</button>
+<button class="btn btn-secondary" onclick="resetHops()">Reset</button>
+</div>
+<div class="result-grid" id="chainResults" style="margin-top:16px"></div>
+<div class="breakdown" id="chainBreakdown" style="margin-top:12px"></div>
+</div>
+
+<div class="card">
+<h2>&#128200; SLA Impact Reference</h2>
+<table class="sla-table">
+<thead><tr><th>SLA Target</th><th>Downtime / Year</th><th>Max Latency Budget</th><th>Typical Use Case</th></tr></thead>
+<tbody>
+<tr><td>99.9% (3 nines)</td><td>8h 45m</td><td>500ms</td><td>Internal tools, dashboards</td></tr>
+<tr><td>99.95%</td><td>4h 22m</td><td>300ms</td><td>Business applications</td></tr>
+<tr><td>99.99% (4 nines)</td><td>52m 36s</td><td>200ms</td><td>E-commerce, SaaS APIs</td></tr>
+<tr><td>99.999% (5 nines)</td><td>5m 15s</td><td>100ms</td><td>Financial, real-time systems</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="card">
+<h2>&#128218; Latency Reference Numbers</h2>
+<table class="sla-table">
+<thead><tr><th>Operation</th><th>Typical Latency</th></tr></thead>
+<tbody>
+<tr><td>L1 cache reference</td><td>0.5 ns</td></tr>
+<tr><td>L2 cache reference</td><td>7 ns</td></tr>
+<tr><td>Main memory reference</td><td>100 ns</td></tr>
+<tr><td>SSD random read</td><td>150 μs</td></tr>
+<tr><td>HDD random read</td><td>10 ms</td></tr>
+<tr><td>Same datacenter RTT</td><td>0.5 ms</td></tr>
+<tr><td>Same region (cloud)</td><td>1–2 ms</td></tr>
+<tr><td>Cross-region (US)</td><td>40–70 ms</td></tr>
+<tr><td>US → Europe</td><td>80–120 ms</td></tr>
+<tr><td>US → Asia</td><td>150–250 ms</td></tr>
+<tr><td>DNS lookup</td><td>20–120 ms</td></tr>
+<tr><td>TLS handshake</td><td>30–100 ms</td></tr>
+<tr><td>TCP handshake</td><td>1 RTT (varies)</td></tr>
+</tbody>
+</table>
+</div>
+
+<footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const SPEED_OF_LIGHT = 299792.458;
+
+function calcSingle(){
+  const dist = parseFloat($('distance').value) || 0;
+  const speedFactor = parseFloat($('medium').value) || 0.67;
+  const payloadKB = parseFloat($('payload').value) || 0;
+  const bwMbps = parseFloat($('bandwidth').value) || 1;
+  const procMs = parseFloat($('processing').value) || 0;
+  const queueMs = parseFloat($('queuing').value) || 0;
+
+  const propagation = (dist / (SPEED_OF_LIGHT * speedFactor)) * 1000;
+  const serialization = (payloadKB * 8) / (bwMbps) ;
+  const oneWay = propagation + serialization + procMs + queueMs;
+  const rtt = propagation * 2 + serialization * 2 + procMs + queueMs;
+  const tcpHandshake = propagation * 2;
+  const tlsHandshake = propagation * 4;
+  const firstByte = tcpHandshake + tlsHandshake + oneWay;
+
+  $('breakdown').innerHTML = `
+    <div class="component"><span>Propagation delay (one-way)</span><span>${propagation.toFixed(2)} ms</span></div>
+    <div class="component"><span>Serialization delay</span><span>${serialization.toFixed(2)} ms</span></div>
+    <div class="component"><span>Processing time</span><span>${procMs.toFixed(2)} ms</span></div>
+    <div class="component"><span>Queuing delay</span><span>${queueMs.toFixed(2)} ms</span></div>
+    <div class="component total"><span>Round-Trip Time (RTT)</span><span>${rtt.toFixed(2)} ms</span></div>
+  `;
+
+  const rttClass = rtt < 50 ? 'good' : rtt < 150 ? 'ok' : 'bad';
+  $('singleResults').innerHTML = `
+    <div class="result-box"><div class="value">${propagation.toFixed(1)}ms</div><div class="label">Propagation (one-way)</div></div>
+    <div class="result-box"><div class="value">${rtt.toFixed(1)}ms</div><div class="label">Round-Trip Time</div>
+      <div class="latency-bar"><div class="fill ${rttClass}" style="width:${Math.min(100,rtt/5)}%"></div></div>
+    </div>
+    <div class="result-box"><div class="value">${tcpHandshake.toFixed(1)}ms</div><div class="label">TCP Handshake (1 RTT)</div></div>
+    <div class="result-box"><div class="value">${tlsHandshake.toFixed(1)}ms</div><div class="label">TLS 1.3 Handshake (2 RTT)</div></div>
+    <div class="result-box"><div class="value">${firstByte.toFixed(1)}ms</div><div class="label">Time to First Byte</div></div>
+    <div class="result-box"><div class="value">${(1000/rtt).toFixed(0)}</div><div class="label">Max Req/s (serial)</div></div>
+  `;
+}
+
+let hops = [
+  {name:'Client → CDN',latency:20,processing:2},
+  {name:'CDN → Load Balancer',latency:1,processing:1},
+  {name:'LB → App Server',latency:0.5,processing:10},
+  {name:'App → Database',latency:1,processing:5},
+];
+
+function renderHops(){
+  $('hopList').innerHTML = hops.map((h,i)=>`
+    <div class="hop-row">
+      <span class="hop-label">Hop ${i+1}</span>
+      <input value="${h.name}" placeholder="Name" onchange="hops[${i}].name=this.value;calcChain()">
+      <input type="number" value="${h.latency}" step="0.1" placeholder="Latency (ms)" style="max-width:100px" onchange="hops[${i}].latency=parseFloat(this.value)||0;calcChain()">
+      <input type="number" value="${h.processing}" step="0.1" placeholder="Processing (ms)" style="max-width:100px" onchange="hops[${i}].processing=parseFloat(this.value)||0;calcChain()">
+      <button class="btn btn-secondary" onclick="hops.splice(${i},1);renderHops();calcChain()">✕</button>
+    </div>
+  `).join('');
+  calcChain();
+}
+
+function addHop(){
+  hops.push({name:`Hop ${hops.length+1}`,latency:1,processing:2});
+  renderHops();
+}
+
+function resetHops(){
+  hops = [
+    {name:'Client → CDN',latency:20,processing:2},
+    {name:'CDN → Load Balancer',latency:1,processing:1},
+    {name:'LB → App Server',latency:0.5,processing:10},
+    {name:'App → Database',latency:1,processing:5},
+  ];
+  renderHops();
+}
+
+function calcChain(){
+  if(hops.length === 0){
+    $('chainResults').innerHTML = '';
+    $('chainBreakdown').innerHTML = '';
+    return;
+  }
+  let totalLatency = 0;
+  let totalProcessing = 0;
+  let breakdown = '';
+
+  hops.forEach(h=>{
+    const hopTotal = h.latency + h.processing;
+    totalLatency += h.latency;
+    totalProcessing += h.processing;
+    const cls = hopTotal < 5 ? 'good' : hopTotal < 30 ? 'ok' : 'bad';
+    breakdown += `<div class="component"><span>${escHtml(h.name)}</span><span>${h.latency}ms + ${h.processing}ms = ${hopTotal.toFixed(1)}ms</span></div>`;
+  });
+
+  const totalOneWay = totalLatency + totalProcessing;
+  const totalRTT = totalOneWay * 2 - totalProcessing;
+  const rttClass = totalOneWay < 50 ? 'good' : totalOneWay < 150 ? 'ok' : 'bad';
+
+  breakdown += `<div class="component total"><span>Total (request path)</span><span>${totalOneWay.toFixed(1)} ms</span></div>`;
+  $('chainBreakdown').innerHTML = breakdown;
+
+  $('chainResults').innerHTML = `
+    <div class="result-box"><div class="value">${totalOneWay.toFixed(1)}ms</div><div class="label">Total One-Way</div>
+      <div class="latency-bar"><div class="fill ${rttClass}" style="width:${Math.min(100,totalOneWay/5)}%"></div></div>
+    </div>
+    <div class="result-box"><div class="value">${totalLatency.toFixed(1)}ms</div><div class="label">Network Latency</div></div>
+    <div class="result-box"><div class="value">${totalProcessing.toFixed(1)}ms</div><div class="label">Processing Time</div></div>
+    <div class="result-box"><div class="value">${hops.length}</div><div class="label">Total Hops</div></div>
+  `;
+}
+
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function applyPreset(name){
+  const presets = {
+    samedc:{distance:0.5,medium:'0.67',payload:50,bandwidth:10000,processing:1,queuing:0.1},
+    crossregion:{distance:4000,medium:'0.67',payload:50,bandwidth:1000,processing:5,queuing:1},
+    transatlantic:{distance:6000,medium:'0.77',payload:50,bandwidth:1000,processing:5,queuing:2},
+    transpacific:{distance:11000,medium:'0.77',payload:50,bandwidth:1000,processing:5,queuing:2},
+    cdn:{distance:500,medium:'0.67',payload:200,bandwidth:1000,processing:3,queuing:0.5},
+    mobile:{distance:50,medium:'1.0',payload:50,bandwidth:50,processing:10,queuing:20},
+    satellite:{distance:1200,medium:'1.0',payload:10,bandwidth:100,processing:5,queuing:5},
+    geo:{distance:35786,medium:'1.0',payload:10,bandwidth:50,processing:5,queuing:10},
+    microservice:{distance:0.1,medium:'0.67',payload:5,bandwidth:10000,processing:2,queuing:0.5},
+  };
+  const p = presets[name];
+  if(!p) return;
+  $('distance').value = p.distance;
+  $('medium').value = p.medium;
+  $('payload').value = p.payload;
+  $('bandwidth').value = p.bandwidth;
+  $('processing').value = p.processing;
+  $('queuing').value = p.queuing;
+  calcSingle();
+}
+
+calcSingle();
+renderHops();
+</script>
+</body>
+</html>
