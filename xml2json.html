@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XML to JSON Converter - Free Online Tool</title>
+<meta name="description" content="Convert XML documents to JSON with customizable attribute handling, array detection, and text node options. Fully client-side.">
+<meta name="keywords" content="xml to json converter, xml json transform, xml parser, xml2json online, convert xml json">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/xml2json.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .editor-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .editor-col { display: flex; flex-direction: column; }
+  .editor-col h3 { margin-bottom: .5rem; display: flex; align-items: center; gap: .5rem; }
+  .editor-col h3 .badge { font-size: .7rem; padding: 2px 8px; border-radius: 10px; background: var(--surface2); color: var(--muted); font-weight: 400; }
+  textarea {
+    flex: 1; min-height: 400px; font-family: var(--mono); font-size: .85rem; line-height: 1.5;
+    padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); resize: vertical; tab-size: 2;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .options { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; align-items: center; }
+  .options label { display: flex; align-items: center; gap: .35rem; font-size: .85rem; color: var(--muted); cursor: pointer; }
+  .options label input { accent-color: var(--accent); }
+  .toolbar { display: flex; gap: .5rem; margin-bottom: .75rem; }
+  .stats { font-size: .8rem; color: var(--muted); margin-top: .5rem; }
+  .error-banner { padding: .75rem 1rem; background: rgba(231,76,60,.1); border: 1px solid var(--error); border-radius: var(--radius); color: var(--error); font-size: .85rem; margin-bottom: .75rem; display: none; }
+  @media (max-width: 768px) {
+    .editor-layout { grid-template-columns: 1fr; }
+    textarea { min-height: 250px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>XML to JSON Converter</h1>
+  <p class="subtitle">Paste XML on the left and get JSON on the right. Customize how attributes, text nodes, and arrays are handled.</p>
+
+  <div class="options">
+    <label><input type="checkbox" id="optAttrPrefix" checked> Prefix attributes with <code>@</code></label>
+    <label><input type="checkbox" id="optTextKey"> Use <code>#text</code> for text nodes</label>
+    <label><input type="checkbox" id="optTrimText" checked> Trim whitespace</label>
+    <label><input type="checkbox" id="optArrays" checked> Force arrays for repeated elements</label>
+    <label><input type="checkbox" id="optCompact" checked> Compact single-text elements</label>
+    <label><input type="number" id="optIndent" value="2" min="0" max="8" style="width:50px;padding:2px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);"> Indent</label>
+  </div>
+
+  <div class="error-banner" id="error"></div>
+
+  <div class="editor-layout">
+    <div class="editor-col">
+      <h3>XML Input <span class="badge" id="xmlSize">0 B</span></h3>
+      <div class="toolbar">
+        <button class="btn" onclick="convert()">Convert &rarr;</button>
+        <button class="btn-secondary" onclick="loadSample()">Sample</button>
+        <button class="btn-secondary" onclick="clearAll()">Clear</button>
+      </div>
+      <textarea id="xmlInput" placeholder="Paste your XML here..." spellcheck="false"></textarea>
+    </div>
+    <div class="editor-col">
+      <h3>JSON Output <span class="badge" id="jsonSize">0 B</span></h3>
+      <div class="toolbar">
+        <button class="btn-secondary" onclick="copyOutput()">Copy</button>
+        <button class="btn-secondary" onclick="downloadJSON()">Download</button>
+      </div>
+      <textarea id="jsonOutput" readonly placeholder="JSON result will appear here..." spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+<script>
+const xmlInput = document.getElementById('xmlInput');
+const jsonOutput = document.getElementById('jsonOutput');
+const errorBanner = document.getElementById('error');
+
+function getOpts() {
+  return {
+    attrPrefix: document.getElementById('optAttrPrefix').checked,
+    textKey: document.getElementById('optTextKey').checked,
+    trimText: document.getElementById('optTrimText').checked,
+    forceArrays: document.getElementById('optArrays').checked,
+    compact: document.getElementById('optCompact').checked,
+    indent: parseInt(document.getElementById('optIndent').value) || 2
+  };
+}
+
+function xmlNodeToObj(node, opts) {
+  const obj = {};
+
+  if (node.attributes && node.attributes.length > 0) {
+    for (let i = 0; i < node.attributes.length; i++) {
+      const attr = node.attributes[i];
+      const key = (opts.attrPrefix ? '@' : '') + attr.name;
+      obj[key] = attr.value;
+    }
+  }
+
+  const childElements = [];
+  let textContent = '';
+
+  for (let i = 0; i < node.childNodes.length; i++) {
+    const child = node.childNodes[i];
+    if (child.nodeType === 1) {
+      childElements.push(child);
+    } else if (child.nodeType === 3 || child.nodeType === 4) {
+      textContent += child.nodeValue || '';
+    }
+  }
+
+  if (opts.trimText) textContent = textContent.trim();
+
+  // Count child element tag occurrences
+  const tagCounts = {};
+  childElements.forEach(el => {
+    tagCounts[el.tagName] = (tagCounts[el.tagName] || 0) + 1;
+  });
+
+  childElements.forEach(el => {
+    const childObj = xmlNodeToObj(el, opts);
+    const isArray = opts.forceArrays && tagCounts[el.tagName] > 1;
+
+    if (isArray) {
+      if (!obj[el.tagName]) obj[el.tagName] = [];
+      obj[el.tagName].push(childObj);
+    } else if (obj[el.tagName] !== undefined) {
+      if (!Array.isArray(obj[el.tagName])) obj[el.tagName] = [obj[el.tagName]];
+      obj[el.tagName].push(childObj);
+    } else {
+      obj[el.tagName] = childObj;
+    }
+  });
+
+  const hasAttrs = node.attributes && node.attributes.length > 0;
+  const hasChildren = childElements.length > 0;
+
+  if (textContent) {
+    if (!hasAttrs && !hasChildren && opts.compact) {
+      return textContent;
+    }
+    const textKey = opts.textKey ? '#text' : '$text';
+    obj[textKey] = textContent;
+  }
+
+  if (!hasAttrs && !hasChildren && !textContent) {
+    return opts.compact ? null : {};
+  }
+
+  return obj;
+}
+
+function convert() {
+  const xml = xmlInput.value.trim();
+  errorBanner.style.display = 'none';
+
+  if (!xml) {
+    jsonOutput.value = '';
+    updateStats();
+    return;
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+
+  const parseError = doc.querySelector('parsererror');
+  if (parseError) {
+    errorBanner.textContent = 'XML Parse Error: ' + parseError.textContent.split('\n')[0];
+    errorBanner.style.display = 'block';
+    jsonOutput.value = '';
+    updateStats();
+    return;
+  }
+
+  const opts = getOpts();
+  const root = doc.documentElement;
+  const result = {};
+  result[root.tagName] = xmlNodeToObj(root, opts);
+
+  jsonOutput.value = JSON.stringify(result, null, opts.indent);
+  updateStats();
+}
+
+function updateStats() {
+  document.getElementById('xmlSize').textContent = formatSize(new Blob([xmlInput.value]).size);
+  document.getElementById('jsonSize').textContent = formatSize(new Blob([jsonOutput.value]).size);
+}
+
+function formatSize(bytes) {
+  if (bytes === 0) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  return (bytes / 1024).toFixed(1) + ' KB';
+}
+
+function copyOutput() {
+  if (!jsonOutput.value) return;
+  navigator.clipboard.writeText(jsonOutput.value).then(() => showToast('Copied to clipboard'));
+}
+
+function downloadJSON() {
+  if (!jsonOutput.value) return;
+  const blob = new Blob([jsonOutput.value], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'converted.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function clearAll() {
+  xmlInput.value = '';
+  jsonOutput.value = '';
+  errorBanner.style.display = 'none';
+  updateStats();
+}
+
+function loadSample() {
+  xmlInput.value = `<?xml version="1.0" encoding="UTF-8"?>
+<bookstore>
+  <book category="fiction">
+    <title lang="en">The Great Gatsby</title>
+    <author>F. Scott Fitzgerald</author>
+    <year>1925</year>
+    <price>10.99</price>
+  </book>
+  <book category="non-fiction">
+    <title lang="en">Sapiens</title>
+    <author>Yuval Noah Harari</author>
+    <year>2011</year>
+    <price>14.99</price>
+  </book>
+  <metadata>
+    <updated>2024-01-15</updated>
+    <count>2</count>
+  </metadata>
+</bookstore>`;
+  convert();
+}
+
+function showToast(msg) {
+  let t = document.querySelector('.toast');
+  if (t) t.remove();
+  t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('show'), 10);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2000);
+}
+
+// Auto-convert on option change
+document.querySelectorAll('.options input').forEach(el => el.addEventListener('change', convert));
+xmlInput.addEventListener('input', () => { convert(); });
+</script>
+</body>
+</html>

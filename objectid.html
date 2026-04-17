@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MongoDB ObjectID Parser & Generator - Free Online Tool</title>
+<meta name="description" content="Parse MongoDB ObjectIDs to extract timestamp, machine ID, process ID, and counter. Generate new ObjectIDs instantly.">
+<meta name="keywords" content="mongodb objectid parser, objectid generator, bson objectid, mongodb id decoder, objectid timestamp">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/objectid.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .input-row { display: flex; gap: .5rem; margin-bottom: 1rem; }
+  .input-row input { flex: 1; font-family: var(--mono); font-size: 1rem; padding: .6rem .8rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .input-row input.invalid { border-color: var(--error); }
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .field { padding: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .field label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: .25rem; }
+  .field .value { font-family: var(--mono); font-size: .95rem; word-break: break-all; }
+  .hex-visual { font-family: var(--mono); font-size: 1.1rem; line-height: 2; text-align: center; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; letter-spacing: .15em; }
+  .hex-visual span { padding: 2px 1px; border-radius: 3px; }
+  .c-ts { background: rgba(231,76,60,.2); color: #e74c3c; }
+  .c-rnd { background: rgba(46,204,113,.2); color: #2ecc71; }
+  .c-cnt { background: rgba(52,152,219,.2); color: #3498db; }
+  .legend { display: flex; gap: 1rem; justify-content: center; font-size: .8rem; color: var(--muted); margin-bottom: 1rem; }
+  .legend span::before { content: '●'; margin-right: 4px; }
+  .legend .l-ts::before { color: #e74c3c; }
+  .legend .l-rnd::before { color: #2ecc71; }
+  .legend .l-cnt::before { color: #3498db; }
+  .gen-section { margin-top: 1.5rem; }
+  .gen-list { display: flex; flex-direction: column; gap: .4rem; margin-top: .75rem; }
+  .gen-item { display: flex; align-items: center; gap: .5rem; font-family: var(--mono); font-size: .9rem; padding: .5rem .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: border-color .15s; }
+  .gen-item:hover { border-color: var(--accent); }
+  .gen-item .ts { font-size: .75rem; color: var(--muted); margin-left: auto; font-family: var(--sans); }
+  .error-msg { color: var(--error); font-size: .85rem; margin-bottom: .5rem; display: none; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .field-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>MongoDB ObjectID Parser & Generator</h1>
+  <p class="subtitle">Parse a 24-character hex ObjectID to extract its embedded timestamp, random value, and counter — or generate fresh IDs.</p>
+
+  <div class="panels">
+    <div>
+      <h3>Parse ObjectID</h3>
+      <div class="input-row">
+        <input type="text" id="oidInput" placeholder="e.g. 507f1f77bcf86cd799439011" maxlength="24" spellcheck="false">
+        <button class="btn" onclick="parseOID()">Parse</button>
+      </div>
+      <div class="error-msg" id="error"></div>
+
+      <div id="hexVisual" class="hex-visual" style="display:none"></div>
+      <div class="legend" id="legend" style="display:none">
+        <span class="l-ts">Timestamp (4 B)</span>
+        <span class="l-rnd">Random (5 B)</span>
+        <span class="l-cnt">Counter (3 B)</span>
+      </div>
+
+      <div class="field-grid" id="fields" style="display:none">
+        <div class="field"><label>Timestamp (Unix)</label><div class="value" id="fUnix"></div></div>
+        <div class="field"><label>Date (UTC)</label><div class="value" id="fDate"></div></div>
+        <div class="field"><label>Date (Local)</label><div class="value" id="fLocal"></div></div>
+        <div class="field"><label>Random Value</label><div class="value" id="fRandom"></div></div>
+        <div class="field"><label>Counter</label><div class="value" id="fCounter"></div></div>
+        <div class="field"><label>Hex Bytes</label><div class="value" id="fHex"></div></div>
+      </div>
+    </div>
+
+    <div>
+      <h3>Generate ObjectIDs</h3>
+      <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.5rem;">
+        <label style="font-size:.85rem;color:var(--muted);">Count:</label>
+        <input type="number" id="genCount" value="5" min="1" max="50" style="width:70px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);">
+        <button class="btn" onclick="generateOIDs()">Generate</button>
+      </div>
+      <p style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem;">Click any ID to copy it. IDs use current timestamp + crypto random bytes.</p>
+      <div class="gen-list" id="genList"></div>
+
+      <div class="gen-section">
+        <h3>Custom Timestamp</h3>
+        <p style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;">Generate an ObjectID with a specific date.</p>
+        <div class="input-row">
+          <input type="datetime-local" id="customDate" style="font-family:var(--mono);font-size:.9rem;">
+          <button class="btn-secondary" onclick="genFromDate()">Generate</button>
+        </div>
+        <div class="gen-item" id="customResult" style="display:none;" onclick="copyText(this.dataset.oid)">
+          <span id="customOid"></span>
+          <span class="ts" id="customTs"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+<script>
+function parseOID() {
+  const raw = document.getElementById('oidInput').value.trim();
+  const err = document.getElementById('error');
+  const fields = document.getElementById('fields');
+  const hexVis = document.getElementById('hexVisual');
+  const legend = document.getElementById('legend');
+
+  err.style.display = 'none';
+  document.getElementById('oidInput').classList.remove('invalid');
+
+  if (!/^[0-9a-fA-F]{24}$/.test(raw)) {
+    err.textContent = 'Invalid ObjectID — must be exactly 24 hex characters.';
+    err.style.display = 'block';
+    document.getElementById('oidInput').classList.add('invalid');
+    fields.style.display = 'none';
+    hexVis.style.display = 'none';
+    legend.style.display = 'none';
+    return;
+  }
+
+  const hex = raw.toLowerCase();
+  const tsHex = hex.slice(0, 8);
+  const rndHex = hex.slice(8, 18);
+  const cntHex = hex.slice(18, 24);
+
+  const tsSeconds = parseInt(tsHex, 16);
+  const date = new Date(tsSeconds * 1000);
+  const counter = parseInt(cntHex, 16);
+
+  // Color-coded hex visual
+  let vis = '';
+  for (let i = 0; i < 24; i += 2) {
+    const byte = hex.slice(i, i + 2);
+    let cls = 'c-ts';
+    if (i >= 8 && i < 18) cls = 'c-rnd';
+    else if (i >= 18) cls = 'c-cnt';
+    vis += `<span class="${cls}">${byte}</span> `;
+  }
+  hexVis.innerHTML = vis;
+  hexVis.style.display = 'block';
+  legend.style.display = 'flex';
+
+  document.getElementById('fUnix').textContent = tsSeconds;
+  document.getElementById('fDate').textContent = date.toISOString();
+  document.getElementById('fLocal').textContent = date.toLocaleString();
+  document.getElementById('fRandom').textContent = '0x' + rndHex;
+  document.getElementById('fCounter').textContent = counter + ' (0x' + cntHex + ')';
+  document.getElementById('fHex').textContent = hex.match(/.{2}/g).join(' ');
+
+  fields.style.display = 'grid';
+}
+
+function generateObjectId(timestamp) {
+  const ts = timestamp || Math.floor(Date.now() / 1000);
+  const tsHex = ts.toString(16).padStart(8, '0');
+  const rndBytes = crypto.getRandomValues(new Uint8Array(8));
+  const rndHex = Array.from(rndBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return tsHex + rndHex;
+}
+
+function generateOIDs() {
+  const count = Math.min(50, Math.max(1, parseInt(document.getElementById('genCount').value) || 5));
+  const list = document.getElementById('genList');
+  list.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const oid = generateObjectId();
+    const ts = parseInt(oid.slice(0, 8), 16);
+    const date = new Date(ts * 1000);
+    const el = document.createElement('div');
+    el.className = 'gen-item';
+    el.dataset.oid = oid;
+    el.onclick = function() { copyText(oid); };
+    el.innerHTML = `<span>${oid}</span><span class="ts">${date.toISOString().slice(0, 19)}Z</span>`;
+    list.appendChild(el);
+  }
+}
+
+function genFromDate() {
+  const input = document.getElementById('customDate').value;
+  if (!input) return;
+  const ts = Math.floor(new Date(input).getTime() / 1000);
+  if (isNaN(ts) || ts < 0) return;
+  const oid = generateObjectId(ts);
+  const date = new Date(ts * 1000);
+  document.getElementById('customOid').textContent = oid;
+  document.getElementById('customTs').textContent = date.toISOString().slice(0, 19) + 'Z';
+  const el = document.getElementById('customResult');
+  el.dataset.oid = oid;
+  el.style.display = 'flex';
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Copied to clipboard');
+  });
+}
+
+function showToast(msg) {
+  let t = document.querySelector('.toast');
+  if (t) t.remove();
+  t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('show'), 10);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2000);
+}
+
+// Auto-parse on paste
+document.getElementById('oidInput').addEventListener('paste', () => setTimeout(parseOID, 0));
+document.getElementById('oidInput').addEventListener('keydown', e => { if (e.key === 'Enter') parseOID(); });
+
+// Generate initial set
+generateOIDs();
+
+// Set default datetime to now
+const now = new Date();
+now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+document.getElementById('customDate').value = now.toISOString().slice(0, 16);
+</script>
+</body>
+</html>

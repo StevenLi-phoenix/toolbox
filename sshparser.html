@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSH Public Key Parser - Free Online Tool</title>
+<meta name="description" content="Parse SSH public keys to extract key type, bit length, fingerprint (SHA-256 and MD5), and comment. Supports RSA, Ed25519, ECDSA.">
+<meta name="keywords" content="ssh key parser, ssh public key analyzer, ssh fingerprint, ssh key info, ssh-rsa decoder">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sshparser.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; min-height: 120px; font-family: var(--mono); font-size: .85rem; line-height: 1.5;
+    padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); resize: vertical;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .actions { display: flex; gap: .5rem; margin: .75rem 0; }
+  .result-card { padding: 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; }
+  .result-card h3 { margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem; }
+  .result-card h3 .type-badge { font-size: .75rem; padding: 2px 10px; border-radius: 10px; font-weight: 500; }
+  .badge-rsa { background: rgba(52,152,219,.15); color: #3498db; }
+  .badge-ed25519 { background: rgba(46,204,113,.15); color: #2ecc71; }
+  .badge-ecdsa { background: rgba(155,89,182,.15); color: #9b59b6; }
+  .badge-dsa { background: rgba(230,126,34,.15); color: #e67e22; }
+  .badge-unknown { background: var(--surface2); color: var(--muted); }
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .75rem; }
+  .info-field { padding: .6rem .75rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  .info-field label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: .2rem; }
+  .info-field .val { font-family: var(--mono); font-size: .85rem; word-break: break-all; cursor: pointer; }
+  .info-field .val:hover { color: var(--accent); }
+  .fingerprint-section { margin-top: .75rem; }
+  .fingerprint-section h4 { font-size: .85rem; margin-bottom: .5rem; color: var(--muted); }
+  .fp-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+  .fp-label { font-size: .75rem; color: var(--muted); min-width: 60px; font-family: var(--mono); }
+  .fp-value { font-family: var(--mono); font-size: .82rem; cursor: pointer; word-break: break-all; }
+  .fp-value:hover { color: var(--accent); }
+  .art-box { font-family: var(--mono); font-size: .75rem; line-height: 1.2; padding: .75rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); white-space: pre; overflow-x: auto; margin-top: .75rem; }
+  .error-msg { padding: .75rem 1rem; background: rgba(231,76,60,.1); border: 1px solid var(--error); border-radius: var(--radius); color: var(--error); font-size: .85rem; display: none; }
+  .multi-keys { font-size: .8rem; color: var(--muted); margin-bottom: .5rem; }
+  @media (max-width: 768px) {
+    .info-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>SSH Public Key Parser</h1>
+  <p class="subtitle">Paste one or more SSH public keys to see key type, bit length, SHA-256/MD5 fingerprints, and comments. Click any value to copy.</p>
+
+  <textarea id="keyInput" placeholder="ssh-rsa AAAAB3NzaC1yc2EAAA... user@host&#10;ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host" spellcheck="false"></textarea>
+  <div class="actions">
+    <button class="btn" onclick="parseKeys()">Parse</button>
+    <button class="btn-secondary" onclick="loadSample()">Sample</button>
+    <button class="btn-secondary" onclick="clearAll()">Clear</button>
+  </div>
+  <div class="error-msg" id="error"></div>
+  <div id="results"></div>
+
+  <footer>Built with ☕ by Steven Li · No data leaves your browser</footer>
+</div>
+<script>
+const KEY_TYPES = {
+  'ssh-rsa': { name: 'RSA', badge: 'badge-rsa' },
+  'ssh-ed25519': { name: 'Ed25519', badge: 'badge-ed25519' },
+  'ecdsa-sha2-nistp256': { name: 'ECDSA (P-256)', badge: 'badge-ecdsa' },
+  'ecdsa-sha2-nistp384': { name: 'ECDSA (P-384)', badge: 'badge-ecdsa' },
+  'ecdsa-sha2-nistp521': { name: 'ECDSA (P-521)', badge: 'badge-ecdsa' },
+  'ssh-dss': { name: 'DSA', badge: 'badge-dsa' }
+};
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function readUint32(bytes, offset) {
+  return (bytes[offset] << 24 | bytes[offset+1] << 16 | bytes[offset+2] << 8 | bytes[offset+3]) >>> 0;
+}
+
+function readSSHString(bytes, offset) {
+  const len = readUint32(bytes, offset);
+  return { data: bytes.slice(offset + 4, offset + 4 + len), next: offset + 4 + len };
+}
+
+function estimateBitLength(keyType, keyBytes) {
+  try {
+    let offset = 0;
+    const typeStr = readSSHString(keyBytes, offset);
+    offset = typeStr.next;
+
+    if (keyType === 'ssh-rsa') {
+      const e = readSSHString(keyBytes, offset);
+      offset = e.next;
+      const n = readSSHString(keyBytes, offset);
+      let bits = n.data.length * 8;
+      if (n.data[0] === 0) bits -= 8;
+      return bits;
+    } else if (keyType === 'ssh-ed25519') {
+      return 256;
+    } else if (keyType.startsWith('ecdsa-sha2-nistp')) {
+      const curve = keyType.replace('ecdsa-sha2-nistp', '');
+      return parseInt(curve);
+    } else if (keyType === 'ssh-dss') {
+      const p = readSSHString(keyBytes, offset);
+      let bits = p.data.length * 8;
+      if (p.data[0] === 0) bits -= 8;
+      return bits;
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function computeFingerprints(keyBytes) {
+  const sha256Buf = await crypto.subtle.digest('SHA-256', keyBytes);
+  const sha256B64 = btoa(String.fromCharCode(...new Uint8Array(sha256Buf))).replace(/=+$/, '');
+
+  const md5Buf = await computeMD5(keyBytes);
+
+  return {
+    sha256: 'SHA256:' + sha256B64,
+    md5: 'MD5:' + md5Buf
+  };
+}
+
+async function computeMD5(data) {
+  // Simple MD5 for fingerprint display
+  const hex = Array.from(new Uint8Array(await md5(data))).map(b => b.toString(16).padStart(2, '0'));
+  return hex.join(':');
+}
+
+// Minimal MD5 implementation for SSH fingerprints
+function md5(data) {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  const words = [];
+  for (let i = 0; i < bytes.length; i += 4) {
+    words.push((bytes[i] || 0) | ((bytes[i+1] || 0) << 8) | ((bytes[i+2] || 0) << 16) | ((bytes[i+3] || 0) << 24));
+  }
+
+  let len = bytes.length;
+  words[len >> 2] |= 0x80 << ((len % 4) * 8);
+  const needed = (len >> 2) + 2;
+  const totalWords = (((needed + 15) >> 4) << 4);
+  while (words.length < totalWords) words.push(0);
+  words[totalWords - 2] = (len * 8) & 0xFFFFFFFF;
+  words[totalWords - 1] = 0;
+
+  let a = 0x67452301, b = 0xefcdab89, c = 0x98badcfe, d = 0x10325476;
+
+  const S = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,
+             5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,
+             4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,
+             6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+  const K = new Uint32Array(64);
+  for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 0x100000000);
+
+  for (let i = 0; i < words.length; i += 16) {
+    let aa = a, bb = b, cc = c, dd = d;
+    for (let j = 0; j < 64; j++) {
+      let f, g;
+      if (j < 16) { f = (b & c) | (~b & d); g = j; }
+      else if (j < 32) { f = (d & b) | (~d & c); g = (5*j + 1) % 16; }
+      else if (j < 48) { f = b ^ c ^ d; g = (3*j + 5) % 16; }
+      else { f = c ^ (b | ~d); g = (7*j) % 16; }
+      const temp = d;
+      d = c; c = b;
+      const x = (a + f + K[j] + (words[i + g] || 0)) | 0;
+      b = (b + ((x << S[j]) | (x >>> (32 - S[j])))) | 0;
+      a = temp;
+    }
+    a = (a + aa) | 0; b = (b + bb) | 0; c = (c + cc) | 0; d = (d + dd) | 0;
+  }
+
+  const result = new Uint8Array(16);
+  [a, b, c, d].forEach((v, i) => {
+    result[i*4] = v & 0xff;
+    result[i*4+1] = (v >> 8) & 0xff;
+    result[i*4+2] = (v >> 16) & 0xff;
+    result[i*4+3] = (v >> 24) & 0xff;
+  });
+  return Promise.resolve(result.buffer);
+}
+
+async function parseKeys() {
+  const input = document.getElementById('keyInput').value.trim();
+  const errorEl = document.getElementById('error');
+  const resultsEl = document.getElementById('results');
+  errorEl.style.display = 'none';
+  resultsEl.innerHTML = '';
+
+  if (!input) return;
+
+  const lines = input.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+
+  if (lines.length === 0) {
+    errorEl.textContent = 'No valid SSH public keys found.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  let parsed = 0;
+  for (const line of lines) {
+    const parts = line.split(/\s+/);
+    if (parts.length < 2) continue;
+
+    const keyType = parts[0];
+    const keyData = parts[1];
+    const comment = parts.slice(2).join(' ') || '(none)';
+
+    const typeInfo = KEY_TYPES[keyType] || { name: keyType, badge: 'badge-unknown' };
+
+    let keyBytes;
+    try {
+      keyBytes = base64ToBytes(keyData);
+    } catch (e) {
+      continue;
+    }
+
+    const bits = estimateBitLength(keyType, keyBytes);
+    const fp = await computeFingerprints(keyBytes);
+
+    const card = document.createElement('div');
+    card.className = 'result-card';
+
+    let bitsStr = bits ? bits + ' bits' : 'N/A';
+    let secLevel = '';
+    if (keyType === 'ssh-rsa' && bits) {
+      if (bits >= 4096) secLevel = '🟢 Strong';
+      else if (bits >= 2048) secLevel = '🟡 Adequate';
+      else secLevel = '🔴 Weak';
+    } else if (keyType === 'ssh-ed25519') {
+      secLevel = '🟢 Strong';
+    } else if (keyType.startsWith('ecdsa')) {
+      secLevel = bits >= 384 ? '🟢 Strong' : '🟡 Adequate';
+    } else if (keyType === 'ssh-dss') {
+      secLevel = '🔴 Deprecated';
+    }
+
+    card.innerHTML = `
+      <h3><span class="type-badge ${typeInfo.badge}">${typeInfo.name}</span> ${comment !== '(none)' ? comment : ''}</h3>
+      <div class="info-grid">
+        <div class="info-field"><label>Key Type</label><div class="val" onclick="copyVal(this)">${keyType}</div></div>
+        <div class="info-field"><label>Algorithm</label><div class="val" onclick="copyVal(this)">${typeInfo.name}</div></div>
+        <div class="info-field"><label>Bit Length</label><div class="val" onclick="copyVal(this)">${bitsStr}</div></div>
+        <div class="info-field"><label>Security</label><div class="val">${secLevel || 'N/A'}</div></div>
+        <div class="info-field"><label>Comment</label><div class="val" onclick="copyVal(this)">${escHtml(comment)}</div></div>
+        <div class="info-field"><label>Key Data Size</label><div class="val" onclick="copyVal(this)">${keyBytes.length} bytes</div></div>
+      </div>
+      <div class="fingerprint-section">
+        <h4>Fingerprints</h4>
+        <div class="fp-row"><span class="fp-label">SHA-256</span><span class="fp-value" onclick="copyVal(this)">${fp.sha256}</span></div>
+        <div class="fp-row"><span class="fp-label">MD5</span><span class="fp-value" onclick="copyVal(this)">${fp.md5}</span></div>
+      </div>
+    `;
+
+    resultsEl.appendChild(card);
+    parsed++;
+  }
+
+  if (parsed === 0) {
+    errorEl.textContent = 'Could not parse any SSH public keys. Expected format: ssh-rsa AAAA... comment';
+    errorEl.style.display = 'block';
+  } else if (parsed > 1) {
+    const note = document.createElement('div');
+    note.className = 'multi-keys';
+    note.textContent = `Parsed ${parsed} keys`;
+    resultsEl.prepend(note);
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function copyVal(el) {
+  navigator.clipboard.writeText(el.textContent).then(() => showToast('Copied'));
+}
+
+function clearAll() {
+  document.getElementById('keyInput').value = '';
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('error').style.display = 'none';
+}
+
+function loadSample() {
+  document.getElementById('keyInput').value = `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7vbqajDRETmoQFTaYPaRBjGaDqNPbroKKPBIqo31deWuvBnAxXpWAEo38FTWfkNXBJfNNOLJAkSLC5KhGRMB3StGPImnKNXobBWRlKYGFRFM0/QFbFMyjFj4JW4bPknQjHEZbydS+NWytSCqMmroxApNnk39zy6MQFml/3N8+NQBmWFE/wDCnPlxfG8QEsMgcN5Lrm5pXn4pNmJNAJVnGVBRNDqs2iFKVEOaJUPB2Zv6MZN5qHW+UrEbVgrgl3EVrdbaGO6Gkeg2p0K2t0y2LZdlDZwbMDrkLTJgFExsH/bRQZ8g3kWifO8RFHBR5bTikPHTAjlvPwnxZFcOjl5THsrt+oBVKGvs0Iw0opYv2i7sHBN8ly5uDxQLKQFQSBVkp0PNBWMpOSWqZR6sMdL5aME1Y3vaFgCfO5BkVCAEICU0VW8rJ/V+0IxZDxjhbGP6TGOR/J3MFCRDpJwS3GiYQK10Kn+SeDWQdNFsEeKGkT4J7RIlxkVBEf37qGc= user@example.com
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl deploy@server
+ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg= ci-bot`;
+  parseKeys();
+}
+
+function showToast(msg) {
+  let t = document.querySelector('.toast');
+  if (t) t.remove();
+  t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('show'), 10);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2000);
+}
+
+document.getElementById('keyInput').addEventListener('paste', () => setTimeout(parseKeys, 0));
+</script>
+</body>
+</html>
