@@ -26,6 +26,7 @@
 | [CSV to SQL Converter](csv2sql.html) | Convert CSV data to SQL INSERT statements and CREATE TABLE queries. |
 | [CSV Viewer & Editor](csvview.html) | View, sort, filter, and edit CSV data in a sortable table. |
 | [SQL Formatter](sql.html) | Beautify, minify, and syntax-highlight SQL queries. |
+| [CSV Pivot Table](csvpivot.html) | Pivot CSV data — pick row, column, value fields and an aggregation (sum, mean, count, median) to build a cross-tab. |
 
 ## CSS & Styling
 
@@ -52,6 +53,7 @@
 | [Color Blindness Simulator](colorblind.html) | Preview how images appear to people with color blindness. |
 | [SVG Pattern Generator](svgpattern.html) | Generate seamless, tileable SVG background patterns. |
 | [SVG Wave Generator](wavegen.html) | Generate SVG wave dividers with customizable layers and colors. |
+| [CSS Spring Animation Generator](cssspring.html) | Tune mass, stiffness, damping, and velocity to emit CSS @keyframes that mimic react-spring physics. |
 
 ## Images & Media
 
@@ -202,6 +204,7 @@
 | [Uptime & SLA Calculator](sla.html) | Convert availability targets to downtime budgets. |
 | [Ambient Noise Generator](noisegen.html) | Generate white noise, pink noise, rain, and ocean waves. |
 | [Interactive Periodic Table](periodic.html) | Browse all 118 elements with atomic number, mass, electron configuration, and discovery year. |
+| [FPS Frame Budget Calculator](fpsbudget.html) | Convert between target FPS and millisecond frame budget, slice into JS / style / paint / GPU phases, and live-measure real frame time. |
 
 ## AI & PM Tools
 

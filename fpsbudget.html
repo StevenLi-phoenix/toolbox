@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FPS Frame Budget Calculator — Free Online Tool</title>
+<meta name="description" content="Convert between target FPS and the millisecond frame budget. Plan main-thread, render, GPU, and idle slices and live-test your machine's actual frame time.">
+<meta name="keywords" content="frame budget calculator, fps to ms, ms to fps, performance budget, 60 fps, 120 fps, 144 hz, raf timing, requestAnimationFrame">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/fpsbudget.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: end; }
+  label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  input[type=number], input[type=text], select {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: 1rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+  }
+  .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .preset {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface); color: var(--text); font-family: var(--mono); font-size: .82rem;
+    cursor: pointer;
+  }
+  .preset:hover { background: var(--surface2); }
+  .preset.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .out-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+  .stat {
+    padding: 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); text-align: center;
+  }
+  .stat .num { font-family: var(--mono); font-size: 1.4rem; font-weight: 600; color: var(--text); }
+  .stat .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
+  .bar-wrap { margin-top: 16px; }
+  .bar {
+    display: flex; height: 36px; border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--border); background: var(--bg);
+  }
+  .bar > div {
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: .78rem; color: white;
+    overflow: hidden; white-space: nowrap;
+  }
+  .seg-main  { background: #2563eb; }
+  .seg-style { background: #7c3aed; }
+  .seg-paint { background: #db2777; }
+  .seg-gpu   { background: #d97706; }
+  .seg-idle  { background: #16a34a; color: #052e16; }
+  .seg-over  { background: #dc2626; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: .78rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .slice-row { display: grid; grid-template-columns: 1fr 90px; gap: 10px; align-items: center; margin-top: 8px; }
+  .slice-row label { margin: 0; font-size: .82rem; color: var(--text); text-transform: none; letter-spacing: 0; }
+  .slice-row input { padding: 6px 10px; font-size: .9rem; }
+  .live-out { font-family: var(--mono); font-size: 1rem; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); margin-top: 10px; }
+  .live-out .row2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; text-align: center; }
+  .live-out .row2 div span { display: block; font-size: .72rem; color: var(--muted); text-transform: uppercase; }
+  button {
+    padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .9rem;
+    font-family: var(--sans);
+  }
+  button:hover { background: var(--surface2); }
+  button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  button.primary:hover { opacity: .9; }
+  .warn { color: var(--warning, #b45309); font-size: .85rem; margin-top: 8px; }
+  .err { color: var(--error, #b91c1c); font-size: .85rem; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-family: var(--mono); font-size: .85rem; }
+  table th, table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+  table th:first-child, table td:first-child { text-align: left; }
+  table th { background: var(--surface2); font-weight: 600; }
+  @media (max-width: 768px) {
+    .row, .out-row, .live-out .row2 { grid-template-columns: 1fr 1fr; }
+    .out-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>FPS Frame Budget Calculator</h1>
+<p class="subtitle">Convert between target frames-per-second and the millisecond budget per frame, slice that budget into main-thread / style / paint / GPU phases, and measure your real frame time with <code>requestAnimationFrame</code>.</p>
+
+<div class="card">
+  <h2>Target FPS &harr; Frame Budget</h2>
+  <div class="row">
+    <div>
+      <label for="fps">Target FPS</label>
+      <input id="fps" type="number" value="60" min="1" step="1" oninput="recalc('fps')">
+    </div>
+    <div>
+      <label for="ms">Frame Budget (ms)</label>
+      <input id="ms" type="number" value="16.667" step="0.001" min="0.001" oninput="recalc('ms')">
+    </div>
+  </div>
+  <div class="preset-row" id="presets">
+    <button class="preset" data-fps="24">24 fps · film</button>
+    <button class="preset" data-fps="30">30 fps</button>
+    <button class="preset active" data-fps="60">60 fps</button>
+    <button class="preset" data-fps="90">90 fps · VR</button>
+    <button class="preset" data-fps="120">120 fps</button>
+    <button class="preset" data-fps="144">144 fps</button>
+    <button class="preset" data-fps="240">240 fps</button>
+  </div>
+  <div class="out-row">
+    <div class="stat"><div class="num" id="outMs">16.67</div><div class="lbl">ms / frame</div></div>
+    <div class="stat"><div class="num" id="outUs">16667</div><div class="lbl">µs / frame</div></div>
+    <div class="stat"><div class="num" id="outHz">60</div><div class="lbl">refresh Hz</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Frame Budget Breakdown</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:0">Allocate phases of a typical browser/game frame as percentages of your target budget. Anything over 100% spills into the next frame and causes jank.</p>
+  <div class="slice-row">
+    <label for="sMain">Main thread / JS</label>
+    <input id="sMain" type="number" min="0" value="40" oninput="renderBar()">
+  </div>
+  <div class="slice-row">
+    <label for="sStyle">Style &amp; layout</label>
+    <input id="sStyle" type="number" min="0" value="15" oninput="renderBar()">
+  </div>
+  <div class="slice-row">
+    <label for="sPaint">Paint &amp; composite</label>
+    <input id="sPaint" type="number" min="0" value="15" oninput="renderBar()">
+  </div>
+  <div class="slice-row">
+    <label for="sGpu">GPU / present</label>
+    <input id="sGpu" type="number" min="0" value="10" oninput="renderBar()">
+  </div>
+  <div class="bar-wrap">
+    <div class="bar" id="bar"></div>
+    <div class="legend">
+      <span><i style="background:#2563eb"></i> JS</span>
+      <span><i style="background:#7c3aed"></i> Style</span>
+      <span><i style="background:#db2777"></i> Paint</span>
+      <span><i style="background:#d97706"></i> GPU</span>
+      <span><i style="background:#16a34a"></i> Idle</span>
+      <span><i style="background:#dc2626"></i> Over budget</span>
+    </div>
+    <div id="barWarn" class="warn" style="display:none"></div>
+  </div>
+  <table>
+    <thead><tr><th>Phase</th><th>%</th><th>ms</th></tr></thead>
+    <tbody id="phaseTable"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Live Frame Time</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:0">Sample <code>requestAnimationFrame</code> intervals on this page for 2 seconds and report the actual frame cadence. Run this in the same browser/tab where you want to test.</p>
+  <button id="liveBtn" class="primary" onclick="startLive()">Measure 2 s</button>
+  <div class="live-out">
+    <div class="row2">
+      <div><span>p50 frame ms</span><strong id="livP50">—</strong></div>
+      <div><span>p95 frame ms</span><strong id="livP95">—</strong></div>
+      <div><span>worst</span><strong id="livMax">—</strong></div>
+    </div>
+    <div class="row2" style="margin-top:8px">
+      <div><span>frames</span><strong id="livN">—</strong></div>
+      <div><span>avg fps</span><strong id="livFps">—</strong></div>
+      <div><span>jank (&gt;budget)</span><strong id="livJank">—</strong></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Common Targets</h2>
+  <table>
+    <thead><tr><th>Refresh / FPS</th><th>ms / frame</th><th>µs / frame</th><th>frames / sec</th><th>frames / hour</th></tr></thead>
+    <tbody>
+      <tr><td>24 fps</td><td>41.667</td><td>41,667</td><td>24</td><td>86,400</td></tr>
+      <tr><td>30 fps</td><td>33.333</td><td>33,333</td><td>30</td><td>108,000</td></tr>
+      <tr><td>60 fps</td><td>16.667</td><td>16,667</td><td>60</td><td>216,000</td></tr>
+      <tr><td>72 fps · VR</td><td>13.889</td><td>13,889</td><td>72</td><td>259,200</td></tr>
+      <tr><td>90 fps · VR</td><td>11.111</td><td>11,111</td><td>90</td><td>324,000</td></tr>
+      <tr><td>120 fps</td><td>8.333</td><td>8,333</td><td>120</td><td>432,000</td></tr>
+      <tr><td>144 Hz</td><td>6.944</td><td>6,944</td><td>144</td><td>518,400</td></tr>
+      <tr><td>165 Hz</td><td>6.061</td><td>6,061</td><td>165</td><td>594,000</td></tr>
+      <tr><td>240 Hz</td><td>4.167</td><td>4,167</td><td>240</td><td>864,000</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.82rem;color:var(--muted);line-height:1.55;margin-top:14px">
+    Web devs usually target 60 fps (16.67 ms) to match most monitors; mobile games on high-refresh phones aim for 120 fps (8.33 ms). VR headsets demand 72–120 fps to avoid motion sickness. Anything over your monitor's Hz only matters for input latency and frame pacing — it won't visually display more frames.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function recalc(src) {
+  let fps = parseFloat($('fps').value);
+  let ms = parseFloat($('ms').value);
+  if (src === 'fps') {
+    if (!Number.isFinite(fps) || fps <= 0) return;
+    ms = 1000 / fps;
+    $('ms').value = ms.toFixed(3);
+  } else {
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    fps = 1000 / ms;
+    $('fps').value = fps.toFixed(2);
+  }
+  $('outMs').textContent = ms.toFixed(3);
+  $('outUs').textContent = Math.round(ms * 1000).toLocaleString();
+  $('outHz').textContent = fps.toFixed(2);
+  document.querySelectorAll('.preset').forEach(b => {
+    b.classList.toggle('active', Math.abs(Number(b.dataset.fps) - fps) < 0.01);
+  });
+  renderBar();
+}
+
+document.querySelectorAll('.preset').forEach(b => {
+  b.addEventListener('click', () => {
+    $('fps').value = b.dataset.fps;
+    recalc('fps');
+  });
+});
+
+function renderBar() {
+  const ms = parseFloat($('ms').value);
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  const slices = [
+    { id: 'sMain', name: 'JS', cls: 'seg-main' },
+    { id: 'sStyle', name: 'Style', cls: 'seg-style' },
+    { id: 'sPaint', name: 'Paint', cls: 'seg-paint' },
+    { id: 'sGpu', name: 'GPU', cls: 'seg-gpu' },
+  ];
+  let used = 0;
+  const data = slices.map(s => {
+    const pct = Math.max(0, parseFloat($(s.id).value) || 0);
+    used += pct;
+    return { ...s, pct, msVal: (pct / 100) * ms };
+  });
+  const idle = Math.max(0, 100 - used);
+  const over = Math.max(0, used - 100);
+  const bar = $('bar');
+  bar.innerHTML = '';
+  const totalPct = used + idle;
+  data.forEach(d => {
+    if (d.pct <= 0) return;
+    const div = document.createElement('div');
+    div.className = d.cls;
+    div.style.width = (d.pct / totalPct * 100) + '%';
+    div.textContent = d.pct >= 6 ? d.name + ' ' + d.msVal.toFixed(1) + 'ms' : '';
+    bar.appendChild(div);
+  });
+  if (idle > 0) {
+    const div = document.createElement('div');
+    div.className = 'seg-idle';
+    div.style.width = (idle / totalPct * 100) + '%';
+    div.textContent = idle >= 6 ? 'Idle ' + ((idle / 100) * ms).toFixed(1) + 'ms' : '';
+    bar.appendChild(div);
+  }
+  $('barWarn').style.display = over > 0 ? '' : 'none';
+  if (over > 0) $('barWarn').textContent = `Over budget by ${over.toFixed(1)}% (${((over / 100) * ms).toFixed(2)} ms) — frames will drop.`;
+
+  const tbody = $('phaseTable');
+  tbody.innerHTML = '';
+  data.forEach(d => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${d.name}</td><td>${d.pct.toFixed(1)}%</td><td>${d.msVal.toFixed(2)}</td>`;
+    tbody.appendChild(tr);
+  });
+  const trIdle = document.createElement('tr');
+  trIdle.innerHTML = `<td>Idle</td><td>${idle.toFixed(1)}%</td><td>${((idle / 100) * ms).toFixed(2)}</td>`;
+  tbody.appendChild(trIdle);
+  const trTotal = document.createElement('tr');
+  trTotal.innerHTML = `<td><strong>Total</strong></td><td><strong>${used.toFixed(1)}%</strong></td><td><strong>${((used / 100) * ms).toFixed(2)}</strong></td>`;
+  tbody.appendChild(trTotal);
+}
+
+function startLive() {
+  const btn = $('liveBtn');
+  btn.disabled = true; btn.textContent = 'Sampling…';
+  const samples = [];
+  let last = performance.now();
+  const start = last;
+  const dur = 2000;
+  function tick(t) {
+    samples.push(t - last);
+    last = t;
+    if (t - start < dur) {
+      requestAnimationFrame(tick);
+    } else {
+      finish(samples);
+      btn.disabled = false; btn.textContent = 'Measure 2 s';
+    }
+  }
+  requestAnimationFrame(t => { last = t; requestAnimationFrame(tick); });
+
+  function finish(arr) {
+    if (arr.length < 2) return;
+    arr.shift();
+    const sorted = [...arr].sort((a, b) => a - b);
+    const p = q => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
+    const p50 = p(0.5), p95 = p(0.95), worst = sorted[sorted.length - 1];
+    const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+    const budget = parseFloat($('ms').value) || 16.667;
+    const jank = arr.filter(x => x > budget * 1.05).length;
+    $('livP50').textContent = p50.toFixed(2);
+    $('livP95').textContent = p95.toFixed(2);
+    $('livMax').textContent = worst.toFixed(2);
+    $('livN').textContent = arr.length;
+    $('livFps').textContent = (1000 / avg).toFixed(1);
+    $('livJank').textContent = jank + ' / ' + arr.length;
+  }
+}
+
+recalc('fps');
+</script>
+</body>
+</html>

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV Pivot Table — Free Online Tool</title>
+<meta name="description" content="Pivot CSV data in your browser. Choose row and column groupings, an aggregation field, and a function (sum, mean, count, min, max) to build a cross-tab table.">
+<meta name="keywords" content="csv pivot, pivot table, csv groupby, csv aggregate, cross tab, csv analysis, pivot online">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/csvpivot.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .9rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+    min-height: 160px; resize: vertical;
+  }
+  .grid-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
+  .grid-row label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .grid-row select, .grid-row input {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .9rem; box-sizing: border-box;
+  }
+  .pivot-wrap { margin-top: 14px; overflow: auto; max-height: 480px; border: 1px solid var(--border); border-radius: var(--radius); }
+  table.pivot { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: .85rem; }
+  table.pivot th, table.pivot td { padding: 6px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: right; white-space: nowrap; }
+  table.pivot th { background: var(--surface2); position: sticky; top: 0; z-index: 1; font-weight: 600; }
+  table.pivot td:first-child, table.pivot th:first-child { text-align: left; background: var(--surface2); position: sticky; left: 0; z-index: 2; font-weight: 600; }
+  table.pivot tbody tr:hover { background: var(--surface2); }
+  .stat-row { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-size: .82rem; color: var(--muted); }
+  .stat-row strong { color: var(--text); font-family: var(--mono); }
+  .err { color: var(--error, #b91c1c); font-size: .85rem; margin-top: 8px; }
+  .actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .actions button {
+    padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .actions button:hover { background: var(--surface2); }
+  .total { background: var(--surface2); font-weight: 600; }
+  .total td { border-top: 2px solid var(--border); }
+  @media (max-width: 768px) { .grid-row { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CSV Pivot Table</h1>
+<p class="subtitle">Paste CSV data, pick a row field, an optional column field, and a value field to aggregate — sum, mean, count, min, max, or median. Useful for ad-hoc analysis without opening a spreadsheet.</p>
+
+<div class="card">
+  <h2>1. Paste CSV</h2>
+  <textarea id="csv" oninput="parse()" placeholder="region,product,quarter,units,revenue&#10;NA,Widgets,Q1,120,4800&#10;NA,Gadgets,Q1,90,5400&#10;EU,Widgets,Q1,80,3200">region,product,quarter,units,revenue
+NA,Widgets,Q1,120,4800
+NA,Gadgets,Q1,90,5400
+NA,Widgets,Q2,150,6000
+NA,Gadgets,Q2,110,6600
+EU,Widgets,Q1,80,3200
+EU,Gadgets,Q1,60,3600
+EU,Widgets,Q2,95,3800
+EU,Gadgets,Q2,75,4500
+APAC,Widgets,Q1,40,1600
+APAC,Gadgets,Q1,30,1800
+APAC,Widgets,Q2,55,2200
+APAC,Gadgets,Q2,45,2700</textarea>
+  <div class="stat-row">
+    <span><strong id="rowCount">0</strong> rows</span>
+    <span><strong id="colCount">0</strong> columns</span>
+    <span id="parseStatus"></span>
+  </div>
+  <div id="parseErr" class="err" style="display:none"></div>
+</div>
+
+<div class="card">
+  <h2>2. Configure Pivot</h2>
+  <div class="grid-row">
+    <div>
+      <label for="rowField">Row Field</label>
+      <select id="rowField" onchange="render()"></select>
+    </div>
+    <div>
+      <label for="colField">Column Field</label>
+      <select id="colField" onchange="render()"></select>
+    </div>
+    <div>
+      <label for="valField">Value Field</label>
+      <select id="valField" onchange="render()"></select>
+    </div>
+    <div>
+      <label for="aggFn">Aggregation</label>
+      <select id="aggFn" onchange="render()">
+        <option value="sum">Sum</option>
+        <option value="mean">Mean (avg)</option>
+        <option value="count">Count</option>
+        <option value="countd">Count Distinct</option>
+        <option value="min">Min</option>
+        <option value="max">Max</option>
+        <option value="median">Median</option>
+      </select>
+    </div>
+  </div>
+  <div class="actions">
+    <button onclick="copyResult()">Copy as CSV</button>
+    <button onclick="copyMd()">Copy as Markdown</button>
+    <button onclick="downloadCsv()">Download CSV</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>3. Result</h2>
+  <div id="resultErr" class="err" style="display:none"></div>
+  <div class="pivot-wrap"><div id="pivotOut"></div></div>
+</div>
+
+<div class="card">
+  <h2>About Pivot Tables</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    A pivot table groups records by one or two categorical fields and reduces a third numeric field to a single number per cell. Use <strong>Count</strong> when no value field makes sense (e.g. how many records per region per quarter), <strong>Sum</strong> for totals, <strong>Mean</strong> for averages, and <strong>Median</strong> when the data is skewed by outliers. Set the column field to <em>(none)</em> to get a flat group-by instead of a cross-tab.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let headers = [];
+let rows = [];
+let lastResult = null;
+
+function parseCSV(text) {
+  const out = [];
+  let row = [], cell = '', q = false, i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { cell += '"'; i += 2; continue; }
+        q = false; i++; continue;
+      }
+      cell += c; i++; continue;
+    }
+    if (c === '"') { q = true; i++; continue; }
+    if (c === ',') { row.push(cell); cell = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(cell); out.push(row); row = []; cell = ''; i++; continue; }
+    cell += c; i++;
+  }
+  if (cell.length > 0 || row.length > 0) { row.push(cell); out.push(row); }
+  return out.filter(r => r.length > 1 || (r.length === 1 && r[0] !== ''));
+}
+
+function parse() {
+  const text = $('csv').value;
+  $('parseErr').style.display = 'none';
+  if (!text.trim()) {
+    headers = []; rows = [];
+    $('rowCount').textContent = '0'; $('colCount').textContent = '0';
+    populateSelects(); render();
+    return;
+  }
+  try {
+    const grid = parseCSV(text);
+    if (grid.length === 0) throw new Error('No rows found');
+    headers = grid[0].map(h => h.trim());
+    rows = grid.slice(1).map(r => {
+      const o = {};
+      headers.forEach((h, i) => { o[h] = (r[i] !== undefined ? r[i] : '').trim(); });
+      return o;
+    });
+    $('rowCount').textContent = rows.length;
+    $('colCount').textContent = headers.length;
+    populateSelects();
+    render();
+  } catch (e) {
+    $('parseErr').style.display = ''; $('parseErr').textContent = 'Parse error: ' + e.message;
+  }
+}
+
+function populateSelects() {
+  const rowSel = $('rowField'), colSel = $('colField'), valSel = $('valField');
+  const prevRow = rowSel.value, prevCol = colSel.value, prevVal = valSel.value;
+  rowSel.innerHTML = headers.map(h => `<option value="${escAttr(h)}">${escHtml(h)}</option>`).join('');
+  colSel.innerHTML = '<option value="">(none — flat group-by)</option>' + headers.map(h => `<option value="${escAttr(h)}">${escHtml(h)}</option>`).join('');
+  valSel.innerHTML = '<option value="">(no value — use Count)</option>' + headers.map(h => `<option value="${escAttr(h)}">${escHtml(h)}</option>`).join('');
+  if (prevRow && headers.includes(prevRow)) rowSel.value = prevRow;
+  if (prevCol && headers.includes(prevCol)) colSel.value = prevCol;
+  if (prevVal && headers.includes(prevVal)) valSel.value = prevVal;
+  if (!rowSel.value && headers.length > 0) rowSel.value = headers[0];
+  if (!colSel.value && headers.length > 1) colSel.value = headers[1];
+  if (!valSel.value) {
+    const numeric = headers.find(h => rows.some(r => r[h] !== '' && !isNaN(Number(r[h]))));
+    if (numeric) valSel.value = numeric;
+  }
+}
+
+function aggregate(values, fn) {
+  if (fn === 'count') return values.length;
+  if (fn === 'countd') return new Set(values).size;
+  const nums = values.map(Number).filter(n => Number.isFinite(n));
+  if (nums.length === 0) return null;
+  if (fn === 'sum') return nums.reduce((a, b) => a + b, 0);
+  if (fn === 'mean') return nums.reduce((a, b) => a + b, 0) / nums.length;
+  if (fn === 'min') return Math.min(...nums);
+  if (fn === 'max') return Math.max(...nums);
+  if (fn === 'median') {
+    const s = [...nums].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+  return null;
+}
+
+function render() {
+  $('resultErr').style.display = 'none';
+  const out = $('pivotOut');
+  out.innerHTML = '';
+  lastResult = null;
+  if (rows.length === 0) return;
+  const rowField = $('rowField').value;
+  const colField = $('colField').value;
+  const valField = $('valField').value;
+  const fn = $('aggFn').value;
+  if (!rowField) return;
+
+  const rowKeys = [...new Set(rows.map(r => r[rowField]))].sort(naturalSort);
+  const colKeys = colField ? [...new Set(rows.map(r => r[colField]))].sort(naturalSort) : [''];
+
+  const buckets = new Map();
+  for (const r of rows) {
+    const rk = r[rowField];
+    const ck = colField ? r[colField] : '';
+    const k = rk + '||' + ck;
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k).push(valField ? r[valField] : 1);
+  }
+
+  const effectiveFn = !valField ? 'count' : fn;
+  const headerLabel = colField ? colField : (valField || 'count');
+
+  const matrix = rowKeys.map(rk => {
+    return colKeys.map(ck => {
+      const arr = buckets.get(rk + '||' + ck) || [];
+      return aggregate(arr, effectiveFn);
+    });
+  });
+
+  const colTotals = colKeys.map((_, ci) => {
+    const all = rows.filter(r => (!colField || r[colField] === colKeys[ci])).map(r => valField ? r[valField] : 1);
+    return aggregate(all, effectiveFn);
+  });
+  const rowTotals = rowKeys.map(rk => {
+    const all = rows.filter(r => r[rowField] === rk).map(r => valField ? r[valField] : 1);
+    return aggregate(all, effectiveFn);
+  });
+  const grandTotal = aggregate(rows.map(r => valField ? r[valField] : 1), effectiveFn);
+
+  const tbl = document.createElement('table');
+  tbl.className = 'pivot';
+  let html = '<thead><tr><th>' + escHtml(rowField) + ' \\ ' + escHtml(headerLabel) + '</th>';
+  for (const ck of colKeys) html += '<th>' + escHtml(ck || '(value)') + '</th>';
+  html += '<th>Total</th></tr></thead><tbody>';
+  rowKeys.forEach((rk, ri) => {
+    html += '<tr><td>' + escHtml(rk) + '</td>';
+    matrix[ri].forEach(v => { html += '<td>' + fmt(v) + '</td>'; });
+    html += '<td>' + fmt(rowTotals[ri]) + '</td></tr>';
+  });
+  html += '<tr class="total"><td>Total</td>';
+  colTotals.forEach(v => { html += '<td>' + fmt(v) + '</td>'; });
+  html += '<td>' + fmt(grandTotal) + '</td></tr>';
+  html += '</tbody>';
+  tbl.innerHTML = html;
+  out.appendChild(tbl);
+
+  lastResult = { rowField, colField, headerLabel, rowKeys, colKeys, matrix, rowTotals, colTotals, grandTotal };
+}
+
+function fmt(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v !== 'number') return escHtml(String(v));
+  if (Number.isInteger(v)) return v.toLocaleString();
+  return v.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function naturalSort(a, b) {
+  const na = Number(a), nb = Number(b);
+  if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+  return String(a).localeCompare(String(b), undefined, { numeric: true });
+}
+
+function escHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function escAttr(s) { return escHtml(s); }
+
+function csvCell(v) {
+  if (v === null || v === undefined) return '';
+  const s = typeof v === 'number' ? String(v) : String(v);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function buildCSV() {
+  if (!lastResult) return '';
+  const r = lastResult;
+  const lines = [];
+  lines.push([r.rowField, ...r.colKeys.map(c => c || 'value'), 'Total'].map(csvCell).join(','));
+  r.rowKeys.forEach((rk, i) => {
+    lines.push([rk, ...r.matrix[i], r.rowTotals[i]].map(csvCell).join(','));
+  });
+  lines.push(['Total', ...r.colTotals, r.grandTotal].map(csvCell).join(','));
+  return lines.join('\n');
+}
+
+function buildMd() {
+  if (!lastResult) return '';
+  const r = lastResult;
+  const head = [r.rowField, ...r.colKeys.map(c => c || 'value'), 'Total'];
+  const lines = [];
+  lines.push('| ' + head.map(escMd).join(' | ') + ' |');
+  lines.push('|' + head.map(() => '---').join('|') + '|');
+  r.rowKeys.forEach((rk, i) => {
+    const cells = [rk, ...r.matrix[i].map(v => v === null ? '' : v), r.rowTotals[i] === null ? '' : r.rowTotals[i]];
+    lines.push('| ' + cells.map(escMd).join(' | ') + ' |');
+  });
+  const tot = ['Total', ...r.colTotals.map(v => v === null ? '' : v), r.grandTotal === null ? '' : r.grandTotal];
+  lines.push('| ' + tot.map(escMd).join(' | ') + ' |');
+  return lines.join('\n');
+}
+
+function escMd(v) { return String(v ?? '').replace(/\|/g, '\\|'); }
+
+async function copyResult() {
+  const csv = buildCSV();
+  if (!csv) return;
+  await navigator.clipboard.writeText(csv);
+}
+async function copyMd() {
+  const md = buildMd();
+  if (!md) return;
+  await navigator.clipboard.writeText(md);
+}
+function downloadCsv() {
+  const csv = buildCSV();
+  if (!csv) return;
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'pivot.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+parse();
+</script>
+</body>
+</html>
