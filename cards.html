@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Card Deck Shuffler & Dealer — Free Online Tool</title>
+<meta name="description" content="Shuffle a 52-card deck (or 54 with jokers) using a seeded Fisher-Yates shuffle, deal hands of any size, and inspect every card visually. Reproducible with a seed for testing and games.">
+<meta name="keywords" content="card shuffler, deck of cards, fisher-yates, seeded random, deal cards, poker hand, blackjack">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cards.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .options { display: flex; gap: 16px; flex-wrap: wrap; align-items: end; margin-bottom: 14px; }
+  .option-group { display: flex; flex-direction: column; gap: 4px; }
+  .option-group label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .option-group input, .option-group select {
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font: inherit; font-size: .9rem;
+  }
+  .toggles { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .toggles label { display: flex; align-items: center; gap: 6px; font-size: .85rem; cursor: pointer; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .actions button {
+    padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font: inherit; font-size: .85rem;
+    cursor: pointer; font-weight: 600;
+  }
+  .actions button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .actions button:hover { opacity: .85; }
+  .deck {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+    gap: 6px; margin-top: 14px;
+  }
+  .card-face {
+    aspect-ratio: 2.5/3.5; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); display: flex; flex-direction: column;
+    justify-content: space-between; padding: 4px 6px; font-family: var(--mono);
+    user-select: none; transition: transform .12s, box-shadow .12s;
+  }
+  .card-face:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+  .card-face.red { color: #c41e1e; }
+  .card-face.black { color: #111; }
+  .card-face.joker { color: #6b21a8; background: #faf5ff; }
+  .card-face .corner { font-size: .85rem; font-weight: 700; line-height: 1; }
+  .card-face .corner.bottom { transform: rotate(180deg); align-self: flex-end; }
+  .card-face .pip { font-size: 1.4rem; text-align: center; }
+  .hand-block {
+    margin-top: 14px; padding: 12px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--surface);
+  }
+  .hand-block h4 {
+    font-size: .85rem; font-weight: 600; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .hand-block .hand-cards {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 6px;
+  }
+  .stat-row {
+    display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px;
+    font-size: .82rem; color: var(--muted);
+  }
+  .stat-row strong { color: var(--text); font-family: var(--mono); }
+  .seed-info { font-size: .75rem; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
+  .order-list {
+    margin-top: 12px; padding: 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; max-height: 200px;
+    overflow: auto; line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Card Deck Shuffler & Dealer</h1>
+<p class="subtitle">Shuffle a standard 52-card deck (or 54 with jokers) using a seeded Fisher-Yates shuffle. Deal hands of any size for poker, blackjack, bridge, or your own card game. Same seed always produces the same shuffle &mdash; great for reproducible tests and demos.</p>
+
+<div class="card">
+  <h2>Shuffle Options</h2>
+  <div class="options">
+    <div class="option-group">
+      <label for="seed">Seed (blank for random)</label>
+      <input id="seed" type="text" placeholder="e.g. blackjack-42" autocomplete="off">
+    </div>
+    <div class="option-group">
+      <label for="hands">Hands</label>
+      <input id="hands" type="number" min="0" max="13" value="4">
+    </div>
+    <div class="option-group">
+      <label for="cards">Cards per hand</label>
+      <input id="cards" type="number" min="1" max="52" value="5">
+    </div>
+  </div>
+  <div class="toggles">
+    <label><input type="checkbox" id="jokers"> Include 2 jokers (54 cards)</label>
+    <label><input type="checkbox" id="sortHand" checked> Sort hands by rank within suits</label>
+  </div>
+  <div class="actions">
+    <button class="primary" onclick="shuffleAndDeal()">Shuffle & Deal</button>
+    <button onclick="randomSeed()">Random seed</button>
+    <button onclick="copyOrder()">Copy deck order</button>
+  </div>
+  <div class="seed-info" id="seedInfo"></div>
+  <div class="stat-row">
+    <span><strong id="deckSize">0</strong> cards</span>
+    <span><strong id="dealtCount">0</strong> dealt</span>
+    <span>remaining: <strong id="remainCount">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Hands</h2>
+  <div id="handsArea">
+    <p style="color:var(--muted);font-size:.85rem">Click "Shuffle & Deal" to deal hands.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Remaining Deck (Top → Bottom)</h2>
+  <div id="deck" class="deck"></div>
+  <div id="orderList" class="order-list"></div>
+</div>
+
+<div class="card">
+  <h2>About this Shuffler</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6">
+    Shuffles use the <strong>Fisher–Yates algorithm</strong> with a seeded
+    <a href="https://en.wikipedia.org/wiki/Mulberry32" target="_blank">Mulberry32</a> PRNG.
+    The seed is hashed via <code>cyrb53</code> so any string produces a uniform 32-bit state.
+    Identical seeds yield identical shuffles &mdash; useful for testing card-game logic, reproducing
+    bug reports, or sharing a specific deal with someone else. For real-money or cryptographic use,
+    do not use this; it is deterministic, not secure.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SUITS = [
+  { sym: '♠', name: 'Spades', color: 'black' },
+  { sym: '♥', name: 'Hearts', color: 'red' },
+  { sym: '♦', name: 'Diamonds', color: 'red' },
+  { sym: '♣', name: 'Clubs', color: 'black' }
+];
+const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+function buildDeck(includeJokers) {
+  const deck = [];
+  for (const s of SUITS) {
+    for (let i = 0; i < RANKS.length; i++) {
+      deck.push({ rank: RANKS[i], rankVal: i, suit: s.sym, suitName: s.name, color: s.color });
+    }
+  }
+  if (includeJokers) {
+    deck.push({ rank: '★', rankVal: 99, suit: 'JK', suitName: 'Joker', color: 'joker' });
+    deck.push({ rank: '★', rankVal: 99, suit: 'JK', suitName: 'Joker', color: 'joker' });
+  }
+  return deck;
+}
+
+// cyrb53 hash → 32-bit state for Mulberry32
+function cyrb53(str, seed = 0) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) {
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0) ^ (h1 >>> 0);
+}
+
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffle(arr, rng) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+let lastDeck = [];
+let lastDealt = [];
+
+function cardLabel(c) { return c.suit === 'JK' ? '🃏' : (c.rank + c.suit); }
+
+function renderCard(c) {
+  const div = document.createElement('div');
+  div.className = 'card-face ' + c.color;
+  if (c.suit === 'JK') {
+    div.innerHTML = '<div class="corner">JK</div><div class="pip">🃏</div><div class="corner bottom">JK</div>';
+  } else {
+    div.innerHTML = '<div class="corner">' + c.rank + '<br>' + c.suit + '</div>' +
+                    '<div class="pip">' + c.suit + '</div>' +
+                    '<div class="corner bottom">' + c.rank + '<br>' + c.suit + '</div>';
+  }
+  return div;
+}
+
+function sortHand(hand) {
+  const order = ['♠', '♥', '♦', '♣', 'JK'];
+  return hand.slice().sort((a, b) => {
+    const so = order.indexOf(a.suit) - order.indexOf(b.suit);
+    if (so !== 0) return so;
+    return a.rankVal - b.rankVal;
+  });
+}
+
+function shuffleAndDeal() {
+  const seedInput = $('seed').value.trim();
+  const useSeed = seedInput || ('rand-' + Math.random().toString(36).slice(2, 10));
+  if (!seedInput) $('seed').value = useSeed;
+  const state = cyrb53(useSeed);
+  const rng = mulberry32(state);
+  const deck = shuffle(buildDeck($('jokers').checked), rng);
+
+  const handCount = Math.max(0, +$('hands').value || 0);
+  const cardsPer = Math.max(0, +$('cards').value || 0);
+  const wanted = handCount * cardsPer;
+  if (wanted > deck.length) {
+    alert('Cannot deal ' + wanted + ' cards from ' + deck.length + '-card deck. Reduce hands or cards.');
+    return;
+  }
+
+  const hands = [];
+  const dealt = deck.slice(0, wanted);
+  const remaining = deck.slice(wanted);
+  for (let h = 0; h < handCount; h++) {
+    const hand = [];
+    for (let c = 0; c < cardsPer; c++) {
+      hand.push(dealt[c * handCount + h]);
+    }
+    hands.push($('sortHand').checked ? sortHand(hand) : hand);
+  }
+
+  lastDeck = deck;
+  lastDealt = remaining;
+
+  $('seedInfo').textContent = 'seed: ' + useSeed + '   state: 0x' + state.toString(16);
+  $('deckSize').textContent = deck.length;
+  $('dealtCount').textContent = wanted;
+  $('remainCount').textContent = remaining.length;
+
+  const ha = $('handsArea');
+  ha.innerHTML = '';
+  if (hands.length === 0 || cardsPer === 0) {
+    ha.innerHTML = '<p style="color:var(--muted);font-size:.85rem">No hands dealt — set hands &gt; 0 and cards &gt; 0.</p>';
+  } else {
+    for (let i = 0; i < hands.length; i++) {
+      const block = document.createElement('div');
+      block.className = 'hand-block';
+      block.innerHTML = '<h4><span>Hand ' + (i + 1) + '</span><span style="color:var(--muted);font-weight:400">' +
+                       hands[i].map(cardLabel).join(' · ') + '</span></h4><div class="hand-cards"></div>';
+      const hc = block.querySelector('.hand-cards');
+      hands[i].forEach(c => hc.appendChild(renderCard(c)));
+      ha.appendChild(block);
+    }
+  }
+
+  const deckEl = $('deck');
+  deckEl.innerHTML = '';
+  remaining.forEach(c => deckEl.appendChild(renderCard(c)));
+
+  $('orderList').textContent = remaining.map((c, i) => (i + 1).toString().padStart(2, '0') + '. ' + cardLabel(c)).join('   ');
+}
+
+function randomSeed() {
+  $('seed').value = '';
+  shuffleAndDeal();
+}
+
+function copyOrder() {
+  if (!lastDeck.length) return;
+  const text = lastDeck.map((c, i) => (i + 1) + '. ' + cardLabel(c) + ' (' + c.suitName + ')').join('\n');
+  navigator.clipboard.writeText(text);
+}
+
+shuffleAndDeal();
+</script>
+</body>
+</html>

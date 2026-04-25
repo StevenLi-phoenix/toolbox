@@ -201,6 +201,7 @@
 | [Meta Tag Generator](metatags.html) | Generate SEO meta tags, Open Graph & Twitter Cards. |
 | [Uptime & SLA Calculator](sla.html) | Convert availability targets to downtime budgets. |
 | [Ambient Noise Generator](noisegen.html) | Generate white noise, pink noise, rain, and ocean waves. |
+| [Interactive Periodic Table](periodic.html) | Browse all 118 elements with atomic number, mass, electron configuration, and discovery year. |
 
 ## AI & PM Tools
 
@@ -236,6 +237,7 @@
 | [Focus Session Planner](focusplanner.html) | Plan a focused work session from a messy task list. |
 | [Code Snippet Manager](snippets.html) | Save, organize, tag, and search code snippets. |
 | [Online Whiteboard](whiteboard.html) | Freehand drawing, shapes, text, arrows, layers, and undo/redo. |
+| [Card Deck Shuffler & Dealer](cards.html) | Shuffle a 52-card deck (or 54 with jokers) using a seeded Fisher-Yates shuffle, then deal hands of any size. |
 
 ## Git & Workflow
 
@@ -270,6 +272,7 @@
 | [Task Batch Planner](taskbatch.html) | Group tasks into smart batches to reduce context switching. |
 | [Task Prioritizer](taskprioritizer.html) | Score tasks by impact, effort, urgency, and risk. |
 | [WIP Limit Planner](wip.html) | Plan realistic work-in-progress limits. |
+| [Open Source License Chooser](license.html) | Compare MIT, Apache 2.0, GPL, BSD, MPL, ISC, Unlicense and more side-by-side, then generate a ready-to-use LICENSE file. |
 
 ---
 
