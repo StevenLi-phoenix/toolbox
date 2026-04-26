@@ -54,6 +54,8 @@
 | [SVG Pattern Generator](svgpattern.html) | Generate seamless, tileable SVG background patterns. |
 | [SVG Wave Generator](wavegen.html) | Generate SVG wave dividers with customizable layers and colors. |
 | [CSS Spring Animation Generator](cssspring.html) | Tune mass, stiffness, damping, and velocity to emit CSS @keyframes that mimic react-spring physics. |
+| [CSS Subgrid Builder](csssubgrid.html) | Align nested grid rows or columns to the parent's tracks for card grids — live preview and clean exported CSS. |
+| [CSS Logical Properties Converter](csslogical.html) | Convert physical CSS (margin-left, padding-top) to logical equivalents (margin-inline-start, padding-block-start) for RTL and vertical writing modes. |
 
 ## Images & Media
 
@@ -205,6 +207,7 @@
 | [Ambient Noise Generator](noisegen.html) | Generate white noise, pink noise, rain, and ocean waves. |
 | [Interactive Periodic Table](periodic.html) | Browse all 118 elements with atomic number, mass, electron configuration, and discovery year. |
 | [FPS Frame Budget Calculator](fpsbudget.html) | Convert between target FPS and millisecond frame budget, slice into JS / style / paint / GPU phases, and live-measure real frame time. |
+| [SQL Window Function Builder](sqlwindow.html) | Compose OVER (PARTITION BY ... ORDER BY ... ROWS BETWEEN ...) clauses for ROW_NUMBER, RANK, LAG, SUM and friends — generated SQL plus live result on sample data. |
 
 ## AI & PM Tools
 
