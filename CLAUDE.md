@@ -58,11 +58,18 @@ If `GITHUB_PAT` is not set, stop and report — don't loop on the proxy 403, ret
 
 ## Push target
 
-The user has authorized **pushing daily tool additions directly to `master`** (fast-forward from the feature branch). Standard flow:
+The user has authorized **pushing daily tool additions directly to the default branch** (fast-forward from the feature branch). The default branch on origin is **`main`** (renamed from `master` upstream — `git push origin master` will silently land on `main` and create a stale `master` ref). Standard flow:
 
 1. Develop on the assigned feature branch (e.g. `claude/<adjective>-<scientist>-<id>`).
 2. Commit there.
-3. `git checkout master && git merge --ff-only <branch> && git push origin master`.
+3. Fetch and fast-forward locally, then push to `main` explicitly:
+   ```bash
+   git fetch origin main
+   git checkout master  # local working branch is still named master
+   git merge --ff-only <branch>
+   git push origin master:main
+   ```
+4. After pushing, also delete the feature branch on origin (`git push origin --delete <branch>`) so it doesn't pile up.
 
 Skip the PR review for the daily-tool flow unless the user explicitly asks for one.
 
