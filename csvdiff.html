@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV Diff Viewer — Free Online Tool</title>
+<meta name="description" content="Compare two CSV files row-by-row. Detect added, removed, and changed rows by a chosen key column with cell-level highlighting. 100% client-side.">
+<meta name="keywords" content="csv diff, csv compare, csv comparison, csv changes, row diff, csv merge, data diff">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/csvdiff.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.inputs{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.inputs textarea{width:100%;min-height:180px;font-family:var(--mono);font-size:.84rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);resize:vertical}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:6px}
+.opts label{display:flex;flex-direction:column;gap:4px;font-size:.82rem;font-weight:600;color:var(--muted)}
+.opts input,.opts select{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem}
+.summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.pill{padding:4px 12px;border-radius:999px;font-size:.78rem;font-weight:600;border:1px solid var(--border);font-family:var(--mono)}
+.pill.added{background:color-mix(in srgb,var(--success) 18%,transparent);color:var(--success);border-color:color-mix(in srgb,var(--success) 35%,var(--border))}
+.pill.removed{background:color-mix(in srgb,var(--error) 18%,transparent);color:var(--error);border-color:color-mix(in srgb,var(--error) 35%,var(--border))}
+.pill.changed{background:color-mix(in srgb,var(--warning) 18%,transparent);color:var(--warning);border-color:color-mix(in srgb,var(--warning) 35%,var(--border))}
+.pill.same{background:var(--surface2)}
+.diff-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.diff-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.82rem}
+.diff-table th,.diff-table td{padding:5px 9px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;vertical-align:top}
+.diff-table th{background:var(--surface2);color:var(--text);font-weight:600;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0}
+.row-added{background:color-mix(in srgb,var(--success) 10%,transparent)}
+.row-removed{background:color-mix(in srgb,var(--error) 10%,transparent)}
+.row-changed{background:color-mix(in srgb,var(--warning) 8%,transparent)}
+.cell-changed{background:color-mix(in srgb,var(--warning) 22%,transparent);border-radius:3px;padding:1px 4px}
+.cell-old{color:var(--error);text-decoration:line-through;opacity:.8;display:block;font-size:.76rem}
+.cell-new{color:var(--success);display:block}
+.tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:.7rem;font-weight:700;letter-spacing:.04em}
+.tag-added{background:var(--success);color:#fff}
+.tag-removed{background:var(--error);color:#fff}
+.tag-changed{background:var(--warning);color:#000}
+.tag-same{background:var(--surface2);color:var(--muted)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.filterbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.filterbar label{display:inline-flex;align-items:center;gap:4px;font-size:.82rem;color:var(--muted);cursor:pointer}
+.note{font-size:.82rem;color:var(--muted);line-height:1.55;margin-top:8px}
+@media(max-width:768px){.inputs{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CSV Diff Viewer</h1>
+<p class="subtitle">Compare two CSV files row-by-row using a chosen key column. See which rows were added, removed, or changed — with cell-level highlighting of every value that moved.</p>
+
+<div class="card">
+<h2>&#128202; Input</h2>
+<div class="inputs">
+<div>
+<label style="font-size:.82rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">Old (left)</label>
+<textarea id="leftCsv" spellcheck="false" placeholder="id,name,price&#10;1,Apple,1.20&#10;2,Banana,0.50"></textarea>
+</div>
+<div>
+<label style="font-size:.82rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">New (right)</label>
+<textarea id="rightCsv" spellcheck="false" placeholder="id,name,price&#10;1,Apple,1.40&#10;3,Cherry,3.00"></textarea>
+</div>
+</div>
+<div class="opts">
+<label>Delimiter
+<select id="delim"><option value=",">Comma (,)</option><option value="	">Tab</option><option value=";">Semicolon (;)</option><option value="|">Pipe (|)</option><option value="auto">Auto-detect</option></select>
+</label>
+<label>Key column
+<select id="keyCol"><option value="">(first column)</option></select>
+</label>
+<label>Trim whitespace
+<select id="trim"><option value="1">Yes</option><option value="0">No</option></select>
+</label>
+<label>Ignore case in values
+<select id="ignoreCase"><option value="0">No</option><option value="1">Yes</option></select>
+</label>
+</div>
+<div class="btnrow">
+<button class="btn" onclick="run()">Compare</button>
+<button class="btn btn-secondary" onclick="loadSample()">Load Sample</button>
+<button class="btn btn-secondary" onclick="swap()">Swap Sides</button>
+<button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+</div>
+</div>
+
+<div class="card" id="summaryCard" style="display:none">
+<h2>&#128269; Diff Summary</h2>
+<div class="summary" id="summary"></div>
+<div class="filterbar">
+<strong style="font-size:.82rem;color:var(--text)">Show:</strong>
+<label><input type="checkbox" data-flt="added" checked> Added</label>
+<label><input type="checkbox" data-flt="removed" checked> Removed</label>
+<label><input type="checkbox" data-flt="changed" checked> Changed</label>
+<label><input type="checkbox" data-flt="same"> Unchanged</label>
+</div>
+<div class="diff-wrap">
+<table class="diff-table" id="diffTable"></table>
+</div>
+<div class="btnrow">
+<button class="btn btn-secondary" onclick="copyChanged()">Copy Changed Rows (CSV)</button>
+<button class="btn btn-secondary" onclick="copyDiffJSON()">Copy Diff (JSON)</button>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128161; How It Works</h2>
+<p class="note">Rows are matched by the value in the chosen <strong>key column</strong>. If the key column is left blank the first column of the header is used. Row matches that share a key but differ in any other cell are flagged as <em>changed</em>; cells that diverge are highlighted in-place. Rows present only on one side are flagged <em>added</em> or <em>removed</em>. Headers from the new file are used as the canonical column order; columns added or dropped between files appear with <code>—</code> on the missing side.</p>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let lastDiff = null;
+
+function detectDelim(text){
+  const line = text.split(/\r?\n/).find(l => l.trim()) || '';
+  const cands = [',', '\t', ';', '|'];
+  let best = ',', bestN = 0;
+  for(const d of cands){
+    const n = (line.match(new RegExp(d === '\t' ? '\\t' : '\\' + d, 'g')) || []).length;
+    if(n > bestN){bestN = n; best = d;}
+  }
+  return best;
+}
+
+function parseCSV(text, delim){
+  if(delim === 'auto') delim = detectDelim(text);
+  const rows = [];
+  let i = 0, field = '', row = [], inQuote = false;
+  while(i < text.length){
+    const c = text[i];
+    if(inQuote){
+      if(c === '"'){
+        if(text[i+1] === '"'){field += '"'; i += 2; continue;}
+        inQuote = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if(c === '"'){inQuote = true; i++; continue;}
+    if(c === delim){row.push(field); field = ''; i++; continue;}
+    if(c === '\r'){i++; continue;}
+    if(c === '\n'){row.push(field); rows.push(row); field = ''; row = []; i++; continue;}
+    field += c; i++;
+  }
+  if(field.length || row.length){row.push(field); rows.push(row);}
+  return rows.filter(r => r.length > 1 || (r.length === 1 && r[0] !== ''));
+}
+
+function escapeHtml(s){return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function csvEscape(v, delim){
+  v = String(v ?? '');
+  if(v.includes(delim) || v.includes('"') || v.includes('\n')) return '"' + v.replace(/"/g, '""') + '"';
+  return v;
+}
+
+function populateKeyCol(headers){
+  const sel = $('keyCol');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">(first column)</option>' + headers.map((h, i) => `<option value="${i}">${escapeHtml(h)}</option>`).join('');
+  if(cur && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+
+function buildDiff(){
+  const trim = $('trim').value === '1';
+  const ic = $('ignoreCase').value === '1';
+  const norm = v => {
+    let s = String(v ?? '');
+    if(trim) s = s.trim();
+    if(ic) s = s.toLowerCase();
+    return s;
+  };
+
+  const delim = $('delim').value;
+  const left = parseCSV($('leftCsv').value, delim);
+  const right = parseCSV($('rightCsv').value, delim);
+  if(left.length === 0 || right.length === 0) return null;
+
+  const lh = left[0], rh = right[0];
+  const allCols = [...rh];
+  for(const c of lh) if(!allCols.includes(c)) allCols.push(c);
+
+  populateKeyCol(rh);
+  const keyIdxRaw = $('keyCol').value;
+  const keyCol = keyIdxRaw === '' ? rh[0] : rh[parseInt(keyIdxRaw)];
+
+  const toMap = (rows, headers) => {
+    const m = new Map();
+    for(let i = 1; i < rows.length; i++){
+      const obj = {};
+      headers.forEach((h, j) => obj[h] = rows[i][j] ?? '');
+      const k = norm(obj[keyCol]);
+      m.set(k, obj);
+    }
+    return m;
+  };
+
+  const lm = toMap(left, lh);
+  const rm = toMap(right, rh);
+  const allKeys = new Set([...lm.keys(), ...rm.keys()]);
+  const out = [];
+  let added = 0, removed = 0, changed = 0, same = 0;
+  for(const k of allKeys){
+    const a = lm.get(k), b = rm.get(k);
+    if(a && !b){removed++; out.push({type:'removed', key:k, old:a, new:null});}
+    else if(!a && b){added++; out.push({type:'added', key:k, old:null, new:b});}
+    else{
+      const cellDiffs = {};
+      let differs = false;
+      for(const col of allCols){
+        const av = a[col] ?? '', bv = b[col] ?? '';
+        if(norm(av) !== norm(bv)){cellDiffs[col] = true; differs = true;}
+      }
+      if(differs){changed++; out.push({type:'changed', key:k, old:a, new:b, cellDiffs});}
+      else{same++; out.push({type:'same', key:k, old:a, new:b});}
+    }
+  }
+  out.sort((a, b) => {
+    const order = {removed:0, changed:1, added:2, same:3};
+    if(order[a.type] !== order[b.type]) return order[a.type] - order[b.type];
+    return String(a.key).localeCompare(String(b.key));
+  });
+
+  return {rows: out, cols: allCols, keyCol, counts: {added, removed, changed, same}, delim: delim === 'auto' ? detectDelim($('rightCsv').value) : delim};
+}
+
+function render(){
+  if(!lastDiff){$('summaryCard').style.display = 'none'; return;}
+  $('summaryCard').style.display = '';
+  const {rows, cols, counts, keyCol} = lastDiff;
+  $('summary').innerHTML = `
+    <span class="pill added">+ ${counts.added} added</span>
+    <span class="pill removed">− ${counts.removed} removed</span>
+    <span class="pill changed">~ ${counts.changed} changed</span>
+    <span class="pill same">${counts.same} unchanged</span>
+    <span class="pill" style="background:var(--surface2)">key: <code>${escapeHtml(keyCol)}</code></span>
+  `;
+
+  const flt = {};
+  document.querySelectorAll('[data-flt]').forEach(cb => flt[cb.dataset.flt] = cb.checked);
+  const visible = rows.filter(r => flt[r.type]);
+
+  let html = `<thead><tr><th>Status</th><th>Key</th>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>`;
+  if(visible.length === 0){
+    html += `<tr><td colspan="${cols.length + 2}" style="padding:20px;text-align:center;color:var(--muted)">No rows match the current filter.</td></tr>`;
+  }
+  for(const r of visible){
+    const cls = r.type === 'added' ? 'row-added' : r.type === 'removed' ? 'row-removed' : r.type === 'changed' ? 'row-changed' : '';
+    const tagCls = `tag-${r.type}`;
+    const tagText = r.type === 'added' ? 'ADDED' : r.type === 'removed' ? 'REMOVED' : r.type === 'changed' ? 'CHANGED' : 'SAME';
+    html += `<tr class="${cls}"><td><span class="tag ${tagCls}">${tagText}</span></td><td><strong>${escapeHtml(r.key)}</strong></td>`;
+    for(const col of cols){
+      const av = r.old ? (r.old[col] ?? '') : '';
+      const bv = r.new ? (r.new[col] ?? '') : '';
+      if(r.type === 'added') html += `<td>${escapeHtml(bv)}</td>`;
+      else if(r.type === 'removed') html += `<td>${escapeHtml(av)}</td>`;
+      else if(r.type === 'changed' && r.cellDiffs[col]){
+        html += `<td><div class="cell-changed"><span class="cell-old">${escapeHtml(av) || '—'}</span><span class="cell-new">${escapeHtml(bv) || '—'}</span></div></td>`;
+      }
+      else html += `<td>${escapeHtml(bv)}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  $('diffTable').innerHTML = html;
+}
+
+function run(){
+  lastDiff = buildDiff();
+  if(!lastDiff){alert('Both inputs need at least a header row.'); return;}
+  render();
+}
+
+function copyChanged(){
+  if(!lastDiff) return;
+  const d = lastDiff.delim;
+  const rows = [['_status', '_key', ...lastDiff.cols]];
+  for(const r of lastDiff.rows){
+    if(r.type === 'same') continue;
+    const src = r.new || r.old;
+    rows.push([r.type, r.key, ...lastDiff.cols.map(c => src[c] ?? '')]);
+  }
+  const text = rows.map(r => r.map(v => csvEscape(v, d)).join(d)).join('\n');
+  navigator.clipboard.writeText(text);
+  flash(event.target);
+}
+
+function copyDiffJSON(){
+  if(!lastDiff) return;
+  navigator.clipboard.writeText(JSON.stringify(lastDiff.rows, null, 2));
+  flash(event.target);
+}
+
+function flash(btn){
+  const orig = btn.textContent;
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = orig, 1400);
+}
+
+function loadSample(){
+  $('leftCsv').value = `id,name,price,stock
+1,Apple,1.20,100
+2,Banana,0.50,40
+3,Cherry,3.00,12
+4,Date,2.10,8
+5,Elderberry,4.50,3`;
+  $('rightCsv').value = `id,name,price,stock
+1,Apple,1.40,90
+2,Banana,0.50,40
+3,Cherry,3.00,12
+5,Elderberry,4.50,0
+6,Fig,2.80,25`;
+  run();
+}
+
+function swap(){
+  const a = $('leftCsv').value;
+  $('leftCsv').value = $('rightCsv').value;
+  $('rightCsv').value = a;
+  if(lastDiff) run();
+}
+
+function clearAll(){
+  $('leftCsv').value = '';
+  $('rightCsv').value = '';
+  lastDiff = null;
+  render();
+}
+
+document.querySelectorAll('[data-flt]').forEach(cb => cb.addEventListener('change', render));
+$('keyCol').addEventListener('change', run);
+$('delim').addEventListener('change', run);
+$('trim').addEventListener('change', run);
+$('ignoreCase').addEventListener('change', run);
+loadSample();
+</script>
+</body>
+</html>

@@ -27,6 +27,7 @@
 | [CSV Viewer & Editor](csvview.html) | View, sort, filter, and edit CSV data in a sortable table. |
 | [SQL Formatter](sql.html) | Beautify, minify, and syntax-highlight SQL queries. |
 | [CSV Pivot Table](csvpivot.html) | Pivot CSV data — pick row, column, value fields and an aggregation (sum, mean, count, median) to build a cross-tab. |
+| [CSV Diff Viewer](csvdiff.html) | Compare two CSV files row-by-row by a chosen key column — added, removed, and changed rows with cell-level highlighting. |
 
 ## CSS & Styling
 
@@ -56,6 +57,7 @@
 | [CSS Spring Animation Generator](cssspring.html) | Tune mass, stiffness, damping, and velocity to emit CSS @keyframes that mimic react-spring physics. |
 | [CSS Subgrid Builder](csssubgrid.html) | Align nested grid rows or columns to the parent's tracks for card grids — live preview and clean exported CSS. |
 | [CSS Logical Properties Converter](csslogical.html) | Convert physical CSS (margin-left, padding-top) to logical equivalents (margin-inline-start, padding-block-start) for RTL and vertical writing modes. |
+| [CSS Mask Generator](cssmask.html) | Build mask-image declarations visually — gradient fades, vignettes, polka dots, and SVG shape masks with size, position, and mode controls. |
 
 ## Images & Media
 
@@ -244,6 +246,7 @@
 | [Code Snippet Manager](snippets.html) | Save, organize, tag, and search code snippets. |
 | [Online Whiteboard](whiteboard.html) | Freehand drawing, shapes, text, arrows, layers, and undo/redo. |
 | [Card Deck Shuffler & Dealer](cards.html) | Shuffle a 52-card deck (or 54 with jokers) using a seeded Fisher-Yates shuffle, then deal hands of any size. |
+| [Moon Phase Calculator](moonphase.html) | Compute moon phase, illumination percentage, and the next full/new moon for any date — with a lunar calendar grid and SVG phase preview. |
 
 ## Git & Workflow
 

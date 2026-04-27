@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moon Phase Calculator — Free Online Tool</title>
+<meta name="description" content="Compute the moon phase, illumination percentage, age in days, and next full/new moon for any date. Pure-JS astronomical calculation, no API.">
+<meta name="keywords" content="moon phase, lunar phase, moon calculator, full moon, new moon, illumination, lunar age, lunar calendar">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/moonphase.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:14px}
+.row label{display:flex;flex-direction:column;gap:4px;font-size:.82rem;font-weight:600;color:var(--muted)}
+.row input{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.moon-display{display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:center}
+.moon-svg{width:200px;height:200px;background:#0a0a18;border-radius:50%;display:block;margin:auto}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:.92rem}
+.facts dt{font-weight:600;color:var(--muted);font-family:var(--mono);font-size:.82rem;text-transform:uppercase;letter-spacing:.04em;align-self:center}
+.facts dd{margin:0;color:var(--text);font-family:var(--mono)}
+.facts .big{font-size:1.4rem;font-weight:700;color:var(--accent)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px}
+.cal-head{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:center;padding:4px 0;letter-spacing:.04em}
+.cal-day{aspect-ratio:1;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px;font-size:.74rem;color:var(--muted);position:relative;cursor:pointer;transition:border-color .12s,transform .12s}
+.cal-day:hover{border-color:var(--accent);transform:translateY(-1px)}
+.cal-day.empty{border-color:transparent;background:transparent;cursor:default}
+.cal-day.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.cal-day .num{font-weight:700;color:var(--text);font-size:.86rem;font-family:var(--mono)}
+.cal-day .mini{width:18px;height:18px;border-radius:50%;background:#0a0a18;display:block;overflow:hidden;position:relative}
+.cal-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px}
+.cal-nav h3{margin:0;font-size:1rem;flex:1;text-align:center}
+.upcoming{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:6px}
+.upcoming .ev{padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:.84rem;font-family:var(--mono)}
+.upcoming .ev .lbl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:2px}
+.upcoming .ev .when{font-size:1rem;font-weight:700;color:var(--text)}
+.upcoming .ev .ago{font-size:.78rem;color:var(--accent);display:block;margin-top:2px}
+.note{font-size:.82rem;color:var(--muted);line-height:1.55;margin-top:8px}
+@media(max-width:600px){.moon-display{grid-template-columns:1fr;text-align:center}.moon-svg{margin:auto}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Moon Phase Calculator</h1>
+<p class="subtitle">Look up the moon phase, illumination, lunar age, and the next full and new moon for any date — computed locally with the Conway approximation, no API calls.</p>
+
+<div class="card">
+<h2>&#128197; Date</h2>
+<div class="row">
+<label>Date
+<input type="date" id="date">
+</label>
+<label>Time (24h, optional)
+<input type="time" id="time" value="12:00">
+</label>
+</div>
+<div class="btnrow">
+<button class="btn" onclick="setToday()">Today</button>
+<button class="btn btn-secondary" onclick="shiftDay(-1)">− 1 day</button>
+<button class="btn btn-secondary" onclick="shiftDay(1)">+ 1 day</button>
+<button class="btn btn-secondary" onclick="shiftDay(-7)">− 1 week</button>
+<button class="btn btn-secondary" onclick="shiftDay(7)">+ 1 week</button>
+</div>
+</div>
+
+<div class="card">
+<h2>&#127769; Phase Snapshot</h2>
+<div class="moon-display">
+<svg class="moon-svg" id="moonSvg" viewBox="-100 -100 200 200" aria-label="Moon phase"></svg>
+<dl class="facts" id="facts"></dl>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128197; Lunar Calendar</h2>
+<div class="cal-nav">
+<button class="btn btn-secondary" onclick="shiftMonth(-1)">&larr;</button>
+<h3 id="calTitle"></h3>
+<button class="btn btn-secondary" onclick="shiftMonth(1)">&rarr;</button>
+</div>
+<div class="cal" id="calendar"></div>
+</div>
+
+<div class="card">
+<h2>&#11088; Upcoming Phases</h2>
+<div class="upcoming" id="upcoming"></div>
+<p class="note">Computed forward from the chosen date by sampling phase progression at 1-hour resolution. Times shown in your local timezone.</p>
+</div>
+
+<div class="card">
+<h2>&#128161; About the Calculation</h2>
+<p class="note">Uses the synodic month length of <code>29.530588</code> days and a known new moon reference of <code>2000-01-06 18:14 UTC</code>. The illumination fraction is computed as <code>(1 − cos(2π·age/29.530588)) / 2</code>. This gives accuracy within a few hours over centuries — great for almanacs, fiction, photography planning, or moonrise-aware UI copy. Not for navigation or eclipse prediction.</p>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const SYNODIC = 29.530588853;
+const KNOWN_NEW_MOON = Date.UTC(2000, 0, 6, 18, 14, 0);
+
+function ageDays(date){
+  const diff = (date.getTime() - KNOWN_NEW_MOON) / 86400000;
+  let age = diff % SYNODIC;
+  if(age < 0) age += SYNODIC;
+  return age;
+}
+
+function illumination(age){
+  return (1 - Math.cos(2 * Math.PI * age / SYNODIC)) / 2;
+}
+
+function phaseName(age){
+  const f = age / SYNODIC;
+  if(age < 1 || age > SYNODIC - 1) return {name:'New Moon', emoji:'🌑'};
+  if(f < 0.23) return {name:'Waxing Crescent', emoji:'🌒'};
+  if(f < 0.27) return {name:'First Quarter', emoji:'🌓'};
+  if(f < 0.48) return {name:'Waxing Gibbous', emoji:'🌔'};
+  if(f < 0.52) return {name:'Full Moon', emoji:'🌕'};
+  if(f < 0.73) return {name:'Waning Gibbous', emoji:'🌖'};
+  if(f < 0.77) return {name:'Last Quarter', emoji:'🌗'};
+  return {name:'Waning Crescent', emoji:'🌘'};
+}
+
+function drawMoon(svg, age, size){
+  const r = size;
+  const f = age / SYNODIC;
+  const illum = illumination(age);
+  const waxing = f < 0.5;
+  let html = `<circle cx="0" cy="0" r="${r}" fill="#0a0a18"/>`;
+  html += `<circle cx="0" cy="0" r="${r}" fill="#e8e8f0"/>`;
+  if(illum < 0.999){
+    let coverFill = '#0a0a18';
+    if(illum < 0.001){
+      html = `<circle cx="0" cy="0" r="${r}" fill="${coverFill}"/><circle cx="0" cy="0" r="${r}" fill="none" stroke="#2a2a3a" stroke-width="1"/>`;
+    } else {
+      const ellipseRx = Math.abs(r * Math.cos(Math.PI * 2 * f));
+      const fullPath = `M 0 ${-r} A ${r} ${r} 0 0 1 0 ${r} A ${r} ${r} 0 0 1 0 ${-r} Z`;
+      let coverPath;
+      if(f < 0.25){
+        coverPath = `M 0 ${-r} A ${ellipseRx} ${r} 0 0 0 0 ${r} A ${r} ${r} 0 0 0 0 ${-r} Z`;
+      } else if(f < 0.5){
+        coverPath = `M 0 ${-r} A ${ellipseRx} ${r} 0 0 1 0 ${r} A ${r} ${r} 0 0 0 0 ${-r} Z`;
+      } else if(f < 0.75){
+        coverPath = `M 0 ${-r} A ${ellipseRx} ${r} 0 0 0 0 ${r} A ${r} ${r} 0 0 1 0 ${-r} Z`;
+      } else {
+        coverPath = `M 0 ${-r} A ${ellipseRx} ${r} 0 0 1 0 ${r} A ${r} ${r} 0 0 1 0 ${-r} Z`;
+      }
+      html += `<path d="${coverPath}" fill="${coverFill}"/>`;
+    }
+  }
+  html += `<circle cx="0" cy="0" r="${r}" fill="none" stroke="#2a2a3a" stroke-width="1"/>`;
+  svg.innerHTML = html;
+}
+
+function findNextPhase(start, target){
+  let t = start.getTime();
+  const stepBig = 3600000;
+  const maxT = t + 35 * 86400000;
+  let prev = phaseDist(t, target);
+  while(t < maxT){
+    const next = phaseDist(t + stepBig, target);
+    if(prev > 0 && next <= 0) break;
+    if(next < 0.001) break;
+    t += stepBig;
+    prev = next;
+  }
+  let lo = t, hi = t + stepBig;
+  for(let i = 0; i < 30; i++){
+    const mid = (lo + hi) / 2;
+    if(phaseDist(mid, target) < 0) lo = mid; else hi = mid;
+  }
+  return new Date((lo + hi) / 2);
+}
+
+function phaseDist(t, target){
+  const age = ageDays(new Date(t));
+  const f = age / SYNODIC;
+  let d = f - target;
+  if(d > 0.5) d -= 1;
+  if(d < -0.5) d += 1;
+  return d;
+}
+
+function getDate(){
+  const d = $('date').value;
+  const t = $('time').value || '12:00';
+  if(!d) return new Date();
+  return new Date(`${d}T${t}`);
+}
+
+function setDate(d){
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  $('date').value = `${yyyy}-${mm}-${dd}`;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  $('time').value = `${hh}:${mi}`;
+}
+
+function setToday(){
+  setDate(new Date());
+  render();
+}
+
+function shiftDay(n){
+  const d = getDate();
+  d.setDate(d.getDate() + n);
+  setDate(d);
+  render();
+}
+
+let calMonth = null;
+function shiftMonth(n){
+  if(!calMonth) calMonth = getDate();
+  calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + n, 1);
+  renderCal();
+}
+
+function fmtDur(ms){
+  if(ms < 0) return 'past';
+  const d = ms / 86400000;
+  if(d < 1) return `${Math.round(d * 24)} h away`;
+  if(d < 30) return `${d.toFixed(1)} days away`;
+  return `${(d / 30).toFixed(1)} months away`;
+}
+
+function fmtDate(d){
+  return d.toLocaleString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+
+function render(){
+  const d = getDate();
+  const age = ageDays(d);
+  const illum = illumination(age);
+  const phase = phaseName(age);
+  const waxing = age / SYNODIC < 0.5;
+
+  drawMoon($('moonSvg'), age, 92);
+
+  const facts = [
+    ['Phase', `<span class="big">${phase.emoji} ${phase.name}</span>`],
+    ['Illumination', `${(illum * 100).toFixed(1)} %`],
+    ['Lunar age', `${age.toFixed(2)} days`],
+    ['Cycle progress', `${(age / SYNODIC * 100).toFixed(1)} %`],
+    ['Direction', waxing ? 'Waxing (growing)' : 'Waning (shrinking)'],
+    ['Date', fmtDate(d)],
+  ];
+  $('facts').innerHTML = facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+
+  const newMoon = findNextPhase(d, 0);
+  const firstQ = findNextPhase(d, 0.25);
+  const fullMoon = findNextPhase(d, 0.5);
+  const lastQ = findNextPhase(d, 0.75);
+  const events = [
+    ['New Moon', '🌑', newMoon],
+    ['First Quarter', '🌓', firstQ],
+    ['Full Moon', '🌕', fullMoon],
+    ['Last Quarter', '🌗', lastQ],
+  ].sort((a, b) => a[2] - b[2]);
+
+  $('upcoming').innerHTML = events.map(([n, e, dt]) => `
+    <div class="ev"><span class="lbl">${e} ${n}</span><span class="when">${fmtDate(dt)}</span><span class="ago">${fmtDur(dt - d)}</span></div>
+  `).join('');
+
+  if(!calMonth) calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  renderCal();
+}
+
+function renderCal(){
+  $('calTitle').textContent = calMonth.toLocaleString(undefined, {month:'long', year:'numeric'});
+  const first = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).getDate();
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  const heads = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<div class="cal-head">${d}</div>`).join('');
+  let cells = '';
+  for(let i = 0; i < startDow; i++) cells += '<div class="cal-day empty"></div>';
+  for(let day = 1; day <= daysInMonth; day++){
+    const cellDate = new Date(calMonth.getFullYear(), calMonth.getMonth(), day, 12, 0);
+    const a = ageDays(cellDate);
+    const ph = phaseName(a);
+    const isToday = `${cellDate.getFullYear()}-${cellDate.getMonth()}-${cellDate.getDate()}` === todayKey;
+    const dStr = `${cellDate.getFullYear()}-${String(cellDate.getMonth()+1).padStart(2,'0')}-${String(cellDate.getDate()).padStart(2,'0')}`;
+    cells += `<div class="cal-day${isToday?' today':''}" onclick="pick('${dStr}')" title="${ph.name} • ${(illumination(a)*100).toFixed(0)}%"><span class="num">${day}</span><span style="font-size:1.2rem;line-height:1">${ph.emoji}</span></div>`;
+  }
+  $('calendar').innerHTML = heads + cells;
+}
+
+function pick(dStr){
+  $('date').value = dStr;
+  render();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  $('date').addEventListener('change', render);
+  $('time').addEventListener('change', render);
+  setToday();
+});
+</script>
+</body>
+</html>
