@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bash Parameter Expansion Tester — Free Online Tool</title>
+<meta name="description" content="Test every Bash parameter expansion form (${var:-default}, ${var:?msg}, ${var/pat/repl}, ${var:offset:length}, ${#var}, ${var^^}…) on your variables. Pure JS — no shell — with built-in cheatsheet.">
+<meta name="keywords" content="bash parameter expansion, shell variable expansion, ${var}, default value, substring, prefix strip, suffix strip, bash cheatsheet">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bashparam.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.varbox{display:grid;grid-template-columns:120px 1fr 90px;gap:8px;align-items:center;margin-bottom:6px}
+.varbox input{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.86rem}
+.varbox .name{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:.94rem}
+.varbox button{padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:.74rem}
+.varbox button:hover{color:var(--error);border-color:var(--error)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.expr-row{display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:6px}
+.expr-row input{padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.92rem}
+.result-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+@media(max-width:640px){.result-row{grid-template-columns:1fr}}
+.result-box{padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)}
+.result-box .lbl{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.result-box .val{font-family:var(--mono);font-size:.95rem;color:var(--text);word-break:break-all;white-space:pre-wrap;min-height:1.4em}
+.result-box.error .val{color:var(--error)}
+.result-box.empty .val{color:var(--muted);font-style:italic}
+table.cheat{width:100%;border-collapse:collapse;margin-top:6px;font-family:var(--mono);font-size:.82rem}
+table.cheat th,table.cheat td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+table.cheat th{font-size:.74rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;background:var(--surface2)}
+table.cheat code{background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent);white-space:nowrap}
+table.cheat tr{cursor:pointer;transition:background .12s}
+table.cheat tr:hover td{background:var(--surface)}
+.examples{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px;margin-top:6px}
+.examples button{padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);cursor:pointer;font-family:var(--mono);font-size:.78rem;text-align:left;transition:all .12s}
+.examples button:hover{border-color:var(--accent);background:var(--surface2)}
+.note{font-size:.82rem;color:var(--muted);line-height:1.55;margin-top:8px}
+.warn{color:var(--warning);font-family:var(--mono);font-size:.78rem;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Bash Parameter Expansion Tester</h1>
+<p class="subtitle">Test Bash <code>${...}</code> parameter expansions — defaults, substring extraction, pattern strip, replacement, case, length — on your own variables. Pure JS, no shell, no server.</p>
+
+<div class="card">
+<h2>&#128221; Variables</h2>
+<p class="note">Set the variables you want to expand. <code>VAR</code> is unset means it has never been assigned. To make it set-but-empty, leave the value blank but click <em>"set empty"</em>.</p>
+<div id="vars"></div>
+<div class="btnrow">
+<button class="btn" onclick="addVar()">+ Add variable</button>
+<button class="btn btn-secondary" onclick="addEmpty()">+ Add empty (set, no value)</button>
+<button class="btn btn-secondary" onclick="addUnset()">+ Add unset</button>
+<button class="btn btn-secondary" onclick="resetVars()">Reset</button>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128270; Expression</h2>
+<div class="expr-row">
+<input type="text" id="expr" value="${name:-anonymous}" spellcheck="false" autocomplete="off">
+</div>
+<div class="examples" id="examples"></div>
+</div>
+
+<div class="card">
+<h2>&#128202; Result</h2>
+<div class="result-row">
+<div class="result-box" id="resultBox">
+<div class="lbl">Expanded value</div>
+<div class="val" id="resultVal"></div>
+</div>
+<div class="result-box">
+<div class="lbl">Form recognized</div>
+<div class="val" id="resultForm"></div>
+</div>
+</div>
+<p class="warn" id="warn" style="display:none"></p>
+</div>
+
+<div class="card">
+<h2>&#128218; Cheatsheet (click to try)</h2>
+<table class="cheat" id="cheat"></table>
+</div>
+
+<div class="card">
+<h2>&#128172; Notes</h2>
+<p class="note"><strong>Pattern syntax:</strong> uses bash glob — <code>*</code> matches any string, <code>?</code> any single char, <code>[abc]</code> char class. Patterns in this tester support globs (translated to regex internally) but not the full extglob ([@?+*!](pat)) syntax.</p>
+<p class="note"><strong>Set vs. unset:</strong> <code>${var-x}</code> only substitutes when <em>unset</em>; <code>${var:-x}</code> substitutes when unset OR empty. The <code>:</code> always means "treat empty as unset".</p>
+<p class="note"><strong>Greedy vs lazy:</strong> <code>${var#pat}</code> strips the shortest prefix matching <code>pat</code>; <code>${var##pat}</code> strips the longest. Same with <code>%</code>/<code>%%</code> for suffixes.</p>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+
+const UNSET = Symbol('unset');
+let vars = {};
+
+function defaultVars(){
+  return {
+    name:    '',
+    file:    'report.tar.gz',
+    path:    '/home/user/projects/myapp/src/main.js',
+    greeting:'Hello World',
+    LOG:     UNSET,
+    count:   '42',
+  };
+}
+
+function resetVars(){ vars = defaultVars(); render(); }
+
+function addVar(){ const n = nextName(); vars[n] = ''; render(); }
+function addEmpty(){ const n = nextName(); vars[n] = ''; render(); }
+function addUnset(){ const n = nextName(); vars[n] = UNSET; render(); }
+
+function nextName(){
+  let i = 1;
+  while(`var${i}` in vars) i++;
+  return `var${i}`;
+}
+
+function renderVars(){
+  const html = Object.entries(vars).map(([k, v]) => {
+    const isUnset = v === UNSET;
+    const isEmpty = v === '';
+    const status = isUnset ? 'unset' : (isEmpty ? 'empty' : 'set');
+    return `<div class="varbox">
+      <span class="name">${k}=</span>
+      <input type="text" value="${isUnset?'':escapeHTML(v)}" placeholder="${isUnset?'(unset)':'(empty)'}" data-name="${k}" oninput="setVal('${k}',this.value)" ${isUnset?'disabled':''}>
+      <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end">
+      <button onclick="toggleUnset('${k}')" title="${isUnset?'mark as set':'mark as unset'}">${status}</button>
+      <button onclick="removeVar('${k}')" title="remove">×</button>
+      </div>
+    </div>`;
+  }).join('');
+  $('vars').innerHTML = html;
+}
+
+function escapeHTML(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+
+function setVal(name, val){ if(vars[name] !== UNSET) vars[name] = val; render(false); }
+
+function toggleUnset(name){
+  if(vars[name] === UNSET) vars[name] = '';
+  else vars[name] = UNSET;
+  render();
+}
+
+function removeVar(name){ delete vars[name]; render(); }
+
+function globToRegex(glob){
+  let re = '';
+  for(let i = 0; i < glob.length; i++){
+    const c = glob[i];
+    if(c === '*') re += '.*';
+    else if(c === '?') re += '.';
+    else if(c === '[') {
+      let j = i + 1, body = '';
+      let negate = false;
+      if(glob[j] === '!' || glob[j] === '^'){ negate = true; j++; }
+      while(j < glob.length && glob[j] !== ']'){ body += glob[j]; j++; }
+      if(j >= glob.length){ re += '\\['; continue; }
+      re += '[' + (negate?'^':'') + body + ']';
+      i = j;
+    } else if('.+(){}|\\^$'.includes(c)) re += '\\' + c;
+    else re += c;
+  }
+  return re;
+}
+
+function expand(expr){
+  if(!expr.startsWith('${') || !expr.endsWith('}')){
+    return { error: 'Expression must start with ${ and end with }', form: '' };
+  }
+  const inner = expr.slice(2, -1);
+
+  // ${#var} → length
+  if(inner.startsWith('#')){
+    const name = inner.slice(1);
+    if(!isValidName(name)) return { error: `Invalid variable name "${name}"`, form: 'length' };
+    const v = vars[name];
+    if(v === undefined || v === UNSET) return { value: '0', form: 'length: ${#var}' };
+    return { value: String(v.length), form: 'length: ${#var}' };
+  }
+
+  // ${!var} → indirect (look up the variable whose name is the value of var)
+  if(inner.startsWith('!') && !/[#%/^,@*]/.test(inner.slice(1))){
+    const name = inner.slice(1);
+    if(name.endsWith('*') || name.endsWith('@')){
+      const prefix = name.slice(0, -1);
+      const matches = Object.keys(vars).filter(k => k.startsWith(prefix) && vars[k] !== UNSET);
+      return { value: matches.join(' '), form: 'indirect: list names with prefix' };
+    }
+    if(!isValidName(name)) return { error: `Invalid variable name "${name}"`, form: 'indirect' };
+    const v = vars[name];
+    if(v === undefined || v === UNSET) return { value: '', form: 'indirect (unset target)' };
+    const target = v;
+    if(!isValidName(target) || vars[target] === undefined || vars[target] === UNSET){
+      return { value: '', form: `indirect: $${target} is unset` };
+    }
+    return { value: vars[target], form: 'indirect: ${!var}' };
+  }
+
+  // Try to parse name + operator
+  const m = inner.match(/^([A-Za-z_][A-Za-z0-9_]*|[0-9]+)(.*)$/s);
+  if(!m) return { error: `Cannot parse expression`, form: '' };
+  const name = m[1];
+  const rest = m[2];
+  const v = vars[name];
+  const isUnset = v === undefined || v === UNSET;
+  const isEmpty = !isUnset && v === '';
+
+  // Plain ${var}
+  if(rest === '') {
+    if(isUnset) return { value: '', form: 'plain: ${var} (unset)' };
+    return { value: v, form: 'plain: ${var}' };
+  }
+
+  // ${var:-default}, ${var-default}, ${var:=…}, ${var:?…}, ${var:+…}
+  let mm = rest.match(/^(:?)([-=?+])(.*)$/s);
+  if(mm){
+    const colon = mm[1] === ':';
+    const op = mm[2];
+    const arg = mm[3];
+    const treatEmptyAsUnset = colon;
+    const triggers = isUnset || (treatEmptyAsUnset && isEmpty);
+    if(op === '-'){
+      return { value: triggers ? arg : v, form: colon ? 'default if unset/empty: ${var:-word}' : 'default if unset: ${var-word}' };
+    }
+    if(op === '='){
+      if(triggers){ vars[name] = arg; renderVars(); return { value: arg, form: '${var:=word} → assigned and substituted' }; }
+      return { value: v, form: '${var:=word} (no change)' };
+    }
+    if(op === '?'){
+      if(triggers) return { error: `bash: ${name}: ${arg || 'parameter null or not set'}`, form: '${var:?msg} (errors when unset)' };
+      return { value: v, form: '${var:?msg}' };
+    }
+    if(op === '+'){
+      return { value: triggers ? '' : arg, form: colon ? 'alt if set & non-empty: ${var:+word}' : 'alt if set: ${var+word}' };
+    }
+  }
+
+  // ${var:offset:length}
+  mm = rest.match(/^:\s*(-?\d+)(?:\s*:\s*(-?\d+))?$/);
+  if(mm){
+    if(isUnset) return { value: '', form: 'substring: ${var:offset:length} (unset → empty)' };
+    let off = parseInt(mm[1], 10);
+    const len = mm[2] !== undefined ? parseInt(mm[2], 10) : null;
+    if(off < 0) off = Math.max(0, v.length + off);
+    let result;
+    if(len === null) result = v.slice(off);
+    else if(len < 0) result = v.slice(off, v.length + len);
+    else result = v.slice(off, off + len);
+    return { value: result, form: 'substring: ${var:offset:length}' };
+  }
+
+  // ${var#pat}, ${var##pat}, ${var%pat}, ${var%%pat}
+  mm = rest.match(/^(##|#|%%|%)(.*)$/s);
+  if(mm){
+    if(isUnset) return { value: '', form: `strip: ${expr} (unset → empty)` };
+    const op = mm[1];
+    const pat = mm[2];
+    const re = globToRegex(pat);
+    if(op === '#'){
+      const r = new RegExp('^' + re + '?');
+      // shortest prefix — try increasing lengths
+      for(let l = 0; l <= v.length; l++){
+        if(new RegExp('^' + re + '$').test(v.slice(0, l))) return { value: v.slice(l), form: 'strip shortest prefix: ${var#pat}' };
+      }
+      return { value: v, form: 'strip shortest prefix: ${var#pat} (no match)' };
+    }
+    if(op === '##'){
+      // longest prefix
+      for(let l = v.length; l >= 0; l--){
+        if(new RegExp('^' + re + '$').test(v.slice(0, l))) return { value: v.slice(l), form: 'strip longest prefix: ${var##pat}' };
+      }
+      return { value: v, form: 'strip longest prefix: ${var##pat} (no match)' };
+    }
+    if(op === '%'){
+      // shortest suffix
+      for(let l = 0; l <= v.length; l++){
+        if(new RegExp('^' + re + '$').test(v.slice(v.length - l))) return { value: v.slice(0, v.length - l), form: 'strip shortest suffix: ${var%pat}' };
+      }
+      return { value: v, form: 'strip shortest suffix: ${var%pat} (no match)' };
+    }
+    if(op === '%%'){
+      // longest suffix
+      for(let l = v.length; l >= 0; l--){
+        if(new RegExp('^' + re + '$').test(v.slice(v.length - l))) return { value: v.slice(0, v.length - l), form: 'strip longest suffix: ${var%%pat}' };
+      }
+      return { value: v, form: 'strip longest suffix: ${var%%pat} (no match)' };
+    }
+  }
+
+  // ${var/pat/repl}, ${var//pat/repl}, ${var/#pat/repl}, ${var/%pat/repl}
+  mm = rest.match(/^\/(\/?[#%]?)([^\/]*)(?:\/(.*))?$/s);
+  if(mm){
+    if(isUnset) return { value: '', form: `replace: ${expr} (unset → empty)` };
+    const flag = mm[1];
+    const pat = mm[2];
+    const repl = mm[3] || '';
+    const reBody = globToRegex(pat);
+    if(flag === '/'){
+      // global
+      return { value: v.replace(new RegExp(reBody, 'g'), repl), form: 'replace all: ${var//pat/repl}' };
+    }
+    if(flag === '#'){
+      return { value: v.replace(new RegExp('^' + reBody), repl), form: 'replace prefix: ${var/#pat/repl}' };
+    }
+    if(flag === '%'){
+      return { value: v.replace(new RegExp(reBody + '$'), repl), form: 'replace suffix: ${var/%pat/repl}' };
+    }
+    return { value: v.replace(new RegExp(reBody), repl), form: 'replace first: ${var/pat/repl}' };
+  }
+
+  // ${var^}, ${var^^}, ${var,}, ${var,,}
+  mm = rest.match(/^(\^\^|\^|,,|,)(.*)$/s);
+  if(mm){
+    if(isUnset) return { value: '', form: `case: ${expr} (unset → empty)` };
+    const op = mm[1];
+    if(op === '^') return { value: v.charAt(0).toUpperCase() + v.slice(1), form: 'uppercase first: ${var^}' };
+    if(op === '^^') return { value: v.toUpperCase(), form: 'uppercase all: ${var^^}' };
+    if(op === ',') return { value: v.charAt(0).toLowerCase() + v.slice(1), form: 'lowercase first: ${var,}' };
+    if(op === ',,') return { value: v.toLowerCase(), form: 'lowercase all: ${var,,}' };
+  }
+
+  // ${var@Q}, @U, @L, @E
+  mm = rest.match(/^@([QULE])$/);
+  if(mm){
+    if(isUnset) return { value: '', form: `transform: ${expr} (unset → empty)` };
+    const op = mm[1];
+    if(op === 'Q') return { value: "'" + v.replace(/'/g, "'\\''") + "'", form: 'quote: ${var@Q}' };
+    if(op === 'U') return { value: v.toUpperCase(), form: 'uppercase: ${var@U}' };
+    if(op === 'L') return { value: v.toLowerCase(), form: 'lowercase: ${var@L}' };
+    if(op === 'E') return { value: v, form: 'escape: ${var@E} (escape sequences passthrough in this tester)' };
+  }
+
+  return { error: `Unrecognized form: ${expr}`, form: '' };
+}
+
+function isValidName(s){ return /^[A-Za-z_][A-Za-z0-9_]*$|^[0-9]+$/.test(s); }
+
+function render(rerenderVarsToo = true){
+  if(rerenderVarsToo) renderVars();
+  const expr = $('expr').value;
+  const out = expand(expr);
+  const box = $('resultBox');
+  box.classList.remove('error', 'empty');
+  if(out.error){
+    box.classList.add('error');
+    $('resultVal').textContent = out.error;
+  } else if(out.value === ''){
+    box.classList.add('empty');
+    $('resultVal').textContent = '(empty)';
+  } else {
+    $('resultVal').textContent = out.value;
+  }
+  $('resultForm').textContent = out.form || '—';
+}
+
+const EXAMPLES = [
+  '${name}',
+  '${name:-anonymous}',
+  '${name:?must be set}',
+  '${LOG-/var/log/default.log}',
+  '${greeting:+yes}',
+  '${file%.tar.gz}',
+  '${file%%.*}',
+  '${file#*.}',
+  '${file##*.}',
+  '${path##*/}',
+  '${path%/*}',
+  '${path//user/USER}',
+  '${greeting/World/Bash}',
+  '${greeting^^}',
+  '${greeting,,}',
+  '${greeting:6}',
+  '${greeting:0:5}',
+  '${greeting: -5}',
+  '${#greeting}',
+  '${greeting@Q}',
+];
+
+function renderExamples(){
+  $('examples').innerHTML = EXAMPLES.map(e =>
+    `<button onclick="loadExample(${JSON.stringify(e).replace(/"/g, '&quot;')})">${escapeHTML(e)}</button>`
+  ).join('');
+}
+
+function loadExample(e){ $('expr').value = e; render(false); }
+
+const CHEAT = [
+  ['${var}',           'value of var, empty if unset'],
+  ['${var:-word}',     'word if var is unset OR empty'],
+  ['${var-word}',      'word only if var is unset'],
+  ['${var:=word}',     'assign word and substitute if unset/empty'],
+  ['${var:?msg}',      'error with msg if unset/empty'],
+  ['${var:+word}',     'word if var is set & non-empty, else empty'],
+  ['${var:offset}',    'substring from offset'],
+  ['${var:offset:len}','substring of length len'],
+  ['${var:-N}',        'last N chars (negative offset, note space)'],
+  ['${#var}',          'length of var'],
+  ['${var#pat}',       'strip shortest prefix matching glob pat'],
+  ['${var##pat}',      'strip longest prefix'],
+  ['${var%pat}',       'strip shortest suffix'],
+  ['${var%%pat}',      'strip longest suffix'],
+  ['${var/pat/repl}',  'replace first match'],
+  ['${var//pat/repl}', 'replace all matches'],
+  ['${var/#pat/repl}', 'replace if matches at start'],
+  ['${var/%pat/repl}', 'replace if matches at end'],
+  ['${var^}',          'uppercase first letter'],
+  ['${var^^}',         'uppercase all letters'],
+  ['${var,}',          'lowercase first letter'],
+  ['${var,,}',         'lowercase all letters'],
+  ['${var@Q}',         'single-quote-escape value (safe to eval)'],
+  ['${var@U}',         'uppercase (alt to ^^)'],
+  ['${var@L}',         'lowercase (alt to ,,)'],
+  ['${!var}',          'indirect: value of variable named in $var'],
+  ['${!prefix*}',      'list variable names starting with prefix'],
+];
+
+function renderCheat(){
+  $('cheat').innerHTML = '<tr><th style="width:38%">Form</th><th>Meaning</th></tr>' +
+    CHEAT.map(([f, d]) => {
+      const safeF = escapeHTML(f);
+      return `<tr onclick="$('expr').value=${JSON.stringify(f).replace(/"/g, '&quot;')};render(false)"><td><code>${safeF}</code></td><td>${escapeHTML(d)}</td></tr>`;
+    }).join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  vars = defaultVars();
+  renderExamples();
+  renderCheat();
+  $('expr').addEventListener('input', () => render(false));
+  render();
+});
+</script>
+</body>
+</html>

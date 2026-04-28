@@ -60,6 +60,8 @@
 | [CSS Subgrid Builder](csssubgrid.html) | Align nested grid rows or columns to the parent's tracks for card grids — live preview and clean exported CSS. |
 | [CSS Logical Properties Converter](csslogical.html) | Convert physical CSS (margin-left, padding-top) to logical equivalents (margin-inline-start, padding-block-start) for RTL and vertical writing modes. |
 | [CSS Mask Generator](cssmask.html) | Build mask-image declarations visually — gradient fades, vignettes, polka dots, and SVG shape masks with size, position, and mode controls. |
+| [CSS color-mix() Builder](cssmix.html) | Mix two colors in oklch, lab, hsl, hwb, srgb and more — adjustable percentage and hue interpolation, side-by-side preview, copy-ready CSS. |
+| [CSS Anchor Positioning Builder](cssanchor.html) | Build anchor-name, position-anchor, and position-area declarations for tooltips and popovers — drag-to-test stage, fallback flips, copy-ready CSS. |
 
 ## Images & Media
 
@@ -212,6 +214,7 @@
 | [Interactive Periodic Table](periodic.html) | Browse all 118 elements with atomic number, mass, electron configuration, and discovery year. |
 | [FPS Frame Budget Calculator](fpsbudget.html) | Convert between target FPS and millisecond frame budget, slice into JS / style / paint / GPU phases, and live-measure real frame time. |
 | [SQL Window Function Builder](sqlwindow.html) | Compose OVER (PARTITION BY ... ORDER BY ... ROWS BETWEEN ...) clauses for ROW_NUMBER, RANK, LAG, SUM and friends — generated SQL plus live result on sample data. |
+| [Bash Parameter Expansion Tester](bashparam.html) | Test ${var:-default}, ${var/pat/repl}, ${var##*/}, ${#var} and every other bash parameter expansion form on your variables — built-in cheatsheet, no shell needed. |
 
 ## AI & PM Tools
 
