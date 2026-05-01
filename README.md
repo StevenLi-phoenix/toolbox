@@ -13,6 +13,7 @@
 | Tool | Description |
 |------|-------------|
 | [JSON Formatter](json.html) | Format, validate, minify, and beautify JSON with syntax highlighting. |
+| [JSON → Swift](json2swift.html) | Generate Swift Codable structs or classes with CodingKeys, Optionals, and nested types. |
 | [JSON → Go Struct](json2go.html) | Convert JSON objects to Go structs with proper json tags. |
 | [JSON → TypeScript](json2ts.html) | Convert JSON objects to TypeScript interfaces instantly. |
 | [JSON ⇄ XML Converter](json2xml.html) | Convert between JSON and XML formats instantly. |
@@ -36,6 +37,7 @@
 | Tool | Description |
 |------|-------------|
 | [CSS Gradient Generator](gradient.html) | Create beautiful linear, radial, and conic gradients with live preview. |
+| [CSS Counter Generator](csscounter.html) | Build counter-reset / counter-increment / content rules with a live preview — roman, alpha, greek, and nested counters. |
 | [CSS Box Shadow](shadow.html) | Design box shadows with multiple layers and inset support. |
 | [Flexbox Playground](flexbox.html) | Interactive CSS flexbox playground with live properties. |
 | [CSS Grid Generator](grid.html) | Build grid layouts visually with presets and CSS export. |
@@ -245,6 +247,7 @@
 | Tool | Description |
 |------|-------------|
 | [Pomodoro Timer](pomodoro.html) | Customizable work/break intervals with audio alerts and tracking. |
+| [Time Card / Timesheet Calculator](timecard.html) | Log clock-in / clock-out shifts and compute total hours, regular vs overtime, gross pay, and weekly breakdowns. |
 | [Kanban Board](kanban.html) | Drag-and-drop Kanban board with customizable columns. |
 | [Habit Tracker](habits.html) | Track daily habits with streaks and a GitHub-style heatmap. |
 | [Focus Session Planner](focusplanner.html) | Plan a focused work session from a messy task list. |

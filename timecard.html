@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Time Card / Timesheet Hours Calculator — Free Online Tool</title>
+<meta name="description" content="Log clock-in / clock-out shifts and compute total hours, regular vs overtime, weekly totals, and gross pay. Round to nearest interval, deduct breaks. 100% client-side.">
+<meta name="keywords" content="time card, timesheet calculator, hours calculator, clock in clock out, work hours, overtime calculator, payroll, biweekly timesheet">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/timecard.html">
+<meta property="og:title" content="Time Card / Timesheet Hours Calculator — Free Online Tool">
+<meta property="og:description" content="Add clock-in / clock-out shifts and compute total hours, overtime, and gross pay with break deductions and rounding.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/timecard.html">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Time Card / Timesheet Hours Calculator">
+<meta name="twitter:description" content="Total work hours from clock-in / clock-out shifts, with overtime and pay.">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+  td input[type="time"], td input[type="date"], td input[type="number"] {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); padding: 4px 6px; font-family: var(--mono); font-size: .85rem; width: 100%; box-sizing: border-box;
+  }
+  td input[type="number"] { max-width: 90px; }
+  .col-actions { width: 60px; text-align: right; }
+  .row-total { font-family: var(--mono); white-space: nowrap; }
+  .row-total.over { color: var(--warning); }
+  .icon-btn {
+    background: transparent; border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--muted); padding: 2px 8px; cursor: pointer; font-size: .85rem;
+  }
+  .icon-btn:hover { color: var(--error); border-color: var(--error); }
+  .opts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .75rem 1rem; }
+  .opt label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: .2rem; }
+  .opt input, .opt select {
+    width: 100%; box-sizing: border-box; padding: 6px 8px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: var(--mono); font-size: .85rem;
+  }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-top: .5rem; }
+  .stat-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: .75rem 1rem;
+  }
+  .stat-card .label { font-size: .78rem; color: var(--muted); margin-bottom: .25rem; }
+  .stat-card .value { font-family: var(--mono); font-size: 1.25rem; font-weight: 600; color: var(--text); }
+  .stat-card.warn .value { color: var(--warning); }
+  .stat-card.success .value { color: var(--success); }
+  .actions-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Time Card &amp; Timesheet Calculator</h1>
+<p class="subtitle">Add clock-in / clock-out shifts. Compute total hours, regular vs overtime, gross pay, and weekly breakdowns.</p>
+
+<div class="card">
+  <h2>Settings</h2>
+  <div class="opts-grid">
+    <div class="opt">
+      <label for="hourly">Hourly rate</label>
+      <input type="number" id="hourly" min="0" step="0.01" value="25" oninput="calc()">
+    </div>
+    <div class="opt">
+      <label for="otThreshold">Overtime after (hours/week)</label>
+      <input type="number" id="otThreshold" min="0" step="0.5" value="40" oninput="calc()">
+    </div>
+    <div class="opt">
+      <label for="otMult">Overtime multiplier</label>
+      <input type="number" id="otMult" min="1" step="0.05" value="1.5" oninput="calc()">
+    </div>
+    <div class="opt">
+      <label for="round">Round each shift to (minutes)</label>
+      <select id="round" onchange="calc()">
+        <option value="0">No rounding</option>
+        <option value="1">1 min</option>
+        <option value="5">5 min</option>
+        <option value="6">6 min (1/10 hour)</option>
+        <option value="15" selected>15 min</option>
+        <option value="30">30 min</option>
+      </select>
+    </div>
+    <div class="opt">
+      <label for="format">Output format</label>
+      <select id="format" onchange="calc()">
+        <option value="decimal">Decimal hours (8.25)</option>
+        <option value="hm">Hours:Minutes (8:15)</option>
+      </select>
+    </div>
+    <div class="opt">
+      <label for="weekStart">Week starts on</label>
+      <select id="weekStart" onchange="calc()">
+        <option value="0">Sunday</option>
+        <option value="1" selected>Monday</option>
+        <option value="6">Saturday</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Shifts</h2>
+  <table id="shiftTable">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Clock in</th>
+        <th>Clock out</th>
+        <th>Break (min)</th>
+        <th>Hours</th>
+        <th class="col-actions"></th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="actions-row">
+    <button class="btn" onclick="addRow()">+ Add shift</button>
+    <button class="btn btn-secondary" onclick="addWeek()">+ Add 5-day week</button>
+    <button class="btn btn-secondary" onclick="clearAll()">Clear all</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Totals</h2>
+  <div class="summary">
+    <div class="stat-card"><div class="label">Total hours</div><div class="value" id="sumTotal">0:00</div></div>
+    <div class="stat-card success"><div class="label">Regular</div><div class="value" id="sumReg">0:00</div></div>
+    <div class="stat-card warn"><div class="label">Overtime</div><div class="value" id="sumOt">0:00</div></div>
+    <div class="stat-card"><div class="label">Gross pay</div><div class="value" id="sumPay">$0.00</div></div>
+  </div>
+  <div id="weekTable" style="margin-top: 1rem;"></div>
+</div>
+</div>
+
+<div class="toast" id="toast">&check; Copied!</div>
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function newRow(date, inT, outT, brk) {
+  const tbody = $('rows');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="date" value="${date || todayISO()}" oninput="calc()"></td>
+    <td><input type="time" value="${inT || '09:00'}" oninput="calc()"></td>
+    <td><input type="time" value="${outT || '17:00'}" oninput="calc()"></td>
+    <td><input type="number" min="0" step="5" value="${brk == null ? 30 : brk}" oninput="calc()"></td>
+    <td class="row-total"></td>
+    <td class="col-actions"><button class="icon-btn" title="Remove" onclick="this.closest('tr').remove(); calc();">&times;</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function addRow() { newRow(); calc(); }
+
+function addWeek() {
+  // Add 5 weekdays starting from the most recent date in the table or today
+  let base = new Date();
+  const lastDate = [...$('rows').querySelectorAll('input[type="date"]')].pop();
+  if (lastDate && lastDate.value) base = new Date(lastDate.value + 'T00:00:00');
+  for (let i = 1; i <= 5; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    newRow(d.toISOString().slice(0, 10));
+  }
+  calc();
+}
+
+function clearAll() {
+  $('rows').innerHTML = '';
+  calc();
+}
+
+function parseTime(t) {
+  if (!t) return null;
+  const [h, m] = t.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function shiftMinutes(inT, outT, brkMin) {
+  const a = parseTime(inT), b = parseTime(outT);
+  if (a == null || b == null) return null;
+  let diff = b - a;
+  if (diff < 0) diff += 24 * 60;
+  diff -= (Number.isFinite(brkMin) ? brkMin : 0);
+  return Math.max(0, diff);
+}
+
+function roundMinutes(min, step) {
+  if (!step || step < 1) return min;
+  return Math.round(min / step) * step;
+}
+
+function fmtHours(min) {
+  const fmt = $('format').value;
+  if (fmt === 'hm') {
+    const sign = min < 0 ? '-' : '';
+    const a = Math.abs(min);
+    const h = Math.floor(a / 60);
+    const m = Math.round(a % 60);
+    return `${sign}${h}:${String(m).padStart(2, '0')}`;
+  }
+  return (min / 60).toFixed(2);
+}
+
+function fmtMoney(n) {
+  return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function weekKey(dateStr, weekStart) {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return 'invalid';
+  const dow = d.getDay();
+  const diff = (dow - weekStart + 7) % 7;
+  d.setDate(d.getDate() - diff);
+  return d.toISOString().slice(0, 10);
+}
+
+function calc() {
+  const round = parseInt($('round').value, 10);
+  const otThreshold = parseFloat($('otThreshold').value) || 0;
+  const otMult = parseFloat($('otMult').value) || 1;
+  const hourly = parseFloat($('hourly').value) || 0;
+  const weekStart = parseInt($('weekStart').value, 10);
+
+  const rows = [...$('rows').querySelectorAll('tr')];
+  const byWeek = new Map();
+  let total = 0;
+
+  for (const tr of rows) {
+    const inputs = tr.querySelectorAll('input');
+    const date = inputs[0].value;
+    const inT = inputs[1].value;
+    const outT = inputs[2].value;
+    const brk = parseFloat(inputs[3].value) || 0;
+    const cell = tr.querySelector('.row-total');
+
+    const mins = shiftMinutes(inT, outT, brk);
+    if (mins == null || !date) {
+      cell.textContent = '—';
+      cell.classList.remove('over');
+      continue;
+    }
+    const rounded = roundMinutes(mins, round);
+    cell.textContent = fmtHours(rounded);
+    cell.classList.toggle('over', rounded > 12 * 60);
+    total += rounded;
+
+    const wk = weekKey(date, weekStart);
+    if (!byWeek.has(wk)) byWeek.set(wk, 0);
+    byWeek.set(wk, byWeek.get(wk) + rounded);
+  }
+
+  // Compute regular vs overtime per week
+  const otThreshMin = otThreshold * 60;
+  let regMin = 0, otMin = 0;
+  for (const wkMin of byWeek.values()) {
+    if (wkMin > otThreshMin) {
+      regMin += otThreshMin;
+      otMin += wkMin - otThreshMin;
+    } else {
+      regMin += wkMin;
+    }
+  }
+
+  $('sumTotal').textContent = fmtHours(total);
+  $('sumReg').textContent = fmtHours(regMin);
+  $('sumOt').textContent = fmtHours(otMin);
+
+  const pay = (regMin / 60) * hourly + (otMin / 60) * hourly * otMult;
+  $('sumPay').textContent = fmtMoney(pay);
+
+  // Weekly breakdown table
+  const weekKeys = [...byWeek.keys()].sort();
+  if (weekKeys.length === 0) {
+    $('weekTable').innerHTML = '';
+    return;
+  }
+  const rowsHtml = weekKeys.map(k => {
+    const wk = byWeek.get(k);
+    const reg = Math.min(wk, otThreshMin);
+    const ot = Math.max(0, wk - otThreshMin);
+    const wkPay = (reg / 60) * hourly + (ot / 60) * hourly * otMult;
+    return `<tr>
+      <td>${k}</td>
+      <td>${fmtHours(wk)}</td>
+      <td>${fmtHours(reg)}</td>
+      <td>${fmtHours(ot)}</td>
+      <td>${fmtMoney(wkPay)}</td>
+    </tr>`;
+  }).join('');
+  $('weekTable').innerHTML = `
+    <h3 style="font-size:.95rem; color:var(--muted); margin: .5rem 0;">Weekly breakdown</h3>
+    <table>
+      <thead><tr><th>Week starting</th><th>Total</th><th>Regular</th><th>Overtime</th><th>Pay</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+// Seed with a Mon-Fri workweek
+(function seed() {
+  const today = new Date();
+  // back up to most recent Monday
+  const dow = today.getDay();
+  const back = (dow + 6) % 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - back);
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    newRow(d.toISOString().slice(0, 10), '09:00', '17:30', 30);
+  }
+  calc();
+})();
+</script>
+</body>
+</html>

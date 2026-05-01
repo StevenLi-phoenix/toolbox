@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON to Swift Struct Converter — Free Online Codable Generator</title>
+<meta name="description" content="Convert JSON objects to Swift structs or classes with Codable conformance. Optional types, CodingKeys, nested struct extraction, and let/var control. 100% client-side.">
+<meta name="keywords" content="json to swift, swift struct generator, codable, swift codingkeys, swift code generator, ios developer tool, json converter">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/json2swift.html">
+<meta property="og:title" content="JSON to Swift Struct Converter — Free Online Tool">
+<meta property="og:description" content="Generate Swift Codable structs or classes from JSON with CodingKeys, nested types, and Optional support.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/json2swift.html">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="JSON to Swift Struct Converter">
+<meta name="twitter:description" content="Generate Swift Codable structs or classes from JSON.">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .options { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
+  .options label { font-size: .85rem; display: flex; align-items: center; gap: .3rem; cursor: pointer; }
+  .options select, .options input[type="text"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: .85rem; }
+  .options input[type="text"] { width: 130px; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  textarea { width: 100%; min-height: 360px; font-family: var(--mono); font-size: .85rem; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; tab-size: 4; }
+  .output-area { position: relative; }
+  .output-area textarea { background: var(--surface); }
+  .copy-btn { position: absolute; top: 8px; right: 8px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON &rarr; Swift</h1>
+<p class="subtitle">Convert JSON to Swift Codable structs or classes — with CodingKeys, Optionals, and nested types.</p>
+
+<div class="card">
+<div class="options">
+  <label>Root name:
+    <input type="text" id="structName" value="Root" placeholder="StructName" oninput="convert()">
+  </label>
+  <label>Kind:
+    <select id="kind" onchange="convert()">
+      <option value="struct">struct</option>
+      <option value="class">class</option>
+    </select>
+  </label>
+  <label>Mutability:
+    <select id="mutability" onchange="convert()">
+      <option value="let">let</option>
+      <option value="var">var</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="optCodable" checked onchange="convert()"> Codable</label>
+  <label><input type="checkbox" id="optKeys" checked onchange="convert()"> CodingKeys for snake_case</label>
+  <label><input type="checkbox" id="optOptional" onchange="convert()"> Optional for nulls</label>
+  <label><input type="checkbox" id="optAccess" onchange="convert()"> public access</label>
+  <label><input type="checkbox" id="optHashable" onchange="convert()"> Hashable</label>
+</div>
+</div>
+
+<div class="panels">
+  <div class="card">
+    <h2>JSON Input</h2>
+    <textarea id="input" placeholder='{"name": "Alice", "age": 30, "active": true}' oninput="convert()"></textarea>
+  </div>
+  <div class="card output-area">
+    <h2>Swift Output</h2>
+    <button class="btn btn-secondary copy-btn" onclick="copyOutput()">Copy</button>
+    <textarea id="output" readonly></textarea>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">&check; Copied!</div>
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SWIFT_KEYWORDS = new Set([
+  'associatedtype','class','deinit','enum','extension','fileprivate','func','import','init',
+  'inout','internal','let','open','operator','private','protocol','public','rethrows','static',
+  'struct','subscript','typealias','var','break','case','continue','default','defer','do','else',
+  'fallthrough','for','guard','if','in','repeat','return','switch','where','while','as','catch',
+  'false','is','nil','super','self','Self','throw','throws','true','try'
+]);
+
+function toPascalCase(s) {
+  return String(s).replace(/[^a-zA-Z0-9_]/g, ' ')
+    .split(/[\s_]+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('') || 'Item';
+}
+
+function toCamelCase(s) {
+  const pascal = toPascalCase(s);
+  return pascal.charAt(0).toLowerCase() + pascal.slice(1);
+}
+
+function safeIdent(name) {
+  let n = name.replace(/[^a-zA-Z0-9_]/g, '_');
+  if (/^[0-9]/.test(n)) n = '_' + n;
+  if (SWIFT_KEYWORDS.has(n)) n = '`' + n + '`';
+  return n;
+}
+
+function singularize(name) {
+  if (name.endsWith('ies') && name.length > 3) return name.slice(0, -3) + 'y';
+  if (name.endsWith('ses') && name.length > 3) return name.slice(0, -2);
+  if (name.endsWith('s') && name.length > 1) return name.slice(0, -1);
+  return name;
+}
+
+function inferType(val, key, nested, opts) {
+  if (val === null) {
+    return 'String?';
+  }
+  if (typeof val === 'string') return 'String';
+  if (typeof val === 'boolean') return 'Bool';
+  if (typeof val === 'number') {
+    return Number.isInteger(val) ? 'Int' : 'Double';
+  }
+  if (Array.isArray(val)) {
+    if (val.length === 0) return '[String]';
+    // Find first non-null element to infer from; fall back to first
+    const sample = val.find(v => v !== null) ?? val[0];
+    const inner = inferType(sample, singularize(key), nested, opts);
+    return `[${inner}]`;
+  }
+  if (typeof val === 'object') {
+    const typeName = toPascalCase(key);
+    nested.push({ name: typeName, obj: val });
+    return typeName;
+  }
+  return 'String';
+}
+
+function generateType(name, obj, nested, opts) {
+  const lines = [];
+  const protocols = [];
+  if (opts.codable) protocols.push('Codable');
+  if (opts.hashable) protocols.push('Hashable');
+
+  const access = opts.access ? 'public ' : '';
+  const conformance = protocols.length ? `: ${protocols.join(', ')}` : '';
+  lines.push(`${access}${opts.kind} ${name}${conformance} {`);
+
+  const entries = Object.entries(obj);
+  if (entries.length === 0) {
+    lines.push('}');
+    return lines;
+  }
+
+  const codingPairs = [];
+  const fieldDecls = [];
+
+  for (const [key, val] of entries) {
+    const swiftField = safeIdent(toCamelCase(key));
+    let swiftType = inferType(val, key, nested, opts);
+
+    // null handling
+    if (val === null && opts.optional) {
+      swiftType = 'String?';
+    } else if (val === null) {
+      swiftType = 'String?';
+    } else if (opts.optional) {
+      // make non-array, non-already-optional types optional
+      if (!swiftType.endsWith('?')) swiftType += '?';
+    }
+
+    fieldDecls.push(`    ${access}${opts.mutability} ${swiftField}: ${swiftType}`);
+
+    // CodingKeys mapping
+    if (swiftField !== key && swiftField !== '`' + key + '`') {
+      codingPairs.push([swiftField, key]);
+    } else {
+      codingPairs.push([swiftField, null]);
+    }
+  }
+
+  lines.push(...fieldDecls);
+
+  // Emit CodingKeys if any field name needs remapping and Codable + keys requested
+  const needsKeys = opts.codable && opts.keys && codingPairs.some(([, raw]) => raw !== null);
+  if (needsKeys) {
+    lines.push('');
+    lines.push('    enum CodingKeys: String, CodingKey {');
+    for (const [field, raw] of codingPairs) {
+      if (raw !== null) {
+        lines.push(`        case ${field} = "${raw}"`);
+      } else {
+        lines.push(`        case ${field}`);
+      }
+    }
+    lines.push('    }');
+  }
+
+  lines.push('}');
+  return lines;
+}
+
+function convert() {
+  const raw = $('input').value.trim();
+  if (!raw) { $('output').value = ''; return; }
+
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (e) {
+    $('output').value = `// Error: ${e.message}`;
+    return;
+  }
+
+  if (typeof parsed !== 'object' || parsed === null) {
+    $('output').value = '// Error: Input must be a JSON object or array of objects';
+    return;
+  }
+
+  const opts = {
+    kind: $('kind').value,
+    mutability: $('mutability').value,
+    codable: $('optCodable').checked,
+    keys: $('optKeys').checked,
+    optional: $('optOptional').checked,
+    access: $('optAccess').checked,
+    hashable: $('optHashable').checked,
+  };
+
+  let rootObj = parsed;
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0 || typeof parsed[0] !== 'object' || parsed[0] === null) {
+      $('output').value = '// Error: Array must contain objects';
+      return;
+    }
+    rootObj = parsed[0];
+  }
+
+  const rootName = ($('structName').value.trim() || 'Root').replace(/[^a-zA-Z0-9_]/g, '');
+  const nested = [];
+  const mainLines = generateType(rootName, rootObj, nested, opts);
+
+  const allTypes = [];
+  const seen = new Set([rootName]);
+  while (nested.length > 0) {
+    const { name, obj } = nested.shift();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    allTypes.push(generateType(name, obj, nested, opts));
+  }
+
+  const header = ['import Foundation', ''];
+  const allCode = [mainLines, ...allTypes].map(s => s.join('\n')).join('\n\n');
+  $('output').value = header.join('\n') + '\n' + allCode + '\n';
+}
+
+function copyOutput() {
+  const text = $('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const toast = $('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1500);
+  });
+}
+
+$('input').value = JSON.stringify({
+  "id": 1,
+  "first_name": "Alice",
+  "email": "alice@example.com",
+  "is_active": true,
+  "score": 98.5,
+  "tags": ["admin", "user"],
+  "address": {
+    "street": "123 Main St",
+    "city": "Springfield",
+    "zip_code": "62701"
+  },
+  "last_login": null
+}, null, 2);
+convert();
+</script>
+</body>
+</html>
