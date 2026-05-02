@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GraphQL Query Cost Calculator — Free Online Tool</title>
+<meta name="description" content="Estimate GraphQL query complexity, depth, and node count. Detect expensive nested queries before they hit production. Configurable per-field costs and list multipliers.">
+<meta name="keywords" content="graphql cost, graphql complexity, query complexity analysis, query depth, graphql rate limiting, graphql cost analyzer, n+1">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/graphqlcost.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea { width: 100%; min-height: 320px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .82rem; background: var(--bg); color: var(--text); box-sizing: border-box; resize: vertical; tab-size: 2; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .controls label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--muted); }
+  .controls input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; }
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+  .stat { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); text-align: center; }
+  .stat .v { font-size: 1.5rem; font-weight: 700; font-family: var(--mono); color: var(--accent, #2563eb); }
+  .stat .v.ok { color: var(--success); }
+  .stat .v.warn { color: var(--warning); }
+  .stat .v.bad { color: var(--error); }
+  .stat .l { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+  .breakdown { font-family: var(--mono); font-size: .82rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; max-height: 380px; overflow: auto; }
+  .breakdown .line { padding: 2px 4px; display: grid; grid-template-columns: 1fr 70px 70px; gap: 8px; align-items: center; }
+  .breakdown .line:hover { background: var(--surface2); }
+  .breakdown .name { color: var(--text); }
+  .breakdown .name.list { color: var(--accent, #2563eb); }
+  .breakdown .name.frag { color: var(--muted); font-style: italic; }
+  .breakdown .cost { text-align: right; color: var(--muted); }
+  .breakdown .cost.expensive { color: var(--error); font-weight: 700; }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .preset { padding: 5px 10px; font-size: .76rem; border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .preset:hover { border-color: var(--accent, #2563eb); }
+  .err { color: var(--error); font-size: .82rem; margin-top: 6px; min-height: 1.4em; }
+  .verdict { padding: 10px 12px; border-radius: var(--radius); font-size: .85rem; margin-top: 10px; }
+  .verdict.ok { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+  .verdict.warn { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
+  .verdict.bad { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .explain { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .explain code { background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .82rem; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } .summary { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>GraphQL Query Cost Calculator</h1>
+<p class="subtitle">Paste a GraphQL query and we'll walk the selection set to estimate cost, depth, and the total number of resolver calls a server might make. Useful for sizing rate limits, spotting <em>N+1</em> traps, and budgeting expensive queries before clients hammer them.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Query</h2>
+    <div class="preset-row">
+      <span style="font-size:.78rem;color:var(--muted);align-self:center">Sample:</span>
+      <button class="preset" data-sample="simple">Simple</button>
+      <button class="preset" data-sample="nested">Nested lists</button>
+      <button class="preset" data-sample="badge">Badge feed</button>
+      <button class="preset" data-sample="evil">Pathological</button>
+    </div>
+    <textarea id="query" spellcheck="false"></textarea>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="card">
+    <h2>Cost model</h2>
+    <div class="controls">
+      <label>Default field cost
+        <input type="number" id="defCost" value="1" min="0" step="0.5">
+      </label>
+      <label>Default list multiplier
+        <input type="number" id="defMult" value="10" min="1">
+      </label>
+      <label>Argument-driven multiplier
+        <input type="text" id="argKeys" value="first,last,limit,take">
+      </label>
+      <label>Cost budget (warn / fail)
+        <input type="text" id="budget" value="50, 200">
+      </label>
+    </div>
+
+    <div class="summary">
+      <div class="stat"><div class="v" id="sCost">0</div><div class="l">total cost</div></div>
+      <div class="stat"><div class="v" id="sDepth">0</div><div class="l">depth</div></div>
+      <div class="stat"><div class="v" id="sNodes">0</div><div class="l">selections</div></div>
+      <div class="stat"><div class="v" id="sLists">0</div><div class="l">list fields</div></div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+
+    <h3 style="margin-top:14px;font-size:.9rem">Per-field breakdown</h3>
+    <div id="breakdown" class="breakdown"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How the cost is computed</h2>
+  <div class="explain">
+    <p>We parse the query (operations, selection sets, fragments, arguments) and compute the cost recursively:</p>
+    <ul style="padding-left:18px;margin:6px 0">
+      <li>Every leaf field contributes the <strong>default field cost</strong>.</li>
+      <li>Every object field contributes its cost <em>plus</em> the cost of its selection set.</li>
+      <li>If a field has an argument from the <strong>argument-driven multiplier</strong> list (e.g. <code>first: 50</code>), its subtree cost is multiplied by that value.</li>
+      <li>Otherwise, list-shaped fields get the <strong>default list multiplier</strong>.</li>
+      <li>Inline fragments and named fragments inherit the parent multiplier.</li>
+    </ul>
+    <p>This is the same shape as <code>graphql-cost-analysis</code> and Shopify's storefront cost rules: it's a <em>worst-case</em> upper bound, ideal for rate-limit sizing and spotting nested list bombs.</p>
+    <p><strong>Tip.</strong> Drop a real production query in here and tweak the budget to mirror your server limits &mdash; you'll know in seconds whether a new client query is going to get throttled.</p>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLES = {
+  simple: `query Me {
+  viewer {
+    id
+    name
+    email
+  }
+}`,
+  nested: `query Feed {
+  posts(first: 20) {
+    id
+    title
+    author {
+      name
+      avatar
+    }
+    comments(first: 5) {
+      id
+      body
+      author { name }
+    }
+  }
+}`,
+  badge: `query Profile($id: ID!) {
+  user(id: $id) {
+    id
+    name
+    badges(first: 25) {
+      label
+      icon
+      awardedBy {
+        name
+        team {
+          name
+          members(first: 10) { id name }
+        }
+      }
+    }
+    followers(first: 50) {
+      id
+      name
+    }
+  }
+}`,
+  evil: `query Pathological {
+  users(first: 100) {
+    posts {
+      comments {
+        likes {
+          user {
+            posts {
+              comments { id }
+            }
+          }
+        }
+      }
+    }
+  }
+}`,
+};
+
+function tokenize(src) {
+  const tokens = [];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '#') { while (i < src.length && src[i] !== '\n') i++; continue; }
+    if (/\s/.test(c) || c === ',') { i++; continue; }
+    if ('{}()[]:'.includes(c)) { tokens.push({ t: c, v: c }); i++; continue; }
+    if (c === '$') {
+      let j = i + 1;
+      while (j < src.length && /[A-Za-z0-9_]/.test(src[j])) j++;
+      tokens.push({ t: 'var', v: src.slice(i, j) });
+      i = j; continue;
+    }
+    if (c === '"') {
+      let j = i + 1;
+      while (j < src.length && src[j] !== '"') { if (src[j] === '\\') j++; j++; }
+      tokens.push({ t: 'str', v: src.slice(i + 1, j) });
+      i = j + 1; continue;
+    }
+    if (c === '.' && src[i + 1] === '.' && src[i + 2] === '.') { tokens.push({ t: '...', v: '...' }); i += 3; continue; }
+    if (c === '@') {
+      let j = i + 1;
+      while (j < src.length && /[A-Za-z0-9_]/.test(src[j])) j++;
+      tokens.push({ t: 'dir', v: src.slice(i, j) });
+      i = j; continue;
+    }
+    if (c === '-' || /[0-9]/.test(c)) {
+      let j = i + 1;
+      while (j < src.length && /[0-9.eE+\-]/.test(src[j])) j++;
+      tokens.push({ t: 'num', v: parseFloat(src.slice(i, j)) });
+      i = j; continue;
+    }
+    if (/[A-Za-z_]/.test(c)) {
+      let j = i + 1;
+      while (j < src.length && /[A-Za-z0-9_]/.test(src[j])) j++;
+      tokens.push({ t: 'name', v: src.slice(i, j) });
+      i = j; continue;
+    }
+    i++;
+  }
+  return tokens;
+}
+
+function parse(src) {
+  const tokens = tokenize(src);
+  let p = 0;
+  const peek = () => tokens[p];
+  const eat = (t) => {
+    const tk = tokens[p];
+    if (!tk || tk.t !== t) throw new Error('Expected ' + t + ' at token ' + (tokens[p] ? tokens[p].v : 'EOF'));
+    p++;
+    return tk;
+  };
+  const fragments = {};
+  const operations = [];
+
+  function parseDocument() {
+    while (p < tokens.length) {
+      const tk = peek();
+      if (!tk) break;
+      if (tk.t === 'name' && (tk.v === 'query' || tk.v === 'mutation' || tk.v === 'subscription')) {
+        operations.push(parseOperation(tk.v));
+      } else if (tk.t === 'name' && tk.v === 'fragment') {
+        parseFragment();
+      } else if (tk.t === '{') {
+        operations.push({ kind: 'query', name: '(anonymous)', selectionSet: parseSelectionSet() });
+      } else {
+        p++;
+      }
+    }
+  }
+
+  function parseOperation(kind) {
+    p++;
+    let name = '(anonymous)';
+    if (peek() && peek().t === 'name') { name = peek().v; p++; }
+    if (peek() && peek().t === '(') skipBalanced('(', ')');
+    while (peek() && peek().t === 'dir') { p++; if (peek() && peek().t === '(') skipBalanced('(', ')'); }
+    return { kind, name, selectionSet: parseSelectionSet() };
+  }
+
+  function parseFragment() {
+    p++;
+    const fname = eat('name').v;
+    if (peek() && peek().t === 'name' && peek().v === 'on') p++;
+    if (peek() && peek().t === 'name') p++;
+    while (peek() && peek().t === 'dir') { p++; if (peek() && peek().t === '(') skipBalanced('(', ')'); }
+    fragments[fname] = parseSelectionSet();
+  }
+
+  function skipBalanced(open, close) {
+    if (!peek() || peek().t !== open) return;
+    p++;
+    let depth = 1;
+    while (p < tokens.length && depth > 0) {
+      if (tokens[p].t === open) depth++;
+      else if (tokens[p].t === close) depth--;
+      p++;
+    }
+  }
+
+  function parseSelectionSet() {
+    eat('{');
+    const sels = [];
+    while (peek() && peek().t !== '}') {
+      sels.push(parseSelection());
+    }
+    eat('}');
+    return sels;
+  }
+
+  function parseSelection() {
+    const tk = peek();
+    if (tk.t === '...') {
+      p++;
+      const next = peek();
+      if (next && next.t === 'name' && next.v !== 'on') {
+        p++;
+        while (peek() && peek().t === 'dir') { p++; if (peek() && peek().t === '(') skipBalanced('(', ')'); }
+        return { kind: 'fragSpread', name: next.v };
+      }
+      if (next && next.t === 'name' && next.v === 'on') {
+        p++;
+        if (peek() && peek().t === 'name') p++;
+      }
+      while (peek() && peek().t === 'dir') { p++; if (peek() && peek().t === '(') skipBalanced('(', ')'); }
+      return { kind: 'inlineFrag', selectionSet: parseSelectionSet() };
+    }
+    let alias = null;
+    let name = eat('name').v;
+    if (peek() && peek().t === ':') { p++; alias = name; name = eat('name').v; }
+    const args = {};
+    if (peek() && peek().t === '(') {
+      p++;
+      while (peek() && peek().t !== ')') {
+        const argName = eat('name').v;
+        eat(':');
+        const v = parseValue();
+        args[argName] = v;
+      }
+      eat(')');
+    }
+    while (peek() && peek().t === 'dir') { p++; if (peek() && peek().t === '(') skipBalanced('(', ')'); }
+    let selectionSet = null;
+    if (peek() && peek().t === '{') selectionSet = parseSelectionSet();
+    return { kind: 'field', name, alias, args, selectionSet };
+  }
+
+  function parseValue() {
+    const tk = peek();
+    if (!tk) return null;
+    if (tk.t === 'num') { p++; return tk.v; }
+    if (tk.t === 'str') { p++; return tk.v; }
+    if (tk.t === 'var') { p++; return { var: tk.v }; }
+    if (tk.t === 'name') { p++; return tk.v; }
+    if (tk.t === '[') {
+      p++;
+      const arr = [];
+      while (peek() && peek().t !== ']') arr.push(parseValue());
+      eat(']');
+      return arr;
+    }
+    if (tk.t === '{') {
+      p++;
+      const obj = {};
+      while (peek() && peek().t !== '}') {
+        const k = eat('name').v;
+        eat(':');
+        obj[k] = parseValue();
+      }
+      eat('}');
+      return obj;
+    }
+    p++;
+    return null;
+  }
+
+  parseDocument();
+  return { operations, fragments };
+}
+
+function compute() {
+  const src = $('query').value;
+  $('err').textContent = '';
+  if (!src.trim()) { resetUi(); return; }
+  let doc;
+  try { doc = parse(src); } catch (e) { $('err').textContent = 'Parse error: ' + e.message; resetUi(); return; }
+  if (!doc.operations.length) { $('err').textContent = 'No operations found.'; resetUi(); return; }
+
+  const defCost = parseFloat($('defCost').value) || 1;
+  const defMult = parseFloat($('defMult').value) || 10;
+  const argKeys = $('argKeys').value.split(',').map(s => s.trim()).filter(Boolean);
+  const budget = $('budget').value.split(',').map(s => parseFloat(s.trim())).filter(x => !isNaN(x));
+  const warnAt = budget[0] || 50;
+  const failAt = budget[1] || 200;
+
+  let totalCost = 0, maxDepth = 0, nodeCount = 0, listCount = 0;
+  const lines = [];
+
+  function walk(selections, depth, mult, indent) {
+    let local = 0;
+    for (const sel of selections) {
+      if (sel.kind === 'field') {
+        nodeCount++;
+        if (depth > maxDepth) maxDepth = depth;
+        let argMult = null;
+        for (const k of argKeys) {
+          if (sel.args[k] !== undefined) {
+            const v = sel.args[k];
+            if (typeof v === 'number' && v > 0) { argMult = v; break; }
+            if (v && typeof v === 'object' && v.var) { argMult = defMult; break; }
+          }
+        }
+        const isList = sel.selectionSet && (argMult !== null || depth === 1);
+        const fieldMult = mult * (argMult !== null ? argMult : (sel.selectionSet ? 1 : 1));
+        const ownCost = defCost * mult;
+        local += ownCost;
+        totalCost += ownCost;
+        let childMult = mult;
+        if (sel.selectionSet) {
+          if (argMult !== null) { childMult = mult * argMult; listCount++; }
+          else if (looksList(sel.name)) { childMult = mult * defMult; listCount++; }
+        }
+        const lineCost = ownCost;
+        lines.push({ indent, name: sel.name, list: childMult > mult, cost: lineCost, mult: mult });
+        if (sel.selectionSet) {
+          local += walk(sel.selectionSet, depth + 1, childMult, indent + 1);
+        }
+      } else if (sel.kind === 'inlineFrag') {
+        lines.push({ indent, name: '... on (inline)', frag: true, cost: 0, mult });
+        local += walk(sel.selectionSet, depth, mult, indent + 1);
+      } else if (sel.kind === 'fragSpread') {
+        const sels = doc.fragments[sel.name];
+        lines.push({ indent, name: '...' + sel.name, frag: true, cost: 0, mult });
+        if (sels) local += walk(sels, depth, mult, indent + 1);
+      }
+    }
+    return local;
+  }
+
+  for (const op of doc.operations) {
+    lines.push({ indent: 0, name: op.kind + ' ' + op.name, frag: true, cost: 0, mult: 1 });
+    walk(op.selectionSet, 1, 1, 1);
+  }
+
+  $('sCost').textContent = totalCost.toFixed(1).replace(/\.0$/, '');
+  $('sDepth').textContent = maxDepth;
+  $('sNodes').textContent = nodeCount;
+  $('sLists').textContent = listCount;
+
+  const sCost = $('sCost');
+  sCost.classList.remove('ok', 'warn', 'bad');
+  let v = $('verdict');
+  v.classList.remove('ok', 'warn', 'bad');
+  if (totalCost >= failAt) {
+    sCost.classList.add('bad');
+    v.classList.add('bad');
+    v.textContent = `Cost ${totalCost.toFixed(0)} ≥ ${failAt} — would be rejected by a typical rate-limited server.`;
+  } else if (totalCost >= warnAt) {
+    sCost.classList.add('warn');
+    v.classList.add('warn');
+    v.textContent = `Cost ${totalCost.toFixed(0)} between ${warnAt} and ${failAt} — risky. Consider pagination or fragment splitting.`;
+  } else {
+    sCost.classList.add('ok');
+    v.classList.add('ok');
+    v.textContent = `Cost ${totalCost.toFixed(0)} under budget (${warnAt}). Looks safe.`;
+  }
+
+  const expensiveCutoff = totalCost / Math.max(nodeCount, 1) * 4;
+  const html = lines.map(l => {
+    const pad = '  '.repeat(l.indent);
+    const cls = l.frag ? 'frag' : (l.list ? 'list' : '');
+    const costCls = l.cost >= expensiveCutoff ? 'expensive' : '';
+    const costTxt = l.cost > 0 ? l.cost.toFixed(1).replace(/\.0$/, '') : '';
+    const multTxt = l.mult > 1 ? '×' + l.mult.toFixed(0) : '';
+    return `<div class="line"><span class="name ${cls}">${pad}${escapeHtml(l.name)}</span><span class="cost">${multTxt}</span><span class="cost ${costCls}">${costTxt}</span></div>`;
+  }).join('');
+  $('breakdown').innerHTML = html;
+}
+
+function looksList(name) {
+  return /s$/i.test(name) || /list$/i.test(name) || /(connection|edges|nodes|all|items)$/i.test(name);
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]); }
+
+function resetUi() {
+  $('sCost').textContent = '0';
+  $('sDepth').textContent = '0';
+  $('sNodes').textContent = '0';
+  $('sLists').textContent = '0';
+  $('breakdown').innerHTML = '';
+  $('verdict').textContent = '';
+  $('verdict').className = 'verdict';
+}
+
+$('query').addEventListener('input', compute);
+['defCost', 'defMult', 'argKeys', 'budget'].forEach(id => $(id).addEventListener('input', compute));
+document.querySelectorAll('.preset[data-sample]').forEach(b => b.addEventListener('click', () => {
+  $('query').value = SAMPLES[b.dataset.sample];
+  compute();
+}));
+
+$('query').value = SAMPLES.nested;
+compute();
+</script>
+</body>
+</html>

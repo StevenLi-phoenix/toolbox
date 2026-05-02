@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cohort Retention Calculator — Free Online Tool</title>
+<meta name="description" content="Build a cohort retention matrix from raw user activity data. Paste user_id,date pairs and see weekly or monthly retention curves with averaged lifetime retention.">
+<meta name="keywords" content="cohort analysis, retention matrix, user retention, churn analysis, cohort retention, dau, mau, product analytics">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cohort.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea { width: 100%; min-height: 240px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .82rem; background: var(--bg); color: var(--text); box-sizing: border-box; resize: vertical; }
+  .controls { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .controls select, .controls input { padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: .82rem; }
+  .controls label { display: inline-flex; align-items: center; gap: 6px; }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .preset { padding: 5px 10px; font-size: .76rem; border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .preset:hover { border-color: var(--accent, #2563eb); }
+  .matrix { overflow-x: auto; margin-top: 12px; }
+  table.cohort { border-collapse: collapse; font-family: var(--mono); font-size: .78rem; }
+  table.cohort th, table.cohort td { border: 1px solid var(--border); padding: 6px 8px; text-align: right; min-width: 56px; white-space: nowrap; }
+  table.cohort th.cohort-label, table.cohort td.cohort-label { text-align: left; background: var(--surface2); font-weight: 700; min-width: 110px; position: sticky; left: 0; z-index: 1; }
+  table.cohort th { background: var(--surface2); font-weight: 700; }
+  table.cohort td.size { background: var(--surface); color: var(--muted); }
+  table.cohort tr.avg td.cohort-label, table.cohort tr.avg td { background: var(--surface2); font-weight: 700; }
+  .stat-row { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .stat-row strong { color: var(--text); font-family: var(--mono); }
+  .err { color: var(--error); font-size: .82rem; margin-top: 6px; min-height: 1.4em; }
+  .legend-grad { display: flex; align-items: center; gap: 6px; font-size: .75rem; color: var(--muted); margin-top: 8px; }
+  .legend-grad .bar { width: 160px; height: 12px; border-radius: 4px; background: linear-gradient(to right, #f0fdf4, #16a34a); border: 1px solid var(--border); }
+  .explain { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .explain code { background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .82rem; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Cohort Retention Calculator</h1>
+<p class="subtitle">Paste raw <code>user_id,date</code> activity rows. We bucket each user into the cohort of their first appearance, then count what fraction returns in week 1, week 2, week N. Classic retention triangle &mdash; the chart every PM ends up needing eventually.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Activity data</h2>
+    <div class="controls">
+      <label>Bucket
+        <select id="bucket">
+          <option value="day">daily</option>
+          <option value="week" selected>weekly</option>
+          <option value="month">monthly</option>
+        </select>
+      </label>
+      <label>Max periods
+        <input type="number" id="maxPeriods" min="2" max="52" value="12" style="width:62px">
+      </label>
+      <label>Format
+        <select id="fmt">
+          <option value="csv" selected>user,date</option>
+          <option value="tsv">user&lt;tab&gt;date</option>
+        </select>
+      </label>
+    </div>
+    <div class="preset-row">
+      <span style="font-size:.78rem;color:var(--muted);align-self:center">Sample:</span>
+      <button class="preset" data-sample="saas">SaaS weekly</button>
+      <button class="preset" data-sample="app">Mobile app daily</button>
+      <button class="preset" data-sample="newsletter">Newsletter monthly</button>
+    </div>
+    <textarea id="input" placeholder="alice,2024-01-02
+bob,2024-01-03
+alice,2024-01-09
+..."></textarea>
+    <div class="err" id="err"></div>
+    <div class="stat-row" id="stats"></div>
+  </div>
+
+  <div class="card">
+    <h2>Retention matrix</h2>
+    <div class="legend-grad"><span>0%</span><div class="bar"></div><span>100%</span></div>
+    <div class="matrix" id="matrix">
+      <div style="font-size:.85rem;color:var(--muted);margin-top:12px">Paste data on the left to build the matrix.</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How it works</h2>
+  <div class="explain">
+    <p>Each user is assigned to the cohort containing their first activity row. For each subsequent bucket (week 0, week 1, week 2, …), we count how many users from that cohort appear at least once in that bucket. The cell value is <code>active / cohort_size</code>.</p>
+    <p>The bottom <strong>average</strong> row weighs each cohort by size, so it's the answer to <em>"of all users we've ever acquired, what % were active N buckets later?"</em> &mdash; not a simple mean of percentages.</p>
+    <p><strong>Tips.</strong> Drop duplicate <code>(user, date)</code> rows before pasting if your data is event-level; otherwise they don't matter (we de-dupe per bucket). Dates in <code>YYYY-MM-DD</code> or any format <code>Date.parse</code> understands.</p>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLES = {
+  saas: (() => {
+    const lines = [];
+    const start = new Date('2024-01-01');
+    const ret = [1, 0.85, 0.72, 0.65, 0.58, 0.55, 0.52, 0.50, 0.48, 0.47, 0.46, 0.45];
+    let uid = 0;
+    for (let cohort = 0; cohort < 8; cohort++) {
+      const cohortSize = 50 + Math.floor(Math.random() * 30);
+      const cohortStart = new Date(start.getTime() + cohort * 7 * 86400000);
+      for (let u = 0; u < cohortSize; u++) {
+        const id = 'u' + (uid++);
+        for (let w = 0; w < ret.length && cohort + w < 12; w++) {
+          if (Math.random() < ret[w]) {
+            const d = new Date(cohortStart.getTime() + w * 7 * 86400000 + Math.floor(Math.random() * 7) * 86400000);
+            lines.push(id + ',' + d.toISOString().slice(0, 10));
+          }
+        }
+      }
+    }
+    return lines.join('\n');
+  })(),
+  app: (() => {
+    const lines = [];
+    const start = new Date('2024-01-01');
+    const ret = [1, 0.40, 0.30, 0.25, 0.22, 0.20, 0.18, 0.17, 0.16, 0.15, 0.14, 0.14, 0.13, 0.13];
+    let uid = 0;
+    for (let cohort = 0; cohort < 14; cohort++) {
+      const cohortSize = 30 + Math.floor(Math.random() * 20);
+      const cohortStart = new Date(start.getTime() + cohort * 86400000);
+      for (let u = 0; u < cohortSize; u++) {
+        const id = 'u' + (uid++);
+        for (let d = 0; d < ret.length && cohort + d < 28; d++) {
+          if (Math.random() < ret[d]) {
+            const day = new Date(cohortStart.getTime() + d * 86400000);
+            lines.push(id + ',' + day.toISOString().slice(0, 10));
+          }
+        }
+      }
+    }
+    return lines.join('\n');
+  })(),
+  newsletter: (() => {
+    const lines = [];
+    const start = new Date('2023-01-15');
+    const ret = [1, 0.60, 0.50, 0.45, 0.42, 0.40, 0.38];
+    let uid = 0;
+    for (let cohort = 0; cohort < 6; cohort++) {
+      const cohortSize = 80 + Math.floor(Math.random() * 40);
+      const cohortDate = new Date(start.getFullYear(), start.getMonth() + cohort, 15);
+      for (let u = 0; u < cohortSize; u++) {
+        const id = 'u' + (uid++);
+        for (let m = 0; m < ret.length && cohort + m < 12; m++) {
+          if (Math.random() < ret[m]) {
+            const dd = new Date(cohortDate.getFullYear(), cohortDate.getMonth() + m, 15);
+            lines.push(id + ',' + dd.toISOString().slice(0, 10));
+          }
+        }
+      }
+    }
+    return lines.join('\n');
+  })(),
+};
+
+function bucketKey(date, mode) {
+  const d = new Date(date.getTime());
+  if (mode === 'day') {
+    return d.toISOString().slice(0, 10);
+  }
+  if (mode === 'week') {
+    const day = d.getUTCDay();
+    const monOffset = (day + 6) % 7;
+    d.setUTCDate(d.getUTCDate() - monOffset);
+    return d.toISOString().slice(0, 10);
+  }
+  return d.toISOString().slice(0, 7);
+}
+
+function bucketIndex(start, target, mode) {
+  if (mode === 'day') return Math.floor((target - start) / 86400000);
+  if (mode === 'week') return Math.floor((target - start) / (7 * 86400000));
+  const sd = new Date(start), td = new Date(target);
+  return (td.getUTCFullYear() - sd.getUTCFullYear()) * 12 + (td.getUTCMonth() - sd.getUTCMonth());
+}
+
+function bucketLabel(key, mode) {
+  if (mode === 'month') return key;
+  if (mode === 'week') return 'wk ' + key;
+  return key;
+}
+
+function colorForPct(p) {
+  if (p === null || p === undefined) return 'transparent';
+  const t = Math.max(0, Math.min(1, p));
+  const r1 = 240, g1 = 253, b1 = 244;
+  const r2 = 22,  g2 = 163, b2 = 74;
+  const r = Math.round(r1 + (r2 - r1) * t);
+  const g = Math.round(g1 + (g2 - g1) * t);
+  const b = Math.round(b1 + (b2 - b1) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
+function pctText(p) {
+  if (p === null) return '';
+  return (p * 100).toFixed(1) + '%';
+}
+
+function compute() {
+  const raw = $('input').value.trim();
+  $('err').textContent = '';
+  if (!raw) { $('matrix').innerHTML = '<div style="font-size:.85rem;color:var(--muted);margin-top:12px">Paste data on the left to build the matrix.</div>'; $('stats').innerHTML = ''; return; }
+  const fmt = $('fmt').value;
+  const sep = fmt === 'tsv' ? '\t' : ',';
+  const mode = $('bucket').value;
+  const maxP = Math.max(2, Math.min(52, parseInt($('maxPeriods').value) || 12));
+  const rows = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const events = [];
+  let bad = 0;
+  for (const line of rows) {
+    const parts = line.split(sep);
+    if (parts.length < 2) { bad++; continue; }
+    const user = parts[0].trim();
+    const dateStr = parts.slice(1).join(sep).trim();
+    const t = Date.parse(dateStr);
+    if (!user || isNaN(t)) { bad++; continue; }
+    events.push({ user, t });
+  }
+  if (bad) $('err').textContent = `Skipped ${bad} unparseable line${bad === 1 ? '' : 's'}.`;
+  if (!events.length) { $('matrix').innerHTML = ''; $('stats').innerHTML = ''; return; }
+
+  const firstByUser = new Map();
+  for (const e of events) {
+    const f = firstByUser.get(e.user);
+    if (f === undefined || e.t < f) firstByUser.set(e.user, e.t);
+  }
+  const cohortMap = new Map();
+  for (const [user, t] of firstByUser.entries()) {
+    const key = bucketKey(new Date(t), mode);
+    if (!cohortMap.has(key)) cohortMap.set(key, { firstT: t, users: new Set() });
+    cohortMap.get(key).users.add(user);
+    const c = cohortMap.get(key);
+    if (t < c.firstT) c.firstT = t;
+  }
+  const cohortKeys = [...cohortMap.keys()].sort();
+  const cohortStart = new Map();
+  for (const k of cohortKeys) {
+    const d = new Date(k.length === 7 ? k + '-01' : k);
+    cohortStart.set(k, d.getTime());
+  }
+  const matrix = new Map();
+  for (const k of cohortKeys) matrix.set(k, new Map());
+  const userToCohort = new Map();
+  for (const [key, info] of cohortMap.entries()) {
+    for (const u of info.users) userToCohort.set(u, key);
+  }
+  const seen = new Set();
+  for (const e of events) {
+    const cKey = userToCohort.get(e.user);
+    if (!cKey) continue;
+    const start = cohortStart.get(cKey);
+    const idx = bucketIndex(new Date(start), new Date(e.t), mode);
+    if (idx < 0 || idx >= maxP) continue;
+    const key = e.user + '|' + cKey + '|' + idx;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const m = matrix.get(cKey);
+    m.set(idx, (m.get(idx) || 0) + 1);
+  }
+
+  const totalUsers = firstByUser.size;
+  const totalEvents = events.length;
+  const totalCohorts = cohortKeys.length;
+  $('stats').innerHTML = `
+    <span>Users: <strong>${totalUsers.toLocaleString()}</strong></span>
+    <span>Events: <strong>${totalEvents.toLocaleString()}</strong></span>
+    <span>Cohorts: <strong>${totalCohorts.toLocaleString()}</strong></span>
+    <span>Bucket: <strong>${mode}</strong></span>`;
+
+  const headers = [];
+  for (let i = 0; i < maxP; i++) headers.push(i === 0 ? 'P0' : 'P' + i);
+  let html = '<table class="cohort"><thead><tr><th class="cohort-label">Cohort</th><th>Size</th>';
+  for (const h of headers) html += `<th>${h}</th>`;
+  html += '</tr></thead><tbody>';
+
+  const colSums = new Array(maxP).fill(0);
+  const colCohortSizeSums = new Array(maxP).fill(0);
+
+  for (const k of cohortKeys) {
+    const size = cohortMap.get(k).users.size;
+    html += `<tr><td class="cohort-label">${bucketLabel(k, mode)}</td><td class="size">${size}</td>`;
+    const m = matrix.get(k);
+    for (let i = 0; i < maxP; i++) {
+      const cnt = m.get(i) || 0;
+      const pct = cnt / size;
+      const startT = cohortStart.get(k);
+      const periodStart = mode === 'month'
+        ? new Date(new Date(startT).getUTCFullYear(), new Date(startT).getUTCMonth() + i, 1).getTime()
+        : startT + i * (mode === 'day' ? 86400000 : 7 * 86400000);
+      if (periodStart > Date.now() && cnt === 0) {
+        html += `<td style="background:var(--surface2);color:var(--muted)">·</td>`;
+      } else {
+        html += `<td style="background:${colorForPct(pct)};color:${pct > 0.55 ? '#fff' : 'var(--text)'}">${pctText(pct)}</td>`;
+        colSums[i] += cnt;
+        colCohortSizeSums[i] += size;
+      }
+    }
+    html += '</tr>';
+  }
+  html += `<tr class="avg"><td class="cohort-label">Average</td><td class="size">${totalUsers}</td>`;
+  for (let i = 0; i < maxP; i++) {
+    if (colCohortSizeSums[i] === 0) { html += '<td>·</td>'; continue; }
+    const pct = colSums[i] / colCohortSizeSums[i];
+    html += `<td style="background:${colorForPct(pct)};color:${pct > 0.55 ? '#fff' : 'var(--text)'}">${pctText(pct)}</td>`;
+  }
+  html += '</tr></tbody></table>';
+  $('matrix').innerHTML = html;
+}
+
+$('input').addEventListener('input', compute);
+$('bucket').addEventListener('change', compute);
+$('maxPeriods').addEventListener('input', compute);
+$('fmt').addEventListener('change', compute);
+document.querySelectorAll('.preset[data-sample]').forEach(b => b.addEventListener('click', () => {
+  const k = b.dataset.sample;
+  $('input').value = SAMPLES[k];
+  if (k === 'app') $('bucket').value = 'day';
+  else if (k === 'newsletter') $('bucket').value = 'month';
+  else $('bucket').value = 'week';
+  compute();
+}));
+
+$('input').value = SAMPLES.saas;
+compute();
+</script>
+</body>
+</html>

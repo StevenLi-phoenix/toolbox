@@ -169,6 +169,7 @@
 | [Webhook Payload Builder](webhookbuilder.html) | Generate sample JSON, TypeScript, schema & cURL for webhooks. |
 | [Redirect Rule Builder & Tester](redirects.html) | Build, validate, and test redirect rules. |
 | [Rate Limit Backoff Planner](backoff.html) | Design exponential, linear, or fixed retry schedules. |
+| [GraphQL Query Cost Calculator](graphqlcost.html) | Estimate query complexity, depth, and resolver call count — spot N+1 traps and size rate limits before clients hit them. |
 
 ## Developer Tools
 
@@ -217,6 +218,7 @@
 | [FPS Frame Budget Calculator](fpsbudget.html) | Convert between target FPS and millisecond frame budget, slice into JS / style / paint / GPU phases, and live-measure real frame time. |
 | [SQL Window Function Builder](sqlwindow.html) | Compose OVER (PARTITION BY ... ORDER BY ... ROWS BETWEEN ...) clauses for ROW_NUMBER, RANK, LAG, SUM and friends — generated SQL plus live result on sample data. |
 | [Bash Parameter Expansion Tester](bashparam.html) | Test ${var:-default}, ${var/pat/repl}, ${var##*/}, ${#var} and every other bash parameter expansion form on your variables — built-in cheatsheet, no shell needed. |
+| [Big O Complexity Comparator](bigo.html) | Compare O(1), O(log n), O(n), O(n log n), O(n²), O(2ⁿ), O(n!) at any input size — operations and runtime budgets on a log–log chart. |
 
 ## AI & PM Tools
 
@@ -241,6 +243,7 @@
 | [Sprint Capacity Planner](sprintcapacity.html) | Estimate capacity, velocity, and task fit for your sprint. |
 | [Sprint Retro Generator](sprintretro.html) | Turn raw retro notes into action items and themes. |
 | [Priority Matrix](prioritymatrix.html) | Sort tasks by impact, effort, urgency, and risk. |
+| [Cohort Retention Calculator](cohort.html) | Build a retention matrix from raw user activity — paste user_id,date pairs and see weekly or monthly retention curves with weighted averages. |
 
 ## Productivity
 
