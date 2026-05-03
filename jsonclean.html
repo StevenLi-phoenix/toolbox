@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Cleaner — Strip Null & Empty Values — Free Online Tool</title>
+<meta name="description" content="Recursively remove null, undefined, empty strings, empty arrays, and empty objects from JSON. Configurable per type, preserves order, no data leaves your browser.">
+<meta name="keywords" content="json cleaner, remove null json, strip empty values, json prune, json compact, clean json keys">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonclean.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 320px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .9rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+    line-height: 1.45;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 18px;
+    margin: 6px 0 4px; font-size: .88rem; color: var(--text);
+  }
+  .controls label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .stats {
+    display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px;
+    font-size: .82rem; color: var(--muted);
+  }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .err { color: var(--error); font-family: var(--mono); font-size: .82rem; margin-top: 6px; }
+  .button-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .button-row button {
+    padding: 6px 12px; border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); font-family: var(--mono); font-size: .82rem; border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .button-row button:hover { border-color: var(--accent); }
+  .indent-row { display: flex; align-items: center; gap: 10px; font-size: .85rem; color: var(--muted); margin-top: 8px; }
+  .indent-row select {
+    padding: 4px 8px; border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); font-family: var(--mono); font-size: .85rem; border-radius: 4px;
+  }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .controls { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON Cleaner</h1>
+<p class="subtitle">Recursively strip <code>null</code>, empty strings, empty arrays, empty objects, false, zero, and NaN values from JSON. Useful when normalising API responses for diffing, shrinking config files, or producing minimal seed data &mdash; toggle each rule independently and preserve key order.</p>
+
+<div class="card">
+  <div class="controls">
+    <label><input type="checkbox" id="rmNull" checked onchange="run()"> Remove <code>null</code></label>
+    <label><input type="checkbox" id="rmEmptyStr" checked onchange="run()"> Remove empty strings <code>""</code></label>
+    <label><input type="checkbox" id="rmEmptyArr" checked onchange="run()"> Remove empty arrays <code>[]</code></label>
+    <label><input type="checkbox" id="rmEmptyObj" checked onchange="run()"> Remove empty objects <code>{}</code></label>
+    <label><input type="checkbox" id="rmFalse" onchange="run()"> Remove <code>false</code></label>
+    <label><input type="checkbox" id="rmZero" onchange="run()"> Remove <code>0</code></label>
+    <label><input type="checkbox" id="rmNaN" checked onchange="run()"> Remove <code>NaN</code> / non-finite (already invalid in JSON)</label>
+    <label><input type="checkbox" id="trimStr" onchange="run()"> Trim string whitespace before checking emptiness</label>
+    <label><input type="checkbox" id="recurse" checked onchange="run()"> Re-clean parents until stable (drops chains of empties)</label>
+    <label><input type="checkbox" id="sortKeys" onchange="run()"> Sort object keys alphabetically</label>
+  </div>
+  <div class="indent-row">
+    <span>Indent</span>
+    <select id="indent" onchange="run()">
+      <option value="2" selected>2 spaces</option>
+      <option value="4">4 spaces</option>
+      <option value="\t">tab</option>
+      <option value="0">minified</option>
+    </select>
+  </div>
+  <div class="panels" style="margin-top:14px">
+    <div>
+      <label class="head" for="input">Input JSON</label>
+      <textarea id="input" oninput="run()" spellcheck="false">{
+  "name": "Toolbox",
+  "version": "1.0.0",
+  "description": "",
+  "author": null,
+  "tags": [],
+  "config": {
+    "debug": false,
+    "verbose": null,
+    "extras": {}
+  },
+  "scripts": {
+    "build": "vite build",
+    "test": "",
+    "lint": null
+  },
+  "dependencies": {
+    "react": "^18.0.0",
+    "lodash": "",
+    "axios": null
+  }
+}</textarea>
+      <div class="button-row">
+        <button onclick="loadSample('package')">Sample: package.json</button>
+        <button onclick="loadSample('api')">Sample: API response</button>
+        <button onclick="copyOut()">Copy output</button>
+      </div>
+      <div id="err" class="err"></div>
+    </div>
+    <div>
+      <label class="head" for="output">Cleaned JSON</label>
+      <textarea id="output" readonly spellcheck="false"></textarea>
+      <div class="stats">
+        <span>input <strong id="sIn">0</strong> chars</span>
+        <span>output <strong id="sOut">0</strong> chars</span>
+        <span>saved <strong id="sDelta">0</strong></span>
+        <span>removed <strong id="sRemoved">0</strong> values</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How "empty" Is Decided</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Each rule is checked <em>after</em> children are already cleaned, so a property like <code>{"a": {"b": null}}</code> with both "remove null" and "remove empty objects" enabled collapses all the way to <code>{}</code> &mdash; or, if <em>recurse until stable</em> is on, gets removed by the next pass too. Strings are matched literally; flip "trim before checking" to also drop whitespace-only strings like <code>"  "</code>. The cleaner never reorders keys unless you ask it to. <code>NaN</code>, <code>Infinity</code>, and <code>-Infinity</code> aren't valid JSON in the first place &mdash; the input parser will reject them with a syntax error, but the output guarantees nothing leaks through.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLES = {
+  package: `{
+  "name": "Toolbox",
+  "version": "1.0.0",
+  "description": "",
+  "author": null,
+  "tags": [],
+  "config": {
+    "debug": false,
+    "verbose": null,
+    "extras": {}
+  },
+  "scripts": {
+    "build": "vite build",
+    "test": "",
+    "lint": null
+  }
+}`,
+  api: `{
+  "user": {
+    "id": 42,
+    "name": "Ada",
+    "nickname": null,
+    "phone": "",
+    "address": {
+      "street": "10 Downing",
+      "apt": null,
+      "tags": []
+    }
+  },
+  "session": {
+    "token": "xyz",
+    "extras": {},
+    "permissions": []
+  },
+  "errors": []
+}`
+};
+
+function loadSample(name) {
+  $('input').value = SAMPLES[name] || '';
+  run();
+}
+
+let removed = 0;
+
+function isEmpty(v, opts) {
+  if (v === null && opts.rmNull) return true;
+  if (typeof v === 'number' && !Number.isFinite(v) && opts.rmNaN) return true;
+  if (typeof v === 'number' && v === 0 && opts.rmZero) return true;
+  if (typeof v === 'boolean' && v === false && opts.rmFalse) return true;
+  if (typeof v === 'string') {
+    const s = opts.trimStr ? v.trim() : v;
+    if (s === '' && opts.rmEmptyStr) return true;
+    return false;
+  }
+  if (Array.isArray(v) && v.length === 0 && opts.rmEmptyArr) return true;
+  if (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0 && opts.rmEmptyObj) return true;
+  return false;
+}
+
+function clean(v, opts) {
+  if (Array.isArray(v)) {
+    const out = [];
+    for (const item of v) {
+      const c = clean(item, opts);
+      if (isEmpty(c, opts)) { removed++; continue; }
+      out.push(c);
+    }
+    return out;
+  }
+  if (v && typeof v === 'object') {
+    const keys = opts.sortKeys ? Object.keys(v).sort() : Object.keys(v);
+    const out = {};
+    for (const k of keys) {
+      const c = clean(v[k], opts);
+      if (isEmpty(c, opts)) { removed++; continue; }
+      out[k] = c;
+    }
+    return out;
+  }
+  return v;
+}
+
+function run() {
+  const opts = {
+    rmNull: $('rmNull').checked,
+    rmEmptyStr: $('rmEmptyStr').checked,
+    rmEmptyArr: $('rmEmptyArr').checked,
+    rmEmptyObj: $('rmEmptyObj').checked,
+    rmFalse: $('rmFalse').checked,
+    rmZero: $('rmZero').checked,
+    rmNaN: $('rmNaN').checked,
+    trimStr: $('trimStr').checked,
+    recurse: $('recurse').checked,
+    sortKeys: $('sortKeys').checked
+  };
+  const src = $('input').value;
+  $('sIn').textContent = src.length;
+  if (!src.trim()) {
+    $('output').value = '';
+    $('err').textContent = '';
+    $('sOut').textContent = '0';
+    $('sDelta').textContent = '0';
+    $('sRemoved').textContent = '0';
+    return;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(src);
+  } catch (e) {
+    $('err').textContent = 'Parse error: ' + e.message;
+    $('output').value = '';
+    return;
+  }
+  $('err').textContent = '';
+  removed = 0;
+  let cleaned = clean(parsed, opts);
+  if (opts.recurse) {
+    let prev;
+    let guard = 0;
+    do {
+      prev = JSON.stringify(cleaned);
+      cleaned = clean(cleaned, opts);
+      guard++;
+    } while (prev !== JSON.stringify(cleaned) && guard < 50);
+  }
+  const indentRaw = $('indent').value;
+  let indent;
+  if (indentRaw === '0') indent = 0;
+  else if (indentRaw === '\\t') indent = '\t';
+  else indent = parseInt(indentRaw, 10);
+  const out = JSON.stringify(cleaned, null, indent);
+  $('output').value = out;
+  $('sOut').textContent = out.length;
+  $('sDelta').textContent = (src.length - out.length);
+  $('sRemoved').textContent = removed;
+}
+
+function copyOut() {
+  const v = $('output').value;
+  if (!v) return;
+  navigator.clipboard.writeText(v).catch(() => {});
+}
+
+run();
+</script>
+</body>
+</html>

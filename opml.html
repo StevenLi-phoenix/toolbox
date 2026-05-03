@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OPML Builder & Parser — Free Online Tool</title>
+<meta name="description" content="Build, parse, and convert OPML feed-subscription lists. Import an OPML file and export it as JSON, plain URLs, or Markdown for backups, RSS readers, and feed migrations.">
+<meta name="keywords" content="opml, opml parser, opml builder, rss subscriptions export, feed list, feedly opml, inoreader, freshrss">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/opml.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 280px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .88rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+    line-height: 1.45;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+  .controls label { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--text); cursor: pointer; }
+  .controls select, .controls input[type="text"] {
+    padding: 4px 8px; border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); font-family: var(--mono); font-size: .85rem; border-radius: 4px;
+  }
+  .button-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .button-row button {
+    padding: 6px 12px; border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); font-family: var(--mono); font-size: .82rem; border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .button-row button:hover { border-color: var(--accent); }
+  .stats {
+    display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px;
+    font-size: .82rem; color: var(--muted);
+  }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .err { color: var(--error); font-family: var(--mono); font-size: .82rem; margin-top: 6px; }
+  .ok { color: var(--success); font-family: var(--mono); font-size: .82rem; margin-top: 6px; }
+  .tree {
+    font-family: var(--mono); font-size: .85rem; color: var(--text);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px;
+    max-height: 320px; overflow: auto; line-height: 1.5;
+  }
+  .tree details { margin-left: .5rem; }
+  .tree summary { cursor: pointer; color: var(--text); }
+  .tree summary::-webkit-details-marker { color: var(--muted); }
+  .tree .leaf { color: var(--muted); padding: 1px 0 1px 1.1rem; }
+  .tree .leaf a { color: var(--accent); text-decoration: none; }
+  .tree .leaf a:hover { text-decoration: underline; }
+  .tree .feed-title { color: var(--text); }
+  .tree .url { color: var(--muted); font-size: .78rem; margin-left: .4rem; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>OPML Builder & Parser</h1>
+<p class="subtitle">OPML (Outline Processor Markup Language) is the portable format every RSS reader supports for backing up and moving feed subscriptions. This tool round-trips OPML &harr; JSON &harr; URL list &harr; Markdown so you can edit a backup in plain text, migrate from Feedly to FreshRSS, or pull just the feed URLs out of a tangled categorised export.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Mode
+      <select id="mode" onchange="run()">
+        <option value="parse" selected>OPML &rarr; JSON / URLs / Markdown</option>
+        <option value="build">URLs / JSON &rarr; OPML</option>
+      </select>
+    </label>
+    <label id="outFmtWrap">Output as
+      <select id="outFmt" onchange="run()">
+        <option value="json" selected>JSON (nested)</option>
+        <option value="urls">Feed URLs only</option>
+        <option value="urlspipe">Title | URL</option>
+        <option value="md">Markdown list</option>
+      </select>
+    </label>
+    <label id="titleWrap" style="display:none">Title
+      <input type="text" id="title" oninput="run()" value="My Subscriptions" autocomplete="off">
+    </label>
+  </div>
+  <div class="panels">
+    <div>
+      <label class="head" for="input">Input</label>
+      <textarea id="input" oninput="run()" spellcheck="false"></textarea>
+      <div class="button-row">
+        <button onclick="loadSample()">Load sample OPML</button>
+        <button onclick="loadSampleUrls()">Load sample URL list</button>
+        <button onclick="downloadOut()">Download output</button>
+        <button onclick="copyOut()">Copy output</button>
+      </div>
+      <div id="msg" class="ok">&nbsp;</div>
+    </div>
+    <div>
+      <label class="head" for="output">Output</label>
+      <textarea id="output" readonly spellcheck="false"></textarea>
+      <div class="stats">
+        <span>feeds: <strong id="nFeeds">0</strong></span>
+        <span>folders: <strong id="nFolders">0</strong></span>
+        <span>output: <strong id="nOut">0</strong> chars</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Tree Preview</h2>
+  <div id="tree" class="tree"><span style="color:var(--muted)">parse some OPML to see the structure</span></div>
+</div>
+
+<div class="card">
+  <h2>About OPML</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    OPML was created by Dave Winer in 2000 for outlining and quickly became the de facto interchange format for RSS reader subscription lists. The interesting attributes for feed exports are <code>type="rss"</code>, <code>text</code> / <code>title</code> (display name), <code>xmlUrl</code> (the actual feed), and optionally <code>htmlUrl</code> (the site). Folders are just <code>&lt;outline&gt;</code> elements that wrap other outlines without an <code>xmlUrl</code>. This tool parses with <code>DOMParser</code> &mdash; the work is done locally and your subscription list is never uploaded.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLE_OPML = `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>My Subscriptions</title>
+  </head>
+  <body>
+    <outline text="Tech" title="Tech">
+      <outline type="rss" text="Hacker News" title="Hacker News" xmlUrl="https://news.ycombinator.com/rss" htmlUrl="https://news.ycombinator.com/"/>
+      <outline type="rss" text="Lobsters" title="Lobsters" xmlUrl="https://lobste.rs/rss" htmlUrl="https://lobste.rs/"/>
+    </outline>
+    <outline text="Blogs" title="Blogs">
+      <outline type="rss" text="Julia Evans" title="Julia Evans" xmlUrl="https://jvns.ca/atom.xml" htmlUrl="https://jvns.ca/"/>
+      <outline type="rss" text="Simon Willison" title="Simon Willison" xmlUrl="https://simonwillison.net/atom/everything/" htmlUrl="https://simonwillison.net/"/>
+    </outline>
+    <outline type="rss" text="XKCD" title="XKCD" xmlUrl="https://xkcd.com/rss.xml" htmlUrl="https://xkcd.com/"/>
+  </body>
+</opml>`;
+
+const SAMPLE_URLS = `# Lines starting with # are folder headings
+# Tech
+https://news.ycombinator.com/rss
+https://lobste.rs/rss
+
+# Blogs
+Julia Evans | https://jvns.ca/atom.xml
+Simon Willison | https://simonwillison.net/atom/everything/
+
+# Uncategorised
+https://xkcd.com/rss.xml`;
+
+function loadSample() {
+  $('mode').value = 'parse';
+  toggleControls();
+  $('input').value = SAMPLE_OPML;
+  run();
+}
+
+function loadSampleUrls() {
+  $('mode').value = 'build';
+  toggleControls();
+  $('input').value = SAMPLE_URLS;
+  run();
+}
+
+function toggleControls() {
+  const isBuild = $('mode').value === 'build';
+  $('outFmtWrap').style.display = isBuild ? 'none' : '';
+  $('titleWrap').style.display = isBuild ? '' : 'none';
+}
+
+let counts = { feeds: 0, folders: 0 };
+
+function parseOpml(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const err = doc.querySelector('parsererror');
+  if (err) throw new Error(err.textContent.split('\n')[0] || 'invalid XML');
+  const opml = doc.querySelector('opml');
+  if (!opml) throw new Error('no <opml> root element');
+  const body = opml.querySelector('body');
+  if (!body) throw new Error('no <body> element in OPML');
+  counts = { feeds: 0, folders: 0 };
+  const headTitle = (opml.querySelector('head > title') || {}).textContent || '';
+  return { title: headTitle, items: walk(body) };
+}
+
+function walk(node) {
+  const out = [];
+  for (const child of node.children) {
+    if (child.tagName !== 'outline') continue;
+    const text = child.getAttribute('text') || child.getAttribute('title') || '';
+    const xmlUrl = child.getAttribute('xmlUrl');
+    const htmlUrl = child.getAttribute('htmlUrl') || undefined;
+    const type = child.getAttribute('type') || undefined;
+    if (xmlUrl) {
+      counts.feeds++;
+      out.push({ text, type: type || 'rss', xmlUrl, ...(htmlUrl ? { htmlUrl } : {}) });
+    } else {
+      counts.folders++;
+      const children = walk(child);
+      out.push({ text, children });
+    }
+  }
+  return out;
+}
+
+function escAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function buildOpml(items, title) {
+  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<opml version="2.0">', '  <head>', '    <title>' + escAttr(title) + '</title>', '  </head>', '  <body>'];
+  function emit(items, depth) {
+    const pad = '  '.repeat(depth);
+    for (const item of items) {
+      if (item.children) {
+        lines.push(pad + '<outline text="' + escAttr(item.text) + '" title="' + escAttr(item.text) + '">');
+        emit(item.children, depth + 1);
+        lines.push(pad + '</outline>');
+      } else {
+        const attrs = [
+          'type="' + escAttr(item.type || 'rss') + '"',
+          'text="' + escAttr(item.text) + '"',
+          'title="' + escAttr(item.text) + '"',
+          'xmlUrl="' + escAttr(item.xmlUrl) + '"'
+        ];
+        if (item.htmlUrl) attrs.push('htmlUrl="' + escAttr(item.htmlUrl) + '"');
+        lines.push(pad + '<outline ' + attrs.join(' ') + '/>');
+      }
+    }
+  }
+  emit(items, 2);
+  lines.push('  </body>', '</opml>');
+  return lines.join('\n');
+}
+
+function parseUrlList(text) {
+  const lines = text.split('\n');
+  const root = [];
+  let folder = null;
+  counts = { feeds: 0, folders: 0 };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#')) {
+      const name = line.replace(/^#+\s*/, '').trim();
+      if (!name || /^uncategori[sz]ed$/i.test(name)) {
+        folder = null;
+        continue;
+      }
+      folder = { text: name, children: [] };
+      root.push(folder);
+      counts.folders++;
+      continue;
+    }
+    let title = '';
+    let url = line;
+    const pipe = line.indexOf('|');
+    if (pipe > -1) {
+      title = line.slice(0, pipe).trim();
+      url = line.slice(pipe + 1).trim();
+    }
+    if (!/^https?:\/\//i.test(url)) continue;
+    if (!title) {
+      try { title = new URL(url).hostname; } catch { title = url; }
+    }
+    const item = { text: title, type: 'rss', xmlUrl: url };
+    counts.feeds++;
+    (folder ? folder.children : root).push(item);
+  }
+  return root;
+}
+
+function flattenFeeds(items, folder = '') {
+  const out = [];
+  for (const it of items) {
+    if (it.children) {
+      out.push(...flattenFeeds(it.children, folder ? folder + ' / ' + it.text : it.text));
+    } else {
+      out.push({ folder, text: it.text, xmlUrl: it.xmlUrl, htmlUrl: it.htmlUrl });
+    }
+  }
+  return out;
+}
+
+function renderTree(items, parent) {
+  for (const it of items) {
+    if (it.children) {
+      const det = document.createElement('details');
+      det.open = true;
+      const sum = document.createElement('summary');
+      sum.textContent = '📁 ' + it.text + ' (' + countFeedsIn(it) + ')';
+      det.appendChild(sum);
+      renderTree(it.children, det);
+      parent.appendChild(det);
+    } else {
+      const div = document.createElement('div');
+      div.className = 'leaf';
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'feed-title';
+      titleSpan.textContent = '📡 ' + it.text;
+      div.appendChild(titleSpan);
+      if (it.xmlUrl) {
+        const url = document.createElement('span');
+        url.className = 'url';
+        const a = document.createElement('a');
+        a.href = it.xmlUrl;
+        a.textContent = it.xmlUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        url.appendChild(a);
+        div.appendChild(url);
+      }
+      parent.appendChild(div);
+    }
+  }
+}
+
+function countFeedsIn(node) {
+  if (!node.children) return node.xmlUrl ? 1 : 0;
+  let n = 0;
+  for (const c of node.children) n += countFeedsIn(c);
+  return n;
+}
+
+function toMarkdown(items, depth = 0) {
+  const lines = [];
+  for (const it of items) {
+    const pad = '  '.repeat(depth);
+    if (it.children) {
+      lines.push(pad + '- **' + it.text + '**');
+      lines.push(toMarkdown(it.children, depth + 1));
+    } else {
+      const link = it.htmlUrl ? '[' + it.text + '](' + it.htmlUrl + ')' : it.text;
+      lines.push(pad + '- ' + link + ' &mdash; `' + it.xmlUrl + '`');
+    }
+  }
+  return lines.filter(Boolean).join('\n');
+}
+
+function run() {
+  toggleControls();
+  const mode = $('mode').value;
+  const src = $('input').value;
+  $('msg').textContent = ' ';
+  $('msg').className = 'ok';
+  if (!src.trim()) {
+    $('output').value = '';
+    $('tree').innerHTML = '<span style="color:var(--muted)">parse some OPML to see the structure</span>';
+    $('nFeeds').textContent = '0';
+    $('nFolders').textContent = '0';
+    $('nOut').textContent = '0';
+    return;
+  }
+  try {
+    if (mode === 'parse') {
+      const { items } = parseOpml(src);
+      const fmt = $('outFmt').value;
+      let out = '';
+      if (fmt === 'json') out = JSON.stringify(items, null, 2);
+      else if (fmt === 'urls') out = flattenFeeds(items).map(f => f.xmlUrl).join('\n');
+      else if (fmt === 'urlspipe') out = flattenFeeds(items).map(f => (f.folder ? '[' + f.folder + '] ' : '') + f.text + ' | ' + f.xmlUrl).join('\n');
+      else if (fmt === 'md') out = toMarkdown(items);
+      $('output').value = out;
+      const tree = $('tree');
+      tree.innerHTML = '';
+      renderTree(items, tree);
+    } else {
+      const items = parseUrlList(src);
+      $('output').value = buildOpml(items, $('title').value || 'Subscriptions');
+      const tree = $('tree');
+      tree.innerHTML = '';
+      renderTree(items, tree);
+    }
+    $('nFeeds').textContent = counts.feeds;
+    $('nFolders').textContent = counts.folders;
+    $('nOut').textContent = $('output').value.length;
+    $('msg').className = 'ok';
+    $('msg').textContent = '✓ ' + counts.feeds + ' feed(s), ' + counts.folders + ' folder(s)';
+  } catch (e) {
+    $('msg').className = 'err';
+    $('msg').textContent = '✗ ' + e.message;
+    $('output').value = '';
+    $('tree').innerHTML = '';
+  }
+}
+
+function copyOut() {
+  const v = $('output').value;
+  if (!v) return;
+  navigator.clipboard.writeText(v).catch(() => {});
+}
+
+function downloadOut() {
+  const v = $('output').value;
+  if (!v) return;
+  const isOpml = $('mode').value === 'build';
+  const ext = isOpml ? 'opml' : ($('outFmt').value === 'json' ? 'json' : ($('outFmt').value === 'md' ? 'md' : 'txt'));
+  const blob = new Blob([v], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'subscriptions.' + ext;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+loadSample();
+</script>
+</body>
+</html>

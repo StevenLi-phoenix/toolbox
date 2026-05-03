@@ -31,6 +31,9 @@
 | [SQL Formatter](sql.html) | Beautify, minify, and syntax-highlight SQL queries. |
 | [CSV Pivot Table](csvpivot.html) | Pivot CSV data — pick row, column, value fields and an aggregation (sum, mean, count, median) to build a cross-tab. |
 | [CSV Diff Viewer](csvdiff.html) | Compare two CSV files row-by-row by a chosen key column — added, removed, and changed rows with cell-level highlighting. |
+| [Spreadsheet Column Converter](spreadsheetcol.html) | Convert Excel/Sheets column letters (A, AA, ZZ) ↔ numbers, and translate A1 ↔ R1C1 cell references in bulk. |
+| [JSON Cleaner](jsonclean.html) | Recursively strip null, empty strings, empty arrays, empty objects, false, and zero values from JSON with stable re-cleaning. |
+| [OPML Builder & Parser](opml.html) | Round-trip OPML feed lists ⇄ JSON, URLs, or Markdown for RSS reader exports, backups, and Feedly→FreshRSS migrations. |
 
 ## CSS & Styling
 
