@@ -67,6 +67,8 @@
 | [CSS Mask Generator](cssmask.html) | Build mask-image declarations visually — gradient fades, vignettes, polka dots, and SVG shape masks with size, position, and mode controls. |
 | [CSS color-mix() Builder](cssmix.html) | Mix two colors in oklch, lab, hsl, hwb, srgb and more — adjustable percentage and hue interpolation, side-by-side preview, copy-ready CSS. |
 | [CSS Anchor Positioning Builder](cssanchor.html) | Build anchor-name, position-anchor, and position-area declarations for tooltips and popovers — drag-to-test stage, fallback flips, copy-ready CSS. |
+| [CSS @property Generator](cssproperty.html) | Register typed CSS custom properties with syntax, inherits, and initial-value — see a transition animate because the property is registered. |
+| [Print Stylesheet Generator](printcss.html) | Build a @media print stylesheet — hide nav, set @page size and margins, manage page breaks, expand link URLs — with a live preview iframe. |
 
 ## Images & Media
 
@@ -173,6 +175,7 @@
 | [Redirect Rule Builder & Tester](redirects.html) | Build, validate, and test redirect rules. |
 | [Rate Limit Backoff Planner](backoff.html) | Design exponential, linear, or fixed retry schedules. |
 | [GraphQL Query Cost Calculator](graphqlcost.html) | Estimate query complexity, depth, and resolver call count — spot N+1 traps and size rate limits before clients hit them. |
+| [WebRTC SDP Parser](sdpparser.html) | Inspect WebRTC SDP offers and answers — break out media sections, codecs, ICE candidates, DTLS fingerprints, and bandwidth limits. |
 
 ## Developer Tools
 

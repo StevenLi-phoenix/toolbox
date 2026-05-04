@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebRTC SDP Parser — Free Online Tool</title>
+<meta name="description" content="Paste a WebRTC SDP offer or answer to break it into media sections, codecs, ICE candidates, DTLS fingerprints, RTCP options, and bandwidth limits — entirely client-side.">
+<meta name="keywords" content="webrtc sdp parser, sdp inspector, ice candidate parser, rtpmap, dtls fingerprint, sdp offer answer, webrtc debugging">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sdpparser.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; min-height: 220px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+    line-height: 1.55;
+  }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .toolbar button {
+    padding: 7px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: .85rem; cursor: pointer;
+  }
+  .toolbar button:hover { background: var(--surface2); }
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin-bottom: 14px;
+  }
+  .stat-box {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .stat-box .lbl { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-box .val { font-family: var(--mono); font-size: 1rem; color: var(--text); margin-top: 2px; }
+  .section {
+    margin-top: 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .section h3 {
+    font-size: .85rem; padding: 10px 14px; border-bottom: 1px solid var(--border);
+    background: var(--surface2); margin: 0; display: flex; justify-content: space-between; align-items: center;
+  }
+  .section .body { padding: 12px 14px; font-size: .85rem; }
+  table.kv { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  table.kv td { padding: 5px 6px; vertical-align: top; }
+  table.kv td.k { color: var(--muted); width: 160px; font-family: var(--mono); white-space: nowrap; }
+  table.kv td.v { font-family: var(--mono); word-break: break-all; }
+  ul.lines { list-style: none; padding: 0; font-family: var(--mono); font-size: .8rem; line-height: 1.65; }
+  ul.lines li { padding: 2px 0; border-bottom: 1px dashed var(--border); }
+  ul.lines li:last-child { border-bottom: 0; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 99px;
+    font-size: .7rem; font-family: var(--mono); border: 1px solid var(--border);
+    background: var(--bg); margin-right: 4px;
+  }
+  .pill.dir-sendrecv { background: #ecfeff; border-color: #67e8f9; }
+  .pill.dir-sendonly { background: #f0fdf4; border-color: #86efac; }
+  .pill.dir-recvonly { background: #fef3c7; border-color: #fcd34d; }
+  .pill.dir-inactive { background: #fee2e2; border-color: #fca5a5; }
+  .err { color: var(--error); font-size: .85rem; margin-top: 10px; }
+  details { margin-top: 8px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: .8rem; }
+  .codec-line { padding: 6px 8px; background: var(--surface2); border-radius: 4px; margin-bottom: 4px; font-family: var(--mono); font-size: .8rem; }
+  .codec-line strong { color: var(--text); }
+  .codec-line span { color: var(--muted); }
+  .candidate {
+    padding: 6px 8px; background: var(--surface2); border-radius: 4px;
+    margin-bottom: 4px; font-family: var(--mono); font-size: .78rem;
+    display: grid; grid-template-columns: 60px 60px 1fr 80px;
+    gap: 8px; align-items: center;
+  }
+  .candidate .typ { font-weight: 600; }
+  .candidate .typ.host { color: #166534; }
+  .candidate .typ.srflx { color: #1d4ed8; }
+  .candidate .typ.relay { color: #9a3412; }
+  .candidate .typ.prflx { color: #7c2d12; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>WebRTC SDP Parser</h1>
+<p class="subtitle">Paste a Session Description Protocol blob &mdash; the kind <code>RTCPeerConnection.createOffer()</code> hands you &mdash; and inspect every media section, codec, ICE candidate, DTLS fingerprint, and bandwidth setting. All parsing happens locally; nothing leaves your browser.</p>
+
+<div class="card">
+  <div class="toolbar">
+    <button id="loadSample">Load sample offer</button>
+    <button id="clearBtn">Clear</button>
+    <button id="copyJson">Copy parsed JSON</button>
+  </div>
+  <textarea id="sdp" spellcheck="false" placeholder="v=0&#10;o=- 1234567890 2 IN IP4 127.0.0.1&#10;s=-&#10;t=0 0&#10;a=group:BUNDLE 0 1&#10;m=audio 9 UDP/TLS/RTP/SAVPF 111 ..."></textarea>
+  <div class="err" id="err"></div>
+</div>
+
+<div id="output"></div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLE = `v=0
+o=- 8675309876543210 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE 0 1
+a=extmap-allow-mixed
+a=msid-semantic: WMS stream-id
+m=audio 9 UDP/TLS/RTP/SAVPF 111 103 104 9 0 8 106 105 13 110 112 113 126
+c=IN IP4 0.0.0.0
+a=rtcp:9 IN IP4 0.0.0.0
+a=ice-ufrag:abcd
+a=ice-pwd:0123456789abcdef0123456789abcdef
+a=ice-options:trickle
+a=fingerprint:sha-256 11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00
+a=setup:actpass
+a=mid:0
+a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level
+a=sendrecv
+a=msid:stream-id audio-track-id
+a=rtcp-mux
+a=rtpmap:111 opus/48000/2
+a=rtcp-fb:111 transport-cc
+a=fmtp:111 minptime=10;useinbandfec=1
+a=rtpmap:103 ISAC/16000
+a=rtpmap:9 G722/8000
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=ssrc:111111 cname:streamCname
+a=candidate:1 1 udp 2113937151 192.168.1.10 50001 typ host generation 0
+a=candidate:2 1 udp 1677729535 203.0.113.5 50001 typ srflx raddr 192.168.1.10 rport 50001 generation 0
+a=candidate:3 1 udp 33562623 203.0.113.99 60001 typ relay raddr 198.51.100.7 rport 60001 generation 0
+m=video 9 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102
+c=IN IP4 0.0.0.0
+b=AS:2000
+a=rtcp:9 IN IP4 0.0.0.0
+a=ice-ufrag:abcd
+a=ice-pwd:0123456789abcdef0123456789abcdef
+a=fingerprint:sha-256 11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00
+a=setup:actpass
+a=mid:1
+a=sendonly
+a=msid:stream-id video-track-id
+a=rtcp-mux
+a=rtcp-rsize
+a=rtpmap:96 VP8/90000
+a=rtcp-fb:96 goog-remb
+a=rtcp-fb:96 transport-cc
+a=rtcp-fb:96 ccm fir
+a=rtcp-fb:96 nack
+a=rtcp-fb:96 nack pli
+a=rtpmap:97 rtx/90000
+a=fmtp:97 apt=96
+a=rtpmap:102 H264/90000
+a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f
+a=ssrc-group:FID 222222 333333
+a=ssrc:222222 cname:streamCname
+a=ssrc:333333 cname:streamCname`;
+
+function parseSdp(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.length > 0);
+  const session = { lines: [], attrs: {}, attrLines: [] };
+  const media = [];
+  let cur = session;
+  for (const line of lines) {
+    if (!/^[a-z]=/i.test(line)) {
+      if (line.trim() !== '') session.errors = (session.errors || []).concat('Bad line: ' + line);
+      continue;
+    }
+    const type = line[0];
+    const value = line.substring(2);
+    if (type === 'm') {
+      const parts = value.split(/\s+/);
+      const mediaSection = {
+        type: 'media',
+        kind: parts[0],
+        port: parts[1],
+        proto: parts[2],
+        payloadTypes: parts.slice(3),
+        attrs: {},
+        attrLines: [],
+        rtpmap: {},
+        fmtp: {},
+        rtcpfb: {},
+        candidates: [],
+        ssrcs: {},
+        ssrcGroups: [],
+        connection: null,
+        bandwidth: [],
+        direction: null,
+      };
+      media.push(mediaSection);
+      cur = mediaSection;
+      cur.lines = [line];
+      continue;
+    }
+    cur.lines = cur.lines || [];
+    cur.lines.push(line);
+    if (type === 'a') {
+      cur.attrLines.push(value);
+      const idx = value.indexOf(':');
+      const key = idx === -1 ? value : value.substring(0, idx);
+      const val = idx === -1 ? true : value.substring(idx + 1);
+      if (['sendrecv','sendonly','recvonly','inactive'].includes(value)) cur.direction = value;
+      if (cur.attrs[key]) {
+        if (Array.isArray(cur.attrs[key])) cur.attrs[key].push(val);
+        else cur.attrs[key] = [cur.attrs[key], val];
+      } else cur.attrs[key] = val;
+
+      if (cur.type === 'media') {
+        if (key === 'rtpmap') {
+          const m = val.match(/^(\d+)\s+(.+)$/);
+          if (m) cur.rtpmap[m[1]] = m[2];
+        } else if (key === 'fmtp') {
+          const m = val.match(/^(\d+)\s+(.+)$/);
+          if (m) cur.fmtp[m[1]] = m[2];
+        } else if (key === 'rtcp-fb') {
+          const m = val.match(/^(\d+|\*)\s+(.+)$/);
+          if (m) {
+            cur.rtcpfb[m[1]] = cur.rtcpfb[m[1]] || [];
+            cur.rtcpfb[m[1]].push(m[2]);
+          }
+        } else if (key === 'candidate') {
+          cur.candidates.push(parseCandidate(val));
+        } else if (key === 'ssrc') {
+          const m = val.match(/^(\d+)\s+([\w-]+):(.+)$/);
+          if (m) {
+            cur.ssrcs[m[1]] = cur.ssrcs[m[1]] || {};
+            cur.ssrcs[m[1]][m[2]] = m[3];
+          }
+        } else if (key === 'ssrc-group') {
+          cur.ssrcGroups.push(val);
+        }
+      }
+    } else if (type === 'c') {
+      cur.connection = value;
+    } else if (type === 'b') {
+      (cur.bandwidth = cur.bandwidth || []).push(value);
+    } else {
+      cur[type] = value;
+    }
+  }
+  return { session, media };
+}
+
+function parseCandidate(val) {
+  const parts = val.split(/\s+/);
+  const c = {
+    foundation: parts[0],
+    componentId: parts[1],
+    transport: parts[2],
+    priority: parts[3],
+    address: parts[4],
+    port: parts[5],
+    type: null,
+    raddr: null,
+    rport: null,
+    extras: {},
+    raw: val,
+  };
+  for (let i = 6; i < parts.length - 1; i += 2) {
+    const k = parts[i];
+    const v = parts[i + 1];
+    if (k === 'typ') c.type = v;
+    else if (k === 'raddr') c.raddr = v;
+    else if (k === 'rport') c.rport = v;
+    else c.extras[k] = v;
+  }
+  return c;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[ch]);
+}
+
+function renderSession(session) {
+  const rows = [];
+  if (session.v !== undefined) rows.push(['Protocol version', session.v]);
+  if (session.o !== undefined) rows.push(['Originator (o=)', session.o]);
+  if (session.s !== undefined) rows.push(['Session name (s=)', session.s]);
+  if (session.t !== undefined) rows.push(['Timing (t=)', session.t]);
+  if (session.attrs['group']) rows.push(['BUNDLE group', session.attrs['group']]);
+  if (session.attrs['msid-semantic']) rows.push(['MSID semantic', session.attrs['msid-semantic']]);
+  if (session.attrs['ice-options']) rows.push(['ICE options', session.attrs['ice-options']]);
+  if (session.attrs['ice-lite'] !== undefined) rows.push(['ICE-lite', 'yes']);
+  if (session.attrs['fingerprint']) rows.push(['Fingerprint', session.attrs['fingerprint']]);
+  let html = '<div class="section"><h3>Session</h3><div class="body"><table class="kv">';
+  for (const [k, v] of rows) html += `<tr><td class="k">${escapeHtml(k)}</td><td class="v">${escapeHtml(v)}</td></tr>`;
+  html += '</table>';
+  html += `<details><summary>Show all session lines (${session.lines ? session.lines.length : 0})</summary><ul class="lines">`;
+  for (const line of (session.lines || [])) html += `<li>${escapeHtml(line)}</li>`;
+  html += '</ul></details></div></div>';
+  return html;
+}
+
+function renderMedia(m, idx) {
+  const dir = m.direction || 'sendrecv';
+  const mid = m.attrs['mid'] || '?';
+  let html = `<div class="section"><h3>m=${escapeHtml(m.kind)} <span><span class="pill">mid: ${escapeHtml(mid)}</span><span class="pill dir-${dir}">${dir}</span><span class="pill">${escapeHtml(m.proto)}</span></span></h3><div class="body">`;
+
+  const rows = [];
+  rows.push(['Port', m.port]);
+  rows.push(['Protocol', m.proto]);
+  rows.push(['Payload types', m.payloadTypes.join(', ')]);
+  if (m.connection) rows.push(['Connection (c=)', m.connection]);
+  if (m.bandwidth && m.bandwidth.length) rows.push(['Bandwidth (b=)', m.bandwidth.join(', ')]);
+  if (m.attrs['ice-ufrag']) rows.push(['ICE ufrag', m.attrs['ice-ufrag']]);
+  if (m.attrs['ice-pwd']) rows.push(['ICE pwd', '••• (' + String(m.attrs['ice-pwd']).length + ' chars)']);
+  if (m.attrs['fingerprint']) rows.push(['Fingerprint', m.attrs['fingerprint']]);
+  if (m.attrs['setup']) rows.push(['DTLS role (setup)', m.attrs['setup']]);
+  if (m.attrs['msid']) rows.push(['MSID', m.attrs['msid']]);
+  if (m.attrs['rtcp-mux'] !== undefined) rows.push(['rtcp-mux', 'enabled']);
+  if (m.attrs['rtcp-rsize'] !== undefined) rows.push(['rtcp-rsize', 'reduced size']);
+  if (m.ssrcGroups.length) rows.push(['SSRC groups', m.ssrcGroups.join(' • ')]);
+
+  html += '<table class="kv">';
+  for (const [k, v] of rows) html += `<tr><td class="k">${escapeHtml(k)}</td><td class="v">${escapeHtml(v)}</td></tr>`;
+  html += '</table>';
+
+  // Codecs
+  if (Object.keys(m.rtpmap).length) {
+    html += '<h4 style="margin-top:12px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Codecs (' + Object.keys(m.rtpmap).length + ')</h4>';
+    for (const pt of m.payloadTypes) {
+      if (!m.rtpmap[pt]) continue;
+      const fb = (m.rtcpfb[pt] || []).join(' • ');
+      const fmt = m.fmtp[pt] || '';
+      html += `<div class="codec-line"><strong>PT ${escapeHtml(pt)}</strong> &mdash; ${escapeHtml(m.rtpmap[pt])}`;
+      if (fmt) html += ` <span>fmtp: ${escapeHtml(fmt)}</span>`;
+      if (fb) html += ` <span>fb: ${escapeHtml(fb)}</span>`;
+      html += '</div>';
+    }
+  }
+
+  // Candidates
+  if (m.candidates.length) {
+    html += '<h4 style="margin-top:12px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">ICE candidates (' + m.candidates.length + ')</h4>';
+    for (const c of m.candidates) {
+      const remote = c.raddr ? `via ${c.raddr}:${c.rport}` : '';
+      html += `<div class="candidate"><span class="typ ${escapeHtml(c.type || '')}">${escapeHtml(c.type || '?')}</span><span>${escapeHtml(c.transport)}</span><span>${escapeHtml(c.address)}:${escapeHtml(c.port)} ${escapeHtml(remote)}</span><span>prio ${escapeHtml(c.priority)}</span></div>`;
+    }
+  }
+
+  // SSRCs
+  if (Object.keys(m.ssrcs).length) {
+    html += '<h4 style="margin-top:12px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">SSRCs (' + Object.keys(m.ssrcs).length + ')</h4><table class="kv">';
+    for (const [id, attrs] of Object.entries(m.ssrcs)) {
+      const detail = Object.entries(attrs).map(([k, v]) => `${k}=${v}`).join(' ');
+      html += `<tr><td class="k">${escapeHtml(id)}</td><td class="v">${escapeHtml(detail)}</td></tr>`;
+    }
+    html += '</table>';
+  }
+
+  html += `<details><summary>Show all ${m.lines ? m.lines.length : 0} raw lines</summary><ul class="lines">`;
+  for (const line of (m.lines || [])) html += `<li>${escapeHtml(line)}</li>`;
+  html += '</ul></details>';
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderSummary(parsed) {
+  const m = parsed.media;
+  const totalCandidates = m.reduce((a, b) => a + b.candidates.length, 0);
+  const totalCodecs = m.reduce((a, b) => a + Object.keys(b.rtpmap).length, 0);
+  const audio = m.filter(x => x.kind === 'audio').length;
+  const video = m.filter(x => x.kind === 'video').length;
+  const data = m.filter(x => x.kind === 'application').length;
+  const bundleGroup = parsed.session.attrs['group'];
+  const bundleCount = bundleGroup ? String(bundleGroup).split(/\s+/).length - 1 : 0;
+  return `
+    <div class="summary">
+      <div class="stat-box"><div class="lbl">Media sections</div><div class="val">${m.length}</div></div>
+      <div class="stat-box"><div class="lbl">Audio / Video / Data</div><div class="val">${audio} / ${video} / ${data}</div></div>
+      <div class="stat-box"><div class="lbl">Codecs</div><div class="val">${totalCodecs}</div></div>
+      <div class="stat-box"><div class="lbl">ICE candidates</div><div class="val">${totalCandidates}</div></div>
+      <div class="stat-box"><div class="lbl">BUNDLEd m-lines</div><div class="val">${bundleCount}</div></div>
+    </div>
+  `;
+}
+
+let lastParsed = null;
+function render() {
+  const text = $('sdp').value;
+  $('err').textContent = '';
+  if (!text.trim()) { $('output').innerHTML = ''; lastParsed = null; return; }
+  try {
+    const parsed = parseSdp(text);
+    lastParsed = parsed;
+    let html = renderSummary(parsed);
+    html += renderSession(parsed.session);
+    parsed.media.forEach((m, i) => { html += renderMedia(m, i); });
+    $('output').innerHTML = html;
+  } catch (e) {
+    $('err').textContent = 'Parse error: ' + e.message;
+    $('output').innerHTML = '';
+  }
+}
+
+$('sdp').addEventListener('input', render);
+$('loadSample').addEventListener('click', () => { $('sdp').value = SAMPLE; render(); });
+$('clearBtn').addEventListener('click', () => { $('sdp').value = ''; render(); });
+$('copyJson').addEventListener('click', async () => {
+  if (!lastParsed) return;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(lastParsed, null, 2));
+    $('copyJson').textContent = 'Copied!';
+    setTimeout(() => $('copyJson').textContent = 'Copy parsed JSON', 1200);
+  } catch (e) { $('copyJson').textContent = 'Copy failed'; }
+});
+
+$('sdp').value = SAMPLE;
+render();
+</script>
+</body>
+</html>
