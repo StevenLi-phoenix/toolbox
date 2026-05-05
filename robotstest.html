@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Robots.txt Tester — Free Online Tool</title>
+<meta name="description" content="Paste a robots.txt and a list of URLs to see which paths are allowed or disallowed for each user-agent. Implements the Google REP rule precedence (longest match, allow ties allow). 100% client-side.">
+<meta name="keywords" content="robots.txt tester, robots.txt checker, crawler rules, googlebot, allow disallow, SEO tool, REP, robots exclusion protocol">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/robotstest.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea, input[type=text] {
+    width: 100%; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box;
+  }
+  textarea { min-height: 180px; resize: vertical; line-height: 1.5; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+  .toolbar button, .toolbar input[type=text] {
+    padding: 7px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: .85rem;
+  }
+  .toolbar button { cursor: pointer; }
+  .toolbar button:hover { background: var(--surface2); }
+  label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+  table.results { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  table.results th, table.results td {
+    padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border);
+    font-family: var(--mono); vertical-align: top;
+  }
+  table.results th { color: var(--muted); font-weight: 500; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+  .verdict {
+    display: inline-block; padding: 3px 8px; border-radius: 99px;
+    font-family: var(--mono); font-size: .72rem; border: 1px solid var(--border);
+  }
+  .verdict.allow { background: #f0fdf4; border-color: #86efac; color: #166534; }
+  .verdict.deny { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+  .verdict.unknown { background: var(--surface2); color: var(--muted); }
+  .rule {
+    font-family: var(--mono); font-size: .78rem; color: var(--muted);
+    background: var(--surface2); padding: 2px 6px; border-radius: 4px;
+    display: inline-block;
+  }
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px; margin: 10px 0;
+  }
+  .stats .box {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .stats .lbl { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stats .val { font-family: var(--mono); font-size: 1rem; color: var(--text); margin-top: 2px; }
+  .empty { color: var(--muted); font-size: .85rem; padding: 16px 0; text-align: center; }
+  .err { color: var(--error); font-size: .8rem; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Robots.txt Tester</h1>
+<p class="subtitle">Paste a <code>robots.txt</code>, list one or more URLs, and check which paths each user-agent is allowed to crawl. Uses Google&rsquo;s Robots Exclusion Protocol rules: longest matching pattern wins, with <code>Allow</code> beating <code>Disallow</code> on ties. Sitemap and non-group lines are surfaced separately.</p>
+
+<div class="card">
+  <div class="grid2">
+    <div>
+      <label for="robots">robots.txt content</label>
+      <textarea id="robots" spellcheck="false"></textarea>
+    </div>
+    <div>
+      <label for="urls">URLs or paths (one per line)</label>
+      <textarea id="urls" spellcheck="false" placeholder="https://example.com/admin/login&#10;/products/widget-1&#10;/private/data.json"></textarea>
+    </div>
+  </div>
+  <div class="toolbar">
+    <label style="margin: 0 8px 0 0; align-self: center; color: var(--muted)">User-agent:</label>
+    <input type="text" id="ua" value="Googlebot" placeholder="Googlebot, *, bingbot, etc." style="max-width: 220px">
+    <button id="testBtn">Test</button>
+    <button id="loadSampleBtn">Load sample</button>
+    <button id="clearBtn">Clear</button>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Per-URL verdict</h2>
+  <div id="results"><div class="empty">Enter a robots.txt and URLs, then click Test.</div></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Parsed rules</h2>
+  <div id="parsed"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">How matching works</h2>
+  <ul style="font-size:.85rem;line-height:1.65;color:var(--muted)">
+    <li>User-agents are matched case-insensitively. The longest matching agent token wins; the wildcard <code>*</code> group is the fallback.</li>
+    <li>Patterns support <code>*</code> (any sequence) and <code>$</code> (end-of-path anchor).</li>
+    <li>For each path the rule with the longest matched pattern wins. On a tie, <code>Allow</code> beats <code>Disallow</code> (Google&rsquo;s convention).</li>
+    <li>Empty <code>Disallow:</code> means &ldquo;allow everything,&rdquo; per the original 1994 spec.</li>
+    <li><code>Sitemap:</code> and <code>Host:</code> directives are not part of crawl matching but are listed separately for visibility.</li>
+  </ul>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLE_ROBOTS = `# Sample robots.txt
+User-agent: *
+Disallow: /admin/
+Disallow: /private/
+Disallow: /*.json$
+Allow: /admin/public-info.html
+Crawl-delay: 5
+
+User-agent: Googlebot
+Disallow: /no-google/
+Allow: /
+
+User-agent: BadBot
+Disallow: /
+
+Sitemap: https://example.com/sitemap.xml
+Sitemap: https://example.com/sitemap-news.xml
+Host: example.com
+`;
+
+const SAMPLE_URLS = `https://example.com/
+https://example.com/admin/
+https://example.com/admin/login.php
+https://example.com/admin/public-info.html
+https://example.com/products/widget-1
+https://example.com/data/feed.json
+https://example.com/no-google/page.html
+https://example.com/private/secrets.txt`;
+
+function parseRobots(text) {
+  const lines = text.split(/\r?\n/);
+  const groups = [];
+  let cur = null;
+  let pendingAgents = null;
+  const sitemaps = [];
+  const other = [];
+
+  for (let raw of lines) {
+    const stripped = raw.replace(/#.*$/, '').trim();
+    if (!stripped) continue;
+    const idx = stripped.indexOf(':');
+    if (idx < 0) continue;
+    const field = stripped.substring(0, idx).trim().toLowerCase();
+    const value = stripped.substring(idx + 1).trim();
+
+    if (field === 'user-agent') {
+      if (cur && cur.rules.length) cur = null;
+      if (!pendingAgents) pendingAgents = [];
+      pendingAgents.push(value.toLowerCase());
+    } else if (field === 'allow' || field === 'disallow') {
+      if (pendingAgents) {
+        cur = { agents: pendingAgents, rules: [], crawlDelay: null };
+        groups.push(cur);
+        pendingAgents = null;
+      }
+      if (!cur) { cur = { agents: ['*'], rules: [], crawlDelay: null }; groups.push(cur); }
+      cur.rules.push({ type: field, pattern: value });
+    } else if (field === 'crawl-delay') {
+      if (pendingAgents) {
+        cur = { agents: pendingAgents, rules: [], crawlDelay: null };
+        groups.push(cur);
+        pendingAgents = null;
+      }
+      if (cur) cur.crawlDelay = value;
+    } else if (field === 'sitemap') {
+      sitemaps.push(value);
+    } else {
+      other.push({ field, value });
+    }
+  }
+  if (pendingAgents && !cur) {
+    groups.push({ agents: pendingAgents, rules: [], crawlDelay: null });
+  }
+  return { groups, sitemaps, other };
+}
+
+function pickGroup(groups, ua) {
+  const lc = ua.toLowerCase();
+  let best = null;
+  let bestLen = -1;
+  let star = null;
+  for (const g of groups) {
+    for (const a of g.agents) {
+      if (a === '*') {
+        if (!star) star = g;
+      } else if (lc.startsWith(a) || lc.includes(a)) {
+        if (a.length > bestLen) { best = g; bestLen = a.length; }
+      }
+    }
+  }
+  return best || star || null;
+}
+
+function patternToRegex(pat) {
+  if (!pat) return null;
+  let p = pat;
+  let anchorEnd = false;
+  if (p.endsWith('$')) { anchorEnd = true; p = p.slice(0, -1); }
+  let re = '';
+  for (const ch of p) {
+    if (ch === '*') re += '.*';
+    else if ('\\.+?()[]{}|^'.includes(ch)) re += '\\' + ch;
+    else re += ch;
+  }
+  return new RegExp('^' + re + (anchorEnd ? '$' : ''));
+}
+
+function pathOf(url) {
+  const m = url.match(/^[a-z]+:\/\/[^/]+(\/.*)?$/i);
+  if (m) return m[1] || '/';
+  if (url.startsWith('/')) return url;
+  return '/' + url;
+}
+
+function evaluate(group, url) {
+  const path = pathOf(url);
+  if (!group) return { verdict: 'allow', rule: null, reason: 'No group matched this user-agent — defaults to allow.' };
+  if (!group.rules.length) return { verdict: 'allow', rule: null, reason: 'Group has no Allow/Disallow rules.' };
+  let bestAllow = null, bestAllowLen = -1;
+  let bestDisallow = null, bestDisallowLen = -1;
+  for (const r of group.rules) {
+    if (r.pattern === '' && r.type === 'disallow') continue;
+    const re = patternToRegex(r.pattern);
+    if (!re) continue;
+    if (re.test(path)) {
+      const len = r.pattern.length;
+      if (r.type === 'allow' && len > bestAllowLen) { bestAllow = r; bestAllowLen = len; }
+      else if (r.type === 'disallow' && len > bestDisallowLen) { bestDisallow = r; bestDisallowLen = len; }
+    }
+  }
+  if (bestAllow == null && bestDisallow == null) {
+    return { verdict: 'allow', rule: null, reason: 'No rule matched this path.' };
+  }
+  if (bestAllow == null) return { verdict: 'deny', rule: bestDisallow, reason: `Disallow: ${bestDisallow.pattern}` };
+  if (bestDisallow == null) return { verdict: 'allow', rule: bestAllow, reason: `Allow: ${bestAllow.pattern}` };
+  if (bestAllowLen >= bestDisallowLen) {
+    return { verdict: 'allow', rule: bestAllow, reason: `Allow: ${bestAllow.pattern} (≥ Disallow: ${bestDisallow.pattern})` };
+  }
+  return { verdict: 'deny', rule: bestDisallow, reason: `Disallow: ${bestDisallow.pattern} (longer than Allow: ${bestAllow.pattern})` };
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function renderResults(parsed, ua, urls) {
+  const group = pickGroup(parsed.groups, ua);
+  const out = $('results');
+  if (!urls.length) {
+    out.innerHTML = '<div class="empty">Add at least one URL to test.</div>';
+    return;
+  }
+  let allowCount = 0, denyCount = 0;
+  const rows = urls.map(u => {
+    const ev = evaluate(group, u);
+    if (ev.verdict === 'allow') allowCount++; else denyCount++;
+    return `<tr>
+      <td>${escapeHtml(u)}</td>
+      <td><span class="verdict ${ev.verdict}">${ev.verdict.toUpperCase()}</span></td>
+      <td>${escapeHtml(ev.reason)}</td>
+    </tr>`;
+  }).join('');
+  out.innerHTML = `
+    <div class="stats">
+      <div class="box"><div class="lbl">Group used</div><div class="val">${group ? escapeHtml(group.agents.join(', ')) : 'none'}</div></div>
+      <div class="box"><div class="lbl">Allowed</div><div class="val">${allowCount}</div></div>
+      <div class="box"><div class="lbl">Disallowed</div><div class="val">${denyCount}</div></div>
+      <div class="box"><div class="lbl">Crawl-delay</div><div class="val">${group && group.crawlDelay ? escapeHtml(group.crawlDelay) + 's' : '—'}</div></div>
+    </div>
+    <table class="results">
+      <thead><tr><th>URL</th><th>Verdict</th><th>Reason</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderParsed(parsed) {
+  const wrap = $('parsed');
+  if (!parsed.groups.length && !parsed.sitemaps.length) {
+    wrap.innerHTML = '<div class="empty">No groups parsed yet.</div>';
+    return;
+  }
+  let html = '';
+  for (const g of parsed.groups) {
+    html += `<div style="margin-bottom:14px">
+      <div style="font-family:var(--mono);font-size:.85rem;color:var(--text);margin-bottom:6px">User-agent: ${escapeHtml(g.agents.join(', '))}</div>`;
+    if (g.rules.length) {
+      html += '<table class="results"><thead><tr><th style="width:90px">Type</th><th>Pattern</th></tr></thead><tbody>';
+      for (const r of g.rules) {
+        html += `<tr><td>${r.type === 'allow' ? '<span class="verdict allow">Allow</span>' : '<span class="verdict deny">Disallow</span>'}</td><td>${escapeHtml(r.pattern || '(empty)')}</td></tr>`;
+      }
+      html += '</tbody></table>';
+    } else {
+      html += '<div class="empty" style="text-align:left">No allow/disallow rules.</div>';
+    }
+    if (g.crawlDelay) html += `<div style="margin-top:6px;font-size:.78rem;color:var(--muted)">Crawl-delay: <span class="rule">${escapeHtml(g.crawlDelay)}</span></div>`;
+    html += '</div>';
+  }
+  if (parsed.sitemaps.length) {
+    html += '<div style="margin-top:14px"><div style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Sitemaps</div>';
+    for (const s of parsed.sitemaps) html += `<div class="rule" style="display:block;margin-bottom:4px">${escapeHtml(s)}</div>`;
+    html += '</div>';
+  }
+  if (parsed.other.length) {
+    html += '<div style="margin-top:14px"><div style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Other directives</div>';
+    for (const o of parsed.other) html += `<div class="rule" style="display:block;margin-bottom:4px">${escapeHtml(o.field)}: ${escapeHtml(o.value)}</div>`;
+    html += '</div>';
+  }
+  wrap.innerHTML = html;
+}
+
+function run() {
+  $('err').textContent = '';
+  let parsed;
+  try {
+    parsed = parseRobots($('robots').value);
+  } catch (e) {
+    $('err').textContent = 'Parse error: ' + e.message;
+    return;
+  }
+  renderParsed(parsed);
+  const urls = $('urls').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const ua = $('ua').value.trim() || '*';
+  renderResults(parsed, ua, urls);
+}
+
+$('testBtn').onclick = run;
+$('loadSampleBtn').onclick = () => {
+  $('robots').value = SAMPLE_ROBOTS;
+  $('urls').value = SAMPLE_URLS;
+  $('ua').value = 'Googlebot';
+  run();
+};
+$('clearBtn').onclick = () => {
+  $('robots').value = '';
+  $('urls').value = '';
+  $('results').innerHTML = '<div class="empty">Enter a robots.txt and URLs, then click Test.</div>';
+  $('parsed').innerHTML = '';
+  $('err').textContent = '';
+};
+['robots', 'urls', 'ua'].forEach(id => $(id).addEventListener('input', () => {
+  if ($('robots').value.trim()) run();
+}));
+</script>
+</body>
+</html>

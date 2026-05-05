@@ -90,6 +90,7 @@
 | [Barcode Generator](barcode.html) | Create Code 128, EAN-13, UPC-A, Code 39, and more. |
 | [QR Code Generator](qrcode.html) | Generate QR codes instantly with custom colors and sizes. |
 | [EXIF & Image Metadata Viewer](exifviewer.html) | View camera info, GPS location, and EXIF metadata. |
+| [PNG Chunk Inspector](pngchunks.html) | Walk every PNG chunk (IHDR, IDAT, tEXt, iTXt, pHYs, sRGB) with CRC32 verification and decoded text metadata. |
 | [Audio Waveform Visualizer](waveform.html) | View real-time waveform and frequency spectrum of audio files. |
 | [Screen Recorder](screenrecord.html) | Record your screen or browser tab. |
 | [Data URL Builder & Inspector](dataurl.html) | Create and decode data URLs for HTML and CSS. |
@@ -130,6 +131,7 @@
 | [Unicode Inspector](unicode.html) | Debug invisible characters and inspect Unicode code points. |
 | [Emoji Picker & Unicode Lookup](emoji.html) | Search 500+ emojis and view Unicode code points. |
 | [Hash Generator](hash.html) | Generate MD5, SHA-1, SHA-256, SHA-384 & SHA-512 hashes. |
+| [Hash Identifier](hashidentify.html) | Identify likely hash algorithms (MD5, SHA family, bcrypt, Argon2, NTLM, sha512crypt, SSHA, JWT) by length, charset, and prefix markers. |
 | [HMAC Signer & Encoder](hmac.html) | Generate HMAC signatures with SHA-1, SHA-256, SHA-384, or SHA-512. |
 | [Text Encrypt / Decrypt](encrypt.html) | Encrypt and decrypt text using AES-256-GCM in your browser. |
 | [JWT Decoder](jwt.html) | Decode and inspect JSON Web Tokens. |
@@ -211,6 +213,7 @@
 | [Font Pair Preview](fontpair.html) | Preview and compare Google Font pairings. |
 | [PDF Merge & Split](pdftool.html) | Combine or split PDF files. All client-side. |
 | [robots.txt Generator](robots.html) | Generate robots.txt files with user-agent rules. |
+| [Robots.txt Tester](robotstest.html) | Test which URLs each user-agent can crawl using Google's longest-match rules with Allow/Disallow tie-breaking. |
 | [XML Sitemap Generator](sitemap.html) | Generate valid XML sitemaps. |
 | [Privacy Policy Generator](privacypolicy.html) | Generate a professional privacy policy in seconds. |
 | [Fake Data Generator](mockdata.html) | Generate realistic fake data for testing. |

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PNG Chunk Inspector — Free Online Tool</title>
+<meta name="description" content="Drop a PNG and inspect every chunk: IHDR, IDAT, tEXt, iTXt, pHYs, gAMA, sRGB, tRNS, PLTE, and more. Verifies CRCs and reveals embedded text metadata. 100% client-side.">
+<meta name="keywords" content="png chunk inspector, png parser, ihdr, idat, ztxt, itxt, png metadata, png crc check, png debug, image forensics">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pngchunks.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .drop {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 28px; text-align: center; color: var(--muted);
+    cursor: pointer; background: var(--surface2);
+    transition: border-color .15s, background .15s;
+  }
+  .drop.dragging { border-color: var(--accent); background: var(--surface); color: var(--text); }
+  .drop input[type=file] { display: none; }
+  .meta {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin: 14px 0;
+  }
+  .meta .box {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .meta .lbl { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .meta .val { font-family: var(--mono); font-size: .95rem; color: var(--text); margin-top: 2px; word-break: break-all; }
+  .chunk {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 8px; background: var(--surface);
+  }
+  .chunk summary {
+    padding: 10px 14px; font-family: var(--mono); cursor: pointer;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .chunk summary::-webkit-details-marker { display: none; }
+  .chunk summary::before { content: "▸"; color: var(--muted); font-size: .8rem; }
+  .chunk[open] summary::before { content: "▾"; }
+  .chunk .body { padding: 12px 14px; border-top: 1px solid var(--border); font-size: .82rem; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 99px;
+    font-family: var(--mono); font-size: .7rem; border: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .pill.crit { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+  .pill.anc { background: #ecfeff; border-color: #67e8f9; color: #155e75; }
+  .pill.crc-ok { background: #f0fdf4; border-color: #86efac; color: #166534; }
+  .pill.crc-bad { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+  .chunk-name { font-size: 1rem; font-weight: 600; color: var(--text); }
+  .chunk-desc { color: var(--muted); flex-grow: 1; font-size: .78rem; }
+  table.kv { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  table.kv td { padding: 5px 6px; vertical-align: top; }
+  table.kv td.k { color: var(--muted); width: 160px; font-family: var(--mono); white-space: nowrap; }
+  table.kv td.v { font-family: var(--mono); word-break: break-all; }
+  .hex { font-family: var(--mono); font-size: .75rem; background: var(--surface2); padding: 8px 10px; border-radius: 4px; white-space: pre; overflow-x: auto; line-height: 1.5; }
+  .text-block { font-family: var(--mono); font-size: .82rem; background: var(--surface2); padding: 8px 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-word; }
+  .err { color: var(--error); font-size: .85rem; margin-top: 10px; }
+  img.preview { max-width: 100%; max-height: 240px; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 8px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>PNG Chunk Inspector</h1>
+<p class="subtitle">Drop a <code>.png</code> file to walk every chunk in order &mdash; signature check, IHDR header, IDAT data, palette and transparency, gamma, color profile, and any embedded text metadata. CRC32 of every chunk is verified. The whole parse runs in your browser; the file is never uploaded.</p>
+
+<div class="card">
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="image/png,.png">
+    <div style="font-size:1.2rem;color:var(--text);margin-bottom:6px">Drop a PNG here</div>
+    <div>or click to choose a file</div>
+  </label>
+  <div class="err" id="err"></div>
+</div>
+
+<div id="output" style="display:none">
+  <div class="card">
+    <h2 style="margin-top:0">File summary</h2>
+    <div class="meta" id="meta"></div>
+    <img id="preview" class="preview" alt="preview">
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Chunks</h2>
+    <div id="chunks"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Chunk type quick reference</h2>
+  <ul style="font-size:.85rem;line-height:1.65;color:var(--muted)">
+    <li><code>IHDR</code>, <code>IDAT</code>, <code>IEND</code>, <code>PLTE</code> &mdash; the four critical chunks every PNG must handle.</li>
+    <li><code>tEXt</code>, <code>zTXt</code>, <code>iTXt</code> &mdash; textual metadata (Software, Author, Description, ICC profile name, XMP, etc.).</li>
+    <li><code>pHYs</code> &mdash; pixel density. <code>gAMA</code>, <code>sRGB</code>, <code>iCCP</code>, <code>cHRM</code> &mdash; color management.</li>
+    <li><code>tRNS</code> &mdash; transparency for indexed or grayscale images. <code>bKGD</code> &mdash; default background color.</li>
+    <li>An uppercase first letter means the chunk is critical (must be understood). Lowercase = ancillary (safe to skip).</li>
+  </ul>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const CHUNK_DESC = {
+  IHDR: 'Image header — width, height, bit depth, color type',
+  PLTE: 'Palette — 1 to 256 RGB triples for indexed images',
+  IDAT: 'Image data — zlib-compressed pixel stream (may appear multiple times)',
+  IEND: 'Image trailer — must be the last chunk',
+  tRNS: 'Transparency — alpha for indexed/grayscale palettes',
+  cHRM: 'Primary chromaticities and white point',
+  gAMA: 'Image gamma',
+  iCCP: 'Embedded ICC color profile',
+  sBIT: 'Significant bits per sample',
+  sRGB: 'Standard RGB color space rendering intent',
+  tEXt: 'Latin-1 textual metadata (key/value)',
+  zTXt: 'Compressed Latin-1 textual metadata',
+  iTXt: 'International (UTF-8) textual metadata',
+  bKGD: 'Default background color',
+  hIST: 'Image histogram',
+  pHYs: 'Physical pixel dimensions (DPI)',
+  sPLT: 'Suggested palette',
+  tIME: 'Last-modification time',
+  acTL: 'APNG animation control',
+  fcTL: 'APNG frame control',
+  fdAT: 'APNG frame data',
+  eXIf: 'Embedded EXIF metadata',
+};
+
+const COLOR_TYPES = {
+  0: 'Grayscale',
+  2: 'Truecolor (RGB)',
+  3: 'Indexed (palette)',
+  4: 'Grayscale + alpha',
+  6: 'Truecolor + alpha (RGBA)',
+};
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function readU32(b, o) {
+  return ((b[o] << 24) | (b[o+1] << 16) | (b[o+2] << 8) | b[o+3]) >>> 0;
+}
+
+function bytesToHex(b, max) {
+  const n = Math.min(b.length, max == null ? b.length : max);
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    if (i && i % 16 === 0) s += '\n';
+    else if (i) s += ' ';
+    s += b[i].toString(16).padStart(2, '0');
+  }
+  if (max != null && b.length > max) s += `\n… ${b.length - max} more bytes`;
+  return s;
+}
+
+function bytesToLatin1(b) {
+  let s = '';
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return s;
+}
+
+function bytesToUtf8(b) {
+  try { return new TextDecoder('utf-8', { fatal: false }).decode(b); } catch { return bytesToLatin1(b); }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function inflateRaw(bytes) {
+  // Minimal zlib decompress using DecompressionStream when available, otherwise null.
+  if (typeof DecompressionStream === 'undefined') return null;
+  return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer();
+}
+
+function splitNullTerminated(bytes, idx) {
+  for (let i = idx; i < bytes.length; i++) {
+    if (bytes[i] === 0) return [bytes.slice(idx, i), i + 1];
+  }
+  return [bytes.slice(idx), bytes.length];
+}
+
+async function decodeChunkBody(type, data) {
+  if (type === 'IHDR') {
+    if (data.length < 13) return { error: 'IHDR shorter than 13 bytes' };
+    const w = readU32(data, 0), h = readU32(data, 4);
+    return {
+      rows: [
+        ['Width', w + ' px'],
+        ['Height', h + ' px'],
+        ['Bit depth', data[8]],
+        ['Color type', `${data[9]} — ${COLOR_TYPES[data[9]] || 'unknown'}`],
+        ['Compression', data[10]],
+        ['Filter', data[11]],
+        ['Interlace', data[12] === 0 ? '0 (none)' : data[12] === 1 ? '1 (Adam7)' : data[12]],
+      ]
+    };
+  }
+  if (type === 'pHYs') {
+    if (data.length < 9) return { error: 'pHYs shorter than 9 bytes' };
+    const x = readU32(data, 0), y = readU32(data, 4), unit = data[8];
+    const rows = [
+      ['X pixels per unit', x],
+      ['Y pixels per unit', y],
+      ['Unit', unit === 1 ? '1 (metres)' : '0 (unspecified)'],
+    ];
+    if (unit === 1) {
+      rows.push(['DPI (X)', (x * 0.0254).toFixed(2)]);
+      rows.push(['DPI (Y)', (y * 0.0254).toFixed(2)]);
+    }
+    return { rows };
+  }
+  if (type === 'gAMA') {
+    if (data.length < 4) return { error: 'gAMA shorter than 4 bytes' };
+    const g = readU32(data, 0);
+    return { rows: [['Gamma × 100000', g], ['Gamma', (g / 100000).toFixed(5)]] };
+  }
+  if (type === 'sRGB') {
+    if (data.length < 1) return { error: 'sRGB chunk empty' };
+    const intents = ['Perceptual', 'Relative colorimetric', 'Saturation', 'Absolute colorimetric'];
+    return { rows: [['Rendering intent', `${data[0]} — ${intents[data[0]] || 'unknown'}`]] };
+  }
+  if (type === 'tIME') {
+    if (data.length < 7) return { error: 'tIME shorter than 7 bytes' };
+    const yr = (data[0] << 8) | data[1];
+    return { rows: [['Modified', `${yr}-${String(data[2]).padStart(2, '0')}-${String(data[3]).padStart(2, '0')} ${String(data[4]).padStart(2, '0')}:${String(data[5]).padStart(2, '0')}:${String(data[6]).padStart(2, '0')} UTC`]] };
+  }
+  if (type === 'tEXt') {
+    const [k, rest] = splitNullTerminated(data, 0);
+    const key = bytesToLatin1(k);
+    const val = bytesToLatin1(data.slice(rest));
+    return { rows: [['Keyword', key], ['Text', val]] };
+  }
+  if (type === 'iTXt') {
+    let i = 0;
+    const [k, p1] = splitNullTerminated(data, 0); i = p1;
+    const compressed = data[i]; i++;
+    const compMethod = data[i]; i++;
+    const [lang, p2] = splitNullTerminated(data, i); i = p2;
+    const [tk, p3] = splitNullTerminated(data, i); i = p3;
+    let text;
+    if (compressed === 1) {
+      const inflated = await inflateRaw(data.slice(i));
+      text = inflated ? bytesToUtf8(new Uint8Array(inflated)) : '(compressed — inflate not available)';
+    } else {
+      text = bytesToUtf8(data.slice(i));
+    }
+    return { rows: [
+      ['Keyword', bytesToLatin1(k)],
+      ['Compressed', compressed ? 'yes' : 'no'],
+      ['Language', bytesToLatin1(lang) || '(none)'],
+      ['Translated key', bytesToUtf8(tk) || '(none)'],
+    ], text };
+  }
+  if (type === 'zTXt') {
+    const [k, rest] = splitNullTerminated(data, 0);
+    const compMethod = data[rest];
+    const inflated = await inflateRaw(data.slice(rest + 1));
+    const text = inflated ? bytesToLatin1(new Uint8Array(inflated)) : '(compressed — inflate not available in this browser)';
+    return { rows: [['Keyword', bytesToLatin1(k)], ['Compression method', compMethod]], text };
+  }
+  if (type === 'PLTE') {
+    return { rows: [['Entries', data.length / 3]] };
+  }
+  if (type === 'tRNS') {
+    return { rows: [['Bytes', data.length]] };
+  }
+  if (type === 'bKGD') {
+    return { rows: [['Bytes', data.length]] };
+  }
+  return null;
+}
+
+async function parsePng(buffer) {
+  const view = new Uint8Array(buffer);
+  const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+  for (let i = 0; i < 8; i++) {
+    if (view[i] !== sig[i]) throw new Error('Not a PNG file (signature mismatch)');
+  }
+  const chunks = [];
+  let off = 8;
+  while (off < view.length) {
+    if (off + 8 > view.length) throw new Error('Truncated chunk header at offset ' + off);
+    const len = readU32(view, off);
+    const typeBytes = view.slice(off + 4, off + 8);
+    const type = String.fromCharCode(...typeBytes);
+    if (off + 8 + len + 4 > view.length) throw new Error(`Chunk ${type} length exceeds file`);
+    const data = view.slice(off + 8, off + 8 + len);
+    const declaredCrc = readU32(view, off + 8 + len);
+    const calcInput = view.slice(off + 4, off + 8 + len);
+    const actualCrc = crc32(calcInput);
+    chunks.push({ offset: off, length: len, type, data, declaredCrc, actualCrc });
+    off += 12 + len;
+    if (type === 'IEND') break;
+  }
+  return { chunks, totalSize: view.length, parsedTo: off, trailing: view.length - off };
+}
+
+async function render(file) {
+  $('err').textContent = '';
+  $('output').style.display = 'none';
+  let buffer;
+  try {
+    buffer = await file.arrayBuffer();
+  } catch (e) {
+    $('err').textContent = 'Could not read file: ' + e.message;
+    return;
+  }
+  let parsed;
+  try {
+    parsed = await parsePng(buffer);
+  } catch (e) {
+    $('err').textContent = e.message;
+    return;
+  }
+  const ihdr = parsed.chunks.find(c => c.type === 'IHDR');
+  let dims = '?';
+  if (ihdr) {
+    const w = readU32(ihdr.data, 0), h = readU32(ihdr.data, 4);
+    dims = `${w} × ${h}`;
+  }
+  const idatTotal = parsed.chunks.filter(c => c.type === 'IDAT').reduce((a, c) => a + c.length, 0);
+  $('meta').innerHTML = `
+    <div class="box"><div class="lbl">File size</div><div class="val">${parsed.totalSize.toLocaleString()} bytes</div></div>
+    <div class="box"><div class="lbl">Dimensions</div><div class="val">${dims}</div></div>
+    <div class="box"><div class="lbl">Chunks</div><div class="val">${parsed.chunks.length}</div></div>
+    <div class="box"><div class="lbl">IDAT total</div><div class="val">${idatTotal.toLocaleString()} bytes</div></div>
+    <div class="box"><div class="lbl">Trailing bytes</div><div class="val">${parsed.trailing}</div></div>
+  `;
+  const url = URL.createObjectURL(file);
+  $('preview').src = url;
+
+  const wrap = $('chunks');
+  wrap.innerHTML = '';
+  for (const c of parsed.chunks) {
+    const det = document.createElement('details');
+    det.className = 'chunk';
+    const isCritical = /^[A-Z]/.test(c.type);
+    const desc = CHUNK_DESC[c.type] || 'unknown chunk type';
+    const crcOk = c.declaredCrc === c.actualCrc;
+    det.innerHTML = `
+      <summary>
+        <span class="chunk-name">${escapeHtml(c.type)}</span>
+        <span class="pill ${isCritical ? 'crit' : 'anc'}">${isCritical ? 'critical' : 'ancillary'}</span>
+        <span class="pill ${crcOk ? 'crc-ok' : 'crc-bad'}">CRC ${crcOk ? 'ok' : 'bad'}</span>
+        <span class="chunk-desc">${escapeHtml(desc)}</span>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--muted)">${c.length} B @ ${c.offset}</span>
+      </summary>
+      <div class="body" data-type="${escapeHtml(c.type)}"></div>
+    `;
+    wrap.appendChild(det);
+    const body = det.querySelector('.body');
+    let html = `<table class="kv">
+      <tr><td class="k">Offset</td><td class="v">${c.offset}</td></tr>
+      <tr><td class="k">Length</td><td class="v">${c.length} bytes</td></tr>
+      <tr><td class="k">Declared CRC32</td><td class="v">0x${c.declaredCrc.toString(16).padStart(8, '0')}</td></tr>
+      <tr><td class="k">Computed CRC32</td><td class="v">0x${c.actualCrc.toString(16).padStart(8, '0')} ${crcOk ? '✓' : '✗'}</td></tr>
+    </table>`;
+    const decoded = await decodeChunkBody(c.type, c.data);
+    if (decoded) {
+      if (decoded.error) {
+        html += `<div class="err">${escapeHtml(decoded.error)}</div>`;
+      } else {
+        html += '<table class="kv" style="margin-top:8px">';
+        for (const [k, v] of (decoded.rows || [])) html += `<tr><td class="k">${escapeHtml(k)}</td><td class="v">${escapeHtml(String(v))}</td></tr>`;
+        html += '</table>';
+        if (decoded.text != null) html += `<div class="text-block" style="margin-top:8px">${escapeHtml(decoded.text)}</div>`;
+      }
+    } else if (c.type !== 'IDAT' && c.length <= 256) {
+      html += `<div class="hex" style="margin-top:8px">${escapeHtml(bytesToHex(c.data, 256))}</div>`;
+    } else if (c.type !== 'IDAT') {
+      html += `<div class="hex" style="margin-top:8px">${escapeHtml(bytesToHex(c.data, 64))}</div>`;
+    }
+    body.innerHTML = html;
+  }
+  $('output').style.display = '';
+}
+
+const drop = $('drop');
+const fileInput = $('file');
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragging'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('dragging'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('dragging');
+  const f = e.dataTransfer.files[0];
+  if (f) render(f);
+});
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) render(f);
+});
+</script>
+</body>
+</html>
