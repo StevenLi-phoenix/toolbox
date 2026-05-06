@@ -69,6 +69,7 @@
 | [CSS Anchor Positioning Builder](cssanchor.html) | Build anchor-name, position-anchor, and position-area declarations for tooltips and popovers — drag-to-test stage, fallback flips, copy-ready CSS. |
 | [CSS @property Generator](cssproperty.html) | Register typed CSS custom properties with syntax, inherits, and initial-value — see a transition animate because the property is registered. |
 | [Print Stylesheet Generator](printcss.html) | Build a @media print stylesheet — hide nav, set @page size and margins, manage page breaks, expand link URLs — with a live preview iframe. |
+| [CSS Text Stroke / Outline Generator](textstroke.html) | Visually design outlined text using -webkit-text-stroke or a cross-browser text-shadow ring — paint order, thickness, presets, and copy-ready CSS. |
 
 ## Images & Media
 
@@ -253,6 +254,7 @@
 | [Sprint Retro Generator](sprintretro.html) | Turn raw retro notes into action items and themes. |
 | [Priority Matrix](prioritymatrix.html) | Sort tasks by impact, effort, urgency, and risk. |
 | [Cohort Retention Calculator](cohort.html) | Build a retention matrix from raw user activity — paste user_id,date pairs and see weekly or monthly retention curves with weighted averages. |
+| [LLM API Cost Calculator](llmcost.html) | Compare per-call and monthly cost across Claude, GPT, Gemini, Llama and others — editable prices, prompt-cache savings, and side-by-side ranking. |
 
 ## Productivity
 
@@ -267,6 +269,7 @@
 | [Online Whiteboard](whiteboard.html) | Freehand drawing, shapes, text, arrows, layers, and undo/redo. |
 | [Card Deck Shuffler & Dealer](cards.html) | Shuffle a 52-card deck (or 54 with jokers) using a seeded Fisher-Yates shuffle, then deal hands of any size. |
 | [Moon Phase Calculator](moonphase.html) | Compute moon phase, illumination percentage, and the next full/new moon for any date — with a lunar calendar grid and SVG phase preview. |
+| [Date Difference Calculator](datediff.html) | Calculate the precise duration between two dates — calendar breakdown (years/months/days), totals in every unit, and weekday vs weekend counts. |
 
 ## Git & Workflow
 

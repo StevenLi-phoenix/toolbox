@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM API Cost Calculator — Free Online Tool</title>
+<meta name="description" content="Estimate LLM API costs across Claude, GPT, Gemini, Llama, and others. Compare per-call cost, monthly burn, and cache savings — input + output + cached token pricing fully editable.">
+<meta name="keywords" content="llm cost calculator, claude pricing, gpt pricing, openai cost, anthropic cost, gemini pricing, prompt caching savings, ai api budget">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/llmcost.html">
+<meta property="og:title" content="LLM API Cost Calculator — Free Online Tool">
+<meta property="og:description" content="Estimate prompt + completion + cached token cost across Claude, GPT, Gemini, and more — and project monthly spend.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/llmcost.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .field label { display: block; font-size: .76rem; color: var(--muted); margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .04em; }
+  .field input, .field select {
+    width: 100%; box-sizing: border-box; padding: 8px 10px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .8rem; }
+  .stat-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: .8rem 1rem;
+  }
+  .stat-card .label { font-size: .72rem; color: var(--muted); margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .04em; }
+  .stat-card .value { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; color: var(--text); line-height: 1.2; }
+  .stat-card .sub { font-size: .72rem; color: var(--muted); margin-top: .25rem; }
+  .stat-card.accent .value { color: var(--accent); }
+  .stat-card.warn .value { color: var(--warning); }
+  .stat-card.success .value { color: var(--success); }
+  table.compare { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  table.compare th, table.compare td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  table.compare th { color: var(--muted); font-size: .73rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  table.compare td.num { font-family: var(--mono); text-align: right; }
+  table.compare tr.current { background: var(--surface2); }
+  table.compare tr:hover { background: var(--surface2); cursor: pointer; }
+  table.compare tr.current td:first-child::before { content: '▸ '; color: var(--accent); }
+  .savings { color: var(--success); font-weight: 600; }
+  .small-note { font-size: .78rem; color: var(--muted); }
+  .num { font-family: var(--mono); }
+  @media (max-width: 700px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>LLM API Cost Calculator</h1>
+<p class="subtitle">Estimate per-request and monthly cost across major LLM providers. Customize input / output / cached pricing, see what prompt caching saves, and compare every model in one click.</p>
+
+<div class="card">
+  <h2>Usage</h2>
+  <div class="grid3">
+    <div class="field">
+      <label for="inTokens">Input tokens / call</label>
+      <input type="number" id="inTokens" min="0" value="2000" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="outTokens">Output tokens / call</label>
+      <input type="number" id="outTokens" min="0" value="500" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="cachedTokens">Cached input tokens / call</label>
+      <input type="number" id="cachedTokens" min="0" value="0" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="callsPerDay">Calls per day</label>
+      <input type="number" id="callsPerDay" min="0" value="1000" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="daysPerMonth">Active days / month</label>
+      <input type="number" id="daysPerMonth" min="1" max="31" value="30" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="margin">Markup multiplier</label>
+      <input type="number" id="margin" min="0" step="0.1" value="1" oninput="calc()">
+    </div>
+  </div>
+  <p class="small-note" style="margin-top:.6rem">"Cached input tokens" use cache-read pricing if the provider supports it. The remaining input tokens (input − cached) use the standard input rate. Markup multiplies the final cost &mdash; useful if you bill customers a margin on top of raw API spend.</p>
+</div>
+
+<div class="card">
+  <h2>Selected model</h2>
+  <div class="grid2">
+    <div class="field">
+      <label for="model">Model</label>
+      <select id="model" onchange="onModelChange()"></select>
+    </div>
+    <div class="field">
+      <label>Provider</label>
+      <input type="text" id="provider" readonly>
+    </div>
+    <div class="field">
+      <label for="pIn">Input $ / 1M tok</label>
+      <input type="number" id="pIn" min="0" step="0.001" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="pOut">Output $ / 1M tok</label>
+      <input type="number" id="pOut" min="0" step="0.001" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="pCacheW">Cache write $ / 1M tok</label>
+      <input type="number" id="pCacheW" min="0" step="0.001" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="pCacheR">Cache read $ / 1M tok</label>
+      <input type="number" id="pCacheR" min="0" step="0.001" oninput="calc()">
+    </div>
+  </div>
+  <p class="small-note" style="margin-top:.6rem">Prices are editable &mdash; tweak them to match your contract or pre-release pricing. The presets below load known list prices but providers update these often, so always sanity-check against the provider's pricing page.</p>
+</div>
+
+<div class="card">
+  <h2>Cost summary</h2>
+  <div class="stat-grid" id="stats"></div>
+  <p class="small-note" style="margin-top:.75rem" id="cacheNote"></p>
+</div>
+
+<div class="card">
+  <h2>Compare all models</h2>
+  <p class="small-note" style="margin:0 0 .5rem">Same usage applied across every preset. Click any row to load its prices into the form above.</p>
+  <div style="overflow-x:auto">
+  <table class="compare">
+    <thead><tr>
+      <th>Model</th><th>Provider</th>
+      <th style="text-align:right">$/call</th>
+      <th style="text-align:right">$/day</th>
+      <th style="text-align:right">$/month</th>
+    </tr></thead>
+    <tbody id="cmpBody"></tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How the math works</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;margin:0">
+    Cost per call = (input − cached) × <code>p<sub>in</sub></code>/1M + cached × <code>p<sub>cacheRead</sub></code>/1M + output × <code>p<sub>out</sub></code>/1M. The "no cache" comparison ignores cache-read pricing and bills every input token at the full input rate. Daily cost = per-call × calls/day; monthly cost = daily × active days. Markup applies last. Tokens are <em>provider tokens</em>, not characters &mdash; for a rough estimate, English text averages ~4 characters per token.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const MODELS = [
+  { name: 'Claude Opus 4.7',       provider: 'Anthropic', pIn: 15,    pOut: 75,    pCacheW: 18.75, pCacheR: 1.50 },
+  { name: 'Claude Sonnet 4.6',     provider: 'Anthropic', pIn: 3,     pOut: 15,    pCacheW: 3.75,  pCacheR: 0.30 },
+  { name: 'Claude Haiku 4.5',      provider: 'Anthropic', pIn: 1,     pOut: 5,     pCacheW: 1.25,  pCacheR: 0.10 },
+  { name: 'GPT-5',                 provider: 'OpenAI',    pIn: 1.25,  pOut: 10,    pCacheW: 1.25,  pCacheR: 0.125 },
+  { name: 'GPT-5 mini',            provider: 'OpenAI',    pIn: 0.25,  pOut: 2,     pCacheW: 0.25,  pCacheR: 0.025 },
+  { name: 'GPT-4o',                provider: 'OpenAI',    pIn: 2.50,  pOut: 10,    pCacheW: 2.50,  pCacheR: 1.25 },
+  { name: 'GPT-4o mini',           provider: 'OpenAI',    pIn: 0.15,  pOut: 0.60,  pCacheW: 0.15,  pCacheR: 0.075 },
+  { name: 'o3',                    provider: 'OpenAI',    pIn: 2,     pOut: 8,     pCacheW: 2,     pCacheR: 0.50 },
+  { name: 'o4-mini',               provider: 'OpenAI',    pIn: 1.10,  pOut: 4.40,  pCacheW: 1.10,  pCacheR: 0.275 },
+  { name: 'Gemini 2.5 Pro',        provider: 'Google',    pIn: 1.25,  pOut: 10,    pCacheW: 1.25,  pCacheR: 0.31 },
+  { name: 'Gemini 2.5 Flash',      provider: 'Google',    pIn: 0.30,  pOut: 2.50,  pCacheW: 0.30,  pCacheR: 0.075 },
+  { name: 'Gemini 1.5 Pro',        provider: 'Google',    pIn: 1.25,  pOut: 5,     pCacheW: 1.25,  pCacheR: 0.3125 },
+  { name: 'Gemini 1.5 Flash',      provider: 'Google',    pIn: 0.075, pOut: 0.30,  pCacheW: 0.075, pCacheR: 0.01875 },
+  { name: 'Llama 3.3 70B',         provider: 'Meta/Groq', pIn: 0.59,  pOut: 0.79,  pCacheW: 0.59,  pCacheR: 0.59 },
+  { name: 'Llama 4 Scout',         provider: 'Meta/Groq', pIn: 0.11,  pOut: 0.34,  pCacheW: 0.11,  pCacheR: 0.11 },
+  { name: 'DeepSeek-V3',           provider: 'DeepSeek',  pIn: 0.27,  pOut: 1.10,  pCacheW: 0.27,  pCacheR: 0.07 },
+  { name: 'DeepSeek-R1',           provider: 'DeepSeek',  pIn: 0.55,  pOut: 2.19,  pCacheW: 0.55,  pCacheR: 0.14 },
+  { name: 'Mistral Large',         provider: 'Mistral',   pIn: 2,     pOut: 6,     pCacheW: 2,     pCacheR: 2 },
+  { name: 'Mistral Small',         provider: 'Mistral',   pIn: 0.20,  pOut: 0.60,  pCacheW: 0.20,  pCacheR: 0.20 },
+  { name: 'Grok 3',                provider: 'xAI',       pIn: 3,     pOut: 15,    pCacheW: 3,     pCacheR: 0.75 },
+  { name: 'Cohere Command R+',     provider: 'Cohere',    pIn: 2.50,  pOut: 10,    pCacheW: 2.50,  pCacheR: 2.50 },
+];
+
+function fmtUSD(v) {
+  if (!isFinite(v)) return '$0';
+  if (v >= 1) return '$' + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (v >= 0.01) return '$' + v.toFixed(4);
+  if (v >= 0.0001) return '$' + v.toFixed(6);
+  return '$' + v.toExponential(3);
+}
+
+function populateModels() {
+  const sel = $('model');
+  sel.innerHTML = MODELS.map((m, i) => `<option value="${i}">${m.name} — ${m.provider}</option>`).join('');
+  loadModel(MODELS[1]);
+}
+
+function loadModel(m) {
+  $('provider').value = m.provider;
+  $('pIn').value = m.pIn;
+  $('pOut').value = m.pOut;
+  $('pCacheW').value = m.pCacheW;
+  $('pCacheR').value = m.pCacheR;
+}
+
+function onModelChange() {
+  const idx = parseInt($('model').value, 10);
+  loadModel(MODELS[idx]);
+  calc();
+}
+
+function costForModel(m, inT, outT, cachedT) {
+  const cached = Math.min(cachedT, inT);
+  const fresh = Math.max(0, inT - cached);
+  return (fresh * m.pIn + cached * m.pCacheR + outT * m.pOut) / 1_000_000;
+}
+
+function calc() {
+  const inT = +$('inTokens').value || 0;
+  const outT = +$('outTokens').value || 0;
+  const cachedT = Math.min(+$('cachedTokens').value || 0, inT);
+  const calls = +$('callsPerDay').value || 0;
+  const days = +$('daysPerMonth').value || 0;
+  const markup = +$('margin').value || 1;
+
+  const m = {
+    pIn: +$('pIn').value || 0,
+    pOut: +$('pOut').value || 0,
+    pCacheW: +$('pCacheW').value || 0,
+    pCacheR: +$('pCacheR').value || 0,
+  };
+
+  const fresh = Math.max(0, inT - cachedT);
+  const inputCost = fresh * m.pIn / 1_000_000;
+  const cachedCost = cachedT * m.pCacheR / 1_000_000;
+  const outputCost = outT * m.pOut / 1_000_000;
+  const perCall = (inputCost + cachedCost + outputCost) * markup;
+  const perCallNoCache = (inT * m.pIn / 1_000_000 + outputCost) * markup;
+  const perDay = perCall * calls;
+  const perMonth = perDay * days;
+  const perYear = perMonth * 12;
+  const cacheSaving = perCallNoCache - perCall;
+  const totalTokens = inT + outT;
+  const $perK = totalTokens > 0 ? perCall / (totalTokens / 1000) : 0;
+
+  const stats = [
+    { cls: 'accent', label: 'Per call', val: fmtUSD(perCall) },
+    { cls: '', label: 'Per 1K total tokens', val: fmtUSD($perK) },
+    { cls: '', label: 'Per day', val: fmtUSD(perDay), sub: calls.toLocaleString() + ' calls' },
+    { cls: 'warn', label: 'Per month', val: fmtUSD(perMonth), sub: days + ' active days' },
+    { cls: '', label: 'Per year', val: fmtUSD(perYear) },
+    { cls: 'success', label: 'Cache savings / call', val: fmtUSD(cacheSaving), sub: cachedT > 0 ? `${(cacheSaving / perCallNoCache * 100 || 0).toFixed(1)}% off` : 'no cached input' },
+  ];
+  $('stats').innerHTML = stats.map(s =>
+    `<div class="stat-card ${s.cls}"><div class="label">${s.label}</div><div class="value">${s.val}</div>${s.sub ? `<div class="sub">${s.sub}</div>` : ''}</div>`
+  ).join('');
+
+  if (cachedT > 0) {
+    $('cacheNote').textContent = `Without cache: ${fmtUSD(perCallNoCache)} per call → ${fmtUSD(perCallNoCache * calls * days)} per month. Caching ${cachedT.toLocaleString()} tokens saves ${fmtUSD(cacheSaving * calls * days)} / month.`;
+  } else {
+    $('cacheNote').textContent = 'Set "Cached input tokens" above to see how much prompt caching would save.';
+  }
+
+  const currentIdx = parseInt($('model').value, 10);
+  const rows = MODELS.map((mm, i) => {
+    const c = costForModel(mm, inT, outT, cachedT) * markup;
+    return { i, mm, c };
+  }).sort((a, b) => a.c - b.c);
+  $('cmpBody').innerHTML = rows.map(({ i, mm, c }) =>
+    `<tr class="${i === currentIdx ? 'current' : ''}" onclick="pickModel(${i})">
+      <td>${mm.name}</td>
+      <td>${mm.provider}</td>
+      <td class="num">${fmtUSD(c)}</td>
+      <td class="num">${fmtUSD(c * calls)}</td>
+      <td class="num">${fmtUSD(c * calls * days)}</td>
+    </tr>`
+  ).join('');
+}
+
+function pickModel(i) {
+  $('model').value = i;
+  loadModel(MODELS[i]);
+  calc();
+}
+
+populateModels();
+calc();
+</script>
+</body>
+</html>
