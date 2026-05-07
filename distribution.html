@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Probability Distribution Visualizer — Free Online Tool</title>
+<meta name="description" content="Plot PMF, PDF, and CDF for normal, uniform, exponential, binomial, Poisson, geometric, and log-normal distributions. Compute mean, variance, quantiles, and tail probabilities — all client-side.">
+<meta name="keywords" content="probability distribution, pmf, pdf, cdf, normal distribution, binomial distribution, poisson distribution, exponential distribution, quantile calculator, statistics tool">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/distribution.html">
+<meta property="og:title" content="Probability Distribution Visualizer — Free Online Tool">
+<meta property="og:description" content="Plot PMF/PDF/CDF for common distributions and compute tail probabilities and quantiles.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/distribution.html">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .field { margin-bottom: .6rem; }
+  .field label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: .2rem; text-transform: uppercase; letter-spacing: .04em; }
+  .field input, .field select {
+    width: 100%; box-sizing: border-box; padding: 7px 9px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .params-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .6rem; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .6rem; }
+  .stat-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: .6rem .8rem;
+  }
+  .stat-card .label { font-size: .72rem; color: var(--muted); margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .04em; }
+  .stat-card .value { font-family: var(--mono); font-size: 1rem; color: var(--text); }
+  canvas {
+    display: block; width: 100%; height: 280px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin-top: .4rem; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .swatch-pmf::before { background: var(--accent); }
+  .swatch-cdf::before { background: var(--success); }
+  .swatch-tail::before { background: var(--warning); }
+  .toggle-row { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .85rem; color: var(--muted); margin: .4rem 0; }
+  .toggle-row label { cursor: pointer; }
+  .quick-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .6rem; }
+  .quick-row button {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); padding: 5px 10px; font-size: .8rem; cursor: pointer; font-family: var(--sans);
+  }
+  .quick-row button:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Probability Distribution Visualizer</h1>
+<p class="subtitle">Plot the PMF/PDF and CDF of common distributions. Compute mean, variance, tail probabilities, and quantiles. Pure JavaScript &mdash; no server, no plotting library.</p>
+
+<div class="card">
+  <h2>Distribution</h2>
+  <div class="field">
+    <label for="dist">Family</label>
+    <select id="dist" onchange="onDistChange()">
+      <optgroup label="Continuous">
+        <option value="normal" selected>Normal (Gaussian)</option>
+        <option value="uniform">Uniform (continuous)</option>
+        <option value="exponential">Exponential</option>
+        <option value="lognormal">Log-normal</option>
+        <option value="gamma">Gamma</option>
+        <option value="beta">Beta</option>
+      </optgroup>
+      <optgroup label="Discrete">
+        <option value="binomial">Binomial</option>
+        <option value="poisson">Poisson</option>
+        <option value="geometric">Geometric (trials until success)</option>
+      </optgroup>
+    </select>
+  </div>
+  <div class="params-grid" id="params"></div>
+  <div class="quick-row" id="presets"></div>
+</div>
+
+<div class="card">
+  <h2>Density / mass function</h2>
+  <canvas id="pdfCanvas" width="720" height="280"></canvas>
+  <div class="legend">
+    <span class="swatch-pmf">PDF / PMF</span>
+    <span class="swatch-tail">Shaded tail (a ≤ X ≤ b)</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Cumulative function</h2>
+  <canvas id="cdfCanvas" width="720" height="220"></canvas>
+  <div class="legend">
+    <span class="swatch-cdf">CDF: P(X ≤ x)</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Tail probability &amp; quantile</h2>
+  <div class="params-grid">
+    <div class="field"><label for="aVal">Lower bound a</label><input type="number" step="any" id="aVal" oninput="recompute()"></div>
+    <div class="field"><label for="bVal">Upper bound b</label><input type="number" step="any" id="bVal" oninput="recompute()"></div>
+    <div class="field"><label for="qVal">Quantile p (0–1)</label><input type="number" step="any" min="0" max="1" id="qVal" value="0.95" oninput="recompute()"></div>
+  </div>
+  <div class="stats" id="probs" style="margin-top:.8rem"></div>
+</div>
+
+<div class="card">
+  <h2>Summary statistics</h2>
+  <div class="stats" id="stats"></div>
+</div>
+
+<div class="card">
+  <h2>About</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;margin:0">
+    PDFs are sampled at 400 points across a sensible domain for the chosen family. Tail probabilities use closed-form CDFs where available (normal &rarr; erf, exponential &rarr; <code>1&minus;e<sup>&minus;&lambda;x</sup></code>, etc.) and numerical integration (Simpson's rule) for gamma, beta, and log-normal. Quantiles use bisection on the CDF. Discrete distributions plot as stems with summed PMF for ranges. The math is approximate &mdash; good enough for visualization and back-of-envelope work, not for production statistical inference.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// --- Special functions ---
+function erf(x) {
+  // Abramowitz & Stegun 7.1.26
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const t = 1 / (1 + p * x);
+  const y = 1 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t * Math.exp(-x*x);
+  return sign * y;
+}
+function logGamma(x) {
+  // Lanczos approximation
+  const g = 7;
+  const c = [
+    0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+    771.32342877765313, -176.61502916214059, 12.507343278686905,
+    -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7
+  ];
+  if (x < 0.5) {
+    return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
+  }
+  x -= 1;
+  let a = c[0];
+  const t = x + g + 0.5;
+  for (let i = 1; i < g + 2; i++) a += c[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+function logBeta(a, b) { return logGamma(a) + logGamma(b) - logGamma(a + b); }
+function logFact(n) { return logGamma(n + 1); }
+function logChoose(n, k) {
+  if (k < 0 || k > n) return -Infinity;
+  return logFact(n) - logFact(k) - logFact(n - k);
+}
+
+function simpson(f, a, b, n) {
+  if (a >= b) return 0;
+  if (n % 2) n++;
+  const h = (b - a) / n;
+  let s = f(a) + f(b);
+  for (let i = 1; i < n; i++) s += (i % 2 ? 4 : 2) * f(a + i*h);
+  return s * h / 3;
+}
+
+// --- Distribution registry ---
+const D = {
+  normal: {
+    label: 'Normal',
+    params: [
+      { id: 'mu', label: 'μ (mean)', def: 0 },
+      { id: 'sigma', label: 'σ (std dev)', def: 1, min: 0 },
+    ],
+    discrete: false,
+    domain: (p) => [p.mu - 4*p.sigma, p.mu + 4*p.sigma],
+    pdf: (x, p) => Math.exp(-0.5 * ((x - p.mu) / p.sigma) ** 2) / (p.sigma * Math.sqrt(2 * Math.PI)),
+    cdf: (x, p) => 0.5 * (1 + erf((x - p.mu) / (p.sigma * Math.sqrt(2)))),
+    mean: p => p.mu, variance: p => p.sigma * p.sigma,
+    presets: [{ name: 'Standard', mu: 0, sigma: 1 }, { name: 'IQ scores', mu: 100, sigma: 15 }],
+  },
+  uniform: {
+    label: 'Uniform',
+    params: [
+      { id: 'a', label: 'a (min)', def: 0 },
+      { id: 'b', label: 'b (max)', def: 1 },
+    ],
+    discrete: false,
+    domain: (p) => [p.a - (p.b-p.a)*0.1, p.b + (p.b-p.a)*0.1],
+    pdf: (x, p) => (x >= p.a && x <= p.b) ? 1 / (p.b - p.a) : 0,
+    cdf: (x, p) => x < p.a ? 0 : x > p.b ? 1 : (x - p.a) / (p.b - p.a),
+    mean: p => (p.a + p.b) / 2, variance: p => (p.b - p.a) ** 2 / 12,
+    presets: [{ name: '[0,1]', a: 0, b: 1 }, { name: '[-1,1]', a: -1, b: 1 }],
+  },
+  exponential: {
+    label: 'Exponential',
+    params: [
+      { id: 'lambda', label: 'λ (rate)', def: 1, min: 0 },
+    ],
+    discrete: false,
+    domain: (p) => [0, 6 / p.lambda],
+    pdf: (x, p) => x < 0 ? 0 : p.lambda * Math.exp(-p.lambda * x),
+    cdf: (x, p) => x < 0 ? 0 : 1 - Math.exp(-p.lambda * x),
+    mean: p => 1 / p.lambda, variance: p => 1 / (p.lambda * p.lambda),
+    presets: [{ name: 'λ = 1', lambda: 1 }, { name: 'λ = 0.5', lambda: 0.5 }],
+  },
+  lognormal: {
+    label: 'Log-normal',
+    params: [
+      { id: 'mu', label: 'μ (log-mean)', def: 0 },
+      { id: 'sigma', label: 'σ (log-sd)', def: 0.5, min: 0 },
+    ],
+    discrete: false,
+    domain: (p) => {
+      const m = Math.exp(p.mu);
+      const hi = Math.exp(p.mu + 4 * p.sigma);
+      return [0, hi];
+    },
+    pdf: (x, p) => x <= 0 ? 0 : Math.exp(-0.5 * ((Math.log(x) - p.mu) / p.sigma) ** 2) / (x * p.sigma * Math.sqrt(2 * Math.PI)),
+    cdf: (x, p) => x <= 0 ? 0 : 0.5 * (1 + erf((Math.log(x) - p.mu) / (p.sigma * Math.sqrt(2)))),
+    mean: p => Math.exp(p.mu + p.sigma * p.sigma / 2),
+    variance: p => (Math.exp(p.sigma*p.sigma) - 1) * Math.exp(2*p.mu + p.sigma*p.sigma),
+    presets: [{ name: 'μ=0, σ=0.5', mu: 0, sigma: 0.5 }, { name: 'μ=0, σ=1', mu: 0, sigma: 1 }],
+  },
+  gamma: {
+    label: 'Gamma',
+    params: [
+      { id: 'shape', label: 'k (shape)', def: 2, min: 0 },
+      { id: 'scale', label: 'θ (scale)', def: 1, min: 0 },
+    ],
+    discrete: false,
+    domain: (p) => [0, p.shape * p.scale * 6],
+    pdf: (x, p) => {
+      if (x < 0) return 0;
+      if (x === 0) return p.shape <= 1 ? Infinity : 0;
+      return Math.exp((p.shape - 1) * Math.log(x) - x / p.scale - p.shape * Math.log(p.scale) - logGamma(p.shape));
+    },
+    cdf: (x, p) => {
+      if (x <= 0) return 0;
+      const f = (t) => Math.exp((p.shape - 1) * Math.log(t) - t / p.scale - p.shape * Math.log(p.scale) - logGamma(p.shape));
+      return Math.min(1, simpson(f, 1e-9, x, 200));
+    },
+    mean: p => p.shape * p.scale, variance: p => p.shape * p.scale * p.scale,
+    presets: [{ name: 'k=2, θ=1', shape: 2, scale: 1 }, { name: 'k=5, θ=2', shape: 5, scale: 2 }],
+  },
+  beta: {
+    label: 'Beta',
+    params: [
+      { id: 'alpha', label: 'α', def: 2, min: 0 },
+      { id: 'betaP', label: 'β', def: 5, min: 0 },
+    ],
+    discrete: false,
+    domain: (p) => [0, 1],
+    pdf: (x, p) => {
+      if (x <= 0 || x >= 1) return 0;
+      return Math.exp((p.alpha - 1) * Math.log(x) + (p.betaP - 1) * Math.log(1 - x) - logBeta(p.alpha, p.betaP));
+    },
+    cdf: (x, p) => {
+      if (x <= 0) return 0;
+      if (x >= 1) return 1;
+      const f = (t) => Math.exp((p.alpha - 1) * Math.log(t) + (p.betaP - 1) * Math.log(1 - t) - logBeta(p.alpha, p.betaP));
+      return Math.min(1, simpson(f, 1e-9, Math.min(x, 1 - 1e-9), 200));
+    },
+    mean: p => p.alpha / (p.alpha + p.betaP),
+    variance: p => p.alpha * p.betaP / ((p.alpha + p.betaP) ** 2 * (p.alpha + p.betaP + 1)),
+    presets: [{ name: 'α=2, β=5', alpha: 2, betaP: 5 }, { name: 'α=0.5, β=0.5', alpha: 0.5, betaP: 0.5 }],
+  },
+  binomial: {
+    label: 'Binomial',
+    params: [
+      { id: 'n', label: 'n (trials)', def: 20, min: 1, integer: true },
+      { id: 'p', label: 'p (success)', def: 0.5, min: 0, max: 1 },
+    ],
+    discrete: true,
+    domain: (p) => [0, p.n],
+    pdf: (k, p) => {
+      k = Math.round(k);
+      if (k < 0 || k > p.n) return 0;
+      return Math.exp(logChoose(p.n, k) + k * Math.log(p.p || 1e-300) + (p.n - k) * Math.log(1 - p.p || 1e-300));
+    },
+    cdf: (x, p) => {
+      x = Math.floor(x);
+      if (x < 0) return 0;
+      if (x >= p.n) return 1;
+      let s = 0;
+      for (let k = 0; k <= x; k++) s += D.binomial.pdf(k, p);
+      return s;
+    },
+    mean: p => p.n * p.p, variance: p => p.n * p.p * (1 - p.p),
+    presets: [{ name: '20 coin flips', n: 20, p: 0.5 }, { name: 'rare event', n: 100, p: 0.05 }],
+  },
+  poisson: {
+    label: 'Poisson',
+    params: [
+      { id: 'lambda', label: 'λ (rate)', def: 4, min: 0 },
+    ],
+    discrete: true,
+    domain: (p) => [0, Math.max(20, Math.ceil(p.lambda + 4 * Math.sqrt(p.lambda)))],
+    pdf: (k, p) => {
+      k = Math.round(k);
+      if (k < 0) return 0;
+      return Math.exp(k * Math.log(p.lambda || 1e-300) - p.lambda - logFact(k));
+    },
+    cdf: (x, p) => {
+      x = Math.floor(x);
+      if (x < 0) return 0;
+      let s = 0;
+      for (let k = 0; k <= x; k++) s += D.poisson.pdf(k, p);
+      return Math.min(1, s);
+    },
+    mean: p => p.lambda, variance: p => p.lambda,
+    presets: [{ name: 'λ = 4', lambda: 4 }, { name: 'λ = 10', lambda: 10 }],
+  },
+  geometric: {
+    label: 'Geometric',
+    params: [
+      { id: 'p', label: 'p (success)', def: 0.3, min: 0, max: 1 },
+    ],
+    discrete: true,
+    domain: (p) => [1, Math.max(15, Math.ceil(8 / p.p))],
+    pdf: (k, p) => {
+      k = Math.round(k);
+      if (k < 1) return 0;
+      return Math.pow(1 - p.p, k - 1) * p.p;
+    },
+    cdf: (x, p) => {
+      x = Math.floor(x);
+      if (x < 1) return 0;
+      return 1 - Math.pow(1 - p.p, x);
+    },
+    mean: p => 1 / p.p, variance: p => (1 - p.p) / (p.p * p.p),
+    presets: [{ name: 'p = 0.3', p: 0.3 }, { name: 'p = 0.1', p: 0.1 }],
+  },
+};
+
+let currentDist = 'normal';
+
+function onDistChange() {
+  currentDist = $('dist').value;
+  const def = D[currentDist];
+  const wrap = $('params');
+  wrap.innerHTML = '';
+  for (const par of def.params) {
+    const id = 'p_' + par.id;
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = `<label for="${id}">${par.label}</label><input type="number" step="any" id="${id}" value="${par.def}">`;
+    wrap.appendChild(div);
+    div.querySelector('input').addEventListener('input', recompute);
+  }
+  const pres = $('presets');
+  pres.innerHTML = '';
+  (def.presets || []).forEach(pr => {
+    const btn = document.createElement('button');
+    btn.textContent = pr.name;
+    btn.onclick = () => {
+      for (const par of def.params) if (pr[par.id] !== undefined) $('p_' + par.id).value = pr[par.id];
+      recompute();
+    };
+    pres.appendChild(btn);
+  });
+  // sensible default a/b
+  const params = readParams();
+  const dom = def.domain(params);
+  $('aVal').value = fmt(dom[0] + (dom[1]-dom[0]) * 0.25);
+  $('bVal').value = fmt(dom[0] + (dom[1]-dom[0]) * 0.75);
+  recompute();
+}
+
+function readParams() {
+  const def = D[currentDist];
+  const out = {};
+  for (const par of def.params) out[par.id] = parseFloat($('p_' + par.id).value);
+  return out;
+}
+
+function fmt(n, d = 4) {
+  if (!isFinite(n)) return String(n);
+  if (Math.abs(n) < 1e-10) return '0';
+  if (Math.abs(n) >= 1e6 || Math.abs(n) < 1e-3) return n.toExponential(d);
+  return parseFloat(n.toFixed(d)).toString();
+}
+
+function quantileBisect(p, params) {
+  const def = D[currentDist];
+  if (p <= 0) return def.discrete ? def.domain(params)[0] : -Infinity;
+  if (p >= 1) return def.domain(params)[1];
+  let lo = def.domain(params)[0], hi = def.domain(params)[1];
+  // expand if continuous and tail isn't covered
+  if (!def.discrete) {
+    let step = (hi - lo) || 1;
+    while (def.cdf(hi, params) < p && step < 1e15) { hi += step; step *= 2; }
+    while (def.cdf(lo, params) > p && step < 1e15) { lo -= step; step *= 2; }
+  }
+  if (def.discrete) {
+    let last = Math.ceil(hi);
+    for (let k = Math.floor(lo); k <= last + 5; k++) {
+      if (def.cdf(k, params) >= p) return k;
+    }
+    return last;
+  }
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    if (def.cdf(mid, params) < p) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+function rangeProb(a, b, params) {
+  const def = D[currentDist];
+  if (a > b) [a, b] = [b, a];
+  if (def.discrete) {
+    return def.cdf(b, params) - def.cdf(a - 1, params);
+  }
+  return def.cdf(b, params) - def.cdf(a, params);
+}
+
+function recompute() {
+  const def = D[currentDist];
+  const params = readParams();
+  const dom = def.domain(params);
+
+  // Plot domain padding
+  let lo = dom[0], hi = dom[1];
+  if (!isFinite(lo)) lo = -10;
+  if (!isFinite(hi)) hi = 10;
+  if (lo === hi) { lo -= 1; hi += 1; }
+
+  const a = parseFloat($('aVal').value);
+  const b = parseFloat($('bVal').value);
+  const q = parseFloat($('qVal').value);
+
+  drawPDF(def, params, lo, hi, a, b);
+  drawCDF(def, params, lo, hi);
+
+  // Stats
+  const mean = def.mean(params);
+  const variance = def.variance(params);
+  const sd = Math.sqrt(variance);
+  const stats = [
+    ['Mean', fmt(mean)],
+    ['Variance', fmt(variance)],
+    ['Std dev', fmt(sd)],
+    ['Median (estimate)', fmt(quantileBisect(0.5, params))],
+  ];
+  $('stats').innerHTML = stats.map(s => `<div class="stat-card"><div class="label">${s[0]}</div><div class="value">${s[1]}</div></div>`).join('');
+
+  const probCells = [];
+  if (!isNaN(a) && !isNaN(b)) {
+    probCells.push(['P(' + fmt(a) + ' ≤ X ≤ ' + fmt(b) + ')', fmt(rangeProb(a, b, params))]);
+    probCells.push(['P(X ≤ ' + fmt(a) + ')', fmt(def.cdf(a, params))]);
+    probCells.push(['P(X > ' + fmt(b) + ')', fmt(1 - def.cdf(b, params))]);
+  }
+  if (!isNaN(q) && q >= 0 && q <= 1) {
+    probCells.push(['Quantile p=' + fmt(q), fmt(quantileBisect(q, params))]);
+  }
+  $('probs').innerHTML = probCells.map(s => `<div class="stat-card"><div class="label">${s[0]}</div><div class="value">${s[1]}</div></div>`).join('');
+}
+
+function drawPDF(def, params, lo, hi, a, b) {
+  const canvas = $('pdfCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--accent').trim() || '#7aa2f7';
+  const warning = css.getPropertyValue('--warning').trim() || '#e0af68';
+  const muted = css.getPropertyValue('--muted').trim() || '#888';
+  const border = css.getPropertyValue('--border').trim() || '#333';
+
+  const padL = 40, padR = 12, padT = 10, padB = 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  // Sample
+  let xs = [], ys = [];
+  if (def.discrete) {
+    for (let k = Math.floor(lo); k <= Math.ceil(hi); k++) {
+      xs.push(k);
+      ys.push(def.pdf(k, params));
+    }
+  } else {
+    const N = 400;
+    for (let i = 0; i <= N; i++) {
+      const x = lo + (hi - lo) * i / N;
+      xs.push(x);
+      ys.push(def.pdf(x, params));
+    }
+  }
+  let yMax = 0;
+  for (const y of ys) if (isFinite(y) && y > yMax) yMax = y;
+  if (yMax === 0) yMax = 1;
+  yMax *= 1.1;
+
+  // Axes
+  ctx.strokeStyle = border;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + plotH); ctx.lineTo(padL + plotW, padT + plotH); ctx.stroke();
+  // ticks
+  ctx.fillStyle = muted; ctx.font = '11px var(--mono, monospace)';
+  for (let i = 0; i <= 5; i++) {
+    const x = lo + (hi - lo) * i / 5;
+    const px = padL + plotW * i / 5;
+    ctx.fillText(fmt(x, 2), px - 12, padT + plotH + 14);
+    ctx.beginPath(); ctx.moveTo(px, padT + plotH); ctx.lineTo(px, padT + plotH + 3); ctx.stroke();
+  }
+  for (let i = 0; i <= 4; i++) {
+    const y = yMax * i / 4;
+    const py = padT + plotH - plotH * i / 4;
+    ctx.fillText(fmt(y, 2), 4, py + 3);
+    ctx.beginPath(); ctx.moveTo(padL - 3, py); ctx.lineTo(padL, py); ctx.stroke();
+  }
+
+  function tx(x) { return padL + (x - lo) / (hi - lo) * plotW; }
+  function ty(y) { return padT + plotH - Math.min(plotH, plotH * y / yMax); }
+
+  // Shade tail
+  if (!isNaN(a) && !isNaN(b)) {
+    const lo2 = Math.min(a, b), hi2 = Math.max(a, b);
+    ctx.fillStyle = warning + '55';
+    if (def.discrete) {
+      for (let i = 0; i < xs.length; i++) {
+        const k = xs[i];
+        if (k >= lo2 && k <= hi2) {
+          const cx = tx(k);
+          const w = Math.max(2, plotW / (xs.length + 1) * 0.7);
+          ctx.fillRect(cx - w/2, ty(ys[i]), w, padT + plotH - ty(ys[i]));
+        }
+      }
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(tx(lo2), padT + plotH);
+      for (let i = 0; i < xs.length; i++) {
+        if (xs[i] >= lo2 && xs[i] <= hi2) ctx.lineTo(tx(xs[i]), ty(ys[i]));
+      }
+      ctx.lineTo(tx(hi2), padT + plotH);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // Plot
+  if (def.discrete) {
+    ctx.strokeStyle = accent; ctx.fillStyle = accent; ctx.lineWidth = 2;
+    for (let i = 0; i < xs.length; i++) {
+      const cx = tx(xs[i]);
+      ctx.beginPath();
+      ctx.moveTo(cx, padT + plotH);
+      ctx.lineTo(cx, ty(ys[i]));
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, ty(ys[i]), 3, 0, 2*Math.PI);
+      ctx.fill();
+    }
+  } else {
+    ctx.strokeStyle = accent; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < xs.length; i++) {
+      const px = tx(xs[i]);
+      const py = ty(ys[i]);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+}
+
+function drawCDF(def, params, lo, hi) {
+  const canvas = $('cdfCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  const success = css.getPropertyValue('--success').trim() || '#9ece6a';
+  const muted = css.getPropertyValue('--muted').trim() || '#888';
+  const border = css.getPropertyValue('--border').trim() || '#333';
+
+  const padL = 40, padR = 12, padT = 10, padB = 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  // Axes
+  ctx.strokeStyle = border;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + plotH); ctx.lineTo(padL + plotW, padT + plotH); ctx.stroke();
+  ctx.fillStyle = muted; ctx.font = '11px var(--mono, monospace)';
+  for (let i = 0; i <= 5; i++) {
+    const x = lo + (hi - lo) * i / 5;
+    const px = padL + plotW * i / 5;
+    ctx.fillText(fmt(x, 2), px - 12, padT + plotH + 14);
+  }
+  for (let i = 0; i <= 4; i++) {
+    const py = padT + plotH - plotH * i / 4;
+    ctx.fillText((i / 4).toFixed(2), 4, py + 3);
+  }
+
+  function tx(x) { return padL + (x - lo) / (hi - lo) * plotW; }
+  function ty(y) { return padT + plotH - plotH * y; }
+
+  ctx.strokeStyle = success; ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (def.discrete) {
+    let prevY = 0;
+    for (let k = Math.floor(lo); k <= Math.ceil(hi); k++) {
+      const yVal = def.cdf(k, params);
+      if (k === Math.floor(lo)) ctx.moveTo(tx(k), ty(prevY));
+      ctx.lineTo(tx(k), ty(prevY));
+      ctx.lineTo(tx(k), ty(yVal));
+      prevY = yVal;
+    }
+    ctx.lineTo(tx(Math.ceil(hi)), ty(prevY));
+  } else {
+    const N = 300;
+    for (let i = 0; i <= N; i++) {
+      const x = lo + (hi - lo) * i / N;
+      const y = def.cdf(x, params);
+      if (i === 0) ctx.moveTo(tx(x), ty(y)); else ctx.lineTo(tx(x), ty(y));
+    }
+  }
+  ctx.stroke();
+}
+
+onDistChange();
+</script>
+</body>
+</html>

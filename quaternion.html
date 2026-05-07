@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quaternion ↔ Euler Converter — Free Online Tool</title>
+<meta name="description" content="Convert between quaternions, Euler angles, axis-angle, and rotation matrices. Visualize 3D rotations live with a wireframe cube preview. 100% client-side.">
+<meta name="keywords" content="quaternion converter, euler angles, axis angle, rotation matrix, quaternion to euler, 3d rotation, gimbal lock, slerp">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/quaternion.html">
+<meta property="og:title" content="Quaternion ↔ Euler Converter — Free Online Tool">
+<meta property="og:description" content="Convert quaternions, Euler angles, axis-angle, and rotation matrices with a live 3D cube preview.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/quaternion.html">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .field { margin-bottom: .6rem; }
+  .field label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: .2rem; text-transform: uppercase; letter-spacing: .04em; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .row3 input, .row4 input, .field input, .field select {
+    width: 100%; box-sizing: border-box; padding: 7px 9px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .axis-label { font-family: var(--mono); color: var(--muted); font-size: .72rem; text-align: center; margin-bottom: 2px; }
+  .matrix {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: .6rem;
+  }
+  .matrix div {
+    font-family: var(--mono); font-size: .9rem; padding: 4px 6px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    text-align: right;
+  }
+  .quick-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .6rem; }
+  .quick-row button {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); padding: 5px 10px; font-size: .8rem; cursor: pointer; font-family: var(--sans);
+  }
+  .quick-row button:hover { border-color: var(--accent); color: var(--accent); }
+  .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 700px) { .panel-grid { grid-template-columns: 1fr; } }
+  canvas {
+    display: block; width: 100%; max-width: 360px; height: 360px; margin: 0 auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .canvas-caption { font-size: .78rem; color: var(--muted); margin-top: .5rem; text-align: center; }
+  .toggle-row { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .85rem; color: var(--muted); margin-bottom: .6rem; }
+  .toggle-row label { cursor: pointer; }
+  .warn { color: var(--warning); font-size: .82rem; margin-top: .5rem; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Quaternion ↔ Euler Converter</h1>
+<p class="subtitle">Convert between quaternions, Euler angles, axis-angle, and 3&times;3 rotation matrices. Edit any representation and the others update in real time. A live wireframe cube shows the resulting orientation.</p>
+
+<div class="card">
+  <h2>Settings</h2>
+  <div class="toggle-row">
+    <label>Euler order:
+      <select id="order" onchange="recomputeFromQ()">
+        <option value="ZYX" selected>ZYX (yaw-pitch-roll, Tait-Bryan)</option>
+        <option value="XYZ">XYZ</option>
+        <option value="YXZ">YXZ</option>
+        <option value="ZXY">ZXY</option>
+        <option value="YZX">YZX</option>
+        <option value="XZY">XZY</option>
+      </select>
+    </label>
+    <label>Angles:
+      <select id="unit" onchange="recomputeFromQ()">
+        <option value="deg" selected>Degrees</option>
+        <option value="rad">Radians</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div class="panel-grid">
+  <div class="card">
+    <h2>Quaternion (x, y, z, w)</h2>
+    <div class="row4">
+      <div><div class="axis-label">x</div><input type="number" step="any" id="qx" value="0" oninput="onQuatInput()"></div>
+      <div><div class="axis-label">y</div><input type="number" step="any" id="qy" value="0" oninput="onQuatInput()"></div>
+      <div><div class="axis-label">z</div><input type="number" step="any" id="qz" value="0" oninput="onQuatInput()"></div>
+      <div><div class="axis-label">w</div><input type="number" step="any" id="qw" value="1" oninput="onQuatInput()"></div>
+    </div>
+    <div id="qNote" style="font-size:.78rem;color:var(--muted);margin-top:.5rem">Identity rotation. |q| = 1.000</div>
+    <div class="quick-row">
+      <button onclick="normalizeQ()">Normalize</button>
+      <button onclick="conjugateQ()">Conjugate (inverse rotation)</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Euler angles</h2>
+    <div class="row3">
+      <div><div class="axis-label" id="elabel-0">Z (yaw)</div><input type="number" step="any" id="e0" value="0" oninput="onEulerInput()"></div>
+      <div><div class="axis-label" id="elabel-1">Y (pitch)</div><input type="number" step="any" id="e1" value="0" oninput="onEulerInput()"></div>
+      <div><div class="axis-label" id="elabel-2">X (roll)</div><input type="number" step="any" id="e2" value="0" oninput="onEulerInput()"></div>
+    </div>
+    <div id="gimbalNote" class="warn" style="display:none">Near gimbal lock — Euler angles are ambiguous, but the quaternion is fine.</div>
+  </div>
+</div>
+
+<div class="panel-grid">
+  <div class="card">
+    <h2>Axis-angle</h2>
+    <div class="field"><label for="aaAngle">Angle</label><input type="number" step="any" id="aaAngle" value="0" oninput="onAxisAngleInput()"></div>
+    <div class="field"><label>Axis (x, y, z)</label>
+      <div class="row3">
+        <input type="number" step="any" id="aaX" value="1" oninput="onAxisAngleInput()">
+        <input type="number" step="any" id="aaY" value="0" oninput="onAxisAngleInput()">
+        <input type="number" step="any" id="aaZ" value="0" oninput="onAxisAngleInput()">
+      </div>
+    </div>
+    <p style="font-size:.78rem;color:var(--muted);margin:.4rem 0 0">Axis is auto-normalized. Angle uses the same unit as Euler.</p>
+  </div>
+
+  <div class="card">
+    <h2>Rotation matrix</h2>
+    <div class="matrix" id="matrix"></div>
+    <p style="font-size:.78rem;color:var(--muted);margin:.4rem 0 0">Right-handed, column-vector convention: <code>v' = R · v</code>. Each column is the image of a basis vector.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>3D preview</h2>
+  <canvas id="viz" width="360" height="360"></canvas>
+  <p class="canvas-caption">Wireframe cube rotated by the current quaternion. Red = +X, green = +Y, blue = +Z basis arrows.</p>
+  <div class="quick-row">
+    <button onclick="setIdentity()">Identity</button>
+    <button onclick="setPreset('x90')">Rotate 90° X</button>
+    <button onclick="setPreset('y90')">Rotate 90° Y</button>
+    <button onclick="setPreset('z90')">Rotate 90° Z</button>
+    <button onclick="setPreset('iso')">Isometric (35.26°, 45°, 0°)</button>
+    <button onclick="setPreset('flip')">Flip (180° around Y)</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;margin:0">
+    Quaternions encode 3D rotations without gimbal lock. The unit-quaternion <code>(x, y, z, w)</code> with <code>w = cos(θ/2)</code> and <code>(x, y, z) = sin(θ/2)·axis</code> represents a rotation of angle θ around <em>axis</em>. Euler-angle conversions depend on the order convention &mdash; ZYX (yaw, pitch, roll) is the most common in robotics and games. Near &plusmn;90° pitch (or whichever middle axis), Euler representation loses a degree of freedom (gimbal lock); the quaternion stays well-defined. The matrix shown is built directly from the quaternion: no double conversion through Euler.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let suppress = false;
+
+function fmt(n, d = 4) {
+  if (!isFinite(n)) return String(n);
+  if (Math.abs(n) < 1e-10) return '0';
+  return parseFloat(n.toFixed(d)).toString();
+}
+
+function unitFactor() {
+  return $('unit').value === 'deg' ? Math.PI / 180 : 1;
+}
+
+function getQuat() {
+  return {
+    x: parseFloat($('qx').value) || 0,
+    y: parseFloat($('qy').value) || 0,
+    z: parseFloat($('qz').value) || 0,
+    w: parseFloat($('qw').value) || 0,
+  };
+}
+
+function setQuatFields(q) {
+  $('qx').value = fmt(q.x, 6);
+  $('qy').value = fmt(q.y, 6);
+  $('qz').value = fmt(q.z, 6);
+  $('qw').value = fmt(q.w, 6);
+  const m = Math.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w);
+  $('qNote').textContent = `|q| = ${fmt(m, 4)}` + (Math.abs(m - 1) > 0.001 ? ' (not unit — click Normalize)' : '');
+}
+
+function normalize(q) {
+  const m = Math.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w);
+  if (m === 0) return { x: 0, y: 0, z: 0, w: 1 };
+  return { x: q.x/m, y: q.y/m, z: q.z/m, w: q.w/m };
+}
+
+// Build quaternion from rotation around an axis
+function quatAxisAngle(ax, ay, az, angle) {
+  const m = Math.sqrt(ax*ax + ay*ay + az*az);
+  if (m === 0) return { x: 0, y: 0, z: 0, w: 1 };
+  const s = Math.sin(angle / 2) / m;
+  return { x: ax * s, y: ay * s, z: az * s, w: Math.cos(angle / 2) };
+}
+
+// Multiply: q1 * q2
+function quatMul(a, b) {
+  return {
+    x: a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+    y: a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+    z: a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w,
+    w: a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z,
+  };
+}
+
+// Build quaternion from Euler angles in given order
+function eulerToQuat(angles, order) {
+  // angles[i] corresponds to order[i]
+  const axes = { X: [1,0,0], Y: [0,1,0], Z: [0,0,1] };
+  let q = { x:0, y:0, z:0, w:1 };
+  for (let i = 0; i < 3; i++) {
+    const a = axes[order[i]];
+    const qi = quatAxisAngle(a[0], a[1], a[2], angles[i]);
+    q = quatMul(q, qi);
+  }
+  return q;
+}
+
+// Quaternion -> rotation matrix (3x3, row-major)
+function quatToMatrix(q) {
+  const { x, y, z, w } = q;
+  return [
+    [1 - 2*(y*y + z*z), 2*(x*y - z*w),     2*(x*z + y*w)],
+    [2*(x*y + z*w),     1 - 2*(x*x + z*z), 2*(y*z - x*w)],
+    [2*(x*z - y*w),     2*(y*z + x*w),     1 - 2*(x*x + y*y)],
+  ];
+}
+
+// Matrix -> Euler given order. Inverse of eulerToQuat composition.
+// Strategy: for order [a,b,c], factor R = Ra * Rb * Rc.
+// Use elementary closed-form for known orders.
+function matrixToEuler(R, order) {
+  // Generic Tait-Bryan extraction from a rotation matrix.
+  // Cases for the six orders.
+  let a, b, c;
+  const e = 1e-7;
+  switch (order) {
+    case 'ZYX': // R = Rz * Ry * Rx
+      // R[0][2] = sin(y); etc.
+      b = Math.asin(Math.max(-1, Math.min(1, R[0][2])));
+      if (Math.abs(R[0][2]) < 1 - e) {
+        a = Math.atan2(-R[0][1], R[0][0]);  // z
+        c = Math.atan2(-R[1][2], R[2][2]);  // x
+      } else {
+        a = Math.atan2(R[1][0], R[1][1]);
+        c = 0;
+      }
+      return [a, b, c]; // [Z, Y, X]
+    case 'XYZ': // R = Rx * Ry * Rz
+      b = Math.asin(Math.max(-1, Math.min(1, -R[2][0])));
+      if (Math.abs(R[2][0]) < 1 - e) {
+        a = Math.atan2(R[2][1], R[2][2]);   // x
+        c = Math.atan2(R[1][0], R[0][0]);   // z
+      } else {
+        a = Math.atan2(-R[1][2], R[1][1]);
+        c = 0;
+      }
+      return [a, b, c]; // [X, Y, Z]
+    case 'YXZ': // R = Ry * Rx * Rz
+      b = Math.asin(Math.max(-1, Math.min(1, R[2][1])));
+      if (Math.abs(R[2][1]) < 1 - e) {
+        a = Math.atan2(-R[2][0], R[2][2]); // y
+        c = Math.atan2(-R[0][1], R[1][1]); // z
+      } else {
+        a = Math.atan2(R[0][2], R[0][0]);
+        c = 0;
+      }
+      return [a, b, c]; // [Y, X, Z]
+    case 'ZXY': // R = Rz * Rx * Ry
+      b = Math.asin(Math.max(-1, Math.min(1, -R[1][2])));
+      if (Math.abs(R[1][2]) < 1 - e) {
+        a = Math.atan2(R[1][0], R[1][1]); // z
+        c = Math.atan2(R[0][2], R[2][2]); // y
+      } else {
+        a = Math.atan2(-R[0][1], R[0][0]);
+        c = 0;
+      }
+      return [a, b, c]; // [Z, X, Y]
+    case 'YZX': // R = Ry * Rz * Rx
+      b = Math.asin(Math.max(-1, Math.min(1, R[1][0])));
+      if (Math.abs(R[1][0]) < 1 - e) {
+        a = Math.atan2(-R[2][0], R[0][0]); // y
+        c = Math.atan2(-R[1][2], R[1][1]); // x
+      } else {
+        a = Math.atan2(R[0][2], R[2][2]);
+        c = 0;
+      }
+      return [a, b, c]; // [Y, Z, X]
+    case 'XZY': // R = Rx * Rz * Ry
+      b = Math.asin(Math.max(-1, Math.min(1, -R[0][1])));
+      if (Math.abs(R[0][1]) < 1 - e) {
+        a = Math.atan2(R[2][1], R[1][1]); // x
+        c = Math.atan2(R[0][2], R[0][0]); // y
+      } else {
+        a = Math.atan2(-R[1][2], R[2][2]);
+        c = 0;
+      }
+      return [a, b, c]; // [X, Z, Y]
+  }
+}
+
+function eulerLabels(order) {
+  const names = { X: 'X (roll)', Y: 'Y (pitch)', Z: 'Z (yaw)' };
+  for (let i = 0; i < 3; i++) $('elabel-' + i).textContent = names[order[i]];
+}
+
+function recomputeFromQ() {
+  const order = $('order').value;
+  eulerLabels(order);
+  const q = normalize(getQuat());
+  const factor = unitFactor();
+  const M = quatToMatrix(q);
+  const e = matrixToEuler(M, order);
+  suppress = true;
+  $('e0').value = fmt(e[0] / factor, 4);
+  $('e1').value = fmt(e[1] / factor, 4);
+  $('e2').value = fmt(e[2] / factor, 4);
+
+  // Axis-angle
+  const w = Math.max(-1, Math.min(1, q.w));
+  const angle = 2 * Math.acos(w);
+  const s = Math.sqrt(1 - w*w);
+  let ax = 1, ay = 0, az = 0;
+  if (s >= 1e-6) { ax = q.x/s; ay = q.y/s; az = q.z/s; }
+  $('aaAngle').value = fmt(angle / factor, 4);
+  $('aaX').value = fmt(ax, 4);
+  $('aaY').value = fmt(ay, 4);
+  $('aaZ').value = fmt(az, 4);
+  suppress = false;
+
+  // Matrix display
+  const mEl = $('matrix');
+  mEl.innerHTML = '';
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    const cell = document.createElement('div');
+    cell.textContent = fmt(M[i][j], 4);
+    mEl.appendChild(cell);
+  }
+
+  // Gimbal warning when middle axis hits ±90°
+  const middle = e[1];
+  const near90 = Math.abs(Math.abs(middle) - Math.PI/2) < 0.02;
+  $('gimbalNote').style.display = near90 ? '' : 'none';
+
+  draw(M);
+  setQuatFields(q);
+}
+
+function onQuatInput() {
+  if (suppress) return;
+  recomputeFromQ();
+}
+
+function onEulerInput() {
+  if (suppress) return;
+  const order = $('order').value;
+  const factor = unitFactor();
+  const angles = [
+    (parseFloat($('e0').value) || 0) * factor,
+    (parseFloat($('e1').value) || 0) * factor,
+    (parseFloat($('e2').value) || 0) * factor,
+  ];
+  const q = normalize(eulerToQuat(angles, order));
+  suppress = true;
+  setQuatFields(q);
+  suppress = false;
+  recomputeFromQ();
+}
+
+function onAxisAngleInput() {
+  if (suppress) return;
+  const factor = unitFactor();
+  const angle = (parseFloat($('aaAngle').value) || 0) * factor;
+  const ax = parseFloat($('aaX').value) || 0;
+  const ay = parseFloat($('aaY').value) || 0;
+  const az = parseFloat($('aaZ').value) || 0;
+  const q = normalize(quatAxisAngle(ax, ay, az, angle));
+  suppress = true;
+  setQuatFields(q);
+  suppress = false;
+  recomputeFromQ();
+}
+
+function normalizeQ() {
+  const q = normalize(getQuat());
+  setQuatFields(q);
+  recomputeFromQ();
+}
+
+function conjugateQ() {
+  const q = getQuat();
+  setQuatFields({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
+  recomputeFromQ();
+}
+
+function setIdentity() {
+  setQuatFields({ x: 0, y: 0, z: 0, w: 1 });
+  recomputeFromQ();
+}
+
+function setPreset(kind) {
+  let q = { x: 0, y: 0, z: 0, w: 1 };
+  if (kind === 'x90') q = quatAxisAngle(1, 0, 0, Math.PI/2);
+  else if (kind === 'y90') q = quatAxisAngle(0, 1, 0, Math.PI/2);
+  else if (kind === 'z90') q = quatAxisAngle(0, 0, 1, Math.PI/2);
+  else if (kind === 'flip') q = quatAxisAngle(0, 1, 0, Math.PI);
+  else if (kind === 'iso') {
+    // ZYX(0, 45°, 35.264°) for classic isometric look
+    const f = Math.PI / 180;
+    q = eulerToQuat([0 * f, 45 * f, 35.264 * f], 'ZYX');
+  }
+  setQuatFields(q);
+  recomputeFromQ();
+}
+
+// 3D drawing using rotation matrix
+function draw(R) {
+  const canvas = $('viz');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  const border = css.getPropertyValue('--border').trim() || '#333';
+  const muted = css.getPropertyValue('--muted').trim() || '#888';
+  const text = css.getPropertyValue('--text').trim() || '#eee';
+
+  const cx = W / 2, cy = H / 2;
+  const scale = 90;
+
+  function project(p) {
+    // simple orthographic look-down from +Z, with slight Y flip for canvas
+    return [cx + p[0] * scale, cy - p[1] * scale];
+  }
+  function rot(p) {
+    return [
+      R[0][0]*p[0] + R[0][1]*p[1] + R[0][2]*p[2],
+      R[1][0]*p[0] + R[1][1]*p[1] + R[1][2]*p[2],
+      R[2][0]*p[0] + R[2][1]*p[1] + R[2][2]*p[2],
+    ];
+  }
+
+  // Cube vertices
+  const verts = [];
+  for (let i = 0; i < 8; i++) {
+    verts.push([
+      ((i & 1) ? 1 : -1),
+      ((i & 2) ? 1 : -1),
+      ((i & 4) ? 1 : -1),
+    ]);
+  }
+  const edges = [
+    [0,1],[2,3],[4,5],[6,7],
+    [0,2],[1,3],[4,6],[5,7],
+    [0,4],[1,5],[2,6],[3,7],
+  ];
+
+  ctx.strokeStyle = border; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, cy); ctx.lineTo(W, cy);
+  ctx.moveTo(cx, 0); ctx.lineTo(cx, H);
+  ctx.stroke();
+
+  // Apply tilted view so identity isn't a flat square
+  const viewTilt = (() => {
+    const ax = Math.PI / 6, ay = -Math.PI / 5;
+    const cy_ = Math.cos(ay), sy_ = Math.sin(ay);
+    const cx_ = Math.cos(ax), sx_ = Math.sin(ax);
+    return [
+      [cy_, 0, sy_],
+      [sx_*sy_, cx_, -sx_*cy_],
+      [-cx_*sy_, sx_, cx_*cy_],
+    ];
+  })();
+  function applyView(p) {
+    return [
+      viewTilt[0][0]*p[0] + viewTilt[0][1]*p[1] + viewTilt[0][2]*p[2],
+      viewTilt[1][0]*p[0] + viewTilt[1][1]*p[1] + viewTilt[1][2]*p[2],
+      viewTilt[2][0]*p[0] + viewTilt[2][1]*p[1] + viewTilt[2][2]*p[2],
+    ];
+  }
+
+  const projVerts = verts.map(v => project(applyView(rot(v))));
+
+  ctx.strokeStyle = text; ctx.lineWidth = 1.5;
+  for (const [a, b] of edges) {
+    ctx.beginPath();
+    ctx.moveTo(projVerts[a][0], projVerts[a][1]);
+    ctx.lineTo(projVerts[b][0], projVerts[b][1]);
+    ctx.stroke();
+  }
+
+  // Basis arrows
+  const colors = ['#f7768e', '#9ece6a', '#7aa2f7'];
+  const labels = ['X', 'Y', 'Z'];
+  const len = 1.5;
+  const basis = [[len,0,0],[0,len,0],[0,0,len]];
+  for (let i = 0; i < 3; i++) {
+    const tip = project(applyView(rot(basis[i])));
+    const origin = project(applyView([0, 0, 0]));
+    ctx.strokeStyle = colors[i]; ctx.fillStyle = colors[i]; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(origin[0], origin[1]);
+    ctx.lineTo(tip[0], tip[1]);
+    ctx.stroke();
+    const ang = Math.atan2(tip[1]-origin[1], tip[0]-origin[0]);
+    const ah = 8;
+    ctx.beginPath();
+    ctx.moveTo(tip[0], tip[1]);
+    ctx.lineTo(tip[0] - ah * Math.cos(ang - Math.PI/7), tip[1] - ah * Math.sin(ang - Math.PI/7));
+    ctx.lineTo(tip[0] - ah * Math.cos(ang + Math.PI/7), tip[1] - ah * Math.sin(ang + Math.PI/7));
+    ctx.closePath();
+    ctx.fill();
+    ctx.font = 'bold 12px var(--mono, monospace)';
+    ctx.fillText(labels[i], tip[0] + 5, tip[1] - 5);
+  }
+}
+
+setIdentity();
+</script>
+</body>
+</html>

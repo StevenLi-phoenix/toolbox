@@ -184,6 +184,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Vector Calculator](vectorcalc.html) | 2D/3D vector math — dot, cross, magnitude, normalize, angle, projection, and lerp with a live 2D preview. |
+| [Quaternion ↔ Euler Converter](quaternion.html) | Convert between quaternions, Euler angles, axis-angle, and rotation matrices with a live 3D cube preview. |
+| [Probability Distribution Visualizer](distribution.html) | Plot PMF/PDF/CDF for normal, binomial, Poisson, gamma, beta and more, with tail probabilities and quantiles. |
 | [Regex Tester](regex.html) | Test regular expressions with real-time highlighting and capture groups. |
 | [Unix Timestamp Converter](timestamp.html) | Convert between Unix timestamps and dates. |
 | [Cron Builder](cron.html) | Build cron expressions visually with human-readable descriptions. |
