@@ -39,6 +39,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [object-fit & object-position Playground](objectfit.html) | Interactive playground for `object-fit` (fill, contain, cover, none, scale-down) and `object-position` with a click-to-set 2D pad and live CSS output. |
 | [CSS Gradient Generator](gradient.html) | Create beautiful linear, radial, and conic gradients with live preview. |
 | [CSS Counter Generator](csscounter.html) | Build counter-reset / counter-increment / content rules with a live preview — roman, alpha, greek, and nested counters. |
 | [CSS Box Shadow](shadow.html) | Design box shadows with multiple layers and inset support. |
@@ -147,6 +148,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Cross-Origin Isolation Headers](crossorigin.html) | Build COOP, COEP, and CORP combinations and see exactly what each unlocks — `SharedArrayBuffer`, high-resolution timers, full isolation. Includes Nginx, Apache, and Worker snippets. |
 | [HTTP Status Code Reference](httpstatus.html) | Interactive reference for all HTTP response codes. |
 | [HTTP Header Analyzer](httpheaders.html) | Analyze security, caching & performance headers. |
 | [CORS Header Builder](cors.html) | Build Access-Control headers and debug CORS policy. |
@@ -184,6 +186,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Complex Number Calculator](complex.html) | Add, multiply, divide, power, and root complex numbers in rectangular or polar form. Modulus, argument, conjugate, exp, log, and Argand-plane plot. |
 | [Vector Calculator](vectorcalc.html) | 2D/3D vector math — dot, cross, magnitude, normalize, angle, projection, and lerp with a live 2D preview. |
 | [Quaternion ↔ Euler Converter](quaternion.html) | Convert between quaternions, Euler angles, axis-angle, and rotation matrices with a live 3D cube preview. |
 | [Probability Distribution Visualizer](distribution.html) | Plot PMF/PDF/CDF for normal, binomial, Poisson, gamma, beta and more, with tail probabilities and quantiles. |
