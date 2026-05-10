@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Query String Builder & Parser — Free Online Tool</title>
+<meta name="description" content="Build, parse, and edit URL query strings via a key/value editor. Supports repeated keys, bracket arrays (a[]=1), indexed arrays (a[0]=1), and comma-separated values. Round-trips through encode/decode in your browser.">
+<meta name="keywords" content="query string builder, querystring parser, url params editor, urlsearchparams, url query, search params, key value url, http query string">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/querystring.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .row input[type=text] {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .88rem; box-sizing: border-box;
+  }
+  .row input[type=text]:focus { border-color: var(--accent); outline: none; }
+  .row .toggle { font-size: .75rem; color: var(--muted); display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+  .row button.del {
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: var(--radius); cursor: pointer; font-size: .85rem;
+  }
+  .row button.del:hover { color: var(--error); border-color: var(--error); }
+  textarea {
+    width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .9rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+    resize: vertical; min-height: 90px; word-break: break-all;
+  }
+  .controls { display: flex; gap: 14px; flex-wrap: wrap; margin: 10px 0; font-size: .85rem; align-items: center; }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .controls select {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--sans); font-size: .85rem;
+  }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  button.primary, button.secondary {
+    padding: 8px 14px; border-radius: var(--radius); cursor: pointer;
+    font-size: .85rem; font-family: var(--sans);
+  }
+  button.primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+  button.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  button.primary:hover, button.secondary:hover { opacity: .92; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-top: 10px; }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .label { font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; display: block; }
+  .header-row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 8px; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; padding: 0 2px; }
+  .err { color: var(--error); font-size: .82rem; margin-top: 8px; min-height: 1em; }
+  pre.snippet {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; font-family: var(--mono); font-size: .82rem;
+    color: var(--text); overflow: auto; margin: 6px 0 0;
+  }
+  @media (max-width: 640px) {
+    .row, .header-row { grid-template-columns: 1fr 1fr auto; }
+    .row .toggle { grid-column: 1 / -1; padding-left: 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Query String Builder & Parser</h1>
+<p class="subtitle">Edit URL query strings as a list of key/value pairs. Paste a URL or query string to round-trip through, switch between repeated-key, bracket-array, indexed-array, and comma-separated styles, and copy the encoded result back into your code.</p>
+
+<div class="card">
+  <h2>Pairs</h2>
+  <div class="header-row">
+    <div>Key</div><div>Value</div><div>&nbsp;</div><div>&nbsp;</div>
+  </div>
+  <div id="rows"></div>
+  <div class="actions">
+    <button class="secondary" onclick="addRow()">+ Add pair</button>
+    <button class="secondary" onclick="clearAll()">Clear all</button>
+    <button class="secondary" onclick="loadSample()">Sample</button>
+  </div>
+  <div class="controls">
+    <label>Array style:
+      <select id="arrayStyle" onchange="rebuild()">
+        <option value="repeat">repeat (a=1&amp;a=2)</option>
+        <option value="bracket">bracket (a[]=1&amp;a[]=2)</option>
+        <option value="indexed">indexed (a[0]=1&amp;a[1]=2)</option>
+        <option value="comma">comma (a=1,2)</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="encodeKeys" checked onchange="rebuild()"> percent-encode keys</label>
+    <label><input type="checkbox" id="encodeValues" checked onchange="rebuild()"> percent-encode values</label>
+    <label><input type="checkbox" id="plusSpace" onchange="rebuild()"> use + for space (form-encoded)</label>
+    <label><input type="checkbox" id="sortKeys" onchange="rebuild()"> sort keys</label>
+    <label><input type="checkbox" id="includeQuestion" checked onchange="rebuild()"> prefix with ?</label>
+  </div>
+  <div class="stats">
+    <span>pairs <strong id="stPairs">0</strong></span>
+    <span>encoded length <strong id="stLen">0</strong></span>
+    <span>distinct keys <strong id="stKeys">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Query String</h2>
+  <span class="label">Paste a URL or query string here to load it into the editor</span>
+  <textarea id="qsInput" oninput="parseInput()" spellcheck="false" placeholder="?status=open&amp;tag=urgent&amp;tag=bug"></textarea>
+  <div id="parseErr" class="err"></div>
+  <div class="actions">
+    <button class="primary" onclick="copyOutput()">Copy</button>
+    <button class="secondary" onclick="syncFromInput()">Reparse from above</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Code Snippets</h2>
+  <span class="label">JavaScript — URLSearchParams</span>
+  <pre class="snippet" id="snipJs"></pre>
+  <span class="label" style="margin-top:10px">Python — urllib.parse.urlencode</span>
+  <pre class="snippet" id="snipPy"></pre>
+  <span class="label" style="margin-top:10px">curl --get with --data-urlencode</span>
+  <pre class="snippet" id="snipCurl"></pre>
+</div>
+
+<div class="card">
+  <h2>About Array Styles</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    There is no single standard for repeating keys in a URL query string. RFC&nbsp;3986 only describes the encoding rules; the structure of values is application-specific. Common conventions include:
+  </p>
+  <ul style="font-size:.85rem;color:var(--muted);line-height:1.7">
+    <li><b>repeat</b> &mdash; Java Servlet, Express (default), Go <code>net/url</code>, browsers' <code>URLSearchParams</code>: <code>?tag=a&amp;tag=b</code></li>
+    <li><b>bracket</b> &mdash; PHP, Rails, qs library default: <code>?tag[]=a&amp;tag[]=b</code></li>
+    <li><b>indexed</b> &mdash; PHP/Rails for ordered or sparse arrays: <code>?tag[0]=a&amp;tag[1]=b</code></li>
+    <li><b>comma</b> &mdash; OpenAPI <code>style: form, explode: false</code>, some REST APIs: <code>?tag=a,b</code></li>
+  </ul>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6">
+    Pick the convention your server expects. Mixing them on the same key (e.g. <code>tag[]=a&amp;tag=b</code>) usually parses inconsistently &mdash; this tool will normalize the output to the chosen style on each rebuild.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let pairs = [];
+let suppress = false;
+
+function addRow(key = '', value = '', encode = true) {
+  pairs.push({ key, value, encode });
+  renderRows();
+  rebuild();
+}
+
+function removeRow(i) {
+  pairs.splice(i, 1);
+  renderRows();
+  rebuild();
+}
+
+function clearAll() {
+  pairs = [];
+  renderRows();
+  rebuild();
+}
+
+function loadSample() {
+  pairs = [
+    { key: 'status', value: 'open', encode: true },
+    { key: 'tag', value: 'urgent', encode: true },
+    { key: 'tag', value: 'bug', encode: true },
+    { key: 'q', value: 'hello world', encode: true },
+    { key: 'limit', value: '50', encode: true },
+  ];
+  renderRows();
+  rebuild();
+}
+
+function renderRows() {
+  const box = $('rows');
+  box.innerHTML = '';
+  pairs.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML =
+      '<input type="text" value="" data-field="key" data-i="' + i + '" placeholder="key">' +
+      '<input type="text" value="" data-field="value" data-i="' + i + '" placeholder="value">' +
+      '<label class="toggle"><input type="checkbox" data-field="encode" data-i="' + i + '"' + (p.encode ? ' checked' : '') + '> encode</label>' +
+      '<button class="del" data-i="' + i + '" type="button" title="remove">×</button>';
+    const inputs = row.querySelectorAll('input[type=text]');
+    inputs[0].value = p.key;
+    inputs[1].value = p.value;
+    box.appendChild(row);
+  });
+  box.querySelectorAll('input').forEach(el => {
+    el.addEventListener('input', onCellChange);
+    el.addEventListener('change', onCellChange);
+  });
+  box.querySelectorAll('button.del').forEach(el => {
+    el.addEventListener('click', e => removeRow(+e.target.dataset.i));
+  });
+}
+
+function onCellChange(e) {
+  const i = +e.target.dataset.i;
+  const f = e.target.dataset.field;
+  if (!pairs[i]) return;
+  if (f === 'encode') pairs[i].encode = e.target.checked;
+  else pairs[i][f] = e.target.value;
+  rebuild();
+}
+
+function pctEncode(s, plusSpace) {
+  let out = encodeURIComponent(s);
+  if (plusSpace) out = out.replace(/%20/g, '+');
+  return out;
+}
+
+function maybeEncode(s, doEncode, plusSpace) {
+  if (!doEncode) return s;
+  return pctEncode(s, plusSpace);
+}
+
+function groupByKey(list) {
+  const groups = new Map();
+  for (const p of list) {
+    if (!groups.has(p.key)) groups.set(p.key, []);
+    groups.get(p.key).push(p);
+  }
+  return groups;
+}
+
+function buildQuery() {
+  const style = $('arrayStyle').value;
+  const encKeys = $('encodeKeys').checked;
+  const encVals = $('encodeValues').checked;
+  const plusSpace = $('plusSpace').checked;
+  const sortKeys = $('sortKeys').checked;
+
+  let working = pairs.filter(p => p.key !== '' || p.value !== '');
+  if (sortKeys) {
+    working = working.slice().sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  const groups = groupByKey(working);
+  const out = [];
+
+  if (style === 'repeat') {
+    for (const p of working) {
+      const k = maybeEncode(p.key, encKeys, plusSpace);
+      const v = maybeEncode(p.value, encVals && p.encode, plusSpace);
+      out.push(k + '=' + v);
+    }
+  } else if (style === 'comma') {
+    for (const [key, items] of groups) {
+      const k = maybeEncode(key, encKeys, plusSpace);
+      const vals = items.map(p => maybeEncode(p.value, encVals && p.encode, plusSpace)).join(',');
+      out.push(k + '=' + vals);
+    }
+  } else if (style === 'bracket') {
+    for (const [key, items] of groups) {
+      const isMulti = items.length > 1;
+      for (const p of items) {
+        const rawKey = isMulti ? key + '[]' : key;
+        const k = encKeys ? pctEncode(rawKey, plusSpace) : rawKey;
+        const v = maybeEncode(p.value, encVals && p.encode, plusSpace);
+        out.push(k + '=' + v);
+      }
+    }
+  } else if (style === 'indexed') {
+    for (const [key, items] of groups) {
+      const isMulti = items.length > 1;
+      items.forEach((p, idx) => {
+        const rawKey = isMulti ? key + '[' + idx + ']' : key;
+        const k = encKeys ? pctEncode(rawKey, plusSpace) : rawKey;
+        const v = maybeEncode(p.value, encVals && p.encode, plusSpace);
+        out.push(k + '=' + v);
+      });
+    }
+  }
+
+  let qs = out.join('&');
+  if ($('includeQuestion').checked && qs) qs = '?' + qs;
+  return { qs, working };
+}
+
+function rebuild() {
+  if (suppress) return;
+  const { qs, working } = buildQuery();
+  suppress = true;
+  $('qsInput').value = qs;
+  suppress = false;
+  $('stPairs').textContent = working.length;
+  $('stLen').textContent = qs.length;
+  $('stKeys').textContent = new Set(working.map(p => p.key)).size;
+  $('parseErr').textContent = '';
+  buildSnippets(working);
+}
+
+function buildSnippets(working) {
+  const jsLines = ['const params = new URLSearchParams();'];
+  for (const p of working) {
+    jsLines.push("params.append(" + JSON.stringify(p.key) + ", " + JSON.stringify(p.value) + ");");
+  }
+  jsLines.push("const qs = '?' + params.toString();");
+  $('snipJs').textContent = jsLines.join('\n');
+
+  const tuples = working.map(p => '    (' + JSON.stringify(p.key) + ', ' + JSON.stringify(p.value) + ')');
+  const pyLines = [
+    'from urllib.parse import urlencode',
+    'params = [',
+    tuples.join(',\n') + (tuples.length ? ',' : ''),
+    ']',
+    'qs = "?" + urlencode(params)'
+  ].filter(Boolean);
+  $('snipPy').textContent = pyLines.join('\n');
+
+  const curlParts = ['curl --get https://api.example.com/'];
+  for (const p of working) {
+    const safeKey = p.key.replace(/'/g, "'\\''");
+    const safeVal = p.value.replace(/'/g, "'\\''");
+    curlParts.push("  --data-urlencode '" + safeKey + "=" + safeVal + "'");
+  }
+  $('snipCurl').textContent = curlParts.join(' \\\n');
+}
+
+function parseQueryString(input) {
+  let raw = input.trim();
+  if (!raw) return [];
+  // Strip leading URL part if present.
+  const qIdx = raw.indexOf('?');
+  if (qIdx >= 0) raw = raw.slice(qIdx + 1);
+  // Strip a trailing fragment if present.
+  const hIdx = raw.indexOf('#');
+  if (hIdx >= 0) raw = raw.slice(0, hIdx);
+  if (!raw) return [];
+
+  const out = [];
+  for (const chunk of raw.split('&')) {
+    if (!chunk) continue;
+    const eq = chunk.indexOf('=');
+    let rawKey, rawVal;
+    if (eq < 0) { rawKey = chunk; rawVal = ''; }
+    else { rawKey = chunk.slice(0, eq); rawVal = chunk.slice(eq + 1); }
+    let key, val;
+    try {
+      key = decodeURIComponent(rawKey.replace(/\+/g, ' '));
+      val = decodeURIComponent(rawVal.replace(/\+/g, ' '));
+    } catch (e) {
+      key = rawKey; val = rawVal;
+    }
+    // Normalize bracket / indexed array keys back to the bare key.
+    const m = key.match(/^([^\[]+)\[\d*\]$/);
+    if (m) key = m[1];
+    if (val.indexOf(',') >= 0 && key && !out.some(p => p.key === key)) {
+      // Heuristic: if user pasted comma-separated values, expand them.
+      const parts = val.split(',');
+      if (parts.length > 1 && parts.every(x => x.length < 64)) {
+        for (const part of parts) out.push({ key, value: part, encode: true });
+        continue;
+      }
+    }
+    out.push({ key, value: val, encode: true });
+  }
+  return out;
+}
+
+function parseInput() {
+  if (suppress) return;
+  try {
+    const next = parseQueryString($('qsInput').value);
+    pairs = next;
+    renderRows();
+    // After re-rendering, build but skip overwriting the textarea.
+    const { working } = buildQuery();
+    $('stPairs').textContent = working.length;
+    $('stLen').textContent = $('qsInput').value.length;
+    $('stKeys').textContent = new Set(working.map(p => p.key)).size;
+    $('parseErr').textContent = '';
+    buildSnippets(working);
+  } catch (e) {
+    $('parseErr').textContent = 'Could not parse: ' + e.message;
+  }
+}
+
+function syncFromInput() { parseInput(); rebuild(); }
+
+function copyOutput() {
+  const v = $('qsInput').value;
+  if (!v) return;
+  navigator.clipboard.writeText(v).then(() => {
+    $('parseErr').style.color = 'var(--success)';
+    $('parseErr').textContent = 'Copied ' + v.length + ' chars to clipboard';
+    setTimeout(() => { $('parseErr').textContent = ''; $('parseErr').style.color = ''; }, 1800);
+  });
+}
+
+loadSample();
+</script>
+</body>
+</html>

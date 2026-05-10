@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown Reference Link Converter — Free Online Tool</title>
+<meta name="description" content="Convert Markdown inline links [text](url) to reference-style [text][1] with definitions at the bottom, and back. Deduplicates URLs, preserves titles, supports images, and shows the exact reference table.">
+<meta name="keywords" content="markdown reference links, inline to reference, reference style links, markdown footnote links, markdown link converter, dedupe markdown urls, markdown cleanup">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mdreflinks.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 320px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .88rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+    line-height: 1.5;
+  }
+  label.head { display: flex; justify-content: space-between; align-items: center; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: flex; gap: 14px; flex-wrap: wrap; margin: 10px 0; font-size: .85rem; align-items: center; }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .controls select, .controls input[type=text] {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--sans); font-size: .85rem;
+  }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  button.primary, button.secondary {
+    padding: 8px 14px; border-radius: var(--radius); cursor: pointer;
+    font-size: .85rem; font-family: var(--sans);
+  }
+  button.primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+  button.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  button.primary:hover, button.secondary:hover { opacity: .92; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-top: 10px; }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .ref-table { margin-top: 14px; }
+  .ref-table table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .82rem; }
+  .ref-table th, .ref-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .ref-table th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .72rem; letter-spacing: .04em; }
+  .ref-table td.url { word-break: break-all; }
+  .ref-table .empty { padding: 12px; color: var(--muted); font-size: .85rem; text-align: center; }
+  .copy-flash { color: var(--success); font-size: .8rem; margin-left: 8px; min-height: 1em; }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Markdown Reference Link Converter</h1>
+<p class="subtitle">Flip Markdown between inline links <code>[text](url)</code> and reference-style <code>[text][1]</code> with the URL list at the bottom. Useful for cleaning up long blog posts or READMEs with many citations &mdash; reference style keeps prose readable and lets you change a URL once instead of finding every occurrence.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Direction:
+      <select id="direction" onchange="run()">
+        <option value="toRef">inline → reference</option>
+        <option value="toInline">reference → inline</option>
+      </select>
+    </label>
+    <label>Label style:
+      <select id="labelStyle" onchange="run()">
+        <option value="numeric">numeric (1, 2, 3…)</option>
+        <option value="slug">slug from text</option>
+        <option value="keep">keep existing</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="dedupe" checked onchange="run()"> deduplicate same URL</label>
+    <label><input type="checkbox" id="includeImages" checked onchange="run()"> include images (![…])</label>
+    <label><input type="checkbox" id="autolinks" onchange="run()"> also extract bare &lt;https://…&gt;</label>
+  </div>
+  <div class="panels">
+    <div>
+      <label class="head">Input
+        <button class="secondary" type="button" style="padding:3px 8px;font-size:.75rem" onclick="loadSample()">Load sample</button>
+      </label>
+      <textarea id="input" oninput="run()" spellcheck="false"></textarea>
+    </div>
+    <div>
+      <label class="head">Output
+        <span><button class="secondary" type="button" style="padding:3px 8px;font-size:.75rem" onclick="copyOutput()">Copy</button><span id="copyFlash" class="copy-flash"></span></span>
+      </label>
+      <textarea id="output" readonly spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="stats">
+    <span>links found <strong id="stLinks">0</strong></span>
+    <span>images found <strong id="stImages">0</strong></span>
+    <span>unique URLs <strong id="stUnique">0</strong></span>
+    <span>characters saved <strong id="stSaved">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Reference Table</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-top:0">Every URL extracted from the input, in the order it first appears. Edit the input to change.</p>
+  <div class="ref-table" id="refTable"></div>
+</div>
+
+<div class="card">
+  <h2>About reference-style links</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Both syntaxes render identically to HTML, but reference-style is friendlier for editing: the URL appears once at the bottom, the prose stays scannable, and updating a URL is a single change instead of a find-and-replace. CommonMark and GFM both support this form, including image references with <code>![alt][label]</code> and a definition row of <code>[label]: url "optional title"</code>. Labels are case-insensitive and may contain spaces.
+  </p>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6">
+    The <em>slug</em> label style derives a label from the link text (e.g. <code>[Anthropic blog](url)</code> &rarr; <code>[anthropic-blog]</code>). When two links share a URL and dedupe is on, they share a label; otherwise each gets its own.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLE = `# Tools we use
+
+We rely on [Claude Code](https://claude.com/claude-code) for day-to-day coding,
+[GitHub](https://github.com) for hosting, and [Linear](https://linear.app "Linear — task tracking") for tickets.
+
+The team uses [Claude Code](https://claude.com/claude-code) every day.
+
+![team logo](https://example.com/logo.png "company logo")
+
+For deeper reading, see <https://example.com/manifesto> and the [GitHub](https://github.com) docs.
+`;
+
+function loadSample() {
+  $('input').value = SAMPLE;
+  run();
+}
+
+function slugify(s) {
+  return s.toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 40) || 'link';
+}
+
+function uniquifyLabel(base, used) {
+  if (!used.has(base)) { used.add(base); return base; }
+  let i = 2;
+  while (used.has(base + '-' + i)) i++;
+  used.add(base + '-' + i);
+  return base + '-' + i;
+}
+
+// Match inline link or image: ![alt](url "title") or [text](url "title")
+// Avoids matching reference-style [text][label] by requiring '(' after ']'.
+const INLINE_RE = /(!?)\[((?:[^\]\\]|\\.)*)\]\(\s*(<[^>]*>|[^\s)]+?)(?:\s+"((?:[^"\\]|\\.)*)"|\s+'((?:[^'\\]|\\.)*)')?\s*\)/g;
+
+// Match autolink <https://...>
+const AUTOLINK_RE = /<(https?:\/\/[^\s>]+)>/g;
+
+// Match a reference definition line: [label]: url "title"
+const DEF_RE = /^[ \t]{0,3}\[((?:[^\]\\]|\\.)+)\]:\s*(<[^>]*>|\S+)(?:\s+(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|\(((?:[^)\\]|\\.)*)\)))?\s*$/;
+
+// Match a reference-style usage: [text][label] or [text][] (collapsed) or [label] (shortcut)
+const REF_FULL_RE = /(!?)\[((?:[^\]\\]|\\.)*)\]\[((?:[^\]\\]|\\.)*)\]/g;
+
+function stripAngle(s) { return s.startsWith('<') && s.endsWith('>') ? s.slice(1, -1) : s; }
+
+function inlineToReference(text, opts) {
+  const links = [];
+  const labelMap = new Map();
+  const usedLabels = new Set();
+  let counter = 1;
+  let imageCount = 0;
+  let linkCount = 0;
+
+  const findOrAssignLabel = (textPart, url, title) => {
+    const key = opts.dedupe ? url : url + '||' + counter;
+    if (opts.dedupe && labelMap.has(key)) return labelMap.get(key);
+    let label;
+    if (opts.labelStyle === 'slug') {
+      label = uniquifyLabel(slugify(textPart || url), usedLabels);
+    } else {
+      label = String(counter);
+      while (usedLabels.has(label)) { counter++; label = String(counter); }
+      usedLabels.add(label);
+      counter++;
+    }
+    labelMap.set(key, label);
+    links.push({ label, url, title: title || '' });
+    return label;
+  };
+
+  let out = text.replace(INLINE_RE, (m, bang, lText, urlRaw, titleD, titleS) => {
+    const isImage = bang === '!';
+    if (isImage && !opts.includeImages) return m;
+    const url = stripAngle(urlRaw);
+    const title = titleD || titleS || '';
+    if (isImage) imageCount++; else linkCount++;
+    const label = findOrAssignLabel(lText, url, title);
+    return bang + '[' + lText + '][' + label + ']';
+  });
+
+  if (opts.autolinks) {
+    out = out.replace(AUTOLINK_RE, (m, url) => {
+      linkCount++;
+      const label = findOrAssignLabel(url, url, '');
+      return '[' + url + '][' + label + ']';
+    });
+  }
+
+  // Strip trailing whitespace, append definitions.
+  out = out.replace(/\s+$/, '');
+  if (links.length) {
+    out += '\n\n';
+    out += links.map(l => {
+      const t = l.title ? ' "' + l.title.replace(/"/g, '\\"') + '"' : '';
+      return '[' + l.label + ']: ' + l.url + t;
+    }).join('\n');
+    out += '\n';
+  } else {
+    out += '\n';
+  }
+
+  return { out, links, linkCount, imageCount };
+}
+
+function referenceToInline(text, opts) {
+  // Collect definitions, removing the lines.
+  const defs = new Map();
+  const lines = text.split(/\n/);
+  const kept = [];
+  for (const line of lines) {
+    const m = line.match(DEF_RE);
+    if (m) {
+      const label = m[1].toLowerCase().trim();
+      const url = stripAngle(m[2]);
+      const title = m[3] || m[4] || m[5] || '';
+      defs.set(label, { url, title });
+      continue;
+    }
+    kept.push(line);
+  }
+
+  let body = kept.join('\n');
+  let linkCount = 0;
+  let imageCount = 0;
+  const seenUrls = new Set();
+
+  body = body.replace(REF_FULL_RE, (m, bang, lText, label) => {
+    const isImage = bang === '!';
+    if (isImage && !opts.includeImages) return m;
+    let lookup = label.trim();
+    if (lookup === '') lookup = lText; // collapsed reference
+    const def = defs.get(lookup.toLowerCase());
+    if (!def) return m; // unknown reference, leave it
+    if (isImage) imageCount++; else linkCount++;
+    seenUrls.add(def.url);
+    const t = def.title ? ' "' + def.title.replace(/"/g, '\\"') + '"' : '';
+    return bang + '[' + lText + '](' + def.url + t + ')';
+  });
+
+  // Also handle shortcut references [label] (no second bracket) where label matches a def.
+  body = body.replace(/(!?)\[((?:[^\]\\]|\\.)+)\](?!\[|\(|:)/g, (m, bang, lText) => {
+    const def = defs.get(lText.toLowerCase().trim());
+    if (!def) return m;
+    const isImage = bang === '!';
+    if (isImage && !opts.includeImages) return m;
+    if (isImage) imageCount++; else linkCount++;
+    seenUrls.add(def.url);
+    const t = def.title ? ' "' + def.title.replace(/"/g, '\\"') + '"' : '';
+    return bang + '[' + lText + '](' + def.url + t + ')';
+  });
+
+  // Strip excess trailing blank lines that were left behind by removed definitions.
+  body = body.replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '') + '\n';
+
+  const links = [...defs.entries()].map(([label, d]) => ({ label, url: d.url, title: d.title }));
+  return { out: body, links, linkCount, imageCount };
+}
+
+function run() {
+  const dir = $('direction').value;
+  const opts = {
+    dedupe: $('dedupe').checked,
+    includeImages: $('includeImages').checked,
+    autolinks: $('autolinks').checked,
+    labelStyle: $('labelStyle').value,
+  };
+  const input = $('input').value;
+  const result = dir === 'toRef'
+    ? inlineToReference(input, opts)
+    : referenceToInline(input, opts);
+  $('output').value = result.out;
+  $('stLinks').textContent = result.linkCount;
+  $('stImages').textContent = result.imageCount;
+  $('stUnique').textContent = new Set(result.links.map(l => l.url)).size;
+  $('stSaved').textContent = (input.length - result.out.length);
+  renderRefTable(result.links);
+}
+
+function renderRefTable(links) {
+  const box = $('refTable');
+  if (!links.length) {
+    box.innerHTML = '<div class="empty">No links extracted yet.</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>Label</th><th>URL</th><th>Title</th></tr></thead><tbody>';
+  for (const l of links) {
+    html += '<tr><td>[' + escapeHtml(l.label) + ']</td><td class="url">' + escapeHtml(l.url) + '</td><td>' + escapeHtml(l.title || '') + '</td></tr>';
+  }
+  html += '</tbody></table>';
+  box.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function copyOutput() {
+  const v = $('output').value;
+  if (!v) return;
+  navigator.clipboard.writeText(v).then(() => {
+    $('copyFlash').textContent = 'copied ' + v.length + ' chars';
+    setTimeout(() => { $('copyFlash').textContent = ''; }, 1800);
+  });
+}
+
+loadSample();
+</script>
+</body>
+</html>

@@ -120,6 +120,7 @@
 | [File Tree Generator](filetree.html) | Generate ASCII file tree diagrams for README files. |
 | [ASCII Art Generator](asciiart.html) | Convert text to ASCII art banners. |
 | [Morse Code Translator](morse.html) | Convert text to Morse code and back with audio playback. |
+| [Markdown Reference Link Converter](mdreflinks.html) | Flip Markdown between inline `[text](url)` and reference-style `[text][1]` with deduplicated definitions, slug labels, and image support. |
 
 ## Encoding & Crypto
 
@@ -181,6 +182,8 @@
 | [Rate Limit Backoff Planner](backoff.html) | Design exponential, linear, or fixed retry schedules. |
 | [GraphQL Query Cost Calculator](graphqlcost.html) | Estimate query complexity, depth, and resolver call count — spot N+1 traps and size rate limits before clients hit them. |
 | [WebRTC SDP Parser](sdpparser.html) | Inspect WebRTC SDP offers and answers — break out media sections, codecs, ICE candidates, DTLS fingerprints, and bandwidth limits. |
+| [Query String Builder & Parser](querystring.html) | Edit URL query strings as key/value pairs. Switch between repeat, bracket, indexed, and comma array styles, with JS, Python, and curl snippets. |
+| [gRPC Status Codes Reference](grpcstatus.html) | All 17 canonical gRPC codes with HTTP mapping, retry guidance, and ready-to-paste handler snippets in Go, Python, Node, and Java. |
 
 ## Developer Tools
 
