@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JWK Inspector &amp; Thumbprint Calculator — Free Online Tool</title>
+<meta name="description" content="Inspect JSON Web Keys (RSA, EC, OKP, oct), validate their structure, compute RFC 7638 SHA-256 thumbprints, and surface kid / alg / use / key_ops at a glance. 100% client-side.">
+<meta name="keywords" content="jwk, json web key, rfc 7638, thumbprint, jwks, oauth, oidc, jwt, key inspector">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jwk.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea { width: 100%; min-height: 220px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; background: var(--bg); color: var(--text); box-sizing: border-box; resize: vertical; }
+  .keys { display: grid; gap: 14px; margin-top: 14px; }
+  .key { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; background: var(--surface); }
+  .key-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .badge { font-family: var(--mono); font-size: .72rem; padding: 3px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); }
+  .badge.kty { background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.35); color: #6366f1; }
+  .badge.priv { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); color: var(--error); }
+  .badge.pub { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); color: var(--success); }
+  .meta { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; font-size: .82rem; }
+  .meta .label { color: var(--muted); }
+  .meta .val { font-family: var(--mono); word-break: break-all; }
+  .verdict { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius); font-size: .85rem; }
+  .verdict.ok { background: rgba(16,185,129,.1); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+  .verdict.bad { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.3); }
+  .verdict.warn { background: rgba(245,158,11,.1); color: #d97706; border: 1px solid rgba(245,158,11,.3); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .copybtn { font-size: .7rem; padding: 3px 9px; }
+  .params { margin-top: 10px; }
+  .params summary { cursor: pointer; font-size: .8rem; color: var(--muted); }
+  .params pre { font-family: var(--mono); font-size: .78rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
+  .samples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  @media (max-width: 768px) { .meta { grid-template-columns: 1fr; gap: 2px 0; } .meta .label { margin-top: 6px; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JWK Inspector &amp; Thumbprint</h1>
+<p class="subtitle">Paste a single JSON Web Key or a full JWKS document. The inspector validates the shape, classifies each key as public or private, surfaces <code>kid</code>, <code>alg</code>, <code>use</code>, and <code>key_ops</code>, and computes the canonical RFC&nbsp;7638 SHA-256 thumbprint. Everything runs in your browser via the Web Crypto API — paste real keys safely.</p>
+
+<div class="card">
+  <label for="src" style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px;">JWK or JWKS JSON</label>
+  <textarea id="src" spellcheck="false" placeholder='{"kty":"EC","crv":"P-256","x":"...","y":"...","kid":"key-1"}'></textarea>
+  <div class="row" style="margin-top:10px;">
+    <button class="btn btn-primary" onclick="inspect()">Inspect</button>
+    <button class="btn btn-secondary" onclick="loadSample('ec')">Sample EC</button>
+    <button class="btn btn-secondary" onclick="loadSample('rsa')">Sample RSA</button>
+    <button class="btn btn-secondary" onclick="loadSample('okp')">Sample OKP</button>
+    <button class="btn btn-secondary" onclick="loadSample('oct')">Sample oct</button>
+    <button class="btn btn-secondary" onclick="loadSample('jwks')">Sample JWKS</button>
+    <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+  </div>
+  <div id="verdict"></div>
+  <div class="keys" id="keys"></div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1rem;">About JWK &amp; Thumbprints</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    A <strong>JSON Web Key</strong> (RFC&nbsp;7517) represents a cryptographic key as JSON.
+    The <code>kty</code> (key type) tells you the family: <code>RSA</code>, <code>EC</code>,
+    <code>OKP</code> (Edwards / X-curve), or <code>oct</code> (symmetric). A
+    <strong>JWKS</strong> is an object with a <code>keys</code> array — what an OIDC
+    provider exposes at <code>/.well-known/jwks.json</code>.
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6;margin-top:10px;">
+    The <strong>JWK Thumbprint</strong> (RFC&nbsp;7638) is a stable, canonical hash of
+    just the required public members for a given <code>kty</code>, sorted lexicographically
+    and serialized without whitespace. It uniquely identifies the key material itself —
+    two JWKs with the same thumbprint represent the same key even if <code>kid</code>,
+    <code>alg</code>, or extra metadata differ. The default hash is SHA-256, base64url-encoded.
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6;margin-top:10px;">
+    Required thumbprint members per spec:
+    <code>RSA</code> &rarr; <code>e</code>, <code>kty</code>, <code>n</code> &middot;
+    <code>EC</code> &rarr; <code>crv</code>, <code>kty</code>, <code>x</code>, <code>y</code> &middot;
+    <code>OKP</code> &rarr; <code>crv</code>, <code>kty</code>, <code>x</code> &middot;
+    <code>oct</code> &rarr; <code>k</code>, <code>kty</code>.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLES = {
+  ec: {"kty":"EC","crv":"P-256","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU","y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0","kid":"sample-ec","use":"sig","alg":"ES256"},
+  rsa: {"kty":"RSA","n":"0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw","e":"AQAB","kid":"sample-rsa","alg":"RS256","use":"sig"},
+  okp: {"kty":"OKP","crv":"Ed25519","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","kid":"sample-okp","alg":"EdDSA","use":"sig"},
+  oct: {"kty":"oct","k":"GawgguFyGrWKav7AX4VKUg","kid":"sample-hs","alg":"HS256"},
+  jwks: {"keys":[
+    {"kty":"EC","crv":"P-256","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU","y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0","kid":"signing-key-2024","use":"sig","alg":"ES256"},
+    {"kty":"RSA","n":"0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw","e":"AQAB","kid":"signing-key-2023","alg":"RS256","use":"sig"}
+  ]}
+};
+
+const REQUIRED = {
+  RSA: ['e','kty','n'],
+  EC:  ['crv','kty','x','y'],
+  OKP: ['crv','kty','x'],
+  oct: ['k','kty']
+};
+
+const PRIVATE_MEMBERS = {
+  RSA: ['d','p','q','dp','dq','qi','oth'],
+  EC:  ['d'],
+  OKP: ['d'],
+  oct: ['k']
+};
+
+function loadSample(kind) {
+  $('src').value = JSON.stringify(SAMPLES[kind], null, 2);
+  inspect();
+}
+
+function clearAll() {
+  $('src').value = '';
+  $('keys').innerHTML = '';
+  $('verdict').innerHTML = '';
+}
+
+function setVerdict(msg, kind) {
+  $('verdict').innerHTML = msg ? `<div class="verdict ${kind}">${msg}</div>` : '';
+}
+
+function b64urlToBytes(s) {
+  if (typeof s !== 'string') throw new Error('not a string');
+  let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) throw new Error('invalid base64url');
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function bytesToB64Url(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+async function sha256B64Url(str) {
+  const buf = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return bytesToB64Url(new Uint8Array(hash));
+}
+
+function canonicalJWK(jwk) {
+  const required = REQUIRED[jwk.kty];
+  if (!required) throw new Error(`unsupported kty: ${jwk.kty}`);
+  const obj = {};
+  for (const k of required) {
+    if (!(k in jwk)) throw new Error(`missing required member: ${k}`);
+    obj[k] = jwk[k];
+  }
+  const sorted = Object.keys(obj).sort().reduce((acc, k) => (acc[k] = obj[k], acc), {});
+  return JSON.stringify(sorted);
+}
+
+function bitLength(b64url) {
+  try {
+    const bytes = b64urlToBytes(b64url);
+    if (bytes.length === 0) return 0;
+    let bits = bytes.length * 8;
+    if (bytes[0] !== 0) {
+      let top = bytes[0];
+      bits -= 8;
+      while (top) { bits++; top >>= 1; }
+    }
+    return bits;
+  } catch { return null; }
+}
+
+function classify(jwk) {
+  const priv = PRIVATE_MEMBERS[jwk.kty] || [];
+  const hasPriv = priv.some(m => m in jwk);
+  if (jwk.kty === 'oct') return 'symmetric';
+  return hasPriv ? 'private' : 'public';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function copyText(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const old = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => btn.textContent = old, 1200);
+  } catch {
+    btn.textContent = 'Copy failed';
+  }
+}
+
+function renderRow(label, value, copyable) {
+  if (value === undefined || value === null || value === '') return '';
+  const safe = escapeHtml(value);
+  const copy = copyable ? `<button class="btn btn-secondary copybtn" data-copy="${escapeHtml(value)}">Copy</button>` : '';
+  return `<div class="label">${label}</div><div class="val">${safe} ${copy}</div>`;
+}
+
+async function inspectOne(jwk, idx) {
+  const errors = [];
+  if (typeof jwk !== 'object' || jwk === null) {
+    errors.push('not an object');
+    return { errors };
+  }
+  if (!jwk.kty) errors.push('missing kty');
+  const required = REQUIRED[jwk.kty] || [];
+  for (const m of required) if (!(m in jwk)) errors.push(`missing ${m}`);
+
+  const cls = errors.length ? null : classify(jwk);
+  let thumb = null, canon = null;
+  if (errors.length === 0) {
+    try {
+      canon = canonicalJWK(jwk);
+      thumb = await sha256B64Url(canon);
+    } catch (e) {
+      errors.push(e.message);
+    }
+  }
+
+  let sizeInfo = '';
+  if (jwk.kty === 'RSA' && jwk.n) {
+    const bits = bitLength(jwk.n);
+    if (bits) sizeInfo = `${bits}-bit modulus`;
+  } else if (jwk.kty === 'EC' && jwk.crv) {
+    sizeInfo = jwk.crv;
+  } else if (jwk.kty === 'OKP' && jwk.crv) {
+    sizeInfo = jwk.crv;
+  } else if (jwk.kty === 'oct' && jwk.k) {
+    try {
+      const bytes = b64urlToBytes(jwk.k);
+      sizeInfo = `${bytes.length * 8} bits`;
+    } catch {}
+  }
+
+  return { jwk, errors, cls, thumb, canon, sizeInfo };
+}
+
+function renderKey(result, idx) {
+  const { jwk, errors, cls, thumb, canon, sizeInfo } = result;
+  const head = errors.length
+    ? `<div class="key-head"><div class="badges"><span class="badge" style="color:var(--error)">Invalid key</span></div><span style="font-size:.78rem;color:var(--muted)">#${idx + 1}</span></div>`
+    : `<div class="key-head"><div class="badges">
+         <span class="badge kty">kty: ${escapeHtml(jwk.kty)}</span>
+         ${sizeInfo ? `<span class="badge">${escapeHtml(sizeInfo)}</span>` : ''}
+         ${jwk.alg ? `<span class="badge">alg: ${escapeHtml(jwk.alg)}</span>` : ''}
+         ${jwk.use ? `<span class="badge">use: ${escapeHtml(jwk.use)}</span>` : ''}
+         <span class="badge ${cls === 'private' ? 'priv' : 'pub'}">${cls}</span>
+       </div><span style="font-size:.78rem;color:var(--muted)">#${idx + 1}</span></div>`;
+
+  if (errors.length) {
+    return `<div class="key">${head}<div class="verdict bad">${errors.map(escapeHtml).join(' &middot; ')}</div></div>`;
+  }
+
+  const rows = [
+    renderRow('kid', jwk.kid, true),
+    renderRow('alg', jwk.alg, false),
+    renderRow('use', jwk.use, false),
+    renderRow('key_ops', Array.isArray(jwk.key_ops) ? jwk.key_ops.join(', ') : jwk.key_ops, false),
+    renderRow('Thumbprint (SHA-256)', thumb, true),
+  ].join('');
+
+  const warn = (cls === 'private' || cls === 'symmetric')
+    ? `<div class="verdict warn">Contains secret material — do not share publicly.</div>` : '';
+
+  return `<div class="key">
+    ${head}
+    <div class="meta">${rows}</div>
+    ${warn}
+    <details class="params"><summary>Canonical JSON used for thumbprint</summary><pre>${escapeHtml(canon)}</pre></details>
+  </div>`;
+}
+
+async function inspect() {
+  const raw = $('src').value.trim();
+  if (!raw) { setVerdict('Paste a JWK or JWKS to inspect.', 'warn'); $('keys').innerHTML = ''; return; }
+  let data;
+  try { data = JSON.parse(raw); }
+  catch (e) { setVerdict(`Invalid JSON: ${escapeHtml(e.message)}`, 'bad'); $('keys').innerHTML = ''; return; }
+
+  let keys;
+  if (data && Array.isArray(data.keys)) keys = data.keys;
+  else if (Array.isArray(data)) keys = data;
+  else keys = [data];
+
+  if (!keys.length) { setVerdict('No keys found.', 'warn'); $('keys').innerHTML = ''; return; }
+
+  const results = [];
+  for (let i = 0; i < keys.length; i++) results.push(await inspectOne(keys[i], i));
+  const valid = results.filter(r => r.errors.length === 0).length;
+  setVerdict(`Parsed ${keys.length} key${keys.length > 1 ? 's' : ''} — ${valid} valid, ${keys.length - valid} with issues.`, valid === keys.length ? 'ok' : 'warn');
+  $('keys').innerHTML = results.map((r, i) => renderKey(r, i)).join('');
+
+  $('keys').querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => copyText(btn.getAttribute('data-copy'), btn));
+  });
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') inspect();
+});
+loadSample('ec');
+</script>
+</body>
+</html>

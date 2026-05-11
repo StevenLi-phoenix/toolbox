@@ -39,6 +39,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS Tooltip Generator](csstooltip.html) | Generate pure-CSS tooltips driven by `data-tooltip` — configurable position, arrow, padding, easing, colors. Live preview and zero-JS output. |
 | [object-fit & object-position Playground](objectfit.html) | Interactive playground for `object-fit` (fill, contain, cover, none, scale-down) and `object-position` with a click-to-set 2D pad and live CSS output. |
 | [CSS Gradient Generator](gradient.html) | Create beautiful linear, radial, and conic gradients with live preview. |
 | [CSS Counter Generator](csscounter.html) | Build counter-reset / counter-increment / content rules with a live preview — roman, alpha, greek, and nested counters. |
@@ -103,6 +104,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Speed Reader (RSVP)](speedread.html) | Read text rapidly one word at a time at your chosen WPM, with adjustable focus letter, chunking, and pause-on-punctuation. |
 | [Markdown Preview](markdown.html) | Write Markdown and see it rendered live. |
 | [Markdown to PDF](md2pdf.html) | Convert Markdown to beautifully formatted PDFs instantly. |
 | [Word Counter](wordcount.html) | Count words, characters, sentences, and reading time. |
@@ -126,6 +128,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [JWK Inspector & Thumbprint](jwk.html) | Parse JSON Web Keys / JWKS, classify public vs private material, and compute canonical RFC 7638 SHA-256 thumbprints for RSA, EC, OKP, oct keys. |
 | [Base64 Encoder/Decoder](base64.html) | Encode text or files to Base64 and decode Base64 strings. |
 | [URL Encoder/Decoder](urlencode.html) | Encode and decode URLs and query strings. |
 | [Number Base Converter](baseconvert.html) | Convert between binary, octal, decimal, hexadecimal, and custom bases. |
