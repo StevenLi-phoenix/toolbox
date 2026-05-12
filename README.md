@@ -39,6 +39,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS @starting-style Generator](startingstyle.html) | Generate `@starting-style` rules with `transition-behavior: allow-discrete` to animate dialogs, popovers, and `display: none → block` entries. Live preview included. |
 | [CSS Tooltip Generator](csstooltip.html) | Generate pure-CSS tooltips driven by `data-tooltip` — configurable position, arrow, padding, easing, colors. Live preview and zero-JS output. |
 | [object-fit & object-position Playground](objectfit.html) | Interactive playground for `object-fit` (fill, contain, cover, none, scale-down) and `object-position` with a click-to-set 2D pad and live CSS output. |
 | [CSS Gradient Generator](gradient.html) | Create beautiful linear, radial, and conic gradients with live preview. |
@@ -128,6 +129,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [HKDF Key Derivation](hkdf.html) | Run RFC 5869 HKDF Extract + Expand with SHA-1/256/384/512 and configurable salt, info, and output length. Includes the appendix-A test vectors. |
 | [JWK Inspector & Thumbprint](jwk.html) | Parse JSON Web Keys / JWKS, classify public vs private material, and compute canonical RFC 7638 SHA-256 thumbprints for RSA, EC, OKP, oct keys. |
 | [Base64 Encoder/Decoder](base64.html) | Encode text or files to Base64 and decode Base64 strings. |
 | [URL Encoder/Decoder](urlencode.html) | Encode and decode URLs and query strings. |
@@ -152,6 +154,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Multipart Body Inspector](multipart.html) | Parse a raw `multipart/form-data`, `multipart/related`, or `multipart/mixed` HTTP body — auto-detect boundary, list per-part headers, filename, content-type, and download binary parts. |
 | [Cross-Origin Isolation Headers](crossorigin.html) | Build COOP, COEP, and CORP combinations and see exactly what each unlocks — `SharedArrayBuffer`, high-resolution timers, full isolation. Includes Nginx, Apache, and Worker snippets. |
 | [HTTP Status Code Reference](httpstatus.html) | Interactive reference for all HTTP response codes. |
 | [HTTP Header Analyzer](httpheaders.html) | Analyze security, caching & performance headers. |

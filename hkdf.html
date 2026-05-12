@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HKDF Key Derivation — RFC 5869 Extract & Expand</title>
+<meta name="description" content="Derive output keying material from an input secret using HKDF-Extract and HKDF-Expand (RFC 5869) with SHA-1/256/384/512. Configurable salt, info, and length. 100% client-side via Web Crypto.">
+<meta name="keywords" content="hkdf, rfc 5869, key derivation, kdf, hmac, sha256, sha512, extract, expand, prk, okm">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hkdf.html">
+<meta property="og:title" content="HKDF Key Derivation — RFC 5869 Extract & Expand">
+<meta property="og:description" content="Run HKDF-Extract and HKDF-Expand entirely in your browser with configurable hash, salt, info, and output length.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/hkdf.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row { margin-bottom: 10px; }
+  input[type="text"], input[type="number"], select, textarea { width: 100%; }
+  textarea { min-height: 70px; font-family: var(--mono); font-size: .85rem; box-sizing: border-box; padding: 10px 12px; resize: vertical; }
+  .out { font-family: var(--mono); word-break: break-all; font-size: .85rem; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); min-height: 44px; }
+  .hint { font-size: .76rem; color: var(--muted); margin-top: 4px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tag { display: inline-block; padding: 3px 9px; font-size: .72rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: var(--surface2); cursor: pointer; }
+  .tag:hover { color: var(--text); border-color: var(--border2); }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 12px; }
+  .meta div { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .meta span { display: block; font-size: .7rem; color: var(--muted); }
+  .meta b { font-family: var(--mono); font-size: .85rem; font-weight: 600; word-break: break-all; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .seg button { background: var(--surface2); color: var(--muted); border: 0; padding: 6px 12px; font-size: .8rem; cursor: pointer; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .lbl { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+  .vec-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 8px; }
+  .vec-table th, .vec-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; font-family: var(--mono); }
+  .vec-table th { color: var(--muted); font-weight: 500; }
+  .vec-table button { font-size: .72rem; padding: 2px 8px; }
+  @media (max-width: 768px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>HKDF Key Derivation</h1>
+  <p class="subtitle">Run the full RFC&nbsp;5869 HKDF pipeline — <code>Extract(salt, IKM) &rarr; PRK</code> followed by <code>Expand(PRK, info, L) &rarr; OKM</code> — entirely in your browser via the Web Crypto API. Useful for deriving per-purpose subkeys from a master secret in TLS 1.3, Signal, Noise, JOSE A256GCM, and Double Ratchet style protocols.</p>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <div class="grid2">
+      <div class="row">
+        <div class="lbl"><span>Input Keying Material (IKM)</span>
+          <div class="seg" data-target="ikmFmt">
+            <button type="button" class="on" data-v="text">text</button>
+            <button type="button" data-v="hex">hex</button>
+            <button type="button" data-v="b64">base64</button>
+          </div>
+        </div>
+        <textarea id="ikm" placeholder="The secret you want to stretch. Example: a shared TLS secret, ECDH output, or password-derived seed."></textarea>
+        <div class="bar" style="margin-top:6px;">
+          <button class="tag" type="button" onclick="randomField('ikm', 32)">Random 32 B</button>
+          <span class="hint" id="ikmLen"></span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="lbl"><span>Salt (optional, recommended)</span>
+          <div class="seg" data-target="saltFmt">
+            <button type="button" class="on" data-v="text">text</button>
+            <button type="button" data-v="hex">hex</button>
+            <button type="button" data-v="b64">base64</button>
+          </div>
+        </div>
+        <textarea id="salt" placeholder="Non-secret random value. Leave blank for a HashLen-sized zero salt (per RFC 5869)."></textarea>
+        <div class="bar" style="margin-top:6px;">
+          <button class="tag" type="button" onclick="randomField('salt', 16)">Random 16 B</button>
+          <button class="tag" type="button" onclick="$('salt').value=''; update();">Zero salt</button>
+          <span class="hint" id="saltLen"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="row">
+        <div class="lbl"><span>Info / context (optional)</span>
+          <div class="seg" data-target="infoFmt">
+            <button type="button" class="on" data-v="text">text</button>
+            <button type="button" data-v="hex">hex</button>
+            <button type="button" data-v="b64">base64</button>
+          </div>
+        </div>
+        <textarea id="info" placeholder="Per-purpose label. Example: 'tls13 traffic' or 'app/v1/encryption-key'."></textarea>
+        <div class="hint" id="infoLen"></div>
+      </div>
+      <div class="row">
+        <div class="grid2" style="gap:10px;">
+          <div>
+            <label for="algo">Hash</label>
+            <select id="algo">
+              <option value="SHA-1">HMAC-SHA1</option>
+              <option value="SHA-256" selected>HMAC-SHA256</option>
+              <option value="SHA-384">HMAC-SHA384</option>
+              <option value="SHA-512">HMAC-SHA512</option>
+            </select>
+          </div>
+          <div>
+            <label for="dkLen">L (bytes)</label>
+            <input type="number" id="dkLen" value="42" min="1" max="8160">
+            <div class="hint">Max 255 × HashLen</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <label for="outFmt">Output format</label>
+          <select id="outFmt">
+            <option value="hex">Hex</option>
+            <option value="base64">Base64</option>
+            <option value="base64url">Base64url</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-primary" id="run">Derive (Extract + Expand)</button>
+      <button class="btn btn-secondary" id="extractOnly">Extract only &rarr; PRK</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label class="lbl"><span>PRK — HMAC-Hash(salt, IKM)</span>
+        <button class="tag" type="button" onclick="copy('prk')">Copy</button>
+      </label>
+      <div class="out" id="prk">—</div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label class="lbl"><span>OKM — Expand(PRK, info, L)</span>
+        <button class="tag" type="button" onclick="copy('okm')">Copy</button>
+      </label>
+      <div class="out" id="okm">—</div>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">RFC 5869 test vectors</h2>
+    <p style="font-size:.82rem;color:var(--muted);line-height:1.6;margin-bottom:8px;">Load any official appendix-A vector and compare the derived OKM against the expected output.</p>
+    <table class="vec-table">
+      <thead><tr><th>Vector</th><th>Hash</th><th>IKM len</th><th>L</th><th></th></tr></thead>
+      <tbody id="vecBody"></tbody>
+    </table>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">When to reach for HKDF</h2>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+      HKDF is built for stretching <em>already-high-entropy</em> material — Diffie-Hellman shared secrets, raw KEM outputs, master keys — into multiple independent subkeys. It is <strong>not</strong> a password hash; if your IKM is a user password, use Argon2id, scrypt, bcrypt, or PBKDF2 instead. Pick a distinct <code>info</code> string per derived key purpose so swapping contexts can never produce the same output. Salt should be non-secret but ideally random; an empty salt falls back to a zero string of HashLen length and is acceptable when the IKM is already cryptographically strong.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const HASH_LEN = { 'SHA-1': 20, 'SHA-256': 32, 'SHA-384': 48, 'SHA-512': 64 };
+
+function setStatus(msg, type) { const el = $('status'); el.className = 'status show ' + (type || ''); el.textContent = msg; }
+function clearStatus() { $('status').className = 'status'; $('status').textContent = ''; }
+
+function hexToBytes(hex) {
+  hex = hex.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (hex.length === 0) return new Uint8Array(0);
+  if (hex.length % 2 !== 0) throw new Error('Hex must have even length');
+  if (!/^[0-9a-fA-F]+$/.test(hex)) throw new Error('Invalid hex characters');
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+function b64ToBytes(s) {
+  s = s.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function bytesToHex(b) { return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join(''); }
+function bytesToB64(b) { let s = ''; for (const x of b) s += String.fromCharCode(x); return btoa(s); }
+function bytesToB64url(b) { return bytesToB64(b).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+
+function fmtFor(field) {
+  const wrap = document.querySelector(`[data-target="${field}Fmt"]`);
+  return wrap.querySelector('.on').dataset.v;
+}
+function readField(id) {
+  const v = $(id).value;
+  const fmt = fmtFor(id);
+  if (fmt === 'hex') return hexToBytes(v);
+  if (fmt === 'b64') return b64ToBytes(v);
+  return new TextEncoder().encode(v);
+}
+function randomField(id, n) {
+  const b = crypto.getRandomValues(new Uint8Array(n));
+  $(id).value = bytesToHex(b);
+  const wrap = document.querySelector(`[data-target="${id}Fmt"]`);
+  wrap.querySelectorAll('button').forEach(btn => btn.classList.toggle('on', btn.dataset.v === 'hex'));
+  update();
+}
+
+function updateLens() {
+  for (const id of ['ikm', 'salt', 'info']) {
+    try {
+      const len = readField(id).length;
+      $(id + 'Len').textContent = len ? `${len} B` : '';
+    } catch (e) {
+      $(id + 'Len').textContent = e.message;
+    }
+  }
+}
+function update() { updateLens(); }
+
+async function hmac(hash, key, data) {
+  const k = await crypto.subtle.importKey('raw', key.length ? key : new Uint8Array(HASH_LEN[hash]), { name: 'HMAC', hash }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', k, data));
+}
+
+async function hkdfExtract(hash, salt, ikm) {
+  const saltBytes = salt.length ? salt : new Uint8Array(HASH_LEN[hash]);
+  return await hmac(hash, saltBytes, ikm);
+}
+
+async function hkdfExpand(hash, prk, info, L) {
+  const hashLen = HASH_LEN[hash];
+  if (L > 255 * hashLen) throw new Error(`L too large: max ${255 * hashLen} bytes for ${hash}`);
+  const N = Math.ceil(L / hashLen);
+  const T = new Uint8Array(N * hashLen);
+  let prev = new Uint8Array(0);
+  for (let i = 0; i < N; i++) {
+    const buf = new Uint8Array(prev.length + info.length + 1);
+    buf.set(prev, 0);
+    buf.set(info, prev.length);
+    buf[buf.length - 1] = i + 1;
+    prev = await hmac(hash, prk, buf);
+    T.set(prev, i * hashLen);
+  }
+  return T.slice(0, L);
+}
+
+function encode(bytes, fmt) {
+  if (fmt === 'hex') return bytesToHex(bytes);
+  if (fmt === 'base64') return bytesToB64(bytes);
+  return bytesToB64url(bytes);
+}
+
+async function run(extractOnly) {
+  clearStatus();
+  let ikm, salt, info;
+  try { ikm = readField('ikm'); } catch (e) { setStatus('IKM: ' + e.message, 'error'); return; }
+  try { salt = readField('salt'); } catch (e) { setStatus('Salt: ' + e.message, 'error'); return; }
+  try { info = readField('info'); } catch (e) { setStatus('Info: ' + e.message, 'error'); return; }
+  if (!ikm.length) { setStatus('IKM is required', 'error'); return; }
+  const hash = $('algo').value;
+  const L = parseInt($('dkLen').value, 10);
+  if (!extractOnly && (!L || L < 1)) { setStatus('L must be >= 1', 'error'); return; }
+  const fmt = $('outFmt').value;
+  const t0 = performance.now();
+  try {
+    const prk = await hkdfExtract(hash, salt, ikm);
+    $('prk').textContent = encode(prk, fmt);
+    if (extractOnly) {
+      $('okm').textContent = '—';
+      $('meta').innerHTML = '';
+      setStatus(`Extracted PRK (${prk.length} B) in ${(performance.now() - t0).toFixed(1)} ms`, 'success');
+      return;
+    }
+    const okm = await hkdfExpand(hash, prk, info, L);
+    $('okm').textContent = encode(okm, fmt);
+    const t1 = performance.now();
+    renderMeta({
+      algorithm: 'HKDF-' + hash.replace('SHA-', 'SHA'),
+      'IKM bytes': ikm.length,
+      'salt bytes': salt.length || `0 (→ ${HASH_LEN[hash]} zeros)`,
+      'info bytes': info.length,
+      'PRK bytes': prk.length,
+      'OKM bytes': L,
+      time: (t1 - t0).toFixed(1) + ' ms',
+    });
+    setStatus(`Derived ${L} B in ${(t1 - t0).toFixed(0)} ms`, 'success');
+  } catch (e) {
+    setStatus('Error: ' + e.message, 'error');
+    $('okm').textContent = '—';
+  }
+}
+
+function renderMeta(m) {
+  $('meta').innerHTML = Object.entries(m).map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+}
+
+function copy(id) {
+  const text = $(id).textContent;
+  if (!text || text === '—') return;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = $('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1200);
+  });
+}
+
+function clearAll() {
+  ['ikm', 'salt', 'info'].forEach(id => $(id).value = '');
+  $('prk').textContent = '—';
+  $('okm').textContent = '—';
+  $('meta').innerHTML = '';
+  clearStatus();
+  updateLens();
+}
+
+const VECTORS = [
+  {
+    name: 'RFC 5869 §A.1', hash: 'SHA-256',
+    ikm: '0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b',
+    salt: '000102030405060708090a0b0c',
+    info: 'f0f1f2f3f4f5f6f7f8f9',
+    L: 42,
+    okm: '3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865'
+  },
+  {
+    name: 'RFC 5869 §A.2', hash: 'SHA-256',
+    ikm: '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f',
+    salt: '606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf',
+    info: 'b0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff',
+    L: 82,
+    okm: 'b11e398dc80327a1c8e7f78c596a49344f012eda2d4efad8a050cc4c19afa97c59045a99cac7827271cb41c65e590e09da3275600c2f09b8367793a9aca3db71cc30c58179ec3e87c14c01d5c1f3434f1d87'
+  },
+  {
+    name: 'RFC 5869 §A.3', hash: 'SHA-256',
+    ikm: '0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b',
+    salt: '', info: '', L: 42,
+    okm: '8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8'
+  },
+  {
+    name: 'RFC 5869 §A.4', hash: 'SHA-1',
+    ikm: '0b0b0b0b0b0b0b0b0b0b0b',
+    salt: '000102030405060708090a0b0c',
+    info: 'f0f1f2f3f4f5f6f7f8f9',
+    L: 42,
+    okm: '085a01ea1b10f36933068b56efa5ad81a4f14b822f5b091568a9cdd4f155fda2c22e422478d305f3f896'
+  },
+];
+
+function buildVectorRow(v, idx) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${v.name}</td><td>${v.hash}</td><td>${v.ikm.length / 2} B</td><td>${v.L} B</td><td><button class="btn btn-secondary" data-i="${idx}">Load</button></td>`;
+  return tr;
+}
+
+function loadVector(i) {
+  const v = VECTORS[i];
+  $('ikm').value = v.ikm;
+  $('salt').value = v.salt;
+  $('info').value = v.info;
+  $('algo').value = v.hash;
+  $('dkLen').value = v.L;
+  $('outFmt').value = 'hex';
+  ['ikm', 'salt', 'info'].forEach(id => {
+    const wrap = document.querySelector(`[data-target="${id}Fmt"]`);
+    wrap.querySelectorAll('button').forEach(btn => btn.classList.toggle('on', btn.dataset.v === 'hex'));
+  });
+  updateLens();
+  run(false).then(() => {
+    const actual = $('okm').textContent.replace(/\s+/g, '').toLowerCase();
+    const ok = actual === v.okm;
+    setStatus(`${v.name} — ${ok ? 'matches expected OKM' : 'MISMATCH (expected ' + v.okm.slice(0, 24) + '…)'}`, ok ? 'success' : 'error');
+  });
+}
+
+document.querySelectorAll('[data-target]').forEach(wrap => {
+  wrap.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    wrap.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    updateLens();
+  });
+});
+['ikm', 'salt', 'info'].forEach(id => $(id).addEventListener('input', updateLens));
+$('algo').addEventListener('change', updateLens);
+$('run').addEventListener('click', () => run(false));
+$('extractOnly').addEventListener('click', () => run(true));
+
+VECTORS.forEach((v, i) => $('vecBody').appendChild(buildVectorRow(v, i)));
+$('vecBody').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-i]');
+  if (btn) loadVector(parseInt(btn.dataset.i, 10));
+});
+
+loadVector(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multipart/form-data Body Inspector — Free Online Tool</title>
+<meta name="description" content="Parse a raw multipart/form-data or multipart/related HTTP body. Auto-detect the boundary, list every part with its Content-Disposition, Content-Type, filename, and decoded length. Download binary parts. 100% client-side.">
+<meta name="keywords" content="multipart form-data, multipart parser, http body, boundary, content disposition, file upload, inspector, mime">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/multipart.html">
+<meta property="og:title" content="Multipart/form-data Body Inspector">
+<meta property="og:description" content="Parse a raw multipart HTTP body in your browser — boundary detection, per-part headers, filename, content-type, and binary-safe extraction.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/multipart.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea#src {
+    width: 100%; min-height: 240px; padding: 12px 14px; box-sizing: border-box;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; background: var(--bg); color: var(--text);
+    resize: vertical;
+  }
+  .ctrlbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .pill { font-family: var(--mono); font-size: .72rem; padding: 3px 9px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); }
+  .pill.bin { background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.35); color: #d97706; }
+  .pill.text { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); color: var(--success); }
+  .pill.warn { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); color: var(--error); }
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px; margin-top: 12px;
+  }
+  .summary div { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .summary span { display: block; font-size: .7rem; color: var(--muted); }
+  .summary b { font-family: var(--mono); font-size: .85rem; font-weight: 600; word-break: break-all; }
+  .part { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; background: var(--surface); margin-top: 12px; }
+  .part-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .meta { display: grid; grid-template-columns: 130px 1fr; gap: 4px 14px; font-size: .82rem; }
+  .meta .label { color: var(--muted); }
+  .meta .val { font-family: var(--mono); word-break: break-all; }
+  pre.body {
+    margin: 10px 0 0; padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .78rem;
+    white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow: auto;
+  }
+  .body-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .verdict { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius); font-size: .85rem; }
+  .verdict.ok { background: rgba(16,185,129,.1); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+  .verdict.bad { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.3); }
+  .verdict.warn { background: rgba(245,158,11,.1); color: #d97706; border: 1px solid rgba(245,158,11,.3); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  details.raw summary { cursor: pointer; font-size: .8rem; color: var(--muted); }
+  .img-preview { max-width: 100%; max-height: 200px; margin-top: 8px; border-radius: var(--radius); border: 1px solid var(--border); display: block; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Multipart Body Inspector</h1>
+<p class="subtitle">Paste a raw HTTP request body, full request including headers, or a saved <code>.txt</code> dump of a <code>multipart/form-data</code>, <code>multipart/related</code>, or <code>multipart/mixed</code> payload. The boundary is auto-detected from the <code>Content-Type</code> header (or guessed from the first line), and each part is broken out with its <code>Content-Disposition</code> name and filename, its declared <code>Content-Type</code>, decoded byte length, and a text preview if it's printable. Binary parts can be downloaded as files.</p>
+
+<div class="card">
+  <label for="src" style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px;">Raw body or full request</label>
+  <textarea id="src" spellcheck="false" placeholder="POST /upload HTTP/1.1&#10;Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryAbCdEf&#10;&#10;------WebKitFormBoundaryAbCdEf&#10;Content-Disposition: form-data; name=&quot;field&quot;&#10;&#10;value&#10;------WebKitFormBoundaryAbCdEf--"></textarea>
+  <div class="ctrlbar">
+    <button class="btn btn-primary" id="parseBtn">Parse</button>
+    <button class="btn btn-secondary" id="sampleSimple">Sample: simple form</button>
+    <button class="btn btn-secondary" id="sampleFile">Sample: file upload</button>
+    <button class="btn btn-secondary" id="sampleNested">Sample: nested mixed</button>
+    <button class="btn btn-secondary" id="clearBtn">Clear</button>
+    <label class="row" style="font-size:.8rem;color:var(--muted);margin-left:auto;">
+      <input type="checkbox" id="autoParse" checked> Auto-parse on edit
+    </label>
+  </div>
+  <div id="verdict"></div>
+  <div class="summary" id="summary"></div>
+</div>
+
+<div id="parts"></div>
+
+<div class="card">
+  <h2 style="font-size:1rem;">Notes on multipart parsing</h2>
+  <p style="font-size:.86rem;color:var(--muted);line-height:1.6">
+    The body is split on lines beginning with <code>--&lt;boundary&gt;</code> using CRLF as required by RFC&nbsp;7578 / RFC&nbsp;2046. The terminating <code>--&lt;boundary&gt;--</code> line marks the end of the multipart entity. Each part is then split into headers and body on the first blank line.
+    Files are kept as raw bytes — <code>Content-Disposition: filename=</code> values may use RFC&nbsp;5987 extended encoding (<code>filename*=UTF-8''…</code>), which is decoded here.
+    Bodies with non-printable bytes are detected and offered as a download rather than rendered as garbled text.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function setVerdict(msg, kind) {
+  $('verdict').innerHTML = msg ? `<div class="verdict ${kind}">${msg}</div>` : '';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function strToBytes(str) {
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
+  return bytes;
+}
+
+function bytesEqualAt(haystack, needle, pos) {
+  if (pos + needle.length > haystack.length) return false;
+  for (let i = 0; i < needle.length; i++) if (haystack[pos + i] !== needle[i]) return false;
+  return true;
+}
+
+function indexOfBytes(haystack, needle, fromIndex) {
+  for (let i = fromIndex; i <= haystack.length - needle.length; i++) {
+    if (bytesEqualAt(haystack, needle, i)) return i;
+  }
+  return -1;
+}
+
+function findHeaderBoundary(raw) {
+  // If raw is a full HTTP message, split header/body on the first \r\n\r\n or \n\n.
+  const crlf = strToBytes('\r\n\r\n');
+  const lf = strToBytes('\n\n');
+  let idx = indexOfBytes(raw, crlf, 0);
+  let sep = 4;
+  if (idx === -1) { idx = indexOfBytes(raw, lf, 0); sep = 2; }
+  if (idx === -1) return null;
+  // Try to parse what's before idx as HTTP-style headers.
+  const headerBytes = raw.slice(0, idx);
+  let headerStr = '';
+  for (const b of headerBytes) headerStr += String.fromCharCode(b);
+  if (!/^[\x20-\x7E\r\n\t]*$/.test(headerStr)) return null;
+  if (!/(^|\n)content-type:/i.test(headerStr)) return null;
+  return { headerStr, bodyStart: idx + sep };
+}
+
+function parseContentType(value) {
+  const out = { type: '', params: {} };
+  if (!value) return out;
+  const parts = value.split(';').map(s => s.trim());
+  out.type = parts.shift().toLowerCase();
+  for (const p of parts) {
+    const eq = p.indexOf('=');
+    if (eq === -1) continue;
+    let k = p.slice(0, eq).trim().toLowerCase();
+    let v = p.slice(eq + 1).trim();
+    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1).replace(/\\(.)/g, '$1');
+    out.params[k] = v;
+  }
+  return out;
+}
+
+function parseContentDisposition(value) {
+  if (!value) return null;
+  const out = { type: '', name: null, filename: null, raw: value };
+  const parts = value.split(';').map(s => s.trim());
+  out.type = parts.shift().toLowerCase();
+  for (const p of parts) {
+    const eq = p.indexOf('=');
+    if (eq === -1) continue;
+    let k = p.slice(0, eq).trim().toLowerCase();
+    let v = p.slice(eq + 1).trim();
+    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1).replace(/\\(.)/g, '$1');
+    if (k === 'filename*') {
+      const m = v.match(/^([^']*)'([^']*)'(.*)$/);
+      if (m) {
+        try { out.filename = decodeURIComponent(m[3]); } catch { out.filename = m[3]; }
+      } else {
+        out.filename = v;
+      }
+    } else if (k === 'filename' && out.filename === null) {
+      out.filename = v;
+    } else if (k === 'name') {
+      out.name = v;
+    }
+  }
+  return out;
+}
+
+function bytesToText(bytes) {
+  try {
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  } catch {
+    let s = '';
+    for (const b of bytes) s += String.fromCharCode(b);
+    return s;
+  }
+}
+
+function looksBinary(bytes) {
+  if (bytes.length === 0) return false;
+  const sample = bytes.length > 4096 ? bytes.slice(0, 4096) : bytes;
+  let bad = 0;
+  for (const b of sample) {
+    if (b === 0) return true;
+    if (b < 9) bad++;
+    else if (b > 13 && b < 32) bad++;
+  }
+  return bad / sample.length > 0.05;
+}
+
+function humanBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+function findBoundary(raw) {
+  const hdr = findHeaderBoundary(raw);
+  if (hdr) {
+    const m = hdr.headerStr.match(/content-type:\s*([^\r\n]+)/i);
+    if (m) {
+      const ct = parseContentType(m[1]);
+      if (ct.params.boundary) {
+        return { boundary: ct.params.boundary, bodyStart: hdr.bodyStart, contentType: ct.type, fromHeader: true };
+      }
+    }
+  }
+  // Try to guess: look for first line starting with --
+  let firstLineEnd = -1;
+  for (let i = 0; i < Math.min(raw.length, 4096); i++) {
+    if (raw[i] === 0x0a) { firstLineEnd = i; break; }
+  }
+  if (firstLineEnd === -1) return null;
+  let lineEnd = firstLineEnd;
+  if (lineEnd > 0 && raw[lineEnd - 1] === 0x0d) lineEnd--;
+  if (lineEnd >= 2 && raw[0] === 0x2d && raw[1] === 0x2d) {
+    let endTrim = lineEnd;
+    if (endTrim >= 4 && raw[endTrim - 1] === 0x2d && raw[endTrim - 2] === 0x2d) endTrim -= 2;
+    const bb = raw.slice(2, endTrim);
+    let s = '';
+    for (const b of bb) s += String.fromCharCode(b);
+    if (s.length > 0) return { boundary: s, bodyStart: 0, contentType: 'multipart/form-data', fromHeader: false };
+  }
+  return null;
+}
+
+function splitParts(body, boundary) {
+  const delim = strToBytes('--' + boundary);
+  const parts = [];
+  let i = indexOfBytes(body, delim, 0);
+  if (i === -1) return parts;
+  while (i !== -1) {
+    let after = i + delim.length;
+    // closing delimiter?
+    if (after + 2 <= body.length && body[after] === 0x2d && body[after + 1] === 0x2d) break;
+    // skip optional CR LF after the boundary
+    if (body[after] === 0x0d && body[after + 1] === 0x0a) after += 2;
+    else if (body[after] === 0x0a) after += 1;
+    const next = indexOfBytes(body, delim, after);
+    if (next === -1) break;
+    // strip trailing CRLF/LF before delimiter
+    let end = next;
+    if (end >= 2 && body[end - 2] === 0x0d && body[end - 1] === 0x0a) end -= 2;
+    else if (end >= 1 && body[end - 1] === 0x0a) end -= 1;
+    parts.push(body.slice(after, end));
+    i = next;
+  }
+  return parts;
+}
+
+function parseOnePart(bytes) {
+  const hdrEnd = indexOfBytes(bytes, strToBytes('\r\n\r\n'), 0);
+  let headerBytes, bodyBytes, sepLen = 4;
+  if (hdrEnd !== -1) {
+    headerBytes = bytes.slice(0, hdrEnd);
+    bodyBytes = bytes.slice(hdrEnd + sepLen);
+  } else {
+    const lfEnd = indexOfBytes(bytes, strToBytes('\n\n'), 0);
+    if (lfEnd !== -1) {
+      headerBytes = bytes.slice(0, lfEnd);
+      bodyBytes = bytes.slice(lfEnd + 2);
+    } else {
+      headerBytes = bytes;
+      bodyBytes = new Uint8Array(0);
+    }
+  }
+  let headerStr = '';
+  for (const b of headerBytes) headerStr += String.fromCharCode(b);
+  const headers = {};
+  for (const line of headerStr.split(/\r?\n/)) {
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    const k = line.slice(0, idx).trim().toLowerCase();
+    const v = line.slice(idx + 1).trim();
+    headers[k] = v;
+  }
+  return { headers, body: bodyBytes };
+}
+
+function downloadBytes(bytes, name, type) {
+  const blob = new Blob([bytes], { type: type || 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name || 'part.bin';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+
+function previewImage(bytes, type) {
+  const blob = new Blob([bytes], { type });
+  return URL.createObjectURL(blob);
+}
+
+function renderPart(part, idx) {
+  const cd = parseContentDisposition(part.headers['content-disposition']);
+  const ct = parseContentType(part.headers['content-type']);
+  const binary = looksBinary(part.body);
+  const ctype = ct.type || 'text/plain';
+  const isImage = ctype.startsWith('image/');
+  const text = !binary ? bytesToText(part.body) : null;
+
+  const badges = [
+    `<span class="pill">#${idx + 1}</span>`,
+    cd && cd.name ? `<span class="pill">name=${escapeHtml(cd.name)}</span>` : '',
+    cd && cd.filename ? `<span class="pill">${escapeHtml(cd.filename)}</span>` : '',
+    `<span class="pill">${escapeHtml(ctype)}</span>`,
+    `<span class="pill ${binary ? 'bin' : 'text'}">${binary ? 'binary' : 'text'}</span>`,
+    `<span class="pill">${humanBytes(part.body.length)}</span>`,
+  ].filter(Boolean).join('');
+
+  const meta = [];
+  if (cd) {
+    if (cd.name) meta.push(['name', cd.name]);
+    if (cd.filename) meta.push(['filename', cd.filename]);
+  }
+  if (ct.type) meta.push(['Content-Type', ct.raw || (ct.type + (ct.params.charset ? '; charset=' + ct.params.charset : ''))]);
+  if (part.headers['content-transfer-encoding']) meta.push(['Transfer-Encoding', part.headers['content-transfer-encoding']]);
+  if (part.headers['content-id']) meta.push(['Content-ID', part.headers['content-id']]);
+  meta.push(['Body size', `${part.body.length} B (${humanBytes(part.body.length)})`]);
+
+  const metaRows = meta.map(([k, v]) => `<div class="label">${escapeHtml(k)}</div><div class="val">${escapeHtml(v)}</div>`).join('');
+
+  let bodyBlock = '';
+  if (part.body.length === 0) {
+    bodyBlock = `<pre class="body"><em>(empty)</em></pre>`;
+  } else if (isImage && binary) {
+    const url = previewImage(part.body, ctype);
+    bodyBlock = `<img class="img-preview" src="${url}" alt="">`;
+  } else if (binary) {
+    bodyBlock = `<pre class="body"><em>(binary body — ${humanBytes(part.body.length)})</em></pre>`;
+  } else {
+    bodyBlock = `<pre class="body">${escapeHtml(text)}</pre>`;
+  }
+
+  const filename = cd && cd.filename ? cd.filename : (cd && cd.name ? cd.name : `part-${idx + 1}`) + (ctype.includes('json') ? '.json' : ctype.includes('xml') ? '.xml' : '.bin');
+
+  return `<div class="card part" data-part="${idx}">
+    <div class="part-head">
+      <div class="badges">${badges}</div>
+    </div>
+    <div class="meta">${metaRows}</div>
+    ${bodyBlock}
+    <div class="body-actions">
+      <button class="btn btn-secondary" data-action="copy" data-idx="${idx}">Copy body as text</button>
+      <button class="btn btn-secondary" data-action="download" data-idx="${idx}" data-name="${escapeHtml(filename)}" data-type="${escapeHtml(ctype)}">Download</button>
+    </div>
+  </div>`;
+}
+
+let lastParts = [];
+
+function parse() {
+  const raw = $('src').value;
+  if (!raw.trim()) {
+    setVerdict('Paste a multipart body above to inspect.', 'warn');
+    $('summary').innerHTML = '';
+    $('parts').innerHTML = '';
+    lastParts = [];
+    return;
+  }
+  const rawBytes = strToBytes(raw);
+  const info = findBoundary(rawBytes);
+  if (!info) {
+    setVerdict('Could not find a multipart boundary. Include the <code>Content-Type</code> header or start the body with <code>--&lt;boundary&gt;</code>.', 'bad');
+    $('summary').innerHTML = '';
+    $('parts').innerHTML = '';
+    lastParts = [];
+    return;
+  }
+  const body = rawBytes.slice(info.bodyStart);
+  const parts = splitParts(body, info.boundary).map(parseOnePart);
+  lastParts = parts;
+
+  const totalSize = parts.reduce((a, p) => a + p.body.length, 0);
+  const named = parts.filter(p => parseContentDisposition(p.headers['content-disposition']) && parseContentDisposition(p.headers['content-disposition']).name).length;
+  const files = parts.filter(p => parseContentDisposition(p.headers['content-disposition']) && parseContentDisposition(p.headers['content-disposition']).filename).length;
+
+  $('summary').innerHTML = `
+    <div><span>boundary</span><b>${escapeHtml(info.boundary)}</b></div>
+    <div><span>parsed parts</span><b>${parts.length}</b></div>
+    <div><span>form fields</span><b>${named - files}</b></div>
+    <div><span>files</span><b>${files}</b></div>
+    <div><span>total body bytes</span><b>${humanBytes(totalSize)}</b></div>
+    <div><span>content type</span><b>${escapeHtml(info.contentType)}</b></div>
+  `;
+
+  if (parts.length === 0) {
+    setVerdict('Boundary found, but no parts could be extracted. Check the body terminator.', 'warn');
+  } else {
+    setVerdict(`Parsed ${parts.length} part${parts.length === 1 ? '' : 's'}${info.fromHeader ? ' using boundary from Content-Type header.' : ' (boundary guessed from first line — paste headers for accuracy).'}`, 'ok');
+  }
+  $('parts').innerHTML = parts.map(renderPart).join('');
+}
+
+$('parts').addEventListener('click', async e => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const idx = parseInt(btn.dataset.idx, 10);
+  const part = lastParts[idx];
+  if (!part) return;
+  if (btn.dataset.action === 'copy') {
+    const text = bytesToText(part.body);
+    try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; setTimeout(() => btn.textContent = 'Copy body as text', 1100); }
+    catch { btn.textContent = 'Copy failed'; }
+  } else if (btn.dataset.action === 'download') {
+    downloadBytes(part.body, btn.dataset.name, btn.dataset.type);
+  }
+});
+
+const SAMPLES = {
+  simple:
+`POST /upload HTTP/1.1\r\nHost: example.com\r\nContent-Type: multipart/form-data; boundary=----WebKitFormBoundaryABCDEF\r\n\r\n------WebKitFormBoundaryABCDEF\r\nContent-Disposition: form-data; name="username"\r\n\r\nalice\r\n------WebKitFormBoundaryABCDEF\r\nContent-Disposition: form-data; name="role"\r\n\r\nadmin\r\n------WebKitFormBoundaryABCDEF\r\nContent-Disposition: form-data; name="bio"\r\n\r\nLikes\r\nmultiline\r\nvalues.\r\n------WebKitFormBoundaryABCDEF--\r\n`,
+  file:
+`POST /api/avatar HTTP/1.1\r\nHost: api.example.com\r\nContent-Type: multipart/form-data; boundary=----X\r\n\r\n------X\r\nContent-Disposition: form-data; name="user_id"\r\n\r\n42\r\n------X\r\nContent-Disposition: form-data; name="avatar"; filename="hello.txt"; filename*=UTF-8''hello-%E4%B8%96%E7%95%8C.txt\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello, world! 你好，世界！\r\n------X\r\nContent-Disposition: form-data; name="metadata"\r\nContent-Type: application/json\r\n\r\n{"crop":"square","quality":90}\r\n------X--\r\n`,
+  nested:
+`Content-Type: multipart/related; boundary=outer\r\n\r\n--outer\r\nContent-Type: application/json; charset=utf-8\r\nContent-ID: <root>\r\n\r\n{"id":"msg-123","attachments":2}\r\n--outer\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename="readme.txt"\r\nContent-ID: <readme>\r\n\r\nThis is the first attachment.\r\n--outer\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="binary.dat"\r\nContent-Transfer-Encoding: binary\r\nContent-ID: <bin>\r\n\r\n\x00\x01\x02\x03\xff\xfe\xfd\xfc some text mixed in \x00\x00\r\n--outer--\r\n`,
+};
+
+$('parseBtn').addEventListener('click', parse);
+$('clearBtn').addEventListener('click', () => { $('src').value = ''; parse(); });
+$('sampleSimple').addEventListener('click', () => { $('src').value = SAMPLES.simple; parse(); });
+$('sampleFile').addEventListener('click', () => { $('src').value = SAMPLES.file; parse(); });
+$('sampleNested').addEventListener('click', () => { $('src').value = SAMPLES.nested; parse(); });
+$('src').addEventListener('input', () => { if ($('autoParse').checked) parse(); });
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') parse(); });
+
+$('src').value = SAMPLES.file;
+parse();
+</script>
+</body>
+</html>
