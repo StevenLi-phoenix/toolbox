@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JWE Decoder & Inspector — Free Online Tool</title>
+<meta name="description" content="Inspect JSON Web Encryption (JWE) tokens. Parse the five compact parts — protected header, encrypted key, IV, ciphertext, and authentication tag — and decode key-management and content-encryption algorithms per RFC 7516.">
+<meta name="keywords" content="jwe decoder, json web encryption, rfc 7516, jose, jwe inspector, jwe parser, encrypted jwt">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jwe.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; min-height: 130px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .9rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+    word-break: break-all;
+  }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; min-height: 1.2em; }
+  .parts { display: grid; gap: 12px; margin-top: 4px; }
+  .part {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); overflow: hidden;
+  }
+  .part-head {
+    padding: 9px 14px; background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: .82rem; gap: 10px; flex-wrap: wrap;
+  }
+  .part-head b { font-size: .9rem; }
+  .part-head .meta { color: var(--muted); font-family: var(--mono); font-size: .76rem; }
+  .part-body { padding: 12px 14px; }
+  .part pre {
+    margin: 0; font-family: var(--mono); font-size: .82rem;
+    white-space: pre-wrap; word-break: break-all; line-height: 1.55;
+  }
+  .seg-1 { border-left: 3px solid #6366f1; }
+  .seg-2 { border-left: 3px solid #db2777; }
+  .seg-3 { border-left: 3px solid #ea580c; }
+  .seg-4 { border-left: 3px solid #059669; }
+  .seg-5 { border-left: 3px solid #0891b2; }
+  .raw-color {
+    word-break: break-all; font-family: var(--mono); font-size: .82rem;
+    line-height: 1.6;
+  }
+  .c-1 { color: #6366f1; } .c-2 { color: #db2777; } .c-3 { color: #ea580c; }
+  .c-4 { color: #059669; } .c-5 { color: #0891b2; } .dot { color: var(--muted); }
+  .alg-grid { display: grid; gap: 8px; }
+  .alg-row {
+    display: grid; grid-template-columns: 110px 1fr;
+    gap: 10px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: .85rem; align-items: center;
+  }
+  .alg-row .k { font-weight: 600; color: var(--muted); font-family: var(--mono); }
+  .alg-row .v { font-family: var(--mono); word-break: break-word; }
+  .alg-row .v small { display: block; color: var(--muted); font-family: var(--sans); margin-top: 2px; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); font-size: .72rem; color: var(--muted);
+    font-family: var(--mono); margin-right: 4px;
+  }
+  .pill.ok { color: var(--success); border-color: var(--success); }
+  .pill.warn { color: var(--warning); border-color: var(--warning); }
+  .pill.bad { color: var(--error); border-color: var(--error); }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .examples button {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 11px; border-radius: 999px;
+    font-size: .78rem; cursor: pointer; font-family: var(--mono);
+  }
+  .examples button:hover { border-color: var(--accent); color: var(--accent); }
+  .hex-toggle { font-size: .76rem; color: var(--muted); }
+  .hex-toggle a { color: var(--accent); cursor: pointer; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JWE Decoder & Inspector</h1>
+<p class="subtitle">JSON Web Encryption (RFC 7516) bundles ciphertext, an integrity tag, and the key-wrapping material into five base64url segments. Decryption requires the recipient's private key, but the protected header — and the structure itself — can always be inspected. Paste a compact JWE below to see every part.</p>
+
+<div class="card">
+  <h2>Compact JWE</h2>
+  <textarea id="src" placeholder="eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZHQ00ifQ.encKey.iv.ciphertext.tag" oninput="run()"></textarea>
+  <div class="err" id="err"></div>
+  <div class="examples">
+    <button onclick="load('rsa')">RSA-OAEP + A256GCM</button>
+    <button onclick="load('a128')">A128KW + A128CBC-HS256</button>
+    <button onclick="load('dir')">dir + A256GCM</button>
+    <button onclick="load('ecdh')">ECDH-ES + A128GCM</button>
+    <button onclick="load('pbes2')">PBES2-HS256+A128KW</button>
+    <button onclick="document.getElementById('src').value='';run()">Clear</button>
+  </div>
+</div>
+
+<div id="out" style="display:none">
+  <div class="card">
+    <h2>Structure</h2>
+    <p class="raw-color" id="rawSplit"></p>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:8px">A compact JWE has five base64url-encoded parts separated by dots: <span class="c-1">header</span>.<span class="c-2">encrypted&nbsp;key</span>.<span class="c-3">iv</span>.<span class="c-4">ciphertext</span>.<span class="c-5">tag</span></p>
+  </div>
+
+  <div class="card">
+    <h2>Protected Header</h2>
+    <div class="parts">
+      <div class="part seg-1">
+        <div class="part-head"><b>JOSE Header (JSON)</b><span class="meta" id="headerMeta"></span></div>
+        <div class="part-body"><pre id="header" class="c-1"></pre></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Algorithm Summary</h2>
+    <div class="alg-grid" id="algGrid"></div>
+  </div>
+
+  <div class="card">
+    <h2>Binary Segments</h2>
+    <div class="parts" id="binParts"></div>
+    <p class="hex-toggle" style="margin-top:10px">Show as <a id="fmtBtn" onclick="toggleFmt()">hex</a></p>
+  </div>
+
+  <div class="card">
+    <h2>Decryption</h2>
+    <p style="font-size:.88rem;color:var(--muted);line-height:1.6">JWE decryption requires the recipient's private key (or a shared symmetric key for <code>dir</code> and key-wrap modes), and is intentionally not performed in this tool — pasted secrets stay in your browser, but the safer pattern is to verify and decrypt server-side. Use the algorithm summary above to pick the right key-management routine, then feed the five segments to your JOSE library.</p>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let fmt = 'b64';
+
+const ALG_DESC = {
+  'RSA1_5':         { fam: 'RSAES-PKCS1-v1_5',         note: 'Legacy. Vulnerable to Bleichenbacher attacks if not used carefully. Avoid in new designs.', risk: 'warn' },
+  'RSA-OAEP':       { fam: 'RSAES OAEP (MGF1+SHA-1)',  note: 'Asymmetric key wrap. Prefer RSA-OAEP-256 for new code.', risk: 'warn' },
+  'RSA-OAEP-256':   { fam: 'RSAES OAEP (MGF1+SHA-256)',note: 'Asymmetric key wrap with SHA-256.', risk: 'ok' },
+  'A128KW':         { fam: 'AES-128 Key Wrap',         note: 'Symmetric key wrap (RFC 3394). Requires a shared 128-bit KEK.', risk: 'ok' },
+  'A192KW':         { fam: 'AES-192 Key Wrap',         note: 'Symmetric AES key wrap (192-bit KEK).', risk: 'ok' },
+  'A256KW':         { fam: 'AES-256 Key Wrap',         note: 'Symmetric AES key wrap (256-bit KEK).', risk: 'ok' },
+  'A128GCMKW':      { fam: 'AES-128 GCM Key Wrap',     note: 'AES-GCM key wrap with 96-bit IV in header (iv) and 128-bit tag.', risk: 'ok' },
+  'A192GCMKW':      { fam: 'AES-192 GCM Key Wrap',     note: 'AES-GCM key wrap (192-bit).', risk: 'ok' },
+  'A256GCMKW':      { fam: 'AES-256 GCM Key Wrap',     note: 'AES-GCM key wrap (256-bit).', risk: 'ok' },
+  'dir':            { fam: 'Direct',                   note: 'No key wrap — content encryption key is shared out-of-band. Encrypted key segment must be empty.', risk: 'ok' },
+  'ECDH-ES':        { fam: 'ECDH-ES (Direct)',         note: 'Ephemeral-static ECDH; derives the CEK directly (encrypted key is empty).', risk: 'ok' },
+  'ECDH-ES+A128KW': { fam: 'ECDH-ES + AES-128 KW',     note: 'ECDH-derived key wraps a generated CEK.', risk: 'ok' },
+  'ECDH-ES+A192KW': { fam: 'ECDH-ES + AES-192 KW',     note: 'ECDH-derived key wraps a generated CEK.', risk: 'ok' },
+  'ECDH-ES+A256KW': { fam: 'ECDH-ES + AES-256 KW',     note: 'ECDH-derived key wraps a generated CEK.', risk: 'ok' },
+  'PBES2-HS256+A128KW': { fam: 'Password-based, PBKDF2/HS256, A128KW', note: 'Derived from a passphrase. Inspect p2c (iterations) and p2s (salt) in the header.', risk: 'ok' },
+  'PBES2-HS384+A192KW': { fam: 'Password-based, PBKDF2/HS384, A192KW', note: 'Passphrase-derived KEK.', risk: 'ok' },
+  'PBES2-HS512+A256KW': { fam: 'Password-based, PBKDF2/HS512, A256KW', note: 'Passphrase-derived KEK.', risk: 'ok' },
+};
+
+const ENC_DESC = {
+  'A128CBC-HS256': { mode: 'AES-128-CBC + HMAC-SHA-256', iv: 16, tag: 16, cek: 32, note: 'Encrypt-then-MAC composite. 32-byte CEK split into MAC+ENC keys.', risk: 'ok' },
+  'A192CBC-HS384': { mode: 'AES-192-CBC + HMAC-SHA-384', iv: 16, tag: 24, cek: 48, note: 'Encrypt-then-MAC composite.', risk: 'ok' },
+  'A256CBC-HS512': { mode: 'AES-256-CBC + HMAC-SHA-512', iv: 16, tag: 32, cek: 64, note: 'Encrypt-then-MAC composite.', risk: 'ok' },
+  'A128GCM':       { mode: 'AES-128-GCM',                iv: 12, tag: 16, cek: 16, note: 'AEAD. 96-bit IV, 128-bit tag.', risk: 'ok' },
+  'A192GCM':       { mode: 'AES-192-GCM',                iv: 12, tag: 16, cek: 24, note: 'AEAD.', risk: 'ok' },
+  'A256GCM':       { mode: 'AES-256-GCM',                iv: 12, tag: 16, cek: 32, note: 'AEAD. Most common content encryption.', risk: 'ok' },
+};
+
+function b64urlToBytes(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function bytesToUtf8(bytes) {
+  return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+}
+
+function bytesToHex(bytes) {
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    out += bytes[i].toString(16).padStart(2, '0');
+    if ((i + 1) % 2 === 0) out += ' ';
+    if ((i + 1) % 32 === 0) out += '\n';
+  }
+  return out.trim();
+}
+
+function fmtSeg(raw, bytes) {
+  if (!raw) return '<empty>';
+  if (fmt === 'hex') return bytesToHex(bytes);
+  return raw;
+}
+
+function safeJSON(bytes) {
+  try {
+    const txt = bytesToUtf8(bytes);
+    return { ok: true, obj: JSON.parse(txt), text: txt };
+  } catch (e) {
+    return { ok: false, err: e.message };
+  }
+}
+
+function pill(text, kind) {
+  return '<span class="pill ' + (kind || '') + '">' + text + '</span>';
+}
+
+function run() {
+  const src = $('src').value.trim();
+  $('err').textContent = '';
+  $('out').style.display = 'none';
+  if (!src) return;
+
+  const parts = src.split('.');
+  if (parts.length !== 5) {
+    $('err').textContent = 'A compact JWE must have exactly 5 dot-separated segments. Got ' + parts.length + '.';
+    return;
+  }
+  for (const p of parts) {
+    if (p && !/^[A-Za-z0-9_-]*$/.test(p)) {
+      $('err').textContent = 'Invalid base64url character in one of the segments.';
+      return;
+    }
+  }
+
+  let bytes;
+  try {
+    bytes = parts.map(b64urlToBytes);
+  } catch (e) {
+    $('err').textContent = 'base64url decode failed: ' + e.message;
+    return;
+  }
+
+  const header = safeJSON(bytes[0]);
+  if (!header.ok) {
+    $('err').textContent = 'Could not parse protected header JSON: ' + header.err;
+    return;
+  }
+
+  $('rawSplit').innerHTML =
+    '<span class="c-1">' + escapeHtml(parts[0]) + '</span>' +
+    '<span class="dot">.</span>' +
+    '<span class="c-2">' + (escapeHtml(parts[1]) || '<em style="color:var(--muted)">(empty)</em>') + '</span>' +
+    '<span class="dot">.</span>' +
+    '<span class="c-3">' + escapeHtml(parts[2]) + '</span>' +
+    '<span class="dot">.</span>' +
+    '<span class="c-4">' + escapeHtml(parts[3]) + '</span>' +
+    '<span class="dot">.</span>' +
+    '<span class="c-5">' + escapeHtml(parts[4]) + '</span>';
+
+  const h = header.obj;
+  $('header').textContent = JSON.stringify(h, null, 2);
+  $('headerMeta').textContent = parts[0].length + ' b64url chars · ' + bytes[0].length + ' bytes';
+
+  const alg = h.alg || '(missing)';
+  const enc = h.enc || '(missing)';
+  const algInfo = ALG_DESC[alg];
+  const encInfo = ENC_DESC[enc];
+
+  const rows = [];
+  rows.push(algRow('alg', alg, algInfo ? algInfo.fam : 'Key-management algorithm (unknown)', algInfo ? algInfo.note : '', algInfo ? algInfo.risk : 'warn'));
+  rows.push(algRow('enc', enc, encInfo ? encInfo.mode : 'Content encryption algorithm (unknown)', encInfo ? encInfo.note : '', encInfo ? encInfo.risk : 'warn'));
+  if (h.kid) rows.push(algRow('kid', h.kid, 'Key ID — selects the decryption key.', '', ''));
+  if (h.typ) rows.push(algRow('typ', h.typ, 'Token type', '', ''));
+  if (h.cty) rows.push(algRow('cty', h.cty, 'Content type of the plaintext (e.g. <code>JWT</code> for nested JWS-in-JWE).', '', ''));
+  if (h.zip) rows.push(algRow('zip', h.zip, h.zip === 'DEF' ? 'Plaintext was DEFLATE-compressed before encryption.' : 'Compression algorithm.', '', 'warn'));
+  if (h.epk) rows.push(algRow('epk', JSON.stringify(h.epk), 'Ephemeral Public Key (for ECDH-ES) — recipient combines this with its private key to derive the shared secret.', '', ''));
+  if (h.apu) rows.push(algRow('apu', h.apu, 'Agreement PartyUInfo (ECDH-ES).', '', ''));
+  if (h.apv) rows.push(algRow('apv', h.apv, 'Agreement PartyVInfo (ECDH-ES).', '', ''));
+  if (h.p2s) rows.push(algRow('p2s', h.p2s, 'PBES2 salt input.', '', ''));
+  if (h.p2c) rows.push(algRow('p2c', String(h.p2c), 'PBES2 iteration count.' + (h.p2c < 1000 ? ' <b>Below recommended minimum (1k+)</b>.' : ''), '', h.p2c < 1000 ? 'warn' : ''));
+  if (h.iv)  rows.push(algRow('iv',  h.iv,  'Per-key-wrap IV (GCMKW family).', '', ''));
+  if (h.tag) rows.push(algRow('tag', h.tag, 'Per-key-wrap authentication tag (GCMKW family).', '', ''));
+  if (h.crit) rows.push(algRow('crit', JSON.stringify(h.crit), 'Critical headers — must be understood by the recipient.', '', 'warn'));
+  $('algGrid').innerHTML = rows.join('');
+
+  const labels = ['Encrypted Key', 'Initialization Vector', 'Ciphertext', 'Authentication Tag'];
+  const expIv = encInfo ? encInfo.iv : null;
+  const expTag = encInfo ? encInfo.tag : null;
+  const notes = [
+    alg === 'dir' || (alg && alg.indexOf('ECDH-ES') === 0 && alg.indexOf('+') === -1)
+      ? (parts[1].length === 0 ? pill('correctly empty', 'ok') : pill('should be empty for ' + alg, 'bad'))
+      : (parts[1].length === 0 ? pill('empty', 'warn') : pill(bytes[1].length + ' bytes', '')),
+    expIv ? (bytes[2].length === expIv ? pill(expIv + ' bytes ✓', 'ok') : pill('expected ' + expIv + ', got ' + bytes[2].length, 'bad')) : pill(bytes[2].length + ' bytes', ''),
+    pill(bytes[3].length + ' bytes', ''),
+    expTag ? (bytes[4].length === expTag ? pill(expTag + ' bytes ✓', 'ok') : pill('expected ' + expTag + ', got ' + bytes[4].length, 'bad')) : pill(bytes[4].length + ' bytes', ''),
+  ];
+  let html = '';
+  for (let i = 0; i < 4; i++) {
+    const idx = i + 2;
+    html +=
+      '<div class="part seg-' + idx + '">' +
+        '<div class="part-head"><b>' + labels[i] + '</b><span>' + notes[i] + '<span class="meta">' + parts[idx - 1].length + ' chars</span></span></div>' +
+        '<div class="part-body"><pre class="c-' + idx + '" data-idx="' + (idx - 1) + '">' +
+          escapeHtml(parts[idx - 1] ? fmtSeg(parts[idx - 1], bytes[idx - 1]) : '(empty)') +
+        '</pre></div>' +
+      '</div>';
+  }
+  $('binParts').innerHTML = html;
+  $('out').style.display = '';
+}
+
+function algRow(k, v, fam, note, risk) {
+  return '<div class="alg-row"><div class="k">' + escapeHtml(k) + '</div>' +
+    '<div class="v">' + escapeHtml(v) + (risk ? ' ' + pill(risk === 'ok' ? 'ok' : (risk === 'warn' ? 'review' : 'unknown'), risk) : '') +
+    (fam ? '<small>' + fam + (note ? ' — ' + note : '') + '</small>' : '') +
+    '</div></div>';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function toggleFmt() {
+  fmt = fmt === 'b64' ? 'hex' : 'b64';
+  $('fmtBtn').textContent = fmt === 'b64' ? 'hex' : 'base64url';
+  run();
+}
+
+const EXAMPLES = {
+  rsa: 'eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZHQ00ifQ.OKOawDo13gRp2ojaHV7LFpZcgV7T6DVZKTyKOMTYUmKoTCVJRgckCL9kiMT03JGeipsEdY3mx_etLbbWSrFr05kLzcSr4qKAq7YN7e9jwQRb23nfa6c9d-StnImGyFDbSv04uVuxIp5Zms1gNxKKK2Da14B8S4rzVRltdYwam_lDp5XnZAYpQdb76FdIKLaVmqgfwX7XWRxv2322i-vDxRfqNzo_tETKzpVLzfiwQyeyPGLBIO56YJ7eObdv0je81860ppamavo35UgoRdbYaBcoh9QcfylQr66oc6vFWXRcZ_ZT2LawVCWTIy3brGPi6UklfCpIMfIjf7iGdXKHzg.48V1_ALb6US04U3b.5eym8TW_c8SuK0ltJ3rpYIzOeDQz7TALvtu6UG9oMo4vpzs9tX_EFShS8iB7j6jiSdiwkIr3ajwQzaBtQD_A.XFBoMYUZodetZdvTiFvSkQ',
+  a128: 'eyJhbGciOiJBMTI4S1ciLCJlbmMiOiJBMTI4Q0JDLUhTMjU2IiwiY3R5IjoiSldUIn0.6KB707dM9YTIgHtLvtgWQ8mKwboJW3of9locizkDTHzBC2IlrT1oOQ.AxY8DCtDaGlsbGljb3RoZQ.KDlTtXchhZTGufMYmOYGS4HffxPSUrfmqCHXaI9wOGY.U0m_YmjN04DJvceFICbCVQ',
+  dir: 'eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiZGlyZWN0LXN5bW1ldHJpYy1rZXkifQ..k73y1KrBBR1u2WuB.gK7-mGEh_2nGwGYW9DZ8sUMOOAtdLfu1QPAaJsdYPjlmnRrxN_g.tCXk4Tm_O5OZQ4QQzWvHbA',
+  ecdh: 'eyJhbGciOiJFQ0RILUVTIiwiZW5jIjoiQTEyOEdDTSIsImVwayI6eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6Imdsek5wckRmTU9Edk1KLW9CV0Jma3pYRkZBSlNUcENscFhqdElRdGZ0SHciLCJ5IjoiUkF0a0NaR05vMC1KcGEzdmJwd0p3M3lQR3JjOWNKaW5VbFlGNDhBR21yMCJ9fQ..-nBoKLH0YkLZPSI9.SwzltQXAUemnDqQNTrh-Sg.GbBmZ8tQHrZqAxLkfP4t1Q',
+  pbes2: 'eyJhbGciOiJQQkVTMi1IUzI1NitBMTI4S1ciLCJlbmMiOiJBMTI4Q0JDLUhTMjU2IiwicDJzIjoiMnF6OG83ZTBQT3lFSi1KdyIsInAyYyI6NDA5Nn0.7zHnRq2SsxbcLDpYn4DStz86oCh-mhMVUm1pCYjB-mbVy_-Qu3lJEA.OkAcgvSeJqGKAt8RJ8Bv0w.aGVsbG8gd29ybGQ.tlGiMOoXOmgUiwvUcMNHHQ',
+};
+
+function load(k) {
+  $('src').value = EXAMPLES[k] || '';
+  run();
+}
+</script>
+</body>
+</html>

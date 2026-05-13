@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Signature V4 Calculator — Free Online Tool</title>
+<meta name="description" content="Compute AWS Signature Version 4 signatures step-by-step — canonical request, string-to-sign, signing key derivation chain, final HMAC, and ready-to-paste Authorization header. Useful for debugging signed AWS API calls and S3 requests.">
+<meta name="keywords" content="aws sigv4, aws signature version 4, aws signing, canonical request, string to sign, signing key, authorization header, s3 signing">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sigv4.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  label.head { display: block; font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; }
+  input[type=text], input[type=password], select, textarea {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .88rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+  }
+  textarea { resize: vertical; min-height: 90px; }
+  .row { margin-bottom: 12px; }
+  .row.inline { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .row.inline2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .step {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; margin-bottom: 12px; background: var(--surface);
+  }
+  .step-head {
+    padding: 10px 14px; background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; flex-wrap: wrap;
+  }
+  .step-head b { font-size: .92rem; }
+  .step-head .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: white;
+    font-size: .76rem; font-weight: 600; margin-right: 6px;
+  }
+  .step-head .meta { color: var(--muted); font-size: .76rem; font-family: var(--mono); }
+  .step pre {
+    margin: 0; padding: 12px 14px; font-family: var(--mono);
+    font-size: .82rem; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .copy-btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 3px 10px; border-radius: 6px; font-size: .74rem;
+    cursor: pointer; font-family: var(--mono);
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .chain { display: grid; gap: 6px; }
+  .chain-row {
+    display: grid; grid-template-columns: 200px 1fr;
+    gap: 10px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); font-size: .82rem; align-items: center;
+  }
+  .chain-row .k { color: var(--muted); font-family: var(--mono); font-size: .78rem; }
+  .chain-row .v { font-family: var(--mono); word-break: break-all; }
+  .err { color: var(--error); font-size: .85rem; margin: 8px 0; min-height: 1.2em; }
+  .ok { color: var(--success); font-size: .8rem; }
+  .toggle-group {
+    display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+  }
+  .toggle-group button {
+    background: var(--surface); border: none; color: var(--text);
+    padding: 6px 14px; cursor: pointer; font-size: .8rem;
+    border-right: 1px solid var(--border);
+  }
+  .toggle-group button:last-child { border-right: none; }
+  .toggle-group button.active { background: var(--accent); color: white; }
+  .preset {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 11px; border-radius: 999px;
+    font-size: .78rem; cursor: pointer; font-family: var(--mono);
+    margin-right: 6px;
+  }
+  .preset:hover { border-color: var(--accent); color: var(--accent); }
+  @media (max-width: 768px) {
+    .grid2, .row.inline, .row.inline2 { grid-template-columns: 1fr; }
+    .chain-row { grid-template-columns: 1fr; }
+    .chain-row .k { font-size: .72rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>AWS Signature V4 Calculator</h1>
+<p class="subtitle">Compute every step of an AWS SigV4 signature — the canonical request, the string-to-sign, the four-stage HMAC key-derivation chain (<code>kDate</code> → <code>kRegion</code> → <code>kService</code> → <code>kSigning</code>), and the final HMAC — without sending anything anywhere. Works for Authorization-header signing and pre-signed S3 URLs. Useful for diagnosing <em>SignatureDoesNotMatch</em> errors against the AWS sample vectors.</p>
+
+<div class="card">
+  <h2>Request</h2>
+  <div class="row inline">
+    <div>
+      <label class="head">Method</label>
+      <select id="method" onchange="run()">
+        <option>GET</option><option>POST</option><option>PUT</option>
+        <option>DELETE</option><option>HEAD</option><option>PATCH</option><option>OPTIONS</option>
+      </select>
+    </div>
+    <div>
+      <label class="head">Region</label>
+      <input type="text" id="region" value="us-east-1" oninput="run()" spellcheck="false">
+    </div>
+    <div>
+      <label class="head">Service</label>
+      <input type="text" id="service" value="s3" oninput="run()" spellcheck="false">
+    </div>
+  </div>
+  <div class="row">
+    <label class="head">URL (with path and optional query)</label>
+    <input type="text" id="url" value="https://examplebucket.s3.amazonaws.com/test.txt" oninput="run()" spellcheck="false">
+  </div>
+  <div class="row">
+    <label class="head">Headers (one per line, <code>Name: value</code>)</label>
+    <textarea id="headers" oninput="run()" spellcheck="false">Range: bytes=0-9</textarea>
+    <p style="font-size:.76rem;color:var(--muted);margin:4px 0 0">
+      <code>host</code> and <code>x-amz-content-sha256</code> are auto-derived if omitted. <code>x-amz-date</code> is set from the timestamp below.
+    </p>
+  </div>
+  <div class="row">
+    <label class="head">Body (signed payload). Leave empty for GET/HEAD.</label>
+    <textarea id="body" oninput="run()" spellcheck="false"></textarea>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Credentials & Time</h2>
+  <div class="row inline2">
+    <div>
+      <label class="head">Access Key ID</label>
+      <input type="text" id="accessKey" value="AKIAIOSFODNN7EXAMPLE" oninput="run()" spellcheck="false">
+    </div>
+    <div>
+      <label class="head">Secret Access Key</label>
+      <input type="password" id="secretKey" value="wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY" oninput="run()" spellcheck="false">
+    </div>
+  </div>
+  <div class="row inline2">
+    <div>
+      <label class="head">Session Token (optional)</label>
+      <input type="text" id="sessionToken" oninput="run()" spellcheck="false" placeholder="for STS / role credentials">
+    </div>
+    <div>
+      <label class="head">Timestamp (ISO 8601 basic, <code>YYYYMMDDTHHMMSSZ</code>)</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="ts" value="20130524T000000Z" oninput="run()" spellcheck="false">
+        <button class="copy-btn" onclick="setNow()" title="Set to current UTC">now</button>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <label class="head">Signing Mode</label>
+    <div class="toggle-group" id="modeGroup">
+      <button data-mode="header" class="active" onclick="setMode('header')">Authorization header</button>
+      <button data-mode="query" onclick="setMode('query')">Pre-signed query (<code>X-Amz-*</code>)</button>
+    </div>
+    <span id="expiresWrap" style="display:none;margin-left:12px;font-size:.82rem;color:var(--muted)">
+      <label>Expires (seconds, max 604800):
+        <input type="text" id="expires" value="86400" oninput="run()" style="width:120px;padding:5px 8px;font-size:.82rem">
+      </label>
+    </span>
+  </div>
+  <div class="row">
+    <span style="font-size:.78rem;color:var(--muted)">Presets:</span>
+    <button class="preset" onclick="loadPreset('s3get')">S3 GET (AWS test vector)</button>
+    <button class="preset" onclick="loadPreset('s3put')">S3 PUT</button>
+    <button class="preset" onclick="loadPreset('s3pre')">S3 pre-signed GET</button>
+    <button class="preset" onclick="loadPreset('ec2')">EC2 DescribeInstances</button>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<div id="out">
+  <div class="card">
+    <h2>1. Canonical Request</h2>
+    <div class="step">
+      <div class="step-head">
+        <b><span class="num">1</span>CanonicalRequest</b>
+        <div>
+          <span class="meta" id="crMeta"></span>
+          <button class="copy-btn" onclick="copy('cr')">Copy</button>
+        </div>
+      </div>
+      <pre id="cr"></pre>
+    </div>
+    <p style="font-size:.78rem;color:var(--muted);margin:6px 4px">
+      Format: <code>METHOD\nURI\nQUERY\nCanonicalHeaders\n\nSignedHeaders\nHashedPayload</code>. Headers are lowercased and sorted; the URI is percent-encoded twice for non-S3 services, once for S3.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>2. String to Sign</h2>
+    <div class="step">
+      <div class="step-head">
+        <b><span class="num">2</span>StringToSign</b>
+        <button class="copy-btn" onclick="copy('sts')">Copy</button>
+      </div>
+      <pre id="sts"></pre>
+    </div>
+    <p style="font-size:.78rem;color:var(--muted);margin:6px 4px">
+      Format: <code>AWS4-HMAC-SHA256\nAmzDate\nCredentialScope\nSHA256(CanonicalRequest)</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>3. Signing Key Derivation</h2>
+    <div class="chain" id="chain"></div>
+    <p style="font-size:.78rem;color:var(--muted);margin:10px 4px">
+      Each step is <code>HMAC-SHA256(prev, next)</code>, starting from <code>"AWS4" + SecretAccessKey</code>. The final <code>kSigning</code> never leaves your browser.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>4. Signature</h2>
+    <div class="chain">
+      <div class="chain-row"><div class="k">signature</div><div class="v" id="sig"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>5. Authorization</h2>
+    <div class="step">
+      <div class="step-head">
+        <b id="finalLabel">Authorization header</b>
+        <button class="copy-btn" onclick="copy('final')">Copy</button>
+      </div>
+      <pre id="final"></pre>
+    </div>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = 'header';
+
+const ENC = new TextEncoder();
+const HEX = bytes => Array.from(new Uint8Array(bytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+async function hmac(keyBytes, data) {
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, typeof data === 'string' ? ENC.encode(data) : data);
+  return new Uint8Array(sig);
+}
+async function sha256hex(data) {
+  const buf = await crypto.subtle.digest('SHA-256', typeof data === 'string' ? ENC.encode(data) : data);
+  return HEX(buf);
+}
+
+function uriEncode(str, isPath) {
+  let out = '';
+  for (const ch of str) {
+    if (/[A-Za-z0-9\-._~]/.test(ch)) out += ch;
+    else if (ch === '/' && isPath) out += ch;
+    else {
+      const bytes = ENC.encode(ch);
+      for (const b of bytes) out += '%' + b.toString(16).toUpperCase().padStart(2, '0');
+    }
+  }
+  return out;
+}
+
+function parseHeaders(raw) {
+  const out = {};
+  for (const line of raw.split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Za-z0-9\-_]+)\s*:\s*(.*?)\s*$/);
+    if (m) out[m[1].toLowerCase()] = m[2].replace(/\s+/g, ' ').trim();
+  }
+  return out;
+}
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('#modeGroup button').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  $('expiresWrap').style.display = m === 'query' ? '' : 'none';
+  $('finalLabel').textContent = m === 'query' ? 'Pre-signed URL' : 'Authorization header';
+  run();
+}
+
+function setNow() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  $('ts').value = d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + 'T' +
+                  pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + 'Z';
+  run();
+}
+
+function copy(id) {
+  navigator.clipboard.writeText($(id).textContent);
+}
+
+async function run() {
+  $('err').textContent = '';
+  try {
+    const method = $('method').value;
+    const region = $('region').value.trim();
+    const service = $('service').value.trim();
+    const url = $('url').value.trim();
+    const accessKey = $('accessKey').value.trim();
+    const secretKey = $('secretKey').value;
+    const sessionToken = $('sessionToken').value.trim();
+    const ts = $('ts').value.trim();
+    const body = $('body').value;
+
+    if (!url) { $('out').style.display = 'none'; return; }
+    if (!/^[0-9]{8}T[0-9]{6}Z$/.test(ts)) throw new Error('Timestamp must look like YYYYMMDDTHHMMSSZ.');
+    const date = ts.slice(0, 8);
+    const scope = `${date}/${region}/${service}/aws4_request`;
+
+    let parsed;
+    try { parsed = new URL(url); } catch { throw new Error('Invalid URL.'); }
+    const host = parsed.host;
+    const isS3 = service === 's3';
+    let rawPath;
+    try { rawPath = decodeURIComponent(parsed.pathname || '/'); }
+    catch { rawPath = parsed.pathname || '/'; }
+    const encodedPath = uriEncode(rawPath, true);
+    const canonicalUri = isS3 ? encodedPath : uriEncode(encodedPath, true);
+
+    const userHeaders = parseHeaders($('headers').value);
+    const headers = Object.assign({}, userHeaders);
+    headers['host'] = headers['host'] || host;
+    const payloadHash = await sha256hex(body);
+    if (!headers['x-amz-content-sha256'] && isS3 && mode === 'header') headers['x-amz-content-sha256'] = payloadHash;
+    if (mode === 'header') headers['x-amz-date'] = ts;
+    if (mode === 'header' && sessionToken) headers['x-amz-security-token'] = sessionToken;
+
+    let queryPairs = [];
+    if (parsed.search) {
+      for (const [k, v] of new URLSearchParams(parsed.search)) {
+        queryPairs.push([uriEncode(k, false), uriEncode(v, false)]);
+      }
+    }
+
+    const signedHeaderKeys = Object.keys(headers).sort();
+
+    if (mode === 'query') {
+      const expires = $('expires').value.trim() || '86400';
+      const credential = `${accessKey}/${scope}`;
+      queryPairs.push(['X-Amz-Algorithm', 'AWS4-HMAC-SHA256']);
+      queryPairs.push(['X-Amz-Credential', uriEncode(credential, false)]);
+      queryPairs.push(['X-Amz-Date', ts]);
+      queryPairs.push(['X-Amz-Expires', expires]);
+      if (sessionToken) queryPairs.push(['X-Amz-Security-Token', uriEncode(sessionToken, false)]);
+      queryPairs.push(['X-Amz-SignedHeaders', uriEncode(signedHeaderKeys.join(';'), false)]);
+    }
+
+    queryPairs.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : (a[1] < b[1] ? -1 : 1));
+    const canonicalQuery = queryPairs.map(([k, v]) => `${k}=${v}`).join('&');
+
+    const canonicalHeaders = signedHeaderKeys.map(k => `${k}:${headers[k]}\n`).join('');
+    const signedHeaders = signedHeaderKeys.join(';');
+    const hashedPayload = mode === 'query' && isS3 ? 'UNSIGNED-PAYLOAD' : payloadHash;
+
+    const canonicalRequest = [method, canonicalUri, canonicalQuery, canonicalHeaders, signedHeaders, hashedPayload].join('\n');
+    const crHash = await sha256hex(canonicalRequest);
+
+    const stringToSign = ['AWS4-HMAC-SHA256', ts, scope, crHash].join('\n');
+
+    const kSecret = ENC.encode('AWS4' + secretKey);
+    const kDate = await hmac(kSecret, date);
+    const kRegion = await hmac(kDate, region);
+    const kService = await hmac(kRegion, service);
+    const kSigning = await hmac(kService, 'aws4_request');
+    const signature = HEX(await hmac(kSigning, stringToSign));
+
+    $('cr').textContent = canonicalRequest;
+    $('crMeta').textContent = 'SHA256 = ' + crHash;
+    $('sts').textContent = stringToSign;
+    $('chain').innerHTML = [
+      ['kSecret (=UTF8("AWS4" + secret))', HEX(kSecret).slice(0, 16) + '… ' + kSecret.length + ' bytes'],
+      ['kDate = HMAC(kSecret, "' + date + '")', HEX(kDate)],
+      ['kRegion = HMAC(kDate, "' + region + '")', HEX(kRegion)],
+      ['kService = HMAC(kRegion, "' + service + '")', HEX(kService)],
+      ['kSigning = HMAC(kService, "aws4_request")', HEX(kSigning)],
+    ].map(([k, v]) => `<div class="chain-row"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(v)}</div></div>`).join('');
+    $('sig').textContent = signature;
+
+    if (mode === 'header') {
+      const credential = `${accessKey}/${scope}`;
+      $('final').textContent = `Authorization: AWS4-HMAC-SHA256 Credential=${credential}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+    } else {
+      queryPairs.push(['X-Amz-Signature', signature]);
+      const finalQuery = queryPairs.map(([k, v]) => `${k}=${v}`).join('&');
+      $('final').textContent = `${parsed.protocol}//${parsed.host}${canonicalUri}?${finalQuery}`;
+    }
+    $('out').style.display = '';
+  } catch (e) {
+    $('err').textContent = e.message;
+    $('out').style.display = 'none';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+const PRESETS = {
+  s3get: {
+    method: 'GET',
+    url: 'https://examplebucket.s3.amazonaws.com/test.txt',
+    headers: 'Range: bytes=0-9',
+    body: '',
+    region: 'us-east-1', service: 's3',
+    accessKey: 'AKIAIOSFODNN7EXAMPLE',
+    secretKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    ts: '20130524T000000Z',
+    mode: 'header',
+  },
+  s3put: {
+    method: 'PUT',
+    url: 'https://examplebucket.s3.amazonaws.com/test%24file.text',
+    headers: 'Date: Fri, 24 May 2013 00:00:00 GMT\nx-amz-storage-class: REDUCED_REDUNDANCY',
+    body: 'Welcome to Amazon S3.',
+    region: 'us-east-1', service: 's3',
+    accessKey: 'AKIAIOSFODNN7EXAMPLE',
+    secretKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    ts: '20130524T000000Z',
+    mode: 'header',
+  },
+  s3pre: {
+    method: 'GET',
+    url: 'https://examplebucket.s3.amazonaws.com/test.txt',
+    headers: '',
+    body: '',
+    region: 'us-east-1', service: 's3',
+    accessKey: 'AKIAIOSFODNN7EXAMPLE',
+    secretKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    ts: '20130524T000000Z',
+    mode: 'query',
+  },
+  ec2: {
+    method: 'GET',
+    url: 'https://ec2.amazonaws.com/?Action=DescribeRegions&Version=2013-10-15',
+    headers: '',
+    body: '',
+    region: 'us-east-1', service: 'ec2',
+    accessKey: 'AKIAIOSFODNN7EXAMPLE',
+    secretKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    ts: '20130524T000000Z',
+    mode: 'header',
+  },
+};
+
+function loadPreset(k) {
+  const p = PRESETS[k]; if (!p) return;
+  $('method').value = p.method;
+  $('url').value = p.url;
+  $('headers').value = p.headers;
+  $('body').value = p.body;
+  $('region').value = p.region;
+  $('service').value = p.service;
+  $('accessKey').value = p.accessKey;
+  $('secretKey').value = p.secretKey;
+  $('ts').value = p.ts;
+  setMode(p.mode);
+}
+
+run();
+</script>
+</body>
+</html>

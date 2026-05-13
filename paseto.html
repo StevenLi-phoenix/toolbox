@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PASETO Token Decoder & Inspector — Free Online Tool</title>
+<meta name="description" content="Decode PASETO (Platform-Agnostic Security Tokens) v1, v2, v3, and v4 — public and local. Split version, purpose, payload, and footer; surface the embedded JSON claims and standard registered fields like iss, sub, exp, nbf, kid.">
+<meta name="keywords" content="paseto, paseto decoder, paseto inspector, platform agnostic security tokens, v4 public, v4 local, alternative to jwt">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/paseto.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; min-height: 130px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .9rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+    word-break: break-all;
+  }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; min-height: 1.2em; }
+  .pill {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); font-size: .76rem; color: var(--muted);
+    font-family: var(--mono); margin-right: 6px;
+  }
+  .pill.ok { color: var(--success); border-color: var(--success); }
+  .pill.warn { color: var(--warning); border-color: var(--warning); }
+  .pill.bad { color: var(--error); border-color: var(--error); }
+  .pill.accent { color: var(--accent); border-color: var(--accent); }
+  .raw {
+    font-family: var(--mono); font-size: .82rem; line-height: 1.7;
+    word-break: break-all;
+  }
+  .c-v { color: #6366f1; } .c-p { color: #db2777; }
+  .c-pl { color: #ea580c; } .c-f { color: #059669; }
+  .dot { color: var(--muted); margin: 0 1px; }
+  .info-grid { display: grid; gap: 8px; }
+  .info-row {
+    display: grid; grid-template-columns: 160px 1fr;
+    gap: 10px; padding: 9px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: .85rem; align-items: center;
+  }
+  .info-row .k { font-weight: 600; color: var(--muted); font-family: var(--mono); font-size: .8rem; }
+  .info-row .v { font-family: var(--mono); word-break: break-word; }
+  .info-row .v small { display: block; color: var(--muted); font-family: var(--sans); font-size: .76rem; margin-top: 3px; }
+  .part {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); overflow: hidden; margin-bottom: 10px;
+  }
+  .part-head {
+    padding: 9px 14px; background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 8px;
+  }
+  .part-head b { font-size: .9rem; }
+  .part-head .meta { color: var(--muted); font-family: var(--mono); font-size: .76rem; }
+  .part pre {
+    margin: 0; padding: 12px 14px; font-family: var(--mono);
+    font-size: .82rem; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .claims-grid { display: grid; gap: 6px; }
+  .claim-row {
+    display: grid; grid-template-columns: 130px 1fr;
+    gap: 10px; padding: 7px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: .85rem; align-items: center;
+  }
+  .claim-row .k { color: var(--muted); font-family: var(--mono); font-size: .78rem; }
+  .claim-row .v { font-family: var(--mono); word-break: break-all; }
+  .claim-row .desc { font-size: .76rem; color: var(--muted); font-family: var(--sans); margin-top: 3px; display: block; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .examples button {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 11px; border-radius: 999px;
+    font-size: .78rem; cursor: pointer; font-family: var(--mono);
+  }
+  .examples button:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>PASETO Decoder & Inspector</h1>
+<p class="subtitle">PASETO (Platform-Agnostic SEcurity TOkens) was designed by Scott Arciszewski as a more opinionated, version-pinned alternative to JWT — no <code>alg: none</code> footguns, no algorithm confusion across versions, and exactly one safe choice per <em>version + purpose</em> pair. This tool splits a token into its components, surfaces the registered claims, and tells you exactly which cryptographic primitives a verifier needs to apply.</p>
+
+<div class="card">
+  <h2>PASETO token</h2>
+  <textarea id="src" placeholder="v4.public.eyJpc3MiOiJodHRwczovL2V4YW1wbGUuY29tIiwic3ViIjoiYWxpY2UiLCJleHAiOiIyMDM4LTAxLTAxVDAwOjAwOjAwWiJ9..." oninput="run()"></textarea>
+  <div class="err" id="err"></div>
+  <div class="examples">
+    <button onclick="load('v4pub')">v4.public (Ed25519)</button>
+    <button onclick="load('v4loc')">v4.local (XChaCha20)</button>
+    <button onclick="load('v3pub')">v3.public (ECDSA P-384)</button>
+    <button onclick="load('v2pub')">v2.public (Ed25519, legacy)</button>
+    <button onclick="load('v4pubf')">v4.public + footer</button>
+    <button onclick="document.getElementById('src').value='';run()">Clear</button>
+  </div>
+</div>
+
+<div id="out" style="display:none">
+  <div class="card">
+    <h2>Structure</h2>
+    <p class="raw" id="rawSplit"></p>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:10px">
+      Format: <span class="c-v">version</span><span class="dot">.</span><span class="c-p">purpose</span><span class="dot">.</span><span class="c-pl">payload</span><span class="dot">.</span><span class="c-f">footer</span> &nbsp;— the footer is optional. <code>local</code> tokens are symmetrically encrypted (AEAD); <code>public</code> tokens are signed and the payload is publicly readable JSON.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Token Metadata</h2>
+    <div class="info-grid" id="meta"></div>
+  </div>
+
+  <div class="card" id="claimsCard" style="display:none">
+    <h2>Claims</h2>
+    <div class="part">
+      <div class="part-head">
+        <b>Payload (JSON, signed but not encrypted)</b>
+        <span class="meta" id="jsonMeta"></span>
+      </div>
+      <pre id="jsonRaw"></pre>
+    </div>
+    <div class="claims-grid" id="claimsGrid"></div>
+  </div>
+
+  <div class="card" id="localCard" style="display:none">
+    <h2>Encrypted Payload Layout</h2>
+    <div class="info-grid" id="localLayout"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-top:10px;line-height:1.6">
+      Local tokens are sealed with an AEAD construction — decryption requires the symmetric key that was used at sign time. This tool intentionally does not accept keys; load the components into your PASETO library to verify and decrypt.
+    </p>
+  </div>
+
+  <div class="card" id="footerCard" style="display:none">
+    <h2>Footer</h2>
+    <div class="part">
+      <div class="part-head">
+        <b>Footer (authenticated, but cleartext)</b>
+        <span class="meta" id="footerMeta"></span>
+      </div>
+      <pre id="footerRaw"></pre>
+    </div>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:6px;line-height:1.6">
+      The footer is bound into the signature/MAC, so anyone tampering with it invalidates the token. Conventional use: <code>kid</code> for key rotation, or a JWK-style identifier.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Verification Recipe</h2>
+    <div id="recipe" style="font-size:.88rem;color:var(--text);line-height:1.7"></div>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const VERSIONS = {
+  v1: {
+    label: 'v1 (NIST primitives, deprecated)',
+    risk: 'warn',
+    public: { sign: 'RSA-PSS 2048+ with SHA-384', sigLen: null, deriveNote: 'RSA-PSS signature appended to message; verify with RSA public key.' },
+    local:  { aead: 'AES-256-CTR + HMAC-SHA-384 (Encrypt-then-MAC)', nonce: 32, tag: 48, note: 'Pre-AEAD construction. Prefer v3+ for new systems.' },
+  },
+  v2: {
+    label: 'v2 (modern, deprecated in favor of v4)',
+    risk: 'warn',
+    public: { sign: 'Ed25519', sigLen: 64, deriveNote: 'Last 64 bytes of decoded payload are the Ed25519 signature.' },
+    local:  { aead: 'XChaCha20-Poly1305', nonce: 24, tag: 16, note: 'XChaCha20-Poly1305 with 24-byte random nonce and 16-byte Poly1305 tag.' },
+  },
+  v3: {
+    label: 'v3 (NIST-friendly, current)',
+    risk: 'ok',
+    public: { sign: 'ECDSA P-384 + SHA-384 (RFC 6979 deterministic)', sigLen: 96, deriveNote: 'Last 96 bytes of decoded payload are r||s for P-384.' },
+    local:  { aead: 'AES-256-CTR + HMAC-SHA-384 (Encrypt-then-MAC)', nonce: 32, tag: 48, note: 'Implicit assertion bound into the key derivation.' },
+  },
+  v4: {
+    label: 'v4 (Sodium / modern, current)',
+    risk: 'ok',
+    public: { sign: 'Ed25519', sigLen: 64, deriveNote: 'Last 64 bytes of decoded payload are the Ed25519 signature.' },
+    local:  { aead: 'XChaCha20 + BLAKE2b-MAC', nonce: 32, tag: 32, note: 'XChaCha20 stream cipher with a BLAKE2b keyed MAC. Implicit assertion supported.' },
+  },
+};
+
+const CLAIM_DESC = {
+  iss: 'Issuer — who minted the token.',
+  sub: 'Subject — the principal this token is about.',
+  aud: 'Audience — the intended recipient.',
+  exp: 'Expiration time (RFC 3339).',
+  nbf: 'Not Before (RFC 3339).',
+  iat: 'Issued At (RFC 3339).',
+  jti: 'Unique token identifier.',
+  kid: 'Key ID — selects the verification key.',
+};
+
+function b64urlToBytes(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function bytesToUtf8(b) { return new TextDecoder('utf-8', { fatal: false }).decode(b); }
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function pill(text, kind) { return '<span class="pill ' + (kind || '') + '">' + escapeHtml(text) + '</span>'; }
+
+function info(k, v, sub) {
+  return '<div class="info-row"><div class="k">' + escapeHtml(k) + '</div>' +
+    '<div class="v">' + v + (sub ? '<small>' + sub + '</small>' : '') + '</div></div>';
+}
+
+function tryRfc3339(s) {
+  if (typeof s !== 'string') return null;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+
+function relative(d, now) {
+  const sec = Math.round((d.getTime() - now.getTime()) / 1000);
+  const abs = Math.abs(sec);
+  const future = sec >= 0;
+  if (abs < 60) return (future ? 'in ' : '') + abs + 's' + (future ? '' : ' ago');
+  if (abs < 3600) return (future ? 'in ' : '') + Math.round(abs / 60) + 'm' + (future ? '' : ' ago');
+  if (abs < 86400) return (future ? 'in ' : '') + Math.round(abs / 3600) + 'h' + (future ? '' : ' ago');
+  return (future ? 'in ' : '') + Math.round(abs / 86400) + 'd' + (future ? '' : ' ago');
+}
+
+function run() {
+  const src = $('src').value.trim();
+  $('err').textContent = '';
+  $('out').style.display = 'none';
+  $('claimsCard').style.display = 'none';
+  $('localCard').style.display = 'none';
+  $('footerCard').style.display = 'none';
+  if (!src) return;
+
+  const parts = src.split('.');
+  if (parts.length < 3 || parts.length > 4) {
+    $('err').textContent = 'PASETO must have 3 or 4 dot-separated parts (got ' + parts.length + ').';
+    return;
+  }
+  const [version, purpose, payloadB64, footerB64] = parts;
+
+  const spec = VERSIONS[version];
+  if (!spec) { $('err').textContent = 'Unknown version: "' + escapeHtml(version) + '". Expected v1, v2, v3, or v4.'; return; }
+  if (purpose !== 'public' && purpose !== 'local') { $('err').textContent = 'Unknown purpose: "' + escapeHtml(purpose) + '". Expected "public" or "local".'; return; }
+
+  let payload, footer;
+  try { payload = b64urlToBytes(payloadB64); }
+  catch (e) { $('err').textContent = 'Could not base64url-decode payload: ' + e.message; return; }
+  if (footerB64) {
+    try { footer = b64urlToBytes(footerB64); }
+    catch (e) { $('err').textContent = 'Could not base64url-decode footer: ' + e.message; return; }
+  }
+
+  $('rawSplit').innerHTML =
+    '<span class="c-v">' + escapeHtml(version) + '</span><span class="dot">.</span>' +
+    '<span class="c-p">' + escapeHtml(purpose) + '</span><span class="dot">.</span>' +
+    '<span class="c-pl">' + escapeHtml(payloadB64) + '</span>' +
+    (footerB64 ? '<span class="dot">.</span><span class="c-f">' + escapeHtml(footerB64) + '</span>'
+                : '<span class="dot" style="color:var(--muted)"> (no footer)</span>');
+
+  const purposeSpec = spec[purpose];
+  const meta = [];
+  meta.push(info('version', pill(version, 'accent') + ' ' + escapeHtml(spec.label.replace(version, '').replace(/^\s*\(/, '(')), null));
+  meta.push(info('purpose', pill(purpose, purpose === 'public' ? 'ok' : 'accent'),
+    purpose === 'public' ? 'Signed token — payload is JSON and readable.' : 'Encrypted token — payload is AEAD-sealed and opaque without the symmetric key.'));
+  if (purpose === 'public') meta.push(info('algorithm', escapeHtml(purposeSpec.sign), purposeSpec.deriveNote));
+  else meta.push(info('algorithm', escapeHtml(purposeSpec.aead), purposeSpec.note));
+  meta.push(info('payload bytes', escapeHtml(String(payload.length)) + ' bytes (' + payloadB64.length + ' base64url chars)', null));
+  if (footer) meta.push(info('footer bytes', escapeHtml(String(footer.length)) + ' bytes', null));
+  $('meta').innerHTML = meta.join('');
+
+  if (purpose === 'public') {
+    const sigLen = purposeSpec.sigLen;
+    let msgBytes = payload, sigBytes = null;
+    if (sigLen && payload.length > sigLen) {
+      msgBytes = payload.slice(0, payload.length - sigLen);
+      sigBytes = payload.slice(payload.length - sigLen);
+    }
+    const txt = bytesToUtf8(msgBytes);
+    let parsed = null;
+    try { parsed = JSON.parse(txt); } catch (e) { parsed = null; }
+    $('jsonRaw').textContent = parsed ? JSON.stringify(parsed, null, 2) : txt;
+    $('jsonMeta').textContent = msgBytes.length + ' bytes message' + (sigBytes ? ' · ' + sigBytes.length + '-byte signature stripped' : '');
+    $('claimsCard').style.display = '';
+
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const now = new Date();
+      const rows = [];
+      const order = ['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti', 'kid'];
+      const seen = new Set();
+      for (const key of order) {
+        if (key in parsed) {
+          seen.add(key);
+          rows.push(claimRow(key, parsed[key], now));
+        }
+      }
+      for (const key of Object.keys(parsed)) {
+        if (!seen.has(key)) rows.push(claimRow(key, parsed[key], now));
+      }
+      $('claimsGrid').innerHTML = rows.join('');
+    } else {
+      $('claimsGrid').innerHTML = '<p style="font-size:.85rem;color:var(--muted);margin:6px 4px">Message body is not a JSON object.</p>';
+    }
+  } else {
+    const layout = [];
+    const nLen = purposeSpec.nonce, tLen = purposeSpec.tag;
+    if (payload.length >= nLen + tLen) {
+      const ct = payload.length - nLen - tLen;
+      layout.push(info('nonce', escapeHtml(String(nLen)) + ' bytes', 'Random nonce, prefixed to payload.'));
+      layout.push(info('ciphertext', escapeHtml(String(ct)) + ' bytes', 'Stream-cipher output of the original JSON message.'));
+      layout.push(info('mac/tag', escapeHtml(String(tLen)) + ' bytes', 'Authentication tag — verified before decryption.'));
+    } else {
+      layout.push(info('error', pill('payload shorter than nonce + tag', 'bad'), 'Expected at least ' + (nLen + tLen) + ' bytes.'));
+    }
+    $('localLayout').innerHTML = layout.join('');
+    $('localCard').style.display = '';
+  }
+
+  if (footer) {
+    const txt = bytesToUtf8(footer);
+    let pretty = txt;
+    try { pretty = JSON.stringify(JSON.parse(txt), null, 2); } catch {}
+    $('footerRaw').textContent = pretty;
+    $('footerMeta').textContent = footer.length + ' bytes';
+    $('footerCard').style.display = '';
+  }
+
+  $('recipe').innerHTML = recipe(version, purpose, spec);
+  $('out').style.display = '';
+}
+
+function claimRow(key, val, now) {
+  let v = typeof val === 'string' ? val : JSON.stringify(val);
+  let extra = '';
+  const d = tryRfc3339(val);
+  if (d) {
+    extra = '<span class="claim-row" style="display:block;padding:0;border:0;background:none"><span class="desc">' +
+      escapeHtml(d.toISOString()) + ' · ' + escapeHtml(relative(d, now));
+    if (key === 'exp' && d.getTime() < now.getTime()) extra += ' · ' + pill('expired', 'bad');
+    if (key === 'nbf' && d.getTime() > now.getTime()) extra += ' · ' + pill('not yet valid', 'warn');
+    extra += '</span></span>';
+  }
+  return '<div class="claim-row"><div class="k">' + escapeHtml(key) + '</div>' +
+    '<div class="v">' + escapeHtml(v) +
+    (CLAIM_DESC[key] ? '<span class="desc">' + escapeHtml(CLAIM_DESC[key]) + '</span>' : '') +
+    extra + '</div></div>';
+}
+
+function recipe(version, purpose, spec) {
+  const ps = spec[purpose];
+  if (purpose === 'public') {
+    return '<ol style="margin:0 0 0 18px;padding:0">' +
+      '<li>Re-construct the <strong>pre-auth-encoding</strong> (PAE) of <code>"' + version + '.public."</code> ‖ <code>message</code> ‖ <code>footer</code> ‖ implicit_assertion (v3/v4 only).</li>' +
+      '<li>Verify the trailing ' + (ps.sigLen || 'N') + '-byte signature against the message with <strong>' + escapeHtml(ps.sign) + '</strong> using the issuer public key.</li>' +
+      '<li>If signature is valid, parse the message as JSON and validate claims (<code>exp</code>, <code>nbf</code>, <code>iss</code>, <code>aud</code>).</li>' +
+      '</ol>';
+  } else {
+    return '<ol style="margin:0 0 0 18px;padding:0">' +
+      '<li>Split the payload into nonce ‖ ciphertext ‖ tag (sizes: ' + ps.nonce + ' / variable / ' + ps.tag + ' bytes).</li>' +
+      '<li>Derive the per-message encryption key and MAC key from the symmetric key, version, purpose, and nonce.</li>' +
+      '<li>Re-compute the MAC over the PAE and compare against the trailing tag in constant time.</li>' +
+      '<li>If the tag matches, decrypt the ciphertext with <strong>' + escapeHtml(ps.aead) + '</strong> to recover the JSON claims, then validate <code>exp</code>/<code>nbf</code>.</li>' +
+      '</ol>';
+  }
+}
+
+const EXAMPLES = {
+  v4pub: 'v4.public.eyJpc3MiOiJodHRwczovL2V4YW1wbGUuY29tIiwic3ViIjoiYWxpY2UiLCJqdGkiOiJhYjEyIiwiZXhwIjoiMjAzOC0wMS0wMVQwMDowMDowMFoifRziPOmwA7az36cn_V3QCjz9Z6bQTIp4j7yOEMacmeGxRwnx1pQ5EpOFGRB74E93jcmuCSufTY4K1Uq_5C0Mjmc',
+  v4loc: 'v4.local.sv28E4W3YYCaB_CSyFTuAu_6LmnctgUVh04KRujAs2U3r83aMhoe_Jec_pGSe-DT7o53yFEn-huivm738cVNLyQA84OuubKSqX-iQUP7FexeMQBlj1aV2LUuLM0SM8l5U8JpkIQb58nVh7fnP45Dww',
+  v3pub: 'v3.public.eyJpc3MiOiJodHRwczovL2V4YW1wbGUuY29tIiwic3ViIjoiYm9iIiwiZXhwIjoiMjAzOC0wMS0wMVQwMDowMDowMFoiff4kMbWILd9yvc7UphuxpRVZcjK4KWBn2eiwhe5-Lkpq2QsU7bFeTFGrrxOBFf-bQCur9eslgPgUHp2W97O9HehhyW8DHbyO9RSNX0mDqntpDp7K4Jo4AYvo08emBXjsLg',
+  v2pub: 'v2.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwIjoiMjAxOS0wMS0wMVQwMDowMDowMCswMDowMCJ9QFnaBKsEHQJiZcwQovn8nRzSVGFd-AAys4dz5SSrDFRGRpeNEXUdhRS4idSjcV-p2dlvaDNx-lsRX3m14LFqBA',
+  v4pubf: 'v4.public.eyJpc3MiOiJodHRwczovL2V4YW1wbGUuY29tIiwic3ViIjoiYWxpY2UiLCJqdGkiOiJhYjEyIiwiZXhwIjoiMjAzOC0wMS0wMVQwMDowMDowMFoifRziPOmwA7az36cn_V3QCjz9Z6bQTIp4j7yOEMacmeGxRwnx1pQ5EpOFGRB74E93jcmuCSufTY4K1Uq_5C0Mjmc.eyJraWQiOiIyMDI0LTAxLWtleS1yb3RhdGlvbiJ9',
+};
+
+function load(k) {
+  $('src').value = EXAMPLES[k] || '';
+  run();
+}
+</script>
+</body>
+</html>

@@ -129,6 +129,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [JWE Decoder & Inspector](jwe.html) | Inspect JSON Web Encryption tokens (RFC 7516) — split the five compact segments, decode the protected header, surface key-management (`alg`) and content-encryption (`enc`) algorithms, and validate IV/tag lengths. |
+| [AWS Signature V4 Calculator](sigv4.html) | Compute every step of an AWS SigV4 signature — canonical request, string-to-sign, `kDate→kRegion→kService→kSigning` HMAC chain, and Authorization header or pre-signed URL. Includes AWS sample-vector presets. |
+| [PASETO Token Decoder](paseto.html) | Decode PASETO v1–v4, public and local. Split version, purpose, payload, and footer; surface registered claims (`iss`, `exp`, `nbf`, `kid`) and the exact cryptographic primitives a verifier needs. |
 | [HKDF Key Derivation](hkdf.html) | Run RFC 5869 HKDF Extract + Expand with SHA-1/256/384/512 and configurable salt, info, and output length. Includes the appendix-A test vectors. |
 | [JWK Inspector & Thumbprint](jwk.html) | Parse JSON Web Keys / JWKS, classify public vs private material, and compute canonical RFC 7638 SHA-256 thumbprints for RSA, EC, OKP, oct keys. |
 | [Base64 Encoder/Decoder](base64.html) | Encode text or files to Base64 and decode Base64 strings. |
