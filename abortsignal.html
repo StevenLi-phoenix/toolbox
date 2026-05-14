@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AbortSignal Playground — Free Online Tool</title>
+<meta name="description" content="Experiment with JavaScript AbortController and AbortSignal patterns: manual abort, AbortSignal.timeout(), AbortSignal.any(), and signal-aware fetch. Live results.">
+<meta name="keywords" content="abortcontroller, abortsignal, fetch abort, signal timeout, abortsignal.any, abortsignal.timeout, cancel fetch, javascript cancellation">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/abortsignal.html">
+<meta property="og:title" content="AbortSignal Playground">
+<meta property="og:description" content="Build and test AbortController patterns — timeout, any(), manual cancel — with a live fetch sandbox.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/abortsignal.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .controls .row { margin-bottom: 12px; }
+  .controls label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .controls input[type="text"], .controls input[type="number"], .controls select { width: 100%; box-sizing: border-box; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; width: 100%; }
+  .seg button { flex: 1 1 0; background: var(--surface2); color: var(--muted); border: 0; padding: 7px 10px; font-size: .8rem; cursor: pointer; min-width: 0; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  pre.code {
+    margin: 0; padding: 14px 16px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .82rem;
+    overflow-x: auto; white-space: pre; line-height: 1.55;
+  }
+  .out-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .tag { display: inline-block; padding: 3px 9px; font-size: .72rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: var(--surface2); cursor: pointer; }
+  .tag:hover { color: var(--text); }
+  .hint { font-size: .76rem; color: var(--muted); margin-top: 4px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 14px 18px; margin-top: 6px; font-size: .8rem; }
+  .checks label { display: inline-flex; align-items: center; gap: 6px; color: var(--text); text-transform: none; letter-spacing: 0; font-size: .82rem; margin: 0; cursor: pointer; }
+  .log {
+    background: #0f172a; color: #e2e8f0; padding: 12px 14px;
+    border-radius: var(--radius); font-family: var(--mono); font-size: .82rem;
+    min-height: 200px; max-height: 320px; overflow-y: auto; line-height: 1.6;
+    border: 1px solid var(--border);
+  }
+  .log .ok { color: #4ade80; }
+  .log .err { color: #f87171; }
+  .log .info { color: #93c5fd; }
+  .log .warn { color: #fbbf24; }
+  .log .ts { color: #64748b; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .browser { font-size: .8rem; color: var(--muted); }
+  .browser b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>AbortSignal Playground</h1>
+  <p class="subtitle">Cancellation in modern JavaScript is one signal — <code>AbortSignal</code> — wired through fetch, addEventListener, streams, and timers. Pick a strategy (timeout, manual abort, race), wire up signals, and either run a live <code>fetch()</code> against a public endpoint or simulate a slow async task. The generated code uses <code>AbortSignal.timeout()</code> and <code>AbortSignal.any()</code> when they apply.</p>
+
+  <div class="card" style="padding:16px;">
+    <div class="layout">
+      <div class="controls">
+        <div class="row">
+          <label>Strategy</label>
+          <div class="seg" data-target="mode">
+            <button type="button" class="on" data-v="timeout">timeout()</button>
+            <button type="button" data-v="manual">manual abort</button>
+            <button type="button" data-v="any">any() race</button>
+          </div>
+        </div>
+
+        <div class="row grid2">
+          <div>
+            <label for="timeoutMs">Timeout (ms)</label>
+            <input type="number" id="timeoutMs" value="2000" min="50" max="60000" step="100">
+          </div>
+          <div>
+            <label for="taskMs">Task duration (ms)</label>
+            <input type="number" id="taskMs" value="3000" min="50" max="60000" step="100">
+            <div class="hint">Used when running the simulated task.</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="checks" style="margin:0;"><input type="checkbox" id="useFetch" checked> Run a real <code>fetch()</code> instead of a sleep simulation</label>
+        </div>
+
+        <div class="row">
+          <label for="url">Fetch URL</label>
+          <input type="text" id="url" value="https://httpbin.org/delay/3">
+          <div class="hint">Try <code>https://httpbin.org/delay/3</code> (3s) or <code>https://httpbin.org/delay/1</code> (1s) to see timeouts succeed vs fail.</div>
+        </div>
+
+        <div class="row">
+          <label>Extra signals (for <code>any()</code>)</label>
+          <div class="checks">
+            <label><input type="checkbox" id="sig-timeout" checked> AbortSignal.timeout(ms)</label>
+            <label><input type="checkbox" id="sig-manual" checked> manual controller</label>
+            <label><input type="checkbox" id="sig-tab"> tab close (<code>beforeunload</code>)</label>
+          </div>
+          <div class="hint">All listed signals are combined with <code>AbortSignal.any()</code>. Whichever fires first wins, and <code>reason</code> tells you which.</div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="runBtn">Run</button>
+          <button class="btn btn-secondary" id="abortBtn">Abort now</button>
+          <button class="btn btn-secondary" id="clearBtn">Clear log</button>
+        </div>
+      </div>
+
+      <div>
+        <strong style="font-size:.9rem;display:block;margin-bottom:6px;">Run log</strong>
+        <div class="log" id="log"></div>
+        <div class="hint browser" style="margin-top:10px;">
+          <b>Support:</b> <code>AbortController</code>: all modern browsers + Node 15+. <code>AbortSignal.timeout()</code>: Chrome 103+, Safari 15.4+, Firefox 100+. <code>AbortSignal.any()</code>: Chrome 116+, Safari 17.4+, Firefox 124+ (early 2024).
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <div class="out-head">
+        <strong style="font-size:.9rem;">Generated code</strong>
+        <span><button class="tag" type="button" id="copyJs">Copy JS</button></span>
+      </div>
+      <pre class="code" id="jsOut"></pre>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Cheat sheet</h2>
+    <ul style="font-size:.85rem;color:var(--muted);line-height:1.7;padding-left:18px;margin:0;">
+      <li><b>Manual abort:</b> <code>const ctrl = new AbortController(); fetch(url, { signal: ctrl.signal }); ctrl.abort(reason)</code>. The optional <code>reason</code> becomes <code>signal.reason</code> and the rejection value.</li>
+      <li><b>Time-bound request:</b> <code>fetch(url, { signal: AbortSignal.timeout(2000) })</code> — no controller bookkeeping, no leaked timer.</li>
+      <li><b>Race signals:</b> <code>AbortSignal.any([userCancel.signal, AbortSignal.timeout(5000)])</code> aborts on the first source to fire.</li>
+      <li><b>React/effects:</b> create an <code>AbortController</code> in the effect, pass <code>signal</code> to async work, and call <code>ctrl.abort()</code> in the cleanup return.</li>
+      <li><b>Detecting cancellation:</b> aborted requests reject with a <code>DOMException</code> named <code>"AbortError"</code>. Check <code>err.name === 'AbortError'</code> or compare <code>signal.reason</code>.</li>
+      <li><b>Beyond fetch:</b> <code>addEventListener('scroll', fn, { signal })</code> auto-removes the listener when the signal aborts. Same with streams, observers, and many Node APIs.</li>
+    </ul>
+  </div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const state = { mode: 'timeout', activeCtrl: null };
+
+function log(msg, cls) {
+  const div = document.createElement('div');
+  const t = new Date().toISOString().slice(11, 23);
+  div.innerHTML = `<span class="ts">[${t}]</span> <span class="${cls||''}">${msg}</span>`;
+  $('log').appendChild(div);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function buildJs() {
+  const mode = state.mode;
+  const t = parseInt($('timeoutMs').value, 10) || 2000;
+  const url = $('url').value || 'https://example.com';
+  const useFetch = $('useFetch').checked;
+  if (mode === 'timeout') {
+    return useFetch
+      ? `// AbortSignal.timeout — cancels the request after ${t}ms
+try {
+  const res = await fetch('${url}', {
+    signal: AbortSignal.timeout(${t}),
+  });
+  console.log(res.status, await res.text());
+} catch (err) {
+  if (err.name === 'TimeoutError') console.warn('timed out');
+  else throw err;
+}`
+      : `// AbortSignal.timeout against a sleep helper
+const sleep = (ms, { signal } = {}) => new Promise((resolve, reject) => {
+  const id = setTimeout(resolve, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(id); reject(signal.reason); });
+});
+try {
+  await sleep(${$('taskMs').value}, { signal: AbortSignal.timeout(${t}) });
+  console.log('task finished');
+} catch (err) {
+  console.warn('aborted:', err);
+}`;
+  }
+  if (mode === 'manual') {
+    return useFetch
+      ? `// Manual cancellation — call ctrl.abort() from anywhere
+const ctrl = new AbortController();
+// e.g. cancelButton.onclick = () => ctrl.abort(new DOMException('user cancelled', 'AbortError'));
+try {
+  const res = await fetch('${url}', { signal: ctrl.signal });
+  console.log(res.status, await res.text());
+} catch (err) {
+  if (err.name === 'AbortError') console.warn('cancelled:', ctrl.signal.reason);
+  else throw err;
+}`
+      : `// Manual abort against a sleep helper
+const ctrl = new AbortController();
+// cancelButton.onclick = () => ctrl.abort();
+const sleep = (ms, { signal } = {}) => new Promise((resolve, reject) => {
+  const id = setTimeout(resolve, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(id); reject(signal.reason); });
+});
+try {
+  await sleep(${$('taskMs').value}, { signal: ctrl.signal });
+} catch (err) {
+  console.warn('aborted:', err);
+}`;
+  }
+  const sigs = [];
+  if ($('sig-timeout').checked) sigs.push(`AbortSignal.timeout(${t})`);
+  if ($('sig-manual').checked) sigs.push('userCancel.signal');
+  if ($('sig-tab').checked) sigs.push('tabClose.signal');
+  const sigList = sigs.length ? sigs : ['AbortSignal.timeout(' + t + ')'];
+  const head = $('sig-manual').checked ? 'const userCancel = new AbortController();\n' : '';
+  const tabHead = $('sig-tab').checked
+    ? `const tabClose = new AbortController();
+addEventListener('beforeunload', () => tabClose.abort(new DOMException('tab closing','AbortError')));
+`
+    : '';
+  return useFetch
+    ? `// Race multiple signals with AbortSignal.any()
+${head}${tabHead}const signal = AbortSignal.any([
+  ${sigList.join(',\n  ')}
+]);
+try {
+  const res = await fetch('${url}', { signal });
+  console.log(res.status, await res.text());
+} catch (err) {
+  console.warn('aborted by:', signal.reason);
+}`
+    : `// Race multiple signals with AbortSignal.any() against a sleep helper
+${head}${tabHead}const signal = AbortSignal.any([
+  ${sigList.join(',\n  ')}
+]);
+const sleep = (ms, { signal } = {}) => new Promise((resolve, reject) => {
+  const id = setTimeout(resolve, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(id); reject(signal.reason); });
+});
+try {
+  await sleep(${$('taskMs').value}, { signal });
+  console.log('task finished');
+} catch (err) {
+  console.warn('aborted by:', signal.reason);
+}`;
+}
+
+function sleep(ms, { signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(resolve, ms);
+    if (signal) signal.addEventListener('abort', () => { clearTimeout(id); reject(signal.reason); }, { once: true });
+  });
+}
+
+function buildRunSignal() {
+  const t = parseInt($('timeoutMs').value, 10) || 2000;
+  const userCancel = new AbortController();
+  state.activeCtrl = userCancel;
+  if (state.mode === 'timeout') {
+    return { signal: AbortSignal.timeout(t), label: `timeout(${t}ms)` };
+  }
+  if (state.mode === 'manual') {
+    return { signal: userCancel.signal, label: 'manual' };
+  }
+  const arr = [];
+  const labels = [];
+  if ($('sig-timeout').checked) { arr.push(AbortSignal.timeout(t)); labels.push(`timeout(${t}ms)`); }
+  if ($('sig-manual').checked) { arr.push(userCancel.signal); labels.push('manual'); }
+  if ($('sig-tab').checked) {
+    const c = new AbortController();
+    const handler = () => c.abort(new DOMException('tab closing','AbortError'));
+    addEventListener('beforeunload', handler, { once: true });
+    arr.push(c.signal);
+    labels.push('tab-close');
+  }
+  if (!arr.length) { arr.push(AbortSignal.timeout(t)); labels.push(`timeout(${t}ms)`); }
+  if (typeof AbortSignal.any !== 'function') {
+    log('AbortSignal.any() not supported in this browser — falling back to first signal only.', 'warn');
+    return { signal: arr[0], label: labels[0] };
+  }
+  return { signal: AbortSignal.any(arr), label: `any([${labels.join(', ')}])` };
+}
+
+async function run() {
+  const { signal, label } = buildRunSignal();
+  const useFetch = $('useFetch').checked;
+  const url = $('url').value.trim();
+  const task = parseInt($('taskMs').value, 10) || 1000;
+  log(`▶ run: mode=<b>${state.mode}</b>, signal=<b>${label}</b>, ${useFetch ? 'fetch ' + url : 'sleep ' + task + 'ms'}`, 'info');
+  const started = performance.now();
+  try {
+    if (useFetch) {
+      const res = await fetch(url, { signal });
+      const ms = (performance.now() - started).toFixed(0);
+      log(`✓ fetch resolved in ${ms}ms — status ${res.status} ${res.statusText}`, 'ok');
+    } else {
+      await sleep(task, { signal });
+      const ms = (performance.now() - started).toFixed(0);
+      log(`✓ task finished in ${ms}ms`, 'ok');
+    }
+  } catch (err) {
+    const ms = (performance.now() - started).toFixed(0);
+    const reason = err && err.name ? err.name : 'Error';
+    const msg = err && err.message ? err.message : String(err);
+    log(`✗ aborted after ${ms}ms — ${reason}: ${msg}`, 'err');
+  }
+}
+
+function abort() {
+  if (state.activeCtrl && !state.activeCtrl.signal.aborted) {
+    state.activeCtrl.abort(new DOMException('user clicked Abort','AbortError'));
+    log('• manual abort dispatched', 'warn');
+  } else {
+    log('• no active manual controller (use mode=manual or include the manual signal in any())', 'warn');
+  }
+}
+
+document.querySelectorAll('[data-target="mode"] button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-target="mode"] button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    state.mode = btn.dataset.v;
+    render();
+  });
+});
+
+['timeoutMs','taskMs','useFetch','url','sig-timeout','sig-manual','sig-tab'].forEach(id => {
+  $(id).addEventListener('input', render);
+  $(id).addEventListener('change', render);
+});
+
+$('runBtn').addEventListener('click', run);
+$('abortBtn').addEventListener('click', abort);
+$('clearBtn').addEventListener('click', () => $('log').innerHTML = '');
+$('copyJs').addEventListener('click', e => {
+  navigator.clipboard.writeText($('jsOut').textContent).then(() => {
+    const old = e.target.textContent;
+    e.target.textContent = 'Copied!';
+    setTimeout(() => e.target.textContent = old, 1100);
+  });
+});
+
+function render() {
+  $('jsOut').textContent = buildJs();
+}
+
+render();
+log('ready. Pick a strategy and click Run. Try timeout=1000 with httpbin /delay/3 to see a timeout abort.', 'info');
+</script>
+</body>
+</html>

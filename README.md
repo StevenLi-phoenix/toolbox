@@ -39,6 +39,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS @scope Builder](cssscope.html) | Generate `@scope` blocks with a scoping root and optional donut limit for component-scoped styles. Presets, live iframe preview, and copy-ready CSS. |
+| [CSS image-set() Generator](imageset.html) | Build `image-set()` declarations for responsive backgrounds, masks, and cursors — DPI variants (`1x`, `2x`, `3x`) and optional AVIF/WebP/JPG format negotiation with `type()`. |
 | [CSS @starting-style Generator](startingstyle.html) | Generate `@starting-style` rules with `transition-behavior: allow-discrete` to animate dialogs, popovers, and `display: none → block` entries. Live preview included. |
 | [CSS Tooltip Generator](csstooltip.html) | Generate pure-CSS tooltips driven by `data-tooltip` — configurable position, arrow, padding, easing, colors. Live preview and zero-JS output. |
 | [object-fit & object-position Playground](objectfit.html) | Interactive playground for `object-fit` (fill, contain, cover, none, scale-down) and `object-position` with a click-to-set 2D pad and live CSS output. |
@@ -198,6 +200,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [AbortSignal Playground](abortsignal.html) | Experiment with `AbortController`, `AbortSignal.timeout()`, and `AbortSignal.any()` — timeout, manual cancel, or race multiple signals against a live `fetch()` or sleep helper. |
 | [Complex Number Calculator](complex.html) | Add, multiply, divide, power, and root complex numbers in rectangular or polar form. Modulus, argument, conjugate, exp, log, and Argand-plane plot. |
 | [Vector Calculator](vectorcalc.html) | 2D/3D vector math — dot, cross, magnitude, normalize, angle, projection, and lerp with a live 2D preview. |
 | [Quaternion ↔ Euler Converter](quaternion.html) | Convert between quaternions, Euler angles, axis-angle, and rotation matrices with a live 3D cube preview. |
