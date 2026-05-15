@@ -34,6 +34,8 @@
 | [Spreadsheet Column Converter](spreadsheetcol.html) | Convert Excel/Sheets column letters (A, AA, ZZ) ↔ numbers, and translate A1 ↔ R1C1 cell references in bulk. |
 | [JSON Cleaner](jsonclean.html) | Recursively strip null, empty strings, empty arrays, empty objects, false, and zero values from JSON with stable re-cleaning. |
 | [OPML Builder & Parser](opml.html) | Round-trip OPML feed lists ⇄ JSON, URLs, or Markdown for RSS reader exports, backups, and Feedly→FreshRSS migrations. |
+| [YAML Diff Viewer](yamldiff.html) | Compare two YAML documents structurally — order-insensitive maps, list identity keys, and add/remove/change reporting for Kubernetes manifests and Helm values. |
+| [JSON → .env Converter](json2env.html) | Flatten nested JSON into `KEY=value` for `.env` files, `docker --env-file`, Kubernetes Secrets, or shell `export`. Configurable separator, prefix, casing, quoting, and array handling. |
 
 ## CSS & Styling
 
@@ -200,6 +202,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Browser Fingerprint Inspector](fingerprint.html) | Probe the signals your browser exposes — UA, screen, canvas hash, WebGL renderer, audio stack, font list, timezone, client hints — and compute a stable SHA-256 fingerprint. Useful for privacy audits and bot-detection research. |
 | [AbortSignal Playground](abortsignal.html) | Experiment with `AbortController`, `AbortSignal.timeout()`, and `AbortSignal.any()` — timeout, manual cancel, or race multiple signals against a live `fetch()` or sleep helper. |
 | [Complex Number Calculator](complex.html) | Add, multiply, divide, power, and root complex numbers in rectangular or polar form. Modulus, argument, conjugate, exp, log, and Argand-plane plot. |
 | [Vector Calculator](vectorcalc.html) | 2D/3D vector math — dot, cross, magnitude, normalize, angle, projection, and lerp with a live 2D preview. |

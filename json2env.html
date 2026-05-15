@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON to .env Converter — Flatten Config into Environment Variables</title>
+<meta name="description" content="Flatten nested JSON into KEY=value lines suitable for a .env file, Docker --env-file, Kubernetes Secret, or shell export. Configurable separator, prefix, casing, quoting, and array handling.">
+<meta name="keywords" content="json to env, json to dotenv, flatten json, env variables, docker env file, kubernetes secret, configmap, json to shell export">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/json2env.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 320px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .85rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+    line-height: 1.5;
+  }
+  textarea[readonly] { background: var(--surface2); }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .opts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px; margin: 4px 0 14px;
+  }
+  .opt { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; }
+  .opt label { font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .opt input[type=text], .opt select {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-family: var(--mono);
+    font-size: .85rem;
+  }
+  .checks { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 10px 0 14px; font-size: .85rem; }
+  .checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); }
+  .stats {
+    display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px;
+    font-size: .82rem; color: var(--muted);
+  }
+  .stats span { padding: 4px 10px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .err { color: var(--error); font-size: .82rem; margin-top: 6px; font-family: var(--mono); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  @media (max-width: 768px) { .panels { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON to .env Converter</h1>
+<p class="subtitle">Flatten a nested JSON config into <code>KEY=value</code> lines for <code>.env</code> files, <code>docker --env-file</code>, Kubernetes <code>ConfigMap</code> / <code>Secret</code> stringData, or shell <code>export</code> statements. Customize the path separator, prefix, casing, quoting, and how arrays and nested objects are flattened.</p>
+
+<div class="card">
+  <div class="opts">
+    <div class="opt">
+      <label for="format">Output format</label>
+      <select id="format" onchange="run()">
+        <option value="dotenv">.env (KEY=value)</option>
+        <option value="export">Shell export (export KEY="value")</option>
+        <option value="docker">Docker --env-file (no quotes)</option>
+        <option value="kube">Kubernetes Secret stringData (YAML)</option>
+        <option value="json">Flat JSON (key→string)</option>
+      </select>
+    </div>
+    <div class="opt">
+      <label for="sep">Path separator</label>
+      <select id="sep" onchange="run()">
+        <option value="_" selected>underscore (_)</option>
+        <option value="__">double underscore (__)</option>
+        <option value=".">dot (.)</option>
+      </select>
+    </div>
+    <div class="opt">
+      <label for="case">Key casing</label>
+      <select id="case" onchange="run()">
+        <option value="upper" selected>UPPER_SNAKE</option>
+        <option value="lower">lower_snake</option>
+        <option value="preserve">preserve</option>
+      </select>
+    </div>
+    <div class="opt">
+      <label for="arr">Arrays</label>
+      <select id="arr" onchange="run()">
+        <option value="index" selected>Index keys (FOO_0, FOO_1)</option>
+        <option value="join">Comma-join values</option>
+        <option value="json">JSON-encode array</option>
+      </select>
+    </div>
+    <div class="opt">
+      <label for="prefix">Prefix</label>
+      <input type="text" id="prefix" placeholder="e.g. APP_" oninput="run()">
+    </div>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="quote" checked onchange="run()"> Quote values with spaces / special chars</label>
+    <label><input type="checkbox" id="skipNull" onchange="run()"> Skip <code>null</code> and empty values</label>
+    <label><input type="checkbox" id="sort" onchange="run()"> Sort keys alphabetically</label>
+    <label><input type="checkbox" id="comment" onchange="run()"> Add header comment</label>
+  </div>
+  <div class="panels">
+    <div>
+      <label class="head" for="input">JSON input</label>
+      <textarea id="input" spellcheck="false" oninput="run()" placeholder='{ "db": { "host": "localhost", "port": 5432 } }'></textarea>
+      <div class="err" id="err"></div>
+    </div>
+    <div>
+      <label class="head" for="output">Flattened output</label>
+      <textarea id="output" readonly spellcheck="false"></textarea>
+      <div class="actions">
+        <button type="button" onclick="copyOut()">Copy</button>
+        <button type="button" onclick="download()">Download .env</button>
+        <button type="button" onclick="loadExample()">Load example</button>
+        <button type="button" onclick="clearAll()">Clear</button>
+      </div>
+    </div>
+  </div>
+  <div class="stats">
+    <span>keys <strong id="cKeys">0</strong></span>
+    <span>max depth <strong id="cDepth">0</strong></span>
+    <span>quoted <strong id="cQuoted">0</strong></span>
+    <span>skipped <strong id="cSkip">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Notes on flattening</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Environment variables are a flat <em>string-to-string</em> map, so any structure has to be encoded into the key path. The default <code>UPPER_SNAKE</code> with <code>_</code> separator follows the convention used by <a href="https://www.npmjs.com/package/dotenv-expand">dotenv</a>, <a href="https://kubernetes.io/docs/concepts/configuration/configmap/">Kubernetes ConfigMaps</a>, and most cloud platforms. The double-underscore (<code>__</code>) separator is what <a href="https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/">ASP.NET Core configuration providers</a> expect for nested keys. Quoting only kicks in when a value contains whitespace, <code>#</code>, <code>=</code>, or non-printable characters — bare values (<code>5432</code>, <code>true</code>) are left unquoted, the way <code>parse_env</code> in most languages prefers. Booleans and numbers serialize as their literal string form (<code>true</code>, not <code>1</code>); flip <em>skip null</em> to suppress missing values rather than emitting <code>KEY=</code>.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function flatten(obj, opts) {
+  const out = [];
+  let maxDepth = 0, skipped = 0;
+  function walk(v, path, depth) {
+    if (depth > maxDepth) maxDepth = depth;
+    if (v === null || v === undefined) {
+      if (opts.skipNull) { skipped++; return; }
+      out.push([path, '']);
+      return;
+    }
+    if (Array.isArray(v)) {
+      if (v.length === 0) {
+        if (opts.skipNull) { skipped++; return; }
+        out.push([path, '']);
+        return;
+      }
+      if (opts.arr === 'join') {
+        out.push([path, v.map(x => (x === null || typeof x === 'object') ? JSON.stringify(x) : String(x)).join(',')]);
+      } else if (opts.arr === 'json') {
+        out.push([path, JSON.stringify(v)]);
+      } else {
+        v.forEach((item, i) => walk(item, path ? `${path}${opts.sep}${i}` : String(i), depth + 1));
+      }
+      return;
+    }
+    if (typeof v === 'object') {
+      const keys = Object.keys(v);
+      if (keys.length === 0) {
+        if (opts.skipNull) { skipped++; return; }
+        out.push([path, '']);
+        return;
+      }
+      for (const k of keys) {
+        const next = path ? `${path}${opts.sep}${k}` : k;
+        walk(v[k], next, depth + 1);
+      }
+      return;
+    }
+    out.push([path, String(v)]);
+  }
+  walk(obj, '', 0);
+  return { entries: out, maxDepth, skipped };
+}
+
+function transformKey(k, opts) {
+  let key = k.replace(/[^A-Za-z0-9_.]/g, '_');
+  if (opts.sep !== '.') key = key.replace(/\./g, opts.sep);
+  if (opts.case === 'upper') key = key.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase();
+  else if (opts.case === 'lower') key = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
+  if (opts.prefix) key = opts.prefix + key;
+  // Strip duplicate separators
+  if (opts.sep === '_') key = key.replace(/_+/g, '_').replace(/^_|_$/g, '');
+  return key;
+}
+
+function quoteValue(v, opts, format) {
+  if (format === 'docker') return v.replace(/\n/g, '\\n');
+  if (format === 'kube') return v;
+  const needs = /[\s#=$`"\\]|^['"]|['"]$/.test(v) || v === '';
+  if (opts.quote && needs) {
+    return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r') + '"';
+  }
+  return v.replace(/\n/g, '\\n');
+}
+
+function run() {
+  $('err').textContent = '';
+  const text = $('input').value.trim();
+  if (!text) { $('output').value = ''; setStats(0,0,0,0); return; }
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch (e) { $('err').textContent = 'JSON parse error: ' + e.message; $('output').value = ''; setStats(0,0,0,0); return; }
+  const opts = {
+    sep: $('sep').value,
+    case: $('case').value,
+    arr: $('arr').value,
+    prefix: $('prefix').value.trim(),
+    quote: $('quote').checked,
+    skipNull: $('skipNull').checked,
+    sort: $('sort').checked,
+  };
+  const format = $('format').value;
+  const { entries, maxDepth, skipped } = flatten(parsed, opts);
+  let rows = entries.map(([k, v]) => [transformKey(k, opts), v]);
+  if (opts.sort) rows.sort((a, b) => a[0].localeCompare(b[0]));
+  let quoted = 0;
+  const lines = [];
+  if ($('comment').checked) {
+    if (format === 'kube') lines.push('# Generated from JSON');
+    else lines.push('# Generated from JSON — ' + entries.length + ' keys, max depth ' + maxDepth);
+  }
+  if (format === 'kube') {
+    lines.push('apiVersion: v1');
+    lines.push('kind: Secret');
+    lines.push('metadata:');
+    lines.push('  name: app-config');
+    lines.push('type: Opaque');
+    lines.push('stringData:');
+    for (const [k, v] of rows) {
+      const needsQuote = /[:#&*!?{},\[\]\|>'"\n\\]|^\s|\s$/.test(v) || v === '';
+      const yval = needsQuote ? JSON.stringify(v) : v;
+      if (needsQuote) quoted++;
+      lines.push(`  ${k}: ${yval}`);
+    }
+  } else if (format === 'json') {
+    const obj = {};
+    for (const [k, v] of rows) obj[k] = v;
+    lines.push(JSON.stringify(obj, null, 2));
+  } else {
+    for (const [k, v] of rows) {
+      const q = quoteValue(v, opts, format);
+      if (q.startsWith('"')) quoted++;
+      if (format === 'export') lines.push(`export ${k}=${q.startsWith('"') ? q : (opts.quote ? `"${q}"` : q)}`);
+      else lines.push(`${k}=${q}`);
+    }
+  }
+  $('output').value = lines.join('\n');
+  setStats(rows.length, maxDepth, quoted, skipped);
+}
+
+function setStats(k, d, q, s) {
+  $('cKeys').textContent = k; $('cDepth').textContent = d;
+  $('cQuoted').textContent = q; $('cSkip').textContent = s;
+}
+
+function copyOut() {
+  const v = $('output').value;
+  if (!v) return;
+  navigator.clipboard.writeText(v).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 1200);
+  });
+}
+
+function download() {
+  const v = $('output').value;
+  if (!v) return;
+  const format = $('format').value;
+  const ext = format === 'kube' ? 'yaml' : format === 'json' ? 'json' : format === 'export' ? 'sh' : 'env';
+  const name = format === 'kube' ? 'secret.yaml' : format === 'json' ? 'flat.json' : format === 'export' ? 'export.sh' : '.env';
+  const blob = new Blob([v], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function loadExample() {
+  $('input').value = JSON.stringify({
+    app: { name: 'toolbox', version: '1.2.0', debug: false },
+    server: { host: '0.0.0.0', port: 8080, timeout: 30 },
+    database: {
+      primary: { url: 'postgres://user:pass@db:5432/app', pool: { min: 2, max: 10 } },
+      replicas: ['replica-1.db', 'replica-2.db']
+    },
+    feature_flags: { newCheckout: true, betaSearch: false },
+    cors: { origins: ['https://app.example.com', 'https://admin.example.com'] },
+    secrets: { jwtKey: 's3cr3t with spaces', stripeKey: null }
+  }, null, 2);
+  run();
+}
+
+function clearAll() {
+  $('input').value = '';
+  $('output').value = '';
+  $('err').textContent = '';
+  setStats(0,0,0,0);
+}
+
+loadExample();
+</script>
+</body>
+</html>

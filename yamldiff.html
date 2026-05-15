@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YAML Diff Viewer — Compare YAML Files Structurally Online</title>
+<meta name="description" content="Compare two YAML documents key-by-key and see added, removed, and changed values. Order-independent, type-aware diff for Kubernetes manifests, CI configs, and Helm values.">
+<meta name="keywords" content="yaml diff, compare yaml, yaml comparison, kubernetes manifest diff, helm values diff, structural diff">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/yamldiff.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; min-height: 260px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .88rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+    line-height: 1.5;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 10px 0; font-size: .85rem; }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); }
+  .stats {
+    display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
+    font-size: .82rem; color: var(--muted);
+  }
+  .stats span { padding: 4px 10px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .diff-table {
+    width: 100%; border-collapse: collapse; font-family: var(--mono);
+    font-size: .85rem; margin-top: 8px;
+  }
+  .diff-table th {
+    text-align: left; padding: 8px 10px; font-size: .76rem;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+    border-bottom: 1px solid var(--border); background: var(--surface2);
+  }
+  .diff-table td {
+    padding: 8px 10px; border-bottom: 1px solid var(--border);
+    vertical-align: top; word-break: break-word;
+  }
+  .diff-table td.path { color: var(--muted); white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .diff-table tr.add  { background: rgba(34,197,94,.08); }
+  .diff-table tr.del  { background: rgba(239,68,68,.08); }
+  .diff-table tr.chg  { background: rgba(234,179,8,.08); }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: .7rem; text-transform: uppercase; font-weight: 600;
+    letter-spacing: .04em;
+  }
+  .b-add { background: rgba(34,197,94,.18); color: var(--success); }
+  .b-del { background: rgba(239,68,68,.18); color: var(--error); }
+  .b-chg { background: rgba(234,179,8,.18); color: var(--warning); }
+  .val { white-space: pre-wrap; }
+  .val .old { color: var(--error); text-decoration: line-through; opacity: .85; }
+  .val .new { color: var(--success); }
+  .empty { padding: 28px 12px; color: var(--muted); text-align: center; font-size: .9rem; }
+  .err { color: var(--error); font-size: .8rem; margin-top: 4px; font-family: var(--mono); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .diff-table td.path { max-width: 140px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>YAML Diff Viewer</h1>
+<p class="subtitle">Compare two YAML documents structurally — key order doesn't matter, values are normalized by type, and lists can be matched by position or by a chosen identity key. Useful for Kubernetes manifests, Helm values, CI workflows, and any config drift hunt.</p>
+
+<div class="card">
+  <div class="panels">
+    <div>
+      <label class="head" for="a">Document A (baseline)</label>
+      <textarea id="a" spellcheck="false" oninput="run()"></textarea>
+      <div class="err" id="errA"></div>
+    </div>
+    <div>
+      <label class="head" for="b">Document B (compare)</label>
+      <textarea id="b" spellcheck="false" oninput="run()"></textarea>
+      <div class="err" id="errB"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <label><input type="checkbox" id="ignoreNulls" onchange="run()"> Ignore <code>null</code> values</label>
+    <label><input type="checkbox" id="listAsSet" onchange="run()"> Compare lists as sets (order-insensitive)</label>
+    <label>List identity key:
+      <input type="text" id="listKey" placeholder="e.g. name" oninput="run()" style="width:120px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.82rem">
+    </label>
+    <button type="button" onclick="loadExample()">Load example</button>
+    <button type="button" onclick="swap()">Swap A ↔ B</button>
+  </div>
+  <div class="stats">
+    <span>added <strong id="cAdd">0</strong></span>
+    <span>removed <strong id="cDel">0</strong></span>
+    <span>changed <strong id="cChg">0</strong></span>
+    <span>unchanged <strong id="cSame">0</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Differences</h2>
+  <div id="diffOut"><div class="empty">Paste YAML in both panels to see the diff.</div></div>
+</div>
+
+<div class="card">
+  <h2>How it works</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Both documents are parsed into a normalized tree of maps, lists, and scalars. The diff walks both trees in parallel, reporting any path where A and B disagree. By default lists are compared positionally — turn on <em>compare as sets</em> for tag/label arrays where order is meaningless, or set a <em>list identity key</em> (like <code>name</code>) to align list items by that field, the same way kubectl matches container entries across manifests. The parser handles flow-style (<code>{}</code> and <code>[]</code>), block style, anchors <code>&amp;ref</code> with aliases <code>*ref</code>, multi-line strings (<code>|</code> and <code>&gt;</code>), and common scalar types (bool, int, float, null, dates as strings).
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---------------- Minimal YAML parser ----------------
+// Supports: block maps, block sequences, flow {} and [], scalars (bool/int/float/null/string),
+// quoted strings ('...' and "..."), multi-line | and >, anchors & aliases, comments, multi-doc separator ---
+function parseYAML(src) {
+  if (!src.trim()) return undefined;
+  // Strip BOM
+  src = src.replace(/^﻿/, '');
+  const lines = src.split(/\r?\n/);
+  // Remove leading document marker
+  let i = 0;
+  while (i < lines.length && /^\s*$/.test(lines[i])) i++;
+  if (i < lines.length && /^---\s*$/.test(lines[i])) i++;
+  const anchors = {};
+  const result = parseBlock(lines, i, -1, anchors);
+  return result.value;
+}
+
+function indentOf(line) {
+  const m = line.match(/^( *)/);
+  return m ? m[1].length : 0;
+}
+
+function isBlank(line) { return /^\s*(#.*)?$/.test(line); }
+
+function parseBlock(lines, start, parentIndent, anchors) {
+  // Skip blank/comment lines
+  let i = start;
+  while (i < lines.length && isBlank(lines[i])) i++;
+  if (i >= lines.length) return { value: null, next: i };
+  const firstIndent = indentOf(lines[i]);
+  if (firstIndent <= parentIndent) return { value: null, next: i };
+  const first = lines[i].slice(firstIndent);
+  // Sequence?
+  if (/^- /.test(first) || /^-$/.test(first.trim())) {
+    return parseSequence(lines, i, firstIndent, anchors);
+  }
+  // Mapping?
+  if (/^[^\s\-].*?:(\s|$)/.test(first) || /^['"]/.test(first)) {
+    return parseMapping(lines, i, firstIndent, anchors);
+  }
+  // Scalar block
+  return parseScalarLine(first, lines, i, firstIndent, anchors);
+}
+
+function parseSequence(lines, start, indent, anchors) {
+  const arr = [];
+  let i = start;
+  while (i < lines.length) {
+    if (isBlank(lines[i])) { i++; continue; }
+    const ind = indentOf(lines[i]);
+    if (ind < indent) break;
+    if (ind > indent) { i++; continue; }
+    const content = lines[i].slice(indent);
+    if (!/^-(\s|$)/.test(content)) break;
+    const after = content.slice(1).replace(/^ /, '');
+    if (after === '' || /^#/.test(after)) {
+      // Nested block on next lines
+      const r = parseBlock(lines, i + 1, indent, anchors);
+      arr.push(r.value);
+      i = r.next;
+    } else if (/^[^\s][^:]*:(\s|$)/.test(after) && !/^['"]/.test(after)) {
+      // Inline map start: "- key: value", continue parsing as mapping starting here
+      const fakeIndent = indent + 2;
+      // Reconstruct: treat the rest of the line as the first map entry indented by fakeIndent
+      const newLines = lines.slice();
+      newLines[i] = ' '.repeat(fakeIndent) + after;
+      const r = parseMapping(newLines, i, fakeIndent, anchors);
+      arr.push(r.value);
+      i = r.next;
+    } else {
+      // Scalar / flow / quoted on this line
+      const r = parseScalarLine(after, lines, i, indent, anchors);
+      arr.push(r.value);
+      i = r.next;
+    }
+  }
+  return { value: arr, next: i };
+}
+
+function parseMapping(lines, start, indent, anchors) {
+  const obj = {};
+  let i = start;
+  while (i < lines.length) {
+    if (isBlank(lines[i])) { i++; continue; }
+    const ind = indentOf(lines[i]);
+    if (ind < indent) break;
+    if (ind > indent) { i++; continue; }
+    const content = lines[i].slice(indent);
+    if (/^-(\s|$)/.test(content)) break;
+    const m = content.match(/^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^:#\s][^:#]*?)\s*:(\s+(.*))?$/);
+    if (!m) { i++; continue; }
+    const key = unquote(m[1].trim());
+    const rest = (m[3] !== undefined ? m[3] : '').trim();
+    if (rest === '' || /^#/.test(rest)) {
+      const r = parseBlock(lines, i + 1, indent, anchors);
+      obj[key] = r.value;
+      i = r.next;
+    } else {
+      const r = parseScalarLine(rest, lines, i, indent, anchors);
+      obj[key] = r.value;
+      i = r.next;
+    }
+  }
+  return { value: obj, next: i };
+}
+
+function parseScalarLine(text, lines, lineIdx, parentIndent, anchors) {
+  let s = text.replace(/\s+#.*$/, '').trim();
+  // Anchor / alias
+  let anchorName = null;
+  const am = s.match(/^&([A-Za-z0-9_\-]+)\s*(.*)$/);
+  if (am) { anchorName = am[1]; s = am[2]; }
+  if (s.startsWith('*')) {
+    const ref = s.slice(1).trim();
+    return { value: anchors.hasOwnProperty(ref) ? deepClone(anchors[ref]) : null, next: lineIdx + 1 };
+  }
+  // Multi-line block
+  if (s === '|' || s === '>' || /^[|>][+\-]?$/.test(s)) {
+    const chomp = s.includes('-') ? '-' : (s.includes('+') ? '+' : '');
+    const fold = s.startsWith('>');
+    let j = lineIdx + 1;
+    let blockIndent = -1;
+    const parts = [];
+    while (j < lines.length) {
+      if (/^\s*$/.test(lines[j])) { parts.push(''); j++; continue; }
+      const ind = indentOf(lines[j]);
+      if (ind <= parentIndent) break;
+      if (blockIndent === -1) blockIndent = ind;
+      if (ind < blockIndent) break;
+      parts.push(lines[j].slice(blockIndent));
+      j++;
+    }
+    let joined;
+    if (fold) {
+      joined = parts.reduce((acc, line, idx) => {
+        if (idx === 0) return line;
+        if (line === '' || parts[idx-1] === '') return acc + '\n' + line;
+        return acc + ' ' + line;
+      }, '');
+    } else {
+      joined = parts.join('\n');
+    }
+    if (chomp === '-') joined = joined.replace(/\n+$/, '');
+    else if (chomp !== '+') joined = joined.replace(/\n+$/, '\n');
+    if (anchorName) anchors[anchorName] = joined;
+    return { value: joined, next: j };
+  }
+  // Flow style
+  if (s.startsWith('{') || s.startsWith('[')) {
+    // Greedy collect until brackets balance
+    let acc = s;
+    let j = lineIdx;
+    while (!flowBalanced(acc) && j + 1 < lines.length) {
+      j++;
+      acc += ' ' + lines[j].trim();
+    }
+    const v = parseFlow(acc);
+    if (anchorName) anchors[anchorName] = v;
+    return { value: v, next: j + 1 };
+  }
+  // Plain scalar
+  const v = parseScalar(s);
+  if (anchorName) anchors[anchorName] = v;
+  return { value: v, next: lineIdx + 1 };
+}
+
+function flowBalanced(s) {
+  let curly = 0, square = 0, inStr = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (c === inStr && s[i-1] !== '\\') inStr = null; continue; }
+    if (c === '"' || c === "'") { inStr = c; continue; }
+    if (c === '{') curly++; else if (c === '}') curly--;
+    else if (c === '[') square++; else if (c === ']') square--;
+  }
+  return curly === 0 && square === 0 && !inStr;
+}
+
+function parseFlow(s) {
+  // Quick JSON-like fallback with YAML scalar lenience
+  try {
+    // Convert single quotes to double for JSON-ish parsing
+    const j = s
+      .replace(/([{,\s])([A-Za-z_][A-Za-z0-9_\-]*)\s*:/g, '$1"$2":')
+      .replace(/'((?:[^'\\]|\\.)*)'/g, (_, x) => JSON.stringify(x));
+    return JSON.parse(j);
+  } catch (e) {
+    // Manual recursive parser
+    const p = { s, i: 0 };
+    return readFlow(p);
+  }
+}
+
+function readFlow(p) {
+  skipWS(p);
+  const c = p.s[p.i];
+  if (c === '{') {
+    p.i++;
+    const obj = {};
+    skipWS(p);
+    if (p.s[p.i] === '}') { p.i++; return obj; }
+    while (p.i < p.s.length) {
+      skipWS(p);
+      const k = readToken(p, [':']);
+      p.i++; // :
+      skipWS(p);
+      obj[unquote(k.trim())] = readFlow(p);
+      skipWS(p);
+      if (p.s[p.i] === ',') { p.i++; continue; }
+      if (p.s[p.i] === '}') { p.i++; break; }
+    }
+    return obj;
+  }
+  if (c === '[') {
+    p.i++;
+    const arr = [];
+    skipWS(p);
+    if (p.s[p.i] === ']') { p.i++; return arr; }
+    while (p.i < p.s.length) {
+      skipWS(p);
+      arr.push(readFlow(p));
+      skipWS(p);
+      if (p.s[p.i] === ',') { p.i++; continue; }
+      if (p.s[p.i] === ']') { p.i++; break; }
+    }
+    return arr;
+  }
+  const t = readToken(p, [',', ']', '}']);
+  return parseScalar(t.trim());
+}
+
+function skipWS(p) { while (p.i < p.s.length && /\s/.test(p.s[p.i])) p.i++; }
+function readToken(p, stops) {
+  let out = '';
+  let quote = null;
+  while (p.i < p.s.length) {
+    const c = p.s[p.i];
+    if (quote) {
+      out += c;
+      if (c === quote && p.s[p.i-1] !== '\\') quote = null;
+      p.i++; continue;
+    }
+    if (c === '"' || c === "'") { quote = c; out += c; p.i++; continue; }
+    if (stops.includes(c)) break;
+    out += c; p.i++;
+  }
+  return out;
+}
+
+function unquote(s) {
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    const inner = s.slice(1, -1);
+    return s[0] === '"' ? inner.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\') : inner.replace(/''/g, "'");
+  }
+  return s;
+}
+
+function parseScalar(s) {
+  if (s === '' || s === null || s === undefined) return null;
+  if (s.startsWith('"') || s.startsWith("'")) return unquote(s);
+  const low = s.toLowerCase();
+  if (low === 'null' || low === '~' || low === '') return null;
+  if (low === 'true' || low === 'yes' || low === 'on') return true;
+  if (low === 'false' || low === 'no' || low === 'off') return false;
+  if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+  if (/^-?\d+\.\d+([eE][+\-]?\d+)?$/.test(s)) return parseFloat(s);
+  if (/^0x[0-9a-fA-F]+$/.test(s)) return parseInt(s, 16);
+  return s;
+}
+
+function deepClone(v) {
+  if (v === null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map(deepClone);
+  const out = {};
+  for (const k in v) out[k] = deepClone(v[k]);
+  return out;
+}
+
+// ---------------- Diff ----------------
+function diff(a, b, path, out, opts) {
+  const ta = typeOf(a), tb = typeOf(b);
+  if (ta !== tb) {
+    out.push({ kind: 'chg', path, a, b });
+    return;
+  }
+  if (ta === 'object') {
+    const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+    for (const k of [...keys].sort()) {
+      const childPath = path ? path + '.' + k : k;
+      if (!(k in a)) {
+        if (opts.ignoreNulls && b[k] === null) continue;
+        out.push({ kind: 'add', path: childPath, a: undefined, b: b[k] });
+      } else if (!(k in b)) {
+        if (opts.ignoreNulls && a[k] === null) continue;
+        out.push({ kind: 'del', path: childPath, a: a[k], b: undefined });
+      } else {
+        diff(a[k], b[k], childPath, out, opts);
+      }
+    }
+    return;
+  }
+  if (ta === 'array') {
+    diffArray(a, b, path, out, opts);
+    return;
+  }
+  if (!Object.is(a, b)) {
+    out.push({ kind: 'chg', path, a, b });
+  }
+}
+
+function diffArray(a, b, path, out, opts) {
+  // List identity key (match by .name etc.)
+  if (opts.listKey && a.every(x => x && typeof x === 'object' && !Array.isArray(x)) && b.every(x => x && typeof x === 'object' && !Array.isArray(x))) {
+    const mapA = new Map(), mapB = new Map();
+    a.forEach((it, i) => mapA.set(it[opts.listKey] ?? `__idx_${i}`, it));
+    b.forEach((it, i) => mapB.set(it[opts.listKey] ?? `__idx_${i}`, it));
+    const keys = new Set([...mapA.keys(), ...mapB.keys()]);
+    for (const k of keys) {
+      const cp = `${path}[${opts.listKey}=${JSON.stringify(k)}]`;
+      if (!mapA.has(k)) out.push({ kind: 'add', path: cp, a: undefined, b: mapB.get(k) });
+      else if (!mapB.has(k)) out.push({ kind: 'del', path: cp, a: mapA.get(k), b: undefined });
+      else diff(mapA.get(k), mapB.get(k), cp, out, opts);
+    }
+    return;
+  }
+  if (opts.listAsSet) {
+    const setA = a.map(v => JSON.stringify(v));
+    const setB = b.map(v => JSON.stringify(v));
+    const missingInB = a.filter((_, i) => !setB.includes(setA[i]));
+    const missingInA = b.filter((_, i) => !setA.includes(setB[i]));
+    missingInB.forEach(v => out.push({ kind: 'del', path: path + '[]', a: v, b: undefined }));
+    missingInA.forEach(v => out.push({ kind: 'add', path: path + '[]', a: undefined, b: v }));
+    return;
+  }
+  const max = Math.max(a.length, b.length);
+  for (let i = 0; i < max; i++) {
+    const cp = `${path}[${i}]`;
+    if (i >= a.length) out.push({ kind: 'add', path: cp, a: undefined, b: b[i] });
+    else if (i >= b.length) out.push({ kind: 'del', path: cp, a: a[i], b: undefined });
+    else diff(a[i], b[i], cp, out, opts);
+  }
+}
+
+function typeOf(v) {
+  if (v === null || v === undefined) return 'null';
+  if (Array.isArray(v)) return 'array';
+  return typeof v === 'object' ? 'object' : typeof v;
+}
+
+function fmt(v) {
+  if (v === undefined) return '';
+  if (v === null) return 'null';
+  if (typeof v === 'string') return v;
+  return JSON.stringify(v, null, 2);
+}
+
+function run() {
+  const aText = $('a').value, bText = $('b').value;
+  $('errA').textContent = ''; $('errB').textContent = '';
+  let A, B;
+  try { A = parseYAML(aText); } catch (e) { $('errA').textContent = 'Parse error: ' + e.message; return; }
+  try { B = parseYAML(bText); } catch (e) { $('errB').textContent = 'Parse error: ' + e.message; return; }
+  if (A === undefined && B === undefined) {
+    $('diffOut').innerHTML = '<div class="empty">Paste YAML in both panels to see the diff.</div>';
+    setStats(0,0,0,0); return;
+  }
+  const opts = {
+    ignoreNulls: $('ignoreNulls').checked,
+    listAsSet: $('listAsSet').checked,
+    listKey: $('listKey').value.trim(),
+  };
+  const out = [];
+  diff(A ?? {}, B ?? {}, '', out, opts);
+  const adds = out.filter(d => d.kind === 'add').length;
+  const dels = out.filter(d => d.kind === 'del').length;
+  const chgs = out.filter(d => d.kind === 'chg').length;
+  const same = countLeaves(A) + countLeaves(B) - adds - dels - chgs * 2;
+  setStats(adds, dels, chgs, Math.max(0, Math.floor(same / 2)));
+  render(out);
+}
+
+function countLeaves(v) {
+  if (v === null || typeof v !== 'object') return 1;
+  if (Array.isArray(v)) return v.reduce((a, x) => a + countLeaves(x), 0);
+  return Object.values(v).reduce((a, x) => a + countLeaves(x), 0);
+}
+
+function setStats(a, d, c, s) {
+  $('cAdd').textContent = a; $('cDel').textContent = d;
+  $('cChg').textContent = c; $('cSame').textContent = s;
+}
+
+function render(diffs) {
+  if (!diffs.length) {
+    $('diffOut').innerHTML = '<div class="empty" style="color:var(--success)">✓ Documents are equivalent.</div>';
+    return;
+  }
+  const rows = diffs.map(d => {
+    const cls = d.kind;
+    const label = d.kind === 'add' ? 'b-add' : d.kind === 'del' ? 'b-del' : 'b-chg';
+    const text = d.kind === 'add' ? 'added' : d.kind === 'del' ? 'removed' : 'changed';
+    let valCell;
+    if (d.kind === 'add') valCell = `<span class="new">${esc(fmt(d.b))}</span>`;
+    else if (d.kind === 'del') valCell = `<span class="old">${esc(fmt(d.a))}</span>`;
+    else valCell = `<span class="old">${esc(fmt(d.a))}</span>\n<span class="new">${esc(fmt(d.b))}</span>`;
+    return `<tr class="${cls}"><td><span class="badge ${label}">${text}</span></td><td class="path">${esc(d.path || '(root)')}</td><td class="val">${valCell}</td></tr>`;
+  }).join('');
+  $('diffOut').innerHTML = `<table class="diff-table"><thead><tr><th style="width:90px"></th><th style="width:30%">path</th><th>value</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+}
+
+function swap() {
+  const a = $('a').value;
+  $('a').value = $('b').value;
+  $('b').value = a;
+  run();
+}
+
+function loadExample() {
+  $('a').value = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+    tier: frontend
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.25
+          ports:
+            - containerPort: 80
+        - name: sidecar
+          image: busybox:1.36`;
+  $('b').value = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+    tier: frontend
+    environment: prod
+spec:
+  replicas: 5
+  template:
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+        - name: sidecar
+          image: busybox:1.36`;
+  $('listKey').value = 'name';
+  run();
+}
+
+loadExample();
+</script>
+</body>
+</html>
