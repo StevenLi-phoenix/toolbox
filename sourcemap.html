@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Source Map Decoder — Free Online Tool</title>
+<meta name="description" content="Decode JavaScript source maps — parse VLQ mappings, browse the original sources, look up generated line/column to find the original source location, and inspect names and ranges.">
+<meta name="keywords" content="source map, sourcemap decoder, source map viewer, vlq, base64 vlq, source map v3, generated to source, debug minified, stack trace decoder">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sourcemap.html">
+<meta property="og:title" content="Source Map Decoder">
+<meta property="og:description" content="Parse a JavaScript source map (.map) — VLQ-decoded mapping table, original source browser, and generated-to-original location lookup.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/sourcemap.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls .row { margin-bottom: 12px; }
+  .controls label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .controls input, .controls textarea, .controls select { width: 100%; box-sizing: border-box; }
+  .controls textarea { font-family: var(--mono); font-size: .8rem; min-height: 160px; padding: 10px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; }
+  pre.code {
+    margin: 0; padding: 14px 16px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .82rem;
+    overflow: auto; white-space: pre; line-height: 1.55; max-height: 360px;
+  }
+  .out-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 8px; }
+  .tag { display: inline-block; padding: 3px 9px; font-size: .72rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: var(--surface2); cursor: pointer; }
+  .tag:hover { color: var(--text); }
+  .hint { font-size: .76rem; color: var(--muted); margin-top: 4px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 8px; margin-top: 8px; }
+  .stat { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .stat .lbl { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .val { font-size: 1.1rem; font-family: var(--mono); margin-top: 2px; }
+  .twocol { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; }
+  @media (max-width: 900px) { .twocol { grid-template-columns: 1fr; } }
+  table.mappings { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .78rem; }
+  table.mappings th, table.mappings td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; white-space: nowrap; }
+  table.mappings th { color: var(--muted); font-weight: 500; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; background: var(--surface2); position: sticky; top: 0; }
+  .scroller { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .err-banner { padding: 8px 12px; background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.25); border-radius: var(--radius); font-size: .82rem; font-family: var(--mono); }
+  .ok-banner { padding: 8px 12px; background: rgba(34,197,94,.1); color: var(--success); border: 1px solid rgba(34,197,94,.25); border-radius: var(--radius); font-size: .82rem; }
+  .lookup-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; }
+  @media (max-width: 600px) { .lookup-row { grid-template-columns: 1fr 1fr; } }
+  .filter-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+  .filter-row input[type="text"] { flex: 1; min-width: 0; max-width: 280px; font-family: var(--mono); font-size: .8rem; }
+  .src-line { padding: 1px 8px; font-family: var(--mono); font-size: .78rem; white-space: pre; }
+  .src-line.hi { background: rgba(99,102,241,.15); }
+  .src-num { color: var(--muted); display: inline-block; width: 36px; text-align: right; padding-right: 8px; user-select: none; }
+  .pill { display: inline-block; padding: 2px 8px; font-size: .72rem; border-radius: 999px; font-weight: 600; }
+  .pill.match { background: rgba(34,197,94,.15); color: var(--success); }
+  .pill.miss { background: rgba(239,68,68,.15); color: var(--error); }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Source Map Decoder</h1>
+  <p class="subtitle">Paste a Source Map v3 file (the JSON inside a <code>.map</code> file, or a <code>data:application/json;base64,...</code> inline map) to decode its VLQ-encoded <code>mappings</code> string. Browse the included sources, inspect the decoded segment table, and look up the original location of a generated <code>line:column</code> from a stack trace.</p>
+
+  <div class="card" style="padding:16px;">
+    <div class="row">
+      <label for="input">Source map JSON</label>
+      <textarea id="input" spellcheck="false" placeholder='{ "version": 3, "sources": ["a.js"], "names": ["x"], "mappings": "AAAA,..." }'></textarea>
+      <div class="hint">Paste the raw JSON, or a <code>data:application/json;base64,...</code> URL from a <code>//# sourceMappingURL=</code> comment. The full file (sources included) stays in your browser.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="parseBtn">Decode</button>
+      <button class="btn btn-secondary" id="sampleBtn">Load sample</button>
+      <button class="btn btn-secondary" id="clearBtn">Clear</button>
+    </div>
+    <div id="status" style="margin-top:10px;"></div>
+    <div class="summary-grid" id="summary" hidden></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;" id="lookupCard" hidden>
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Generated → Original lookup</h2>
+    <div class="hint" style="margin-bottom:8px;">Enter a 1-based line and 0-based column from your minified bundle (e.g. from a stack trace) to find the corresponding original source location.</div>
+    <div class="lookup-row">
+      <div>
+        <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">Generated line (1-based)</label>
+        <input type="number" id="qLine" value="1" min="1">
+      </div>
+      <div>
+        <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">Generated column (0-based)</label>
+        <input type="number" id="qCol" value="0" min="0">
+      </div>
+      <button class="btn btn-secondary" id="lookupBtn">Find</button>
+    </div>
+    <div id="lookupOut" style="margin-top:12px;"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;" id="tableCard" hidden>
+    <div class="out-head">
+      <strong style="font-size:.95rem;">Decoded mappings</strong>
+      <span><span class="tag" id="mapCount">0 segments</span></span>
+    </div>
+    <div class="filter-row">
+      <select id="srcFilter" style="max-width:280px;"><option value="">All sources</option></select>
+      <input type="text" id="textFilter" placeholder="Filter by name or source...">
+      <span class="tag" id="showAll">Show all</span>
+    </div>
+    <div class="scroller">
+      <table class="mappings" id="mapTable"><thead><tr>
+        <th>Gen L:C</th><th>Source</th><th>Orig L:C</th><th>Name</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;" id="srcCard" hidden>
+    <div class="out-head">
+      <strong style="font-size:.95rem;">Original source browser</strong>
+      <select id="srcSelect" style="max-width:340px;"></select>
+    </div>
+    <div class="scroller" id="srcView" style="max-height:420px;"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About Source Map v3</h2>
+    <ul style="font-size:.85rem;color:var(--muted);line-height:1.7;padding-left:18px;margin:0;">
+      <li><b>Format:</b> JSON with <code>version: 3</code>, <code>sources</code>, optional <code>sourcesContent</code>, <code>names</code>, and the giant <code>mappings</code> string.</li>
+      <li><b>Mappings:</b> lines separated by <code>;</code>, segments by <code>,</code>. Each segment is 1, 4, or 5 Base64 VLQ values: generated column, source index, original line, original column, and (optionally) name index — each value relative to the previous segment.</li>
+      <li><b>VLQ:</b> each value is split into 5-bit chunks, with a continuation bit (bit 5) and a sign bit (bit 0 of the first chunk). The 6-bit chunks map to <code>A-Za-z0-9+/</code> via Base64.</li>
+      <li><b>Reverse lookup</b> uses binary search over the segments for the target line.</li>
+      <li><b>Inline maps</b> are usually <code>data:application/json;charset=utf-8;base64,...</code> appended to bundles. The decoder here strips the prefix and decodes automatically.</li>
+    </ul>
+  </div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const B64MAP = (() => { const m = {}; for (let i = 0; i < BASE64.length; i++) m[BASE64[i]] = i; return m; })();
+
+function decodeVLQ(str) {
+  const values = [];
+  let value = 0, shift = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (!(ch in B64MAP)) throw new Error('Bad base64 char: ' + ch);
+    const d = B64MAP[ch];
+    const continuation = d & 32;
+    const digit = d & 31;
+    value += digit << shift;
+    if (continuation) {
+      shift += 5;
+    } else {
+      const sign = value & 1;
+      let n = value >>> 1;
+      if (sign) n = n === 0 ? -0x80000000 : -n;
+      values.push(n);
+      value = 0; shift = 0;
+    }
+  }
+  return values;
+}
+
+function decodeMappings(mappingsStr) {
+  const out = [];
+  let srcIdx = 0, origLine = 0, origCol = 0, nameIdx = 0;
+  const lines = mappingsStr.split(';');
+  for (let gLine = 0; gLine < lines.length; gLine++) {
+    let genCol = 0;
+    const line = lines[gLine];
+    if (!line) { out.push([]); continue; }
+    const segments = line.split(',');
+    const decoded = [];
+    for (const seg of segments) {
+      if (!seg) continue;
+      const v = decodeVLQ(seg);
+      genCol += v[0];
+      if (v.length === 1) {
+        decoded.push({ genLine: gLine, genCol });
+      } else if (v.length >= 4) {
+        srcIdx += v[1];
+        origLine += v[2];
+        origCol += v[3];
+        const entry = { genLine: gLine, genCol, source: srcIdx, origLine, origCol };
+        if (v.length === 5) {
+          nameIdx += v[4];
+          entry.name = nameIdx;
+        }
+        decoded.push(entry);
+      }
+    }
+    out.push(decoded);
+  }
+  return out;
+}
+
+let state = { map: null, decoded: null };
+
+function parseMaybeDataURL(input) {
+  const trimmed = input.trim();
+  const dataRe = /^data:application\/json[^,]*,/i;
+  const m = trimmed.match(dataRe);
+  if (m) {
+    const payload = trimmed.slice(m[0].length);
+    if (/;base64$/i.test(m[0].replace(/,$/, ''))) {
+      return atob(payload);
+    }
+    return decodeURIComponent(payload);
+  }
+  if (trimmed.startsWith(')]}')) {
+    return trimmed.replace(/^\)\]\}'?\n?/, '');
+  }
+  return trimmed;
+}
+
+function setError(msg) {
+  $('status').innerHTML = `<div class="err-banner">${msg}</div>`;
+}
+function setOK(msg) {
+  $('status').innerHTML = `<div class="ok-banner">${msg}</div>`;
+}
+
+function parseInput() {
+  const raw = $('input').value;
+  if (!raw.trim()) { setError('Paste a source map JSON or data: URL.'); return; }
+  let text;
+  try { text = parseMaybeDataURL(raw); } catch (e) { return setError('Could not decode base64 data URL: ' + e.message); }
+  let map;
+  try { map = JSON.parse(text); } catch (e) { return setError('Not valid JSON: ' + e.message); }
+  if (typeof map !== 'object' || !map) return setError('Map must be a JSON object.');
+  if (map.version !== 3) return setError(`Expected "version": 3 (got ${JSON.stringify(map.version)}).`);
+  if (typeof map.mappings !== 'string') return setError('Missing "mappings" string.');
+  if (!Array.isArray(map.sources)) return setError('Missing "sources" array.');
+  let decoded;
+  try { decoded = decodeMappings(map.mappings); } catch (e) { return setError('VLQ decoding failed: ' + e.message); }
+  state.map = map;
+  state.decoded = decoded;
+  renderSummary();
+  renderMappings();
+  renderSources();
+  $('lookupCard').hidden = false;
+  $('tableCard').hidden = false;
+  $('srcCard').hidden = false;
+  setOK(`Decoded successfully — ${map.sources.length} source${map.sources.length===1?'':'s'}, ${decoded.length} generated line${decoded.length===1?'':'s'}.`);
+}
+
+function renderSummary() {
+  const m = state.map, d = state.decoded;
+  const segs = d.reduce((a, l) => a + l.length, 0);
+  const namedSegs = d.reduce((a, l) => a + l.filter(s => 'name' in s).length, 0);
+  const hasContent = Array.isArray(m.sourcesContent) && m.sourcesContent.some(s => typeof s === 'string');
+  const stats = [
+    ['Version', m.version],
+    ['File', m.file || '—'],
+    ['Source root', m.sourceRoot || '—'],
+    ['Sources', m.sources.length],
+    ['Names', (m.names || []).length],
+    ['Gen. lines', d.length],
+    ['Segments', segs.toLocaleString()],
+    ['Named segments', namedSegs.toLocaleString()],
+    ['sourcesContent', hasContent ? 'embedded' : 'absent'],
+  ];
+  $('summary').hidden = false;
+  $('summary').innerHTML = stats.map(([l,v]) =>
+    `<div class="stat"><div class="lbl">${l}</div><div class="val">${v}</div></div>`
+  ).join('');
+}
+
+function fmtSrc(idx) {
+  if (idx == null) return '—';
+  const s = state.map.sources[idx];
+  return s ? s.replace(/^webpack:\/\//, '') : `#${idx}`;
+}
+
+function renderMappings() {
+  const tbody = $('mapTable').querySelector('tbody');
+  const src = $('srcFilter').value;
+  const txt = $('textFilter').value.toLowerCase();
+  const sel = src === '' ? null : parseInt(src, 10);
+  const rows = [];
+  let total = 0;
+  for (const line of state.decoded) {
+    for (const seg of line) {
+      total++;
+      if (sel !== null && seg.source !== sel) continue;
+      if (txt) {
+        const name = state.map.names?.[seg.name] || '';
+        const srcStr = fmtSrc(seg.source);
+        if (!(name.toLowerCase().includes(txt) || srcStr.toLowerCase().includes(txt))) continue;
+      }
+      rows.push(seg);
+      if (rows.length > 5000) break;
+    }
+    if (rows.length > 5000) break;
+  }
+  $('mapCount').textContent = `${total.toLocaleString()} segments` + (rows.length < total ? ` (showing ${rows.length})` : '');
+  tbody.innerHTML = rows.map(seg => {
+    const name = state.map.names?.[seg.name];
+    return `<tr>
+      <td>${seg.genLine+1}:${seg.genCol}</td>
+      <td>${fmtSrc(seg.source)}</td>
+      <td>${'origLine' in seg ? (seg.origLine+1) + ':' + seg.origCol : '—'}</td>
+      <td>${name ? escapeHtml(name) : '—'}</td>
+    </tr>`;
+  }).join('');
+  const filt = $('srcFilter');
+  if (filt.options.length <= 1) {
+    state.map.sources.forEach((s, i) => {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = s;
+      filt.appendChild(o);
+    });
+  }
+}
+
+function renderSources() {
+  const sel = $('srcSelect');
+  sel.innerHTML = '';
+  state.map.sources.forEach((s, i) => {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = s;
+    sel.appendChild(o);
+  });
+  showSource();
+}
+
+function showSource(highlightLine) {
+  const i = parseInt($('srcSelect').value, 10) || 0;
+  const content = state.map.sourcesContent?.[i];
+  const view = $('srcView');
+  if (typeof content !== 'string') {
+    view.innerHTML = '<div class="hint" style="padding:12px;">No <code>sourcesContent</code> embedded for this source — it points at <code>'+escapeHtml(state.map.sources[i])+'</code>.</div>';
+    return;
+  }
+  const lines = content.split('\n');
+  view.innerHTML = lines.map((l, idx) => {
+    const hi = highlightLine === idx + 1 ? ' hi' : '';
+    return `<div class="src-line${hi}" id="srcL${idx+1}"><span class="src-num">${idx+1}</span>${escapeHtml(l)}</div>`;
+  }).join('');
+  if (highlightLine) {
+    const el = document.getElementById('srcL' + highlightLine);
+    if (el) el.scrollIntoView({ block: 'center' });
+  }
+}
+
+function lookup() {
+  if (!state.decoded) return;
+  const gLine = parseInt($('qLine').value, 10) - 1;
+  const gCol = parseInt($('qCol').value, 10);
+  if (gLine < 0 || gLine >= state.decoded.length) {
+    $('lookupOut').innerHTML = `<span class="pill miss">no match</span> line ${gLine+1} is outside the mapped ${state.decoded.length} lines.`;
+    return;
+  }
+  const segs = state.decoded[gLine];
+  if (!segs.length) {
+    $('lookupOut').innerHTML = `<span class="pill miss">no match</span> line ${gLine+1} has no mappings.`;
+    return;
+  }
+  let lo = 0, hi = segs.length - 1, found = null;
+  if (segs[0].genCol > gCol) {
+    $('lookupOut').innerHTML = `<span class="pill miss">no match</span> column ${gCol} is before the first segment on line ${gLine+1} (starts at col ${segs[0].genCol}).`;
+    return;
+  }
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (segs[mid].genCol <= gCol) { found = segs[mid]; lo = mid + 1; }
+    else { hi = mid - 1; }
+  }
+  if (!found || !('origLine' in found)) {
+    $('lookupOut').innerHTML = `<span class="pill miss">no source mapping</span> found a segment at gen <code>${found.genLine+1}:${found.genCol}</code> but it has no source info.`;
+    return;
+  }
+  const srcName = fmtSrc(found.source);
+  const name = state.map.names?.[found.name];
+  $('lookupOut').innerHTML = `
+    <div class="ok-banner">
+      <span class="pill match">match</span>
+      <code>${srcName}</code> at <b>line ${found.origLine+1}, col ${found.origCol}</b>${name ? ` (name: <code>${escapeHtml(name)}</code>)` : ''}.
+      <br><span class="hint" style="margin-top:6px;display:inline-block;">Segment found at gen <code>${found.genLine+1}:${found.genCol}</code>.</span>
+    </div>`;
+  $('srcSelect').value = found.source;
+  showSource(found.origLine + 1);
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+$('parseBtn').addEventListener('click', parseInput);
+$('clearBtn').addEventListener('click', () => {
+  $('input').value = '';
+  $('status').innerHTML = '';
+  $('summary').hidden = true;
+  $('lookupCard').hidden = true;
+  $('tableCard').hidden = true;
+  $('srcCard').hidden = true;
+  state = { map: null, decoded: null };
+});
+$('sampleBtn').addEventListener('click', () => {
+  $('input').value = JSON.stringify({
+    version: 3,
+    file: 'out.min.js',
+    sources: ['hello.js', 'util.js'],
+    sourcesContent: [
+      "function greet(name) {\n  return 'hello, ' + name;\n}\nconsole.log(greet('world'));",
+      "export const add = (a, b) => a + b;\nexport const mul = (a, b) => a * b;"
+    ],
+    names: ['greet','name','hello','console','log','world','add','a','b','mul'],
+    mappings: 'AAAA,SAASA,MAAMC,GACb,MAAO,UAAUA;CAClB;AACAG,QAAQC,IAAIL,MAAMM,QAClB;ACJA,MAAMC,IAAI,CAACC,GAAGC,IAAMD,IAAIC;AACxB,MAAMC,IAAI,CAACF,GAAGC,IAAMD,IAAIC'
+  }, null, 2);
+  parseInput();
+});
+$('lookupBtn').addEventListener('click', lookup);
+$('srcFilter').addEventListener('change', renderMappings);
+$('textFilter').addEventListener('input', renderMappings);
+$('showAll').addEventListener('click', () => { $('srcFilter').value = ''; $('textFilter').value = ''; renderMappings(); });
+$('srcSelect').addEventListener('change', () => showSource());
+</script>
+</body>
+</html>

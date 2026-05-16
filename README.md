@@ -41,6 +41,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS light-dark() Playground](lightdark.html) | Build dual-theme CSS variables with the `light-dark()` function — one declaration, both themes, no `@media (prefers-color-scheme)`. Live light/dark/auto preview and copy-ready CSS. |
 | [CSS @scope Builder](cssscope.html) | Generate `@scope` blocks with a scoping root and optional donut limit for component-scoped styles. Presets, live iframe preview, and copy-ready CSS. |
 | [CSS image-set() Generator](imageset.html) | Build `image-set()` declarations for responsive backgrounds, masks, and cursors — DPI variants (`1x`, `2x`, `3x`) and optional AVIF/WebP/JPG format negotiation with `type()`. |
 | [CSS @starting-style Generator](startingstyle.html) | Generate `@starting-style` rules with `transition-behavior: allow-discrete` to animate dialogs, popovers, and `display: none → block` entries. Live preview included. |
@@ -161,6 +162,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [URLPattern Tester](urlpattern.html) | Test the `URLPattern` web API against URLs — named groups (`:id`), wildcards, modifiers (`?`/`+`/`*`), and inline regex. Shows captured groups and copy-ready JavaScript. |
 | [Multipart Body Inspector](multipart.html) | Parse a raw `multipart/form-data`, `multipart/related`, or `multipart/mixed` HTTP body — auto-detect boundary, list per-part headers, filename, content-type, and download binary parts. |
 | [Cross-Origin Isolation Headers](crossorigin.html) | Build COOP, COEP, and CORP combinations and see exactly what each unlocks — `SharedArrayBuffer`, high-resolution timers, full isolation. Includes Nginx, Apache, and Worker snippets. |
 | [HTTP Status Code Reference](httpstatus.html) | Interactive reference for all HTTP response codes. |
@@ -202,6 +204,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Source Map Decoder](sourcemap.html) | Decode JavaScript source maps — parse VLQ `mappings`, browse embedded sources, and look up the original location for a generated `line:column` from a stack trace. |
 | [Browser Fingerprint Inspector](fingerprint.html) | Probe the signals your browser exposes — UA, screen, canvas hash, WebGL renderer, audio stack, font list, timezone, client hints — and compute a stable SHA-256 fingerprint. Useful for privacy audits and bot-detection research. |
 | [AbortSignal Playground](abortsignal.html) | Experiment with `AbortController`, `AbortSignal.timeout()`, and `AbortSignal.any()` — timeout, manual cancel, or race multiple signals against a live `fetch()` or sleep helper. |
 | [Complex Number Calculator](complex.html) | Add, multiply, divide, power, and root complex numbers in rectangular or polar form. Modulus, argument, conjugate, exp, log, and Argand-plane plot. |
