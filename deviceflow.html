@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OAuth 2.0 Device Authorization Flow Builder — Free Online Tool</title>
+<meta name="description" content="Walk through the RFC 8628 OAuth 2.0 Device Authorization grant — build the device authorization request, render the user_code with a QR code for verification_uri_complete, plan the polling loop, and copy curl/fetch snippets.">
+<meta name="keywords" content="oauth2 device flow, rfc 8628 device authorization grant, device code flow, smart tv oauth, cli oauth, user_code, verification_uri_complete, polling interval, slow_down, authorization_pending, oauth qr code">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/deviceflow.html">
+<meta property="og:title" content="OAuth 2.0 Device Authorization Flow Builder">
+<meta property="og:description" content="Build, simulate, and inspect every step of the RFC 8628 Device Authorization grant — from the initial POST to the polling loop, with QR codes and curl snippets.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/deviceflow.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .row { margin-bottom: 12px; }
+  .row > label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; box-sizing: border-box; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: var(--mono); font-size: .85rem;
+    background: var(--bg); color: var(--text);
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  pre.code {
+    margin: 0; padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .8rem;
+    overflow-x: auto; white-space: pre; line-height: 1.55;
+  }
+  .out-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 8px; flex-wrap: wrap; }
+  .tag { display: inline-block; padding: 3px 9px; font-size: .72rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: var(--surface2); cursor: pointer; }
+  .tag:hover { color: var(--text); }
+  .tag.static { cursor: default; }
+  .hint { font-size: .76rem; color: var(--muted); margin-top: 4px; }
+  h2.step { font-size: 1rem; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  h2.step .num { display: inline-flex; width: 22px; height: 22px; align-items: center; justify-content: center; background: var(--accent); color: #fff; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .preset-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .preset-row button { font-size: .75rem; padding: 4px 10px; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .seg button { background: var(--surface2); color: var(--muted); border: 0; padding: 5px 12px; font-size: .8rem; cursor: pointer; font-family: var(--sans); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .display-user-code {
+    display: inline-block; padding: 10px 18px; background: #0b1220; color: #fff;
+    font-family: var(--mono); font-size: 1.6rem; letter-spacing: .25em;
+    border-radius: 10px; font-weight: 700; user-select: all;
+  }
+  .qr-frame { display: inline-block; padding: 10px; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
+  .qr-frame svg { display: block; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+  .meta { font-size: .82rem; color: var(--muted); }
+  .meta b { color: var(--text); font-family: var(--mono); }
+  .timeline { display: flex; flex-direction: column; gap: 4px; font-family: var(--mono); font-size: .78rem; }
+  .timeline div { display: grid; grid-template-columns: 70px 1fr; gap: 8px; padding: 4px 8px; border-radius: 4px; }
+  .timeline div.poll { color: var(--muted); }
+  .timeline div.pend { background: rgba(234,179,8,.08); color: #92400e; }
+  .timeline div.slow { background: rgba(239,68,68,.08); color: #991b1b; }
+  .timeline div.ok { background: rgba(34,197,94,.1); color: #166534; font-weight: 600; }
+  .timeline div.expire { background: rgba(127,127,127,.08); color: #555; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; width: 38%; }
+  td code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-size: .78rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>OAuth 2.0 Device Authorization Flow Builder</h1>
+  <p class="subtitle">The Device Authorization grant (<a href="https://datatracker.ietf.org/doc/html/rfc8628" target="_blank" rel="noopener">RFC 8628</a>) is how smart TVs, CLIs, and IoT devices log a user in without a browser of their own. The device asks the authorization server for a <code>user_code</code>, displays it (often as a QR code), and polls a token endpoint until the user finishes approving on their phone. Configure the request below to inspect every step and copy ready-to-run snippets.</p>
+
+  <div class="card" style="padding:16px;">
+    <div class="preset-row">
+      <span class="hint" style="margin-right:6px;">Provider preset:</span>
+      <button class="btn btn-secondary preset" data-preset="google">Google</button>
+      <button class="btn btn-secondary preset" data-preset="github">GitHub</button>
+      <button class="btn btn-secondary preset" data-preset="microsoft">Microsoft</button>
+      <button class="btn btn-secondary preset" data-preset="auth0">Auth0</button>
+      <button class="btn btn-secondary preset" data-preset="okta">Okta</button>
+      <button class="btn btn-secondary preset" data-preset="custom">Generic</button>
+    </div>
+
+    <div class="layout">
+      <div>
+        <div class="row">
+          <label>Device Authorization endpoint</label>
+          <input type="text" id="devUrl" value="https://oauth2.googleapis.com/device/code">
+        </div>
+        <div class="row">
+          <label>Token endpoint</label>
+          <input type="text" id="tokenUrl" value="https://oauth2.googleapis.com/token">
+        </div>
+        <div class="row">
+          <label>client_id</label>
+          <input type="text" id="clientId" value="your-client-id.apps.googleusercontent.com">
+        </div>
+        <div class="row">
+          <label>scope</label>
+          <input type="text" id="scope" value="openid email profile">
+        </div>
+      </div>
+      <div>
+        <div class="row">
+          <label>client_secret (only for confidential clients)</label>
+          <input type="text" id="clientSecret" value="" placeholder="leave blank for public clients (CLIs, TVs)">
+          <div class="hint">Most device-flow clients are public — never ship a real secret in firmware or a desktop CLI. Native confidential clients use it; SPAs/CLIs do not.</div>
+        </div>
+        <div class="row">
+          <label>Simulated response (for previewing step 3)</label>
+          <div class="grid-2">
+            <div>
+              <span class="hint" style="display:block;margin-bottom:3px;">user_code</span>
+              <input type="text" id="userCode" value="WDJB-MJHT">
+            </div>
+            <div>
+              <span class="hint" style="display:block;margin-bottom:3px;">verification_uri</span>
+              <input type="text" id="verifyUri" value="https://www.google.com/device">
+            </div>
+            <div>
+              <span class="hint" style="display:block;margin-bottom:3px;">expires_in (sec)</span>
+              <input type="number" id="expiresIn" value="1800" min="60" max="3600">
+            </div>
+            <div>
+              <span class="hint" style="display:block;margin-bottom:3px;">interval (sec)</span>
+              <input type="number" id="interval" value="5" min="1" max="60">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1 -->
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 class="step"><span class="num">1</span>POST device_authorization request</h2>
+    <p class="hint" style="margin-bottom:10px;">The device sends a <code>application/x-www-form-urlencoded</code> request with its <code>client_id</code> and the scopes it wants.</p>
+    <div class="out-head"><strong style="font-size:.85rem;">Wire</strong><span><button class="tag" type="button" data-copy="reqRaw">Copy</button></span></div>
+    <pre class="code" id="reqRaw"></pre>
+    <div class="grid-2" style="margin-top:12px;">
+      <div>
+        <div class="out-head"><strong style="font-size:.85rem;">curl</strong><span><button class="tag" type="button" data-copy="reqCurl">Copy</button></span></div>
+        <pre class="code" id="reqCurl"></pre>
+      </div>
+      <div>
+        <div class="out-head"><strong style="font-size:.85rem;">JavaScript fetch()</strong><span><button class="tag" type="button" data-copy="reqJs">Copy</button></span></div>
+        <pre class="code" id="reqJs"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 class="step"><span class="num">2</span>Server response</h2>
+    <p class="hint" style="margin-bottom:10px;">A JSON object with the user-facing <code>user_code</code> and the back-channel <code>device_code</code> you'll exchange in step 4. Some providers also include <code>verification_uri_complete</code>, a URL that pre-fills the code — perfect for a QR code.</p>
+    <div class="out-head"><strong style="font-size:.85rem;">Example response body</strong><span><button class="tag" type="button" data-copy="respJson">Copy</button></span></div>
+    <pre class="code" id="respJson"></pre>
+    <table style="margin-top:10px;">
+      <tr><th>device_code</th><td>Long-lived, opaque secret. Sent only between device and server. Never shown to user.</td></tr>
+      <tr><th>user_code</th><td>Short, easy-to-type code (typically 8 chars + hyphen). Shown on the device's screen.</td></tr>
+      <tr><th>verification_uri</th><td>URL the user types into a separate browser. They will then enter the <code>user_code</code> manually.</td></tr>
+      <tr><th>verification_uri_complete</th><td>Same URL with <code>?user_code=…</code> pre-filled. Skip the typing step — encode this in the QR code.</td></tr>
+      <tr><th>expires_in</th><td>How long the <code>device_code</code> remains valid (seconds). Stop polling after this.</td></tr>
+      <tr><th>interval</th><td>Minimum seconds between token-endpoint polls. Increase this if you get <code>slow_down</code>.</td></tr>
+    </table>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 class="step"><span class="num">3</span>Display the user code</h2>
+    <p class="hint" style="margin-bottom:10px;">Show the <code>user_code</code> prominently. Add a QR code of <code>verification_uri_complete</code> so users with a phone don't have to type at all.</p>
+    <div class="grid-2" style="align-items:start;">
+      <div>
+        <div style="margin-bottom:8px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">User code</div>
+        <span class="display-user-code" id="bigCode">WDJB-MJHT</span>
+        <p class="meta" style="margin-top:14px;">Visit <b id="visitUri">https://www.google.com/device</b><br>and enter the code above.</p>
+        <p class="meta" style="margin-top:6px;">Pre-filled URL: <code style="word-break:break-all;" id="completeUri">—</code></p>
+      </div>
+      <div>
+        <div style="margin-bottom:8px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">QR code (verification_uri_complete)</div>
+        <div class="qr-frame" id="qrFrame"></div>
+        <p class="meta" style="margin-top:8px;">Scan with a phone to skip the typing step entirely.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4 -->
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 class="step"><span class="num">4</span>Poll the token endpoint</h2>
+    <p class="hint" style="margin-bottom:10px;">Repeat this POST every <code>interval</code> seconds until the user finishes approving (or the device code expires). The grant type is the URN form, not <code>device_code</code>.</p>
+    <div class="out-head"><strong style="font-size:.85rem;">Wire (per poll)</strong><span><button class="tag" type="button" data-copy="pollRaw">Copy</button></span></div>
+    <pre class="code" id="pollRaw"></pre>
+    <div class="grid-2" style="margin-top:12px;">
+      <div>
+        <div class="out-head"><strong style="font-size:.85rem;">curl</strong><span><button class="tag" type="button" data-copy="pollCurl">Copy</button></span></div>
+        <pre class="code" id="pollCurl"></pre>
+      </div>
+      <div>
+        <div class="out-head"><strong style="font-size:.85rem;">Polling loop (JS)</strong><span><button class="tag" type="button" data-copy="pollJs">Copy</button></span></div>
+        <pre class="code" id="pollJs"></pre>
+      </div>
+    </div>
+
+    <h3 style="font-size:.9rem;margin:14px 0 6px;">Expected error responses while polling</h3>
+    <table>
+      <tr><th><code>authorization_pending</code></th><td>User hasn't acted yet. Keep polling at the same interval.</td></tr>
+      <tr><th><code>slow_down</code></th><td>Polling too fast. <b>Add 5 seconds to the interval</b> and continue (RFC 8628 §3.5).</td></tr>
+      <tr><th><code>access_denied</code></th><td>User clicked Deny. Stop polling. Show "approval declined" on the device.</td></tr>
+      <tr><th><code>expired_token</code></th><td><code>device_code</code> expired before the user finished. Restart at step 1.</td></tr>
+      <tr><th>200 with tokens</th><td>Success — store <code>access_token</code> and (if requested) <code>refresh_token</code> and <code>id_token</code>.</td></tr>
+    </table>
+  </div>
+
+  <!-- Step 5 timeline -->
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 class="step"><span class="num">5</span>Polling timeline (simulated)</h2>
+    <p class="hint" style="margin-bottom:10px;">A sketch of what the polling loop looks like given the configured <code>interval</code> and <code>expires_in</code>. Drag the "user approves at" slider to see when the loop succeeds.</p>
+    <div class="row">
+      <label>User approves at <span class="meta">(<b id="approveLabel">28s</b> after device code issued)</span></label>
+      <input type="range" id="approveAt" min="0" max="120" step="1" value="28" style="width:100%;">
+    </div>
+    <div class="row">
+      <label>Inject <code>slow_down</code> at poll #</label>
+      <input type="range" id="slowdownAt" min="0" max="10" step="1" value="0" style="width:100%;">
+      <div class="hint">0 = no slow_down. Set to N to simulate the server returning <code>slow_down</code> on poll N (the loop will then add 5s).</div>
+    </div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Implementation notes</h2>
+    <ul style="font-size:.85rem;color:var(--muted);line-height:1.7;padding-left:18px;margin:0;">
+      <li><b>Discover endpoints from <code>/.well-known/openid-configuration</code>.</b> Look for <code>device_authorization_endpoint</code> and <code>token_endpoint</code>. Some providers (e.g. older Auth0 tenants) hide the device endpoint behind feature flags.</li>
+      <li><b>Always include <code>client_id</code> on the token POST</b> — RFC 8628 §3.4 keeps the client identifier on every poll. Public clients omit <code>client_secret</code>.</li>
+      <li><b>Add jitter and capped backoff.</b> Even though <code>slow_down</code> tells you when to add 5s, jittering helps avoid synchronized polling storms on shared NATs.</li>
+      <li><b>Display the URL <em>and</em> the QR code.</b> Not everyone has a phone camera handy; not everyone wants to type. Surface both.</li>
+      <li><b>Handle <code>expired_token</code> gracefully.</b> Reset state, request a new device code, and let the user start over without restarting the whole app.</li>
+      <li><b>Refresh tokens are not guaranteed.</b> Some providers require <code>access_type=offline</code> or the <code>offline_access</code> scope to issue one. Plan for re-doing the device flow when the access token expires if no refresh token is returned.</li>
+    </ul>
+  </div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const PRESETS = {
+  google: { devUrl: 'https://oauth2.googleapis.com/device/code', tokenUrl: 'https://oauth2.googleapis.com/token', clientId: 'your-client-id.apps.googleusercontent.com', scope: 'openid email profile', verifyUri: 'https://www.google.com/device', userCode: 'WDJB-MJHT', interval: 5, expiresIn: 1800 },
+  github: { devUrl: 'https://github.com/login/device/code', tokenUrl: 'https://github.com/login/oauth/access_token', clientId: 'Iv1.abcd1234efgh5678', scope: 'repo read:user', verifyUri: 'https://github.com/login/device', userCode: 'A1B2-C3D4', interval: 5, expiresIn: 900 },
+  microsoft: { devUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/devicecode', tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token', clientId: '00000000-0000-0000-0000-000000000000', scope: 'openid profile offline_access User.Read', verifyUri: 'https://microsoft.com/devicelogin', userCode: 'B7VQ4ZN6X', interval: 5, expiresIn: 900 },
+  auth0: { devUrl: 'https://YOUR_DOMAIN.auth0.com/oauth/device/code', tokenUrl: 'https://YOUR_DOMAIN.auth0.com/oauth/token', clientId: 'YOUR_CLIENT_ID', scope: 'openid profile email offline_access', verifyUri: 'https://YOUR_DOMAIN.auth0.com/activate', userCode: 'KTGB-LMNP', interval: 5, expiresIn: 900 },
+  okta: { devUrl: 'https://YOUR_DOMAIN.okta.com/oauth2/v1/device/authorize', tokenUrl: 'https://YOUR_DOMAIN.okta.com/oauth2/v1/token', clientId: '0oa1234567890', scope: 'openid profile offline_access', verifyUri: 'https://YOUR_DOMAIN.okta.com/activate', userCode: 'WXYZ-1234', interval: 5, expiresIn: 600 },
+  custom: { devUrl: 'https://auth.example.com/oauth/device/code', tokenUrl: 'https://auth.example.com/oauth/token', clientId: 'my-cli', scope: 'read write', verifyUri: 'https://auth.example.com/device', userCode: 'ABCD-EFGH', interval: 5, expiresIn: 1800 },
+};
+
+function applyPreset(name) {
+  const p = PRESETS[name];
+  if (!p) return;
+  $('devUrl').value = p.devUrl;
+  $('tokenUrl').value = p.tokenUrl;
+  $('clientId').value = p.clientId;
+  $('scope').value = p.scope;
+  $('verifyUri').value = p.verifyUri;
+  $('userCode').value = p.userCode;
+  $('interval').value = p.interval;
+  $('expiresIn').value = p.expiresIn;
+  render();
+}
+
+document.querySelectorAll('.preset').forEach(b => {
+  b.addEventListener('click', () => applyPreset(b.dataset.preset));
+});
+
+function urlEncode(params) {
+  return Object.entries(params)
+    .filter(([_, v]) => v !== undefined && v !== '')
+    .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
+    .join('&');
+}
+
+function escapeShell(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
+
+function render() {
+  const devUrl = $('devUrl').value.trim();
+  const tokenUrl = $('tokenUrl').value.trim();
+  const clientId = $('clientId').value.trim();
+  const clientSecret = $('clientSecret').value.trim();
+  const scope = $('scope').value.trim();
+  const userCode = $('userCode').value.trim();
+  const verifyUri = $('verifyUri').value.trim();
+  const expiresIn = parseInt($('expiresIn').value, 10) || 1800;
+  const interval = parseInt($('interval').value, 10) || 5;
+
+  // Step 1
+  const reqParams = { client_id: clientId };
+  if (scope) reqParams.scope = scope;
+  const reqBody = urlEncode(reqParams);
+  const reqUrlObj = (() => { try { return new URL(devUrl); } catch(e) { return null; } })();
+  const host = reqUrlObj ? reqUrlObj.host : '';
+  const path = reqUrlObj ? reqUrlObj.pathname + reqUrlObj.search : '';
+  $('reqRaw').textContent =
+`POST ${path} HTTP/1.1
+Host: ${host}
+Content-Type: application/x-www-form-urlencoded
+Accept: application/json
+Content-Length: ${reqBody.length}
+
+${reqBody}`;
+
+  $('reqCurl').textContent =
+`curl -X POST ${escapeShell(devUrl)} \\
+  -H "Content-Type: application/x-www-form-urlencoded" \\
+  -H "Accept: application/json" \\
+  --data-urlencode "client_id=${clientId}"${scope ? ` \\\n  --data-urlencode "scope=${scope}"` : ''}`;
+
+  $('reqJs').textContent =
+`const res = await fetch(${JSON.stringify(devUrl)}, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Accept': 'application/json',
+  },
+  body: new URLSearchParams({
+    client_id: ${JSON.stringify(clientId)},${scope ? `\n    scope: ${JSON.stringify(scope)},` : ''}
+  }),
+});
+const data = await res.json();
+// → { device_code, user_code, verification_uri, verification_uri_complete?, expires_in, interval }`;
+
+  // Step 2 — example response
+  const verifyComplete = verifyUri + (verifyUri.includes('?') ? '&' : '?') + 'user_code=' + encodeURIComponent(userCode);
+  const respBody = {
+    device_code: 'GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS',
+    user_code: userCode,
+    verification_uri: verifyUri,
+    verification_uri_complete: verifyComplete,
+    expires_in: expiresIn,
+    interval: interval,
+  };
+  $('respJson').textContent = JSON.stringify(respBody, null, 2);
+
+  // Step 3 — visuals
+  $('bigCode').textContent = userCode || '——';
+  $('visitUri').textContent = verifyUri || '—';
+  $('completeUri').textContent = verifyComplete;
+  renderQR(verifyComplete);
+
+  // Step 4
+  const pollParams = {
+    client_id: clientId,
+    device_code: 'GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS',
+    grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+  };
+  if (clientSecret) pollParams.client_secret = clientSecret;
+  const pollBody = urlEncode(pollParams);
+  const tUrlObj = (() => { try { return new URL(tokenUrl); } catch(e) { return null; } })();
+  const tHost = tUrlObj ? tUrlObj.host : '';
+  const tPath = tUrlObj ? tUrlObj.pathname + tUrlObj.search : '';
+  $('pollRaw').textContent =
+`POST ${tPath} HTTP/1.1
+Host: ${tHost}
+Content-Type: application/x-www-form-urlencoded
+Accept: application/json
+Content-Length: ${pollBody.length}
+
+${pollBody}`;
+
+  $('pollCurl').textContent =
+`curl -X POST ${escapeShell(tokenUrl)} \\
+  -H "Content-Type: application/x-www-form-urlencoded" \\
+  --data-urlencode "client_id=${clientId}" \\
+  --data-urlencode "device_code=$DEVICE_CODE" \\${clientSecret ? `\n  --data-urlencode "client_secret=${clientSecret}" \\` : ''}
+  --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:device_code"`;
+
+  $('pollJs').textContent =
+`let interval = ${interval}; // seconds, from device_authorization response
+const deadline = Date.now() + ${expiresIn} * 1000;
+
+while (Date.now() < deadline) {
+  await new Promise(r => setTimeout(r, interval * 1000));
+
+  const res = await fetch(${JSON.stringify(tokenUrl)}, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: ${JSON.stringify(clientId)},
+      device_code: deviceCode,
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+    }),
+  });
+  const data = await res.json();
+
+  if (res.ok && data.access_token) return data;          // ✓ success
+  if (data.error === 'authorization_pending') continue;  // keep polling
+  if (data.error === 'slow_down') { interval += 5; continue; } // back off
+  throw new Error(data.error || 'device flow failed');   // access_denied, expired_token, …
+}
+throw new Error('expired_token');`;
+
+  renderTimeline();
+}
+
+function renderTimeline() {
+  const interval = parseInt($('interval').value, 10) || 5;
+  const expiresIn = parseInt($('expiresIn').value, 10) || 1800;
+  const approveAt = parseInt($('approveAt').value, 10);
+  const slowdownAt = parseInt($('slowdownAt').value, 10);
+  $('approveLabel').textContent = approveAt + 's';
+
+  const lines = [];
+  lines.push({ t: 0, cls: '', text: 'device code issued' });
+  let t = 0;
+  let pollNum = 0;
+  let curInterval = interval;
+  let approved = false;
+  while (t + curInterval <= Math.min(expiresIn, 180)) {
+    t += curInterval;
+    pollNum++;
+    if (!approved && t >= approveAt) {
+      lines.push({ t, cls: 'ok', text: `poll #${pollNum} → 200 OK { access_token, … }` });
+      approved = true;
+      break;
+    }
+    if (slowdownAt > 0 && pollNum === slowdownAt) {
+      lines.push({ t, cls: 'slow', text: `poll #${pollNum} → 400 slow_down (interval += 5)` });
+      curInterval += 5;
+    } else {
+      lines.push({ t, cls: 'pend', text: `poll #${pollNum} → 400 authorization_pending` });
+    }
+  }
+  if (!approved) {
+    lines.push({ t: expiresIn, cls: 'expire', text: 'device_code expired — restart from step 1' });
+  }
+
+  const max = approveAt;
+  void max;
+  const html = lines.map(l => {
+    return `<div class="${l.cls}"><span>+${l.t}s</span><span>${escapeHtml(l.text)}</span></div>`;
+  }).join('');
+  $('timeline').innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ───────── Minimal QR encoder (model 2, ECC L/M/Q/H supported but we use M, version auto) ─────────
+// Adapted from the well-known QR algorithm. Self-contained, no external dependency.
+const QR = (() => {
+  // Galois field GF(256)
+  const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+  (function() {
+    let x = 1;
+    for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+    for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+  })();
+  function gfMul(a, b) { return a && b ? EXP[(LOG[a] + LOG[b]) % 255] : 0; }
+  function polyMul(p, q) {
+    const r = new Uint8Array(p.length + q.length - 1);
+    for (let i = 0; i < p.length; i++) for (let j = 0; j < q.length; j++) r[i+j] ^= gfMul(p[i], q[j]);
+    return r;
+  }
+  function rsGeneratorPoly(n) {
+    let g = new Uint8Array([1]);
+    for (let i = 0; i < n; i++) g = polyMul(g, new Uint8Array([1, EXP[i]]));
+    return g;
+  }
+  function rsEncode(data, ecLen) {
+    const gen = rsGeneratorPoly(ecLen);
+    const out = new Uint8Array(data.length + ecLen);
+    out.set(data, 0);
+    for (let i = 0; i < data.length; i++) {
+      const coef = out[i];
+      if (coef !== 0) for (let j = 0; j < gen.length; j++) out[i+j] ^= gfMul(gen[j], coef);
+    }
+    out.set(data, 0);
+    return out.slice(data.length);
+  }
+
+  // ECC level M only, byte mode only. Version selected by capacity.
+  // Data codeword count for ECC level M, versions 1..40 (per ISO/IEC 18004 Table 9).
+  const DATA_CODEWORDS_M = [
+    16,28,44,64,86,108,124,154,182,216,254,290,334,365,415,453,507,563,627,669,
+    714,782,860,914,1000,1062,1128,1193,1267,1373,1455,1541,1631,1725,1812,1914,1992,2102,2216,2334
+  ];
+  // EC bytes per block, blocks group1, dataPerBlock group1, blocks group2, dataPerBlock group2 — for level M
+  const RS_M = [
+    [10,1,16,0,0],[16,1,28,0,0],[26,1,44,0,0],[18,2,32,0,0],[24,2,43,0,0],
+    [16,4,27,0,0],[18,4,31,0,0],[22,2,38,2,39],[22,3,36,2,37],[26,4,43,1,44],
+    [30,1,50,4,51],[22,6,36,2,37],[22,8,37,1,38],[24,4,40,5,41],[24,5,41,5,42],
+    [28,7,45,3,46],[28,10,46,1,47],[26,9,43,4,44],[26,3,44,11,45],[26,3,41,13,42],
+    [26,17,42,0,0],[28,17,46,0,0],[28,4,47,14,48],[28,6,45,14,46],[28,8,47,13,48],
+    [28,19,46,4,47],[28,22,45,3,46],[28,3,45,23,46],[28,21,45,7,46],[28,19,47,10,48],
+    [28,2,46,29,47],[28,10,46,23,47],[28,14,46,21,47],[28,14,46,23,47],[28,12,47,26,48],
+    [28,6,47,34,48],[28,29,46,14,47],[28,13,46,32,47],[28,40,47,7,48],[28,18,47,31,48]
+  ];
+
+  // Format info bit sequences for (M, mask 0..7) — pre-encoded 15-bit
+  const FORMAT_M = [0x5412,0x5125,0x5E7C,0x5B4B,0x45F9,0x40CE,0x4F97,0x4AA0];
+
+  // Version info for v7+ — 18-bit
+  function versionBits(v) {
+    let d = v << 12;
+    let r = d;
+    for (let i = 0; i < 6; i++) if ((r >> (17 - i)) & 1) r ^= 0x1F25 << (5 - i);
+    return d | (r & 0xFFF);
+  }
+
+  // Alignment pattern positions (versions 2..40)
+  const ALIGN = [
+    [], [6,18], [6,22], [6,26], [6,30], [6,34], [6,22,38], [6,24,42], [6,26,46],
+    [6,28,50], [6,30,54], [6,32,58], [6,34,62], [6,26,46,66], [6,26,48,70],
+    [6,26,50,74], [6,30,54,78], [6,30,56,82], [6,30,58,86], [6,34,62,90],
+    [6,28,50,72,94], [6,26,50,74,98], [6,30,54,78,102], [6,28,54,80,106],
+    [6,32,58,84,110], [6,30,58,86,114], [6,34,62,90,118], [6,26,50,74,98,122],
+    [6,30,54,78,102,126], [6,26,52,78,104,130], [6,30,56,82,108,134],
+    [6,34,60,86,112,138], [6,30,58,86,114,142], [6,34,62,90,118,146],
+    [6,30,54,78,102,126,150], [6,24,50,76,102,128,154], [6,28,54,80,106,132,158],
+    [6,32,58,84,110,136,162], [6,26,54,82,110,138,166], [6,30,58,86,114,142,170]
+  ];
+
+  function pickVersion(byteLen) {
+    for (let v = 1; v <= 40; v++) {
+      // bit overhead: mode(4) + length(8 or 16) + bits(byteLen*8) + terminator(4)
+      const lenBits = v <= 9 ? 8 : 16;
+      const need = 4 + lenBits + byteLen * 8;
+      const cap = DATA_CODEWORDS_M[v-1] * 8;
+      if (need <= cap) return v;
+    }
+    throw new Error('QR data too large (max ~2331 bytes at ECC-M v40)');
+  }
+
+  function buildBitstream(data, v) {
+    const cap = DATA_CODEWORDS_M[v-1];
+    const lenBits = v <= 9 ? 8 : 16;
+    const bits = [];
+    function push(n, value) { for (let i = n - 1; i >= 0; i--) bits.push((value >> i) & 1); }
+    push(4, 0b0100); // byte mode
+    push(lenBits, data.length);
+    for (const b of data) push(8, b);
+    // terminator (up to 4 zeros), then pad to byte
+    const tCap = cap * 8;
+    for (let i = 0; i < 4 && bits.length < tCap; i++) bits.push(0);
+    while (bits.length % 8) bits.push(0);
+    // pad bytes
+    const pads = [0xEC, 0x11];
+    let p = 0;
+    while (bits.length < tCap) {
+      push(8, pads[p % 2]); p++;
+    }
+    // pack into bytes
+    const bytes = new Uint8Array(cap);
+    for (let i = 0; i < bytes.length; i++) {
+      let b = 0;
+      for (let j = 0; j < 8; j++) b = (b << 1) | bits[i*8 + j];
+      bytes[i] = b;
+    }
+    return bytes;
+  }
+
+  function blockSplit(bytes, v) {
+    const [, g1Blocks, g1Per, g2Blocks, g2Per] = RS_M[v-1];
+    const blocks = [];
+    let p = 0;
+    for (let i = 0; i < g1Blocks; i++) { blocks.push(bytes.slice(p, p + g1Per)); p += g1Per; }
+    for (let i = 0; i < g2Blocks; i++) { blocks.push(bytes.slice(p, p + g2Per)); p += g2Per; }
+    return blocks;
+  }
+
+  function interleave(blocks, ecBlocks) {
+    let dMax = 0, eMax = 0;
+    for (const b of blocks) dMax = Math.max(dMax, b.length);
+    for (const e of ecBlocks) eMax = Math.max(eMax, e.length);
+    const out = [];
+    for (let i = 0; i < dMax; i++) for (const b of blocks) if (i < b.length) out.push(b[i]);
+    for (let i = 0; i < eMax; i++) for (const e of ecBlocks) if (i < e.length) out.push(e[i]);
+    return new Uint8Array(out);
+  }
+
+  function placeModules(v, finalBytes) {
+    const size = 17 + 4 * v;
+    const m = Array.from({length: size}, () => new Int8Array(size).fill(-1));
+    function setFn(r, c, val) { m[r][c] = val; }
+    function setFnArea(r, c, val) { m[r][c] = val | 0x80; } // mark reserved
+    // Finder patterns (top-left, top-right, bottom-left) + separators
+    function finder(r, c) {
+      for (let i = -1; i <= 7; i++) for (let j = -1; j <= 7; j++) {
+        const rr = r + i, cc = c + j;
+        if (rr < 0 || rr >= size || cc < 0 || cc >= size) continue;
+        const val = (i >= 0 && i <= 6 && j >= 0 && j <= 6 &&
+          (i === 0 || i === 6 || j === 0 || j === 6 ||
+           (i >= 2 && i <= 4 && j >= 2 && j <= 4))) ? 1 : 0;
+        setFnArea(rr, cc, val);
+      }
+    }
+    finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+    // Timing patterns
+    for (let i = 8; i < size - 8; i++) {
+      if (m[6][i] === -1) setFnArea(6, i, (i + 1) % 2);
+      if (m[i][6] === -1) setFnArea(i, 6, (i + 1) % 2);
+    }
+    // Dark module
+    setFnArea(size - 8, 8, 1);
+    // Alignment patterns (ALIGN array is indexed by v-1 with an empty slot at v=1)
+    if (v >= 2) {
+      const pos = ALIGN[v - 1];
+      for (const r of pos) for (const c of pos) {
+        if ((r === 6 && c === 6) || (r === 6 && c === pos[pos.length-1]) || (r === pos[pos.length-1] && c === 6)) continue;
+        for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
+          const val = (Math.max(Math.abs(i), Math.abs(j)) !== 1) ? 1 : 0;
+          if (m[r + i][c + j] === -1) setFnArea(r + i, c + j, val);
+        }
+      }
+    }
+    // Reserve format info areas
+    for (let i = 0; i < 9; i++) {
+      if (m[8][i] === -1) setFnArea(8, i, 0);
+      if (m[i][8] === -1) setFnArea(i, 8, 0);
+    }
+    for (let i = 0; i < 8; i++) {
+      if (m[size - 1 - i][8] === -1) setFnArea(size - 1 - i, 8, 0);
+      if (m[8][size - 1 - i] === -1) setFnArea(8, size - 1 - i, 0);
+    }
+    // Version info (v >= 7)
+    if (v >= 7) {
+      const vb = versionBits(v);
+      for (let i = 0; i < 18; i++) {
+        const bit = (vb >> i) & 1;
+        const a = Math.floor(i / 3), b = i % 3 + size - 11;
+        setFnArea(a, b, bit);
+        setFnArea(b, a, bit);
+      }
+    }
+
+    // Place data bits using the zigzag from bottom-right
+    let bitIdx = 0;
+    let dir = -1;
+    let col = size - 1;
+    while (col > 0) {
+      if (col === 6) col--;
+      for (let r0 = 0; r0 < size; r0++) {
+        const r = dir === -1 ? size - 1 - r0 : r0;
+        for (let cOff = 0; cOff < 2; cOff++) {
+          const c = col - cOff;
+          if (m[r][c] === -1) {
+            let bit = 0;
+            if (bitIdx < finalBytes.length * 8) {
+              const byte = finalBytes[bitIdx >> 3];
+              bit = (byte >> (7 - (bitIdx & 7))) & 1;
+            }
+            m[r][c] = bit;
+            bitIdx++;
+          }
+        }
+      }
+      col -= 2;
+      dir = -dir;
+    }
+    return m;
+  }
+
+  function applyMask(m, mask) {
+    const size = m.length;
+    const out = Array.from({length: size}, () => new Int8Array(size));
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
+      const v = m[r][c];
+      if (v & 0x80) { out[r][c] = v & 0x7f; continue; } // function module
+      let invert = false;
+      switch (mask) {
+        case 0: invert = ((r + c) % 2 === 0); break;
+        case 1: invert = (r % 2 === 0); break;
+        case 2: invert = (c % 3 === 0); break;
+        case 3: invert = ((r + c) % 3 === 0); break;
+        case 4: invert = ((Math.floor(r/2) + Math.floor(c/3)) % 2 === 0); break;
+        case 5: invert = ((r*c) % 2 + (r*c) % 3 === 0); break;
+        case 6: invert = (((r*c) % 2 + (r*c) % 3) % 2 === 0); break;
+        case 7: invert = (((r+c) % 2 + (r*c) % 3) % 2 === 0); break;
+      }
+      out[r][c] = v ^ (invert ? 1 : 0);
+    }
+    return out;
+  }
+
+  function placeFormatBits(m, mask) {
+    const size = m.length;
+    const bits = FORMAT_M[mask];
+    for (let i = 0; i < 15; i++) {
+      const bit = (bits >> i) & 1;
+      // Vertical copy: top-left finder side + bottom-left finder side
+      if (i < 6) m[i][8] = bit;
+      else if (i < 8) m[i + 1][8] = bit;
+      else m[size - 15 + i][8] = bit;
+      // Horizontal copy: top-right finder side + top-left finder side
+      if (i < 8) m[8][size - 1 - i] = bit;
+      else if (i === 8) m[8][7] = bit;
+      else m[8][14 - i] = bit;
+    }
+    m[size - 8][8] = 1; // dark module (always 1)
+  }
+
+  function maskPenalty(m) {
+    // Simplified penalty: just dark-light run penalty + 50/50 balance
+    const size = m.length;
+    let penalty = 0;
+    for (let r = 0; r < size; r++) {
+      let run = 1;
+      for (let c = 1; c < size; c++) {
+        if (m[r][c] === m[r][c-1]) { run++; if (run === 5) penalty += 3; else if (run > 5) penalty++; }
+        else run = 1;
+      }
+    }
+    for (let c = 0; c < size; c++) {
+      let run = 1;
+      for (let r = 1; r < size; r++) {
+        if (m[r][c] === m[r-1][c]) { run++; if (run === 5) penalty += 3; else if (run > 5) penalty++; }
+        else run = 1;
+      }
+    }
+    return penalty;
+  }
+
+  function encode(text) {
+    const data = new TextEncoder().encode(text);
+    const v = pickVersion(data.length);
+    const stream = buildBitstream(data, v);
+    const blocks = blockSplit(stream, v);
+    const [ecLen] = RS_M[v-1];
+    const ecBlocks = blocks.map(b => rsEncode(b, ecLen));
+    const final = interleave(blocks, ecBlocks);
+
+    let bestMask = 0, bestPenalty = Infinity, bestModules = null;
+    for (let mask = 0; mask < 8; mask++) {
+      const base = placeModules(v, final);
+      const masked = applyMask(base, mask);
+      placeFormatBits(masked, mask);
+      const p = maskPenalty(masked);
+      if (p < bestPenalty) { bestPenalty = p; bestMask = mask; bestModules = masked; }
+    }
+    return bestModules;
+  }
+
+  return { encode };
+})();
+
+function renderQR(text) {
+  const frame = $('qrFrame');
+  frame.innerHTML = '';
+  if (!text) return;
+  let modules;
+  try {
+    modules = QR.encode(text);
+  } catch (e) {
+    frame.textContent = '(too long to encode as QR)';
+    return;
+  }
+  const n = modules.length;
+  const quiet = 4;
+  const total = n + quiet * 2;
+  const px = 5;
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('width', String(total * px));
+  svg.setAttribute('height', String(total * px));
+  svg.setAttribute('viewBox', `0 0 ${total} ${total}`);
+  const bg = document.createElementNS(svgNS, 'rect');
+  bg.setAttribute('width', String(total));
+  bg.setAttribute('height', String(total));
+  bg.setAttribute('fill', '#fff');
+  svg.appendChild(bg);
+  let path = '';
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (modules[r][c] & 1) path += `M${c + quiet} ${r + quiet}h1v1h-1z`;
+    }
+  }
+  const p = document.createElementNS(svgNS, 'path');
+  p.setAttribute('d', path);
+  p.setAttribute('fill', '#000');
+  svg.appendChild(p);
+  frame.appendChild(svg);
+}
+
+// Copy buttons
+document.body.addEventListener('click', e => {
+  const id = e.target?.dataset?.copy;
+  if (!id) return;
+  const txt = $(id)?.textContent || '';
+  navigator.clipboard.writeText(txt).then(() => {
+    const old = e.target.textContent;
+    e.target.textContent = 'Copied!';
+    setTimeout(() => e.target.textContent = old, 1000);
+  });
+});
+
+['devUrl','tokenUrl','clientId','clientSecret','scope','userCode','verifyUri','expiresIn','interval'].forEach(id => {
+  $(id).addEventListener('input', render);
+});
+['approveAt','slowdownAt'].forEach(id => $(id).addEventListener('input', renderTimeline));
+
+render();
+</script>
+</body>
+</html>

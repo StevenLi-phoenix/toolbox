@@ -41,6 +41,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS field-sizing Generator](fieldsizing.html) | Build CSS rules that auto-size `textarea`, `input`, and `select` to their content with `field-sizing: content`. Live preview, `ch`/`lh` guardrails, and an `@supports` fallback. |
 | [CSS light-dark() Playground](lightdark.html) | Build dual-theme CSS variables with the `light-dark()` function — one declaration, both themes, no `@media (prefers-color-scheme)`. Live light/dark/auto preview and copy-ready CSS. |
 | [CSS @scope Builder](cssscope.html) | Generate `@scope` blocks with a scoping root and optional donut limit for component-scoped styles. Presets, live iframe preview, and copy-ready CSS. |
 | [CSS image-set() Generator](imageset.html) | Build `image-set()` declarations for responsive backgrounds, masks, and cursors — DPI variants (`1x`, `2x`, `3x`) and optional AVIF/WebP/JPG format negotiation with `type()`. |
@@ -134,6 +135,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [WebAuthn / Passkey Decoder](webauthn.html) | Decode WebAuthn registration and authentication responses — `clientDataJSON`, CBOR `attestationObject`, `authenticatorData` flags, AAGUID lookup, credential ID, and the COSE-encoded public key (EC2/RSA/OKP). |
 | [JWE Decoder & Inspector](jwe.html) | Inspect JSON Web Encryption tokens (RFC 7516) — split the five compact segments, decode the protected header, surface key-management (`alg`) and content-encryption (`enc`) algorithms, and validate IV/tag lengths. |
 | [AWS Signature V4 Calculator](sigv4.html) | Compute every step of an AWS SigV4 signature — canonical request, string-to-sign, `kDate→kRegion→kService→kSigning` HMAC chain, and Authorization header or pre-signed URL. Includes AWS sample-vector presets. |
 | [PASETO Token Decoder](paseto.html) | Decode PASETO v1–v4, public and local. Split version, purpose, payload, and footer; surface registered claims (`iss`, `exp`, `nbf`, `kid`) and the exact cryptographic primitives a verifier needs. |
@@ -162,6 +164,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [OAuth 2.0 Device Flow Builder](deviceflow.html) | Walk through the RFC 8628 Device Authorization grant — build the initial POST, render the `user_code` with a QR for `verification_uri_complete`, plan the polling loop with `slow_down`/`expired_token` handling, and copy curl/fetch snippets. |
 | [URLPattern Tester](urlpattern.html) | Test the `URLPattern` web API against URLs — named groups (`:id`), wildcards, modifiers (`?`/`+`/`*`), and inline regex. Shows captured groups and copy-ready JavaScript. |
 | [Multipart Body Inspector](multipart.html) | Parse a raw `multipart/form-data`, `multipart/related`, or `multipart/mixed` HTTP body — auto-detect boundary, list per-part headers, filename, content-type, and download binary parts. |
 | [Cross-Origin Isolation Headers](crossorigin.html) | Build COOP, COEP, and CORP combinations and see exactly what each unlocks — `SharedArrayBuffer`, high-resolution timers, full isolation. Includes Nginx, Apache, and Worker snippets. |

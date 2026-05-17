@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebAuthn / Passkey Response Decoder — Free Online Tool</title>
+<meta name="description" content="Decode WebAuthn registration (attestation) and authentication (assertion) responses — parse clientDataJSON, authenticatorData flags, AAGUID, credentialId, COSE public keys, and attestation statements. 100% client-side.">
+<meta name="keywords" content="webauthn decoder, passkey decoder, fido2 inspector, attestationObject parser, authenticatorData parser, clientDataJSON, AAGUID lookup, COSE key decoder, fido attestation">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/webauthn.html">
+<meta property="og:title" content="WebAuthn / Passkey Response Decoder">
+<meta property="og:description" content="Decode WebAuthn registration and authentication responses — clientDataJSON, attestationObject (CBOR), authenticatorData flags, AAGUID, credentialId, and COSE public keys.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/webauthn.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea, input[type=text] {
+    width: 100%; box-sizing: border-box; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .85rem; background: var(--bg);
+    color: var(--text); resize: vertical;
+  }
+  textarea { min-height: 140px; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .seg button { background: var(--surface2); color: var(--muted); border: 0; padding: 6px 14px; font-size: .82rem; cursor: pointer; font-family: var(--sans); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .row { margin-bottom: 14px; }
+  .row > label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  pre.code {
+    margin: 0; padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .8rem;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-all; line-height: 1.55;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; width: 32%; }
+  td { font-family: var(--mono); font-size: .8rem; word-break: break-all; }
+  td code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  .flag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin-top: 8px; }
+  .flag { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: .78rem; font-family: var(--mono); display: flex; justify-content: space-between; gap: 8px; }
+  .flag.on { background: rgba(34, 197, 94, .08); border-color: #86efac; color: #166534; }
+  .flag .v { color: var(--muted); }
+  .flag.on .v { color: #166534; font-weight: 600; }
+  .pill { display: inline-block; padding: 2px 9px; font-size: .72rem; border-radius: 999px; background: var(--surface2); color: var(--muted); border: 1px solid var(--border); margin-right: 4px; }
+  .pill.ok { color: #15803d; border-color: #86efac; }
+  .pill.warn { color: #a16207; border-color: #fde68a; }
+  .pill.err { color: #b91c1c; border-color: #fca5a5; }
+  .error-banner { padding: 10px 14px; background: rgba(239,68,68,.08); border: 1px solid #fca5a5; color: #991b1b; border-radius: 6px; font-size: .85rem; margin-bottom: 10px; }
+  h3 { font-size: .9rem; margin: 18px 0 8px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .tabs button { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: .8rem; cursor: pointer; font-family: var(--sans); }
+  .tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .hint { font-size: .76rem; color: var(--muted); margin-top: 4px; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .twocol { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>WebAuthn / Passkey Response Decoder</h1>
+  <p class="subtitle">Decode the raw response from <code>navigator.credentials.create()</code> (registration) or <code>navigator.credentials.get()</code> (authentication). Parses <code>clientDataJSON</code>, the CBOR-encoded <code>attestationObject</code>, <code>authenticatorData</code> flags, AAGUID, credential ID, and the COSE-encoded public key — everything you need to debug a FIDO2 / passkey flow before writing the server-side verifier.</p>
+
+  <div class="card" style="padding:16px;">
+    <div class="row">
+      <label>Mode</label>
+      <div class="seg" id="modeSeg">
+        <button class="on" data-v="reg">Registration (attestation)</button>
+        <button data-v="auth">Authentication (assertion)</button>
+      </div>
+    </div>
+
+    <div class="row" id="rowJson">
+      <label>Paste raw response JSON <span style="text-transform:none;letter-spacing:0;color:var(--text);font-size:.7rem;">(from <code>PublicKeyCredential.toJSON()</code> — values are base64url)</span></label>
+      <textarea id="jsonIn" spellcheck="false" placeholder='{"id":"…","rawId":"…","response":{"clientDataJSON":"…","attestationObject":"…"},"type":"public-key"}'></textarea>
+      <div class="hint">Paste either the full credential JSON or just the inner <code>response</code>. Individual fields (<code>clientDataJSON</code>, <code>attestationObject</code>, <code>authenticatorData</code>) can also be pasted on their own below.</div>
+    </div>
+
+    <div class="row">
+      <label>Or paste individual fields</label>
+      <div class="twocol">
+        <div>
+          <span class="hint" style="margin-bottom:4px;display:block;">clientDataJSON (base64url)</span>
+          <textarea id="cdj" spellcheck="false" rows="2"></textarea>
+        </div>
+        <div>
+          <span class="hint" style="margin-bottom:4px;display:block;" id="cdj2Label">attestationObject (base64url)</span>
+          <textarea id="cdj2" spellcheck="false" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="decode">Decode</button>
+      <button class="btn btn-secondary" id="sample">Load sample</button>
+      <button class="btn btn-secondary" id="clear">Clear</button>
+    </div>
+  </div>
+
+  <div id="output" style="display:none;">
+    <div class="card" style="padding:16px;margin-top:16px;">
+      <h2 style="font-size:1rem;margin:0 0 10px;">Summary <span id="summaryPills"></span></h2>
+      <table id="summaryTable"></table>
+    </div>
+
+    <div class="card" style="padding:16px;margin-top:16px;">
+      <h2 style="font-size:1rem;margin:0 0 10px;">clientDataJSON</h2>
+      <p class="hint" style="margin-bottom:8px;">Sent by the browser to the authenticator. The server verifies <code>type</code>, <code>challenge</code>, and <code>origin</code> match what it issued.</p>
+      <pre class="code" id="cdjOut"></pre>
+    </div>
+
+    <div class="card" id="authDataCard" style="padding:16px;margin-top:16px;">
+      <h2 style="font-size:1rem;margin:0 0 10px;">authenticatorData</h2>
+      <p class="hint" style="margin-bottom:8px;">37 fixed bytes (rpIdHash + flags + signCount) optionally followed by attested credential data and extensions.</p>
+      <table id="adTable"></table>
+      <h3>Flags</h3>
+      <div class="flag-grid" id="flagGrid"></div>
+    </div>
+
+    <div class="card" id="attCard" style="padding:16px;margin-top:16px;">
+      <h2 style="font-size:1rem;margin:0 0 10px;">Attested credential data</h2>
+      <table id="credTable"></table>
+      <h3>COSE public key</h3>
+      <table id="coseTable"></table>
+    </div>
+
+    <div class="card" id="stmtCard" style="padding:16px;margin-top:16px;">
+      <h2 style="font-size:1rem;margin:0 0 10px;">Attestation statement</h2>
+      <p class="hint" style="margin-bottom:8px;">Statement format = <code id="fmtName">—</code>. Fields are shown as CBOR-decoded JSON; X.509 cert bytes show as <code>&lt;cert N bytes&gt;</code>.</p>
+      <pre class="code" id="stmtOut"></pre>
+    </div>
+
+    <div class="card" id="sigCard" style="padding:16px;margin-top:16px;">
+      <h2 style="font-size:1rem;margin:0 0 10px;">Signature</h2>
+      <table id="sigTable"></table>
+    </div>
+
+    <div class="card" style="padding:16px;margin-top:16px;">
+      <h2 style="font-size:1rem;margin:0 0 10px;">Verifier checklist</h2>
+      <ul id="checklist" style="font-size:.85rem;color:var(--text);line-height:1.7;padding-left:18px;margin:0;"></ul>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">About WebAuthn responses</h2>
+    <ul style="font-size:.85rem;color:var(--muted);line-height:1.7;padding-left:18px;margin:0;">
+      <li><b>Registration</b> returns an <code>attestationObject</code> — CBOR with three fields: <code>fmt</code> (statement format), <code>attStmt</code> (signature over authData + clientDataHash), and <code>authData</code> (rpIdHash + flags + signCount + attested credential + extensions).</li>
+      <li><b>Authentication</b> returns <code>authenticatorData</code> + <code>signature</code> separately. The signature covers <code>authData ‖ SHA-256(clientDataJSON)</code> and is verified with the credential's public key (stored at registration).</li>
+      <li><b>AAGUID</b> identifies the authenticator model (e.g. YubiKey 5, Apple platform, Windows Hello). The all-zero AAGUID is intentional for some platforms (privacy-preserving passkeys).</li>
+      <li><b>COSE keys</b> are CBOR maps. EC2 keys use <code>kty=2</code>, <code>alg=-7</code> (ES256), <code>crv=1</code> (P-256), <code>x</code>/<code>y</code> coordinates. RSA uses <code>kty=3</code>, <code>alg=-257</code> (RS256), <code>n</code>/<code>e</code>. OKP (Ed25519) uses <code>kty=1</code>, <code>alg=-8</code>.</li>
+      <li><b>Flags byte:</b> <code>UP</code> (user present), <code>UV</code> (user verified — PIN/biometric), <code>BE</code> (backup eligible — passkey/synced), <code>BS</code> (backup state — currently synced), <code>AT</code> (attested credential present), <code>ED</code> (extensions present).</li>
+    </ul>
+  </div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = 'reg';
+
+// ───────── base64url ─────────
+function b64uToBytes(s) {
+  s = String(s).replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g, '');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function bytesToHex(b) {
+  return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function bytesToB64u(b) {
+  let s = '';
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function bytesToUtf8(b) {
+  try { return new TextDecoder('utf-8', { fatal: false }).decode(b); } catch(e) { return ''; }
+}
+
+// ───────── CBOR decoder (RFC 8949 subset, enough for WebAuthn) ─────────
+function decodeCBOR(bytes) {
+  let p = 0;
+  function readByte() { return bytes[p++]; }
+  function readUint(n) {
+    let v = 0n;
+    for (let i = 0; i < n; i++) v = (v << 8n) | BigInt(bytes[p++]);
+    return v;
+  }
+  function readArg(ai) {
+    if (ai < 24) return BigInt(ai);
+    if (ai === 24) return BigInt(readByte());
+    if (ai === 25) return readUint(2);
+    if (ai === 26) return readUint(4);
+    if (ai === 27) return readUint(8);
+    throw new Error('CBOR: indefinite length not supported');
+  }
+  function readItem() {
+    if (p >= bytes.length) throw new Error('CBOR: unexpected end');
+    const ib = readByte();
+    const mt = ib >> 5;
+    const ai = ib & 0x1f;
+    let v;
+    switch (mt) {
+      case 0: { // unsigned int
+        v = readArg(ai);
+        return v <= 9007199254740991n ? Number(v) : v;
+      }
+      case 1: { // negative int
+        v = readArg(ai);
+        const n = -1n - v;
+        return n >= -9007199254740991n ? Number(n) : n;
+      }
+      case 2: { // byte string
+        const len = Number(readArg(ai));
+        const out = bytes.slice(p, p + len);
+        p += len;
+        return out; // Uint8Array
+      }
+      case 3: { // text string
+        const len = Number(readArg(ai));
+        const s = bytesToUtf8(bytes.slice(p, p + len));
+        p += len;
+        return s;
+      }
+      case 4: { // array
+        const len = Number(readArg(ai));
+        const arr = [];
+        for (let i = 0; i < len; i++) arr.push(readItem());
+        return arr;
+      }
+      case 5: { // map
+        const len = Number(readArg(ai));
+        const m = new Map();
+        for (let i = 0; i < len; i++) {
+          const k = readItem();
+          const val = readItem();
+          m.set(k, val);
+        }
+        return m;
+      }
+      case 6: { // tag — skip and return tagged value
+        readArg(ai);
+        return readItem();
+      }
+      case 7: {
+        if (ai === 20) return false;
+        if (ai === 21) return true;
+        if (ai === 22) return null;
+        if (ai === 23) return undefined;
+        if (ai === 25 || ai === 26 || ai === 27) { p += (ai === 25 ? 2 : ai === 26 ? 4 : 8); return NaN; }
+        return undefined;
+      }
+    }
+  }
+  const item = readItem();
+  return { item, consumed: p };
+}
+
+// Convert CBOR Maps to plain objects for display
+function cborToJson(v) {
+  if (v instanceof Uint8Array) return { __bytes: bytesToHex(v), __len: v.length };
+  if (Array.isArray(v)) return v.map(cborToJson);
+  if (v instanceof Map) {
+    const o = {};
+    for (const [k, val] of v.entries()) o[String(k)] = cborToJson(val);
+    return o;
+  }
+  if (typeof v === 'bigint') return v.toString();
+  return v;
+}
+
+function fmtBytes(b, max = 64) {
+  if (!b) return '';
+  const hex = bytesToHex(b);
+  if (hex.length <= max * 2) return hex;
+  return hex.slice(0, max * 2) + '…';
+}
+
+// ───────── authData parser ─────────
+function parseAuthData(buf) {
+  if (buf.length < 37) throw new Error('authenticatorData too short (need ≥37 bytes, got ' + buf.length + ')');
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const rpIdHash = buf.slice(0, 32);
+  const flagsByte = buf[32];
+  const signCount = dv.getUint32(33, false);
+  const flags = {
+    UP: !!(flagsByte & 0x01),
+    UV: !!(flagsByte & 0x04),
+    BE: !!(flagsByte & 0x08),
+    BS: !!(flagsByte & 0x10),
+    AT: !!(flagsByte & 0x40),
+    ED: !!(flagsByte & 0x80),
+  };
+  let off = 37;
+  let attestedCred = null;
+  if (flags.AT) {
+    if (buf.length < off + 18) throw new Error('AT flag set but not enough bytes for attested credential data');
+    const aaguid = buf.slice(off, off + 16); off += 16;
+    const credIdLen = dv.getUint16(off, false); off += 2;
+    if (buf.length < off + credIdLen) throw new Error('credentialIdLength exceeds buffer');
+    const credId = buf.slice(off, off + credIdLen); off += credIdLen;
+    // COSE key consumes the rest (or up to extensions)
+    const rest = buf.slice(off);
+    const cose = decodeCBOR(rest);
+    off += cose.consumed;
+    attestedCred = { aaguid, credId, coseKeyMap: cose.item };
+  }
+  let extensions = null;
+  if (flags.ED && off < buf.length) {
+    try {
+      const ext = decodeCBOR(buf.slice(off));
+      extensions = ext.item;
+      off += ext.consumed;
+    } catch (e) {}
+  }
+  return { rpIdHash, flagsByte, flags, signCount, attestedCred, extensions, totalLen: buf.length };
+}
+
+const COSE_KEY_LABELS = {
+  1: 'kty',
+  2: 'kid',
+  3: 'alg',
+  4: 'key_ops',
+  5: 'base_iv',
+  '-1': 'crv',
+  '-2': 'x',
+  '-3': 'y',
+  '-4': 'd',
+  '-1_rsa': 'n',
+  '-2_rsa': 'e',
+};
+const COSE_KTY = { 1: 'OKP (Ed25519)', 2: 'EC2', 3: 'RSA', 4: 'symmetric' };
+const COSE_ALG = {
+  '-7': 'ES256 (ECDSA P-256 + SHA-256)',
+  '-35': 'ES384 (ECDSA P-384 + SHA-384)',
+  '-36': 'ES512 (ECDSA P-521 + SHA-512)',
+  '-8': 'EdDSA',
+  '-257': 'RS256 (RSASSA-PKCS1-v1_5 + SHA-256)',
+  '-258': 'RS384',
+  '-259': 'RS512',
+  '-37': 'PS256 (RSASSA-PSS + SHA-256)',
+  '-38': 'PS384',
+  '-39': 'PS512',
+};
+const COSE_CRV = { 1: 'P-256', 2: 'P-384', 3: 'P-521', 6: 'Ed25519', 7: 'Ed448' };
+
+function decodeCoseKey(m) {
+  const out = { raw: {} };
+  for (const [k, v] of m.entries()) {
+    const key = typeof k === 'number' ? String(k) : String(k);
+    out.raw[key] = v;
+  }
+  const kty = out.raw['1'];
+  out.kty = kty;
+  out.ktyName = COSE_KTY[kty] || 'unknown';
+  const alg = out.raw['3'];
+  out.alg = alg;
+  out.algName = COSE_ALG[String(alg)] || 'unknown';
+  if (kty === 2 || kty === 1) {
+    out.crv = out.raw['-1'];
+    out.crvName = COSE_CRV[out.crv] || 'unknown';
+    out.x = out.raw['-2'];
+    out.y = out.raw['-3'];
+  } else if (kty === 3) {
+    out.n = out.raw['-1'];
+    out.e = out.raw['-2'];
+  }
+  return out;
+}
+
+// Known AAGUIDs (small lookup — extend as needed)
+const AAGUID_LOOKUP = {
+  '00000000-0000-0000-0000-000000000000': 'Platform (privacy-preserving) — Chrome/Safari passkey',
+  'fbfc3007-154e-4ecc-8c0b-6e020557d7bd': 'iCloud Keychain (Apple)',
+  'adce0002-35bc-c60a-648b-0b25f1f05503': 'Chrome on Mac/Linux',
+  'b93fd961-f2e6-462f-b122-82002247de78': 'Android Keystore',
+  '08987058-cadc-4b81-b6e1-30de50dcbe96': 'Windows Hello (TPM)',
+  '6028b017-b1d4-4c02-b4b3-afcdafc96bb2': 'Windows Hello (software)',
+  '9ddd1817-af5a-4672-a2b9-3e3dd95000a9': 'Windows Hello',
+  'ee882879-721c-4913-9775-3dfcce97072a': 'YubiKey 5 Series',
+  'cb69481e-8ff7-4039-93ec-0a2729a154a8': 'YubiKey 5 Series',
+  'fa2b99dc-9e39-4257-8f92-4a30d23c4118': 'YubiKey 5 NFC',
+  '2fc0579f-8113-47ea-b116-bb5a8db9202a': 'YubiKey 5 NFC FIPS',
+  'd8522d9f-575b-4866-88a9-ba99fa02f35b': 'YubiKey Bio',
+  '1ac71f64-468d-4fe0-bef1-0e5f2f551f18': 'Solo Keys',
+};
+
+function aaguidToUuid(bytes) {
+  const h = bytesToHex(bytes);
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20,32)}`;
+}
+
+// ───────── Main decoders ─────────
+function decodeRegistration(cdjB64, attObjB64) {
+  const result = {};
+  const cdjBytes = b64uToBytes(cdjB64);
+  result.clientDataJSON = JSON.parse(bytesToUtf8(cdjBytes));
+  result.clientDataJSONRaw = cdjBytes;
+  const attObjBytes = b64uToBytes(attObjB64);
+  const att = decodeCBOR(attObjBytes).item;
+  if (!(att instanceof Map)) throw new Error('attestationObject is not a CBOR map');
+  result.fmt = att.get('fmt');
+  result.attStmt = att.get('attStmt');
+  const authDataBytes = att.get('authData');
+  if (!(authDataBytes instanceof Uint8Array)) throw new Error('authData missing from attestationObject');
+  result.authDataRaw = authDataBytes;
+  result.authData = parseAuthData(authDataBytes);
+  if (result.authData.attestedCred && result.authData.attestedCred.coseKeyMap instanceof Map) {
+    result.cose = decodeCoseKey(result.authData.attestedCred.coseKeyMap);
+  }
+  return result;
+}
+
+function decodeAuthentication(cdjB64, authDataB64, sigB64) {
+  const result = {};
+  const cdjBytes = b64uToBytes(cdjB64);
+  result.clientDataJSON = JSON.parse(bytesToUtf8(cdjBytes));
+  result.clientDataJSONRaw = cdjBytes;
+  const authDataBytes = b64uToBytes(authDataB64);
+  result.authDataRaw = authDataBytes;
+  result.authData = parseAuthData(authDataBytes);
+  if (sigB64) result.signature = b64uToBytes(sigB64);
+  return result;
+}
+
+function render(result) {
+  $('output').style.display = 'block';
+  $('attCard').style.display = (mode === 'reg' && result.authData.attestedCred) ? 'block' : 'none';
+  $('stmtCard').style.display = (mode === 'reg') ? 'block' : 'none';
+  $('authDataCard').style.display = 'block';
+  $('sigCard').style.display = (mode === 'auth' && result.signature) ? 'block' : 'none';
+
+  // Summary
+  const cd = result.clientDataJSON;
+  const summaryRows = [
+    ['type (clientData)', `<code>${escapeHtml(cd.type || '')}</code>`],
+    ['origin', `<code>${escapeHtml(cd.origin || '')}</code>`],
+    ['challenge', `<code>${escapeHtml(cd.challenge || '')}</code>`],
+    ['rpIdHash (authData)', `<code>${bytesToHex(result.authData.rpIdHash)}</code>`],
+    ['signCount', `<code>${result.authData.signCount}</code> ${result.authData.signCount === 0 ? '<span class="pill warn">0 — common for passkeys/syncable creds</span>' : ''}`],
+    ['flags byte', `<code>0x${result.authData.flagsByte.toString(16).padStart(2,'0')}</code> (binary <code>${result.authData.flagsByte.toString(2).padStart(8,'0')}</code>)`],
+  ];
+  if (mode === 'reg') {
+    summaryRows.unshift(['attestation fmt', `<code>${escapeHtml(result.fmt || '')}</code>`]);
+  }
+  $('summaryTable').innerHTML = summaryRows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+
+  // Summary pills
+  const pills = [];
+  if (cd.type === (mode === 'reg' ? 'webauthn.create' : 'webauthn.get')) {
+    pills.push(`<span class="pill ok">type matches mode</span>`);
+  } else {
+    pills.push(`<span class="pill err">type "${escapeHtml(cd.type || '')}" doesn't match mode</span>`);
+  }
+  if (result.authData.flags.UP) pills.push('<span class="pill ok">UP</span>');
+  if (result.authData.flags.UV) pills.push('<span class="pill ok">UV</span>');
+  if (result.authData.flags.BE) pills.push('<span class="pill ok">BE (passkey-eligible)</span>');
+  if (result.authData.flags.BS) pills.push('<span class="pill ok">BS (currently synced)</span>');
+  $('summaryPills').innerHTML = pills.join(' ');
+
+  // clientData
+  $('cdjOut').textContent = JSON.stringify(cd, null, 2);
+
+  // authData table
+  const ad = result.authData;
+  const adRows = [
+    ['total bytes', `<code>${ad.totalLen}</code>`],
+    ['rpIdHash (SHA-256 of RP ID)', `<code>${bytesToHex(ad.rpIdHash)}</code>`],
+    ['flags byte', `<code>0x${ad.flagsByte.toString(16).padStart(2,'0')}</code>`],
+    ['signCount', `<code>${ad.signCount}</code>`],
+  ];
+  if (ad.extensions) adRows.push(['extensions (CBOR)', `<pre class="code" style="margin:0;padding:8px;">${escapeHtml(JSON.stringify(cborToJson(ad.extensions), null, 2))}</pre>`]);
+  $('adTable').innerHTML = adRows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+
+  // flags
+  const FLAGS = [
+    ['UP', 'user present (touch)', ad.flags.UP],
+    ['UV', 'user verified (PIN/biometric)', ad.flags.UV],
+    ['BE', 'backup eligible (passkey)', ad.flags.BE],
+    ['BS', 'backup state (synced now)', ad.flags.BS],
+    ['AT', 'attested credential present', ad.flags.AT],
+    ['ED', 'extension data present', ad.flags.ED],
+  ];
+  $('flagGrid').innerHTML = FLAGS.map(([k, desc, on]) =>
+    `<div class="flag ${on ? 'on' : ''}" title="${desc}"><span>${k}</span><span class="v">${on ? '1' : '0'}</span></div>`
+  ).join('');
+
+  // Attested credential
+  if (mode === 'reg' && ad.attestedCred) {
+    const ac = ad.attestedCred;
+    const uuid = aaguidToUuid(ac.aaguid);
+    const known = AAGUID_LOOKUP[uuid];
+    const credRows = [
+      ['AAGUID', `<code>${uuid}</code>${known ? `<br><span class="pill ok" style="margin-top:4px;">${escapeHtml(known)}</span>` : ''}`],
+      ['credentialId length', `<code>${ac.credId.length}</code> bytes`],
+      ['credentialId (base64url)', `<code>${bytesToB64u(ac.credId)}</code>`],
+      ['credentialId (hex)', `<code>${fmtBytes(ac.credId, 128)}</code>`],
+    ];
+    $('credTable').innerHTML = credRows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+
+    if (result.cose) {
+      const c = result.cose;
+      const coseRows = [
+        ['kty', `<code>${c.kty}</code> — ${c.ktyName}`],
+        ['alg', `<code>${c.alg}</code> — ${c.algName}`],
+      ];
+      if (c.crv !== undefined) coseRows.push(['crv', `<code>${c.crv}</code> — ${c.crvName}`]);
+      if (c.x instanceof Uint8Array) coseRows.push(['x', `<code>${bytesToHex(c.x)}</code> (${c.x.length} bytes)`]);
+      if (c.y instanceof Uint8Array) coseRows.push(['y', `<code>${bytesToHex(c.y)}</code> (${c.y.length} bytes)`]);
+      if (c.n instanceof Uint8Array) coseRows.push(['n (modulus)', `<code>${fmtBytes(c.n, 96)}</code> (${c.n.length} bytes)`]);
+      if (c.e instanceof Uint8Array) coseRows.push(['e (exponent)', `<code>${bytesToHex(c.e)}</code>`]);
+      $('coseTable').innerHTML = coseRows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+    }
+  }
+
+  // attStmt
+  if (mode === 'reg') {
+    $('fmtName').textContent = result.fmt || '—';
+    const stmtJson = result.attStmt instanceof Map ? cborToJson(result.attStmt) : (result.attStmt ?? null);
+    // Special-case x5c — show as "<cert N bytes>"
+    if (stmtJson && stmtJson.x5c && Array.isArray(stmtJson.x5c)) {
+      stmtJson.x5c = stmtJson.x5c.map(c => c && c.__bytes ? `<X.509 DER cert, ${c.__len} bytes>` : c);
+    }
+    $('stmtOut').textContent = JSON.stringify(stmtJson, null, 2);
+  }
+
+  // signature
+  if (mode === 'auth' && result.signature) {
+    const sigRows = [
+      ['length', `<code>${result.signature.length}</code> bytes`],
+      ['hex', `<code>${bytesToHex(result.signature)}</code>`],
+      ['base64url', `<code>${bytesToB64u(result.signature)}</code>`],
+      ['signed bytes', `<code>authData ‖ SHA-256(clientDataJSON)</code> — verify with the credential's public key stored at registration time`],
+    ];
+    $('sigTable').innerHTML = sigRows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+  }
+
+  // Checklist
+  const checks = [];
+  checks.push(`<li>Decode <code>clientDataJSON</code> as UTF-8 and JSON.parse it.</li>`);
+  checks.push(`<li>Verify <code>clientData.type</code> === <code>"${mode === 'reg' ? 'webauthn.create' : 'webauthn.get'}"</code>.</li>`);
+  checks.push(`<li>Verify <code>clientData.challenge</code> matches the base64url challenge you issued (one-time use!).</li>`);
+  checks.push(`<li>Verify <code>clientData.origin</code> matches your application's expected origin.</li>`);
+  checks.push(`<li>Compute SHA-256 of the configured RP ID and check it equals <code>authData.rpIdHash</code>.</li>`);
+  checks.push(`<li>Require <code>UP=1</code>${mode === 'reg' ? ' (and <code>UV=1</code> if you require user verification)' : ''}.</li>`);
+  if (mode === 'reg') {
+    checks.push(`<li>Persist the credential ID, the COSE public key, the AAGUID, the BE/BS flags, and the initial signCount.</li>`);
+    checks.push(`<li>For non-<code>none</code> attestation, verify the attestation signature against the trusted root for that format (e.g. FIDO MDS for packed/tpm).</li>`);
+  } else {
+    checks.push(`<li>Verify the signature over <code>authData ‖ SHA-256(clientDataJSON)</code> with the stored public key.</li>`);
+    checks.push(`<li>If the stored signCount > 0 and the new signCount &le; stored, flag a cloned authenticator.</li>`);
+  }
+  $('checklist').innerHTML = checks.join('');
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ───────── Wiring ─────────
+const OUTPUT_TEMPLATE = $('output').innerHTML;
+function resetOutput() { $('output').innerHTML = OUTPUT_TEMPLATE; }
+function showError(msg) {
+  resetOutput();
+  $('output').style.display = 'block';
+  $('output').innerHTML = `<div class="error-banner">${escapeHtml(msg)}</div>` + OUTPUT_TEMPLATE;
+  // Hide the cards below so only the error is visible
+  ['summaryTable', 'cdjOut'].forEach(() => {});
+  // Actually, simpler: replace entirely with just the error banner
+  $('output').innerHTML = `<div class="card" style="padding:16px;margin-top:16px;"><div class="error-banner">${escapeHtml(msg)}</div></div>`;
+  $('output').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function doDecode() {
+  resetOutput();
+  const raw = $('jsonIn').value.trim();
+  let cdj = $('cdj').value.trim();
+  let other = $('cdj2').value.trim();
+  let sig = '';
+
+  if (raw) {
+    let obj;
+    try { obj = JSON.parse(raw); } catch (e) { return showError('Could not parse JSON: ' + e.message); }
+    // Accept either the full credential or just .response
+    const resp = obj.response || obj;
+    if (!cdj) cdj = resp.clientDataJSON || '';
+    if (mode === 'reg') {
+      if (!other) other = resp.attestationObject || '';
+    } else {
+      if (!other) other = resp.authenticatorData || '';
+      sig = resp.signature || '';
+    }
+  }
+
+  if (!cdj) return showError('clientDataJSON is required.');
+  if (!other) return showError(mode === 'reg' ? 'attestationObject is required.' : 'authenticatorData is required.');
+
+  try {
+    const result = mode === 'reg'
+      ? decodeRegistration(cdj, other)
+      : decodeAuthentication(cdj, other, sig);
+    render(result);
+    $('output').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    showError('Decode failed: ' + (e.message || e));
+  }
+}
+
+// ───────── Minimal CBOR encoder (for sample generation) ─────────
+function cborEncodeUint(n) {
+  if (n < 24) return new Uint8Array([n]);
+  if (n < 256) return new Uint8Array([24, n]);
+  if (n < 65536) { const b = new Uint8Array(3); b[0] = 25; new DataView(b.buffer).setUint16(1, n, false); return b; }
+  if (n < 4294967296) { const b = new Uint8Array(5); b[0] = 26; new DataView(b.buffer).setUint32(1, n, false); return b; }
+  throw new Error('uint too large');
+}
+function cborEncodeHead(mt, n) {
+  const u = cborEncodeUint(n);
+  u[0] = (mt << 5) | (u[0] & 0x1f);
+  return u;
+}
+function concatBytes(...arrs) {
+  let len = 0;
+  for (const a of arrs) len += a.length;
+  const out = new Uint8Array(len);
+  let p = 0;
+  for (const a of arrs) { out.set(a, p); p += a.length; }
+  return out;
+}
+function cborEncode(v) {
+  if (v === null) return new Uint8Array([0xf6]);
+  if (v === false) return new Uint8Array([0xf4]);
+  if (v === true) return new Uint8Array([0xf5]);
+  if (typeof v === 'number') {
+    if (Number.isInteger(v)) {
+      if (v >= 0) return cborEncodeHead(0, v);
+      return cborEncodeHead(1, -1 - v);
+    }
+    throw new Error('floats not supported');
+  }
+  if (typeof v === 'string') {
+    const u = new TextEncoder().encode(v);
+    return concatBytes(cborEncodeHead(3, u.length), u);
+  }
+  if (v instanceof Uint8Array) {
+    return concatBytes(cborEncodeHead(2, v.length), v);
+  }
+  if (Array.isArray(v)) {
+    return concatBytes(cborEncodeHead(4, v.length), ...v.map(cborEncode));
+  }
+  if (v instanceof Map) {
+    const parts = [cborEncodeHead(5, v.size)];
+    for (const [k, val] of v.entries()) {
+      parts.push(cborEncode(k));
+      parts.push(cborEncode(val));
+    }
+    return concatBytes(...parts);
+  }
+  throw new Error('unsupported CBOR value');
+}
+
+// ───────── Live sample generation ─────────
+let SAMPLE_STATE = null; // { keyPair, credId }
+
+async function ensureKey() {
+  if (SAMPLE_STATE) return SAMPLE_STATE;
+  const keyPair = await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']
+  );
+  const credId = new Uint8Array(32);
+  crypto.getRandomValues(credId);
+  SAMPLE_STATE = { keyPair, credId };
+  return SAMPLE_STATE;
+}
+
+async function buildSampleReg() {
+  const { keyPair, credId } = await ensureKey();
+  const rpId = 'webauthn.io';
+  const origin = 'https://webauthn.io';
+  const challenge = new Uint8Array(16);
+  crypto.getRandomValues(challenge);
+  const cdj = JSON.stringify({
+    type: 'webauthn.create',
+    challenge: bytesToB64u(challenge),
+    origin,
+    crossOrigin: false,
+  });
+  const cdjBytes = new TextEncoder().encode(cdj);
+
+  const rpIdHash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rpId)));
+  const flags = 0x45; // UP | UV | AT
+  const signCount = new Uint8Array([0, 0, 0, 0]);
+  const aaguid = new Uint8Array(16); // all zeros (privacy-preserving passkey marker)
+  const credIdLen = new Uint8Array(2);
+  new DataView(credIdLen.buffer).setUint16(0, credId.length, false);
+
+  const jwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+  const x = b64uToBytes(jwk.x);
+  const y = b64uToBytes(jwk.y);
+  const coseMap = new Map();
+  coseMap.set(1, 2);    // kty: EC2
+  coseMap.set(3, -7);   // alg: ES256
+  coseMap.set(-1, 1);   // crv: P-256
+  coseMap.set(-2, x);
+  coseMap.set(-3, y);
+  const cose = cborEncode(coseMap);
+
+  const authData = concatBytes(rpIdHash, new Uint8Array([flags]), signCount, aaguid, credIdLen, credId, cose);
+
+  const attMap = new Map();
+  attMap.set('fmt', 'none');
+  attMap.set('attStmt', new Map());
+  attMap.set('authData', authData);
+  const attObj = cborEncode(attMap);
+
+  return {
+    id: bytesToB64u(credId),
+    rawId: bytesToB64u(credId),
+    type: 'public-key',
+    response: {
+      clientDataJSON: bytesToB64u(cdjBytes),
+      attestationObject: bytesToB64u(attObj),
+    },
+  };
+}
+
+async function buildSampleAuth() {
+  const { keyPair, credId } = await ensureKey();
+  const rpId = 'webauthn.io';
+  const origin = 'https://webauthn.io';
+  const challenge = new Uint8Array(16);
+  crypto.getRandomValues(challenge);
+  const cdj = JSON.stringify({
+    type: 'webauthn.get',
+    challenge: bytesToB64u(challenge),
+    origin,
+    crossOrigin: false,
+  });
+  const cdjBytes = new TextEncoder().encode(cdj);
+
+  const rpIdHash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rpId)));
+  const flags = 0x05; // UP | UV (no AT for assertions)
+  const signCount = new Uint8Array([0, 0, 0, 1]);
+  const authData = concatBytes(rpIdHash, new Uint8Array([flags]), signCount);
+
+  const cdjHash = new Uint8Array(await crypto.subtle.digest('SHA-256', cdjBytes));
+  const signed = concatBytes(authData, cdjHash);
+  // Web Crypto returns raw r||s for ECDSA; WebAuthn signatures are DER-encoded ECDSA. Convert.
+  const raw = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keyPair.privateKey, signed));
+  const sig = ecdsaRawToDer(raw);
+
+  return {
+    id: bytesToB64u(credId),
+    rawId: bytesToB64u(credId),
+    type: 'public-key',
+    response: {
+      clientDataJSON: bytesToB64u(cdjBytes),
+      authenticatorData: bytesToB64u(authData),
+      signature: bytesToB64u(sig),
+      userHandle: bytesToB64u(new TextEncoder().encode('user-01')),
+    },
+  };
+}
+
+function ecdsaRawToDer(raw) {
+  const half = raw.length / 2;
+  const r = raw.slice(0, half);
+  const s = raw.slice(half);
+  function trimInt(x) {
+    let i = 0;
+    while (i < x.length - 1 && x[i] === 0) i++;
+    let out = x.slice(i);
+    if (out[0] & 0x80) out = concatBytes(new Uint8Array([0]), out);
+    return out;
+  }
+  const rI = trimInt(r);
+  const sI = trimInt(s);
+  function intTLV(x) { return concatBytes(new Uint8Array([0x02, x.length]), x); }
+  const body = concatBytes(intTLV(rI), intTLV(sI));
+  return concatBytes(new Uint8Array([0x30, body.length]), body);
+}
+
+$('decode').addEventListener('click', doDecode);
+$('clear').addEventListener('click', () => {
+  $('jsonIn').value = ''; $('cdj').value = ''; $('cdj2').value = '';
+  $('output').style.display = 'none';
+});
+$('sample').addEventListener('click', async () => {
+  $('sample').disabled = true;
+  $('sample').textContent = 'Generating…';
+  try {
+    const obj = mode === 'reg' ? await buildSampleReg() : await buildSampleAuth();
+    $('jsonIn').value = JSON.stringify(obj, null, 2);
+    $('cdj').value = ''; $('cdj2').value = '';
+    doDecode();
+  } catch (e) {
+    showError('Sample generation failed: ' + (e.message || e));
+  } finally {
+    $('sample').disabled = false;
+    $('sample').textContent = 'Load sample';
+  }
+});
+
+document.querySelectorAll('#modeSeg button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#modeSeg button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    mode = b.dataset.v;
+    $('cdj2Label').textContent = mode === 'reg' ? 'attestationObject (base64url)' : 'authenticatorData (base64url)';
+  });
+});
+</script>
+</body>
+</html>
