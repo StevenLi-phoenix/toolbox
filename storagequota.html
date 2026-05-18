@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browser Storage Quota Inspector — Free Online Tool</title>
+<meta name="description" content="Inspect your browser's storage quota and usage per-origin: navigator.storage.estimate() totals plus a per-bucket breakdown of localStorage, sessionStorage, IndexedDB, Cache Storage, and cookies. Test persistence and clear.">
+<meta name="keywords" content="browser storage quota, navigator.storage.estimate, storage usage, localstorage size, indexeddb quota, cache storage size, persistent storage, storage manager, web storage inspector, opfs">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/storagequota.html">
+<meta property="og:title" content="Browser Storage Quota Inspector">
+<meta property="og:description" content="Estimate your browser's storage quota and break it down by API — localStorage, IndexedDB, Cache Storage, cookies — with a persist toggle.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/storagequota.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stat { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .stat .v { font-size: 1.2rem; font-family: var(--mono); color: var(--text); font-weight: 600; }
+  .stat .sub { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+  .bar { height: 12px; background: var(--surface2); border-radius: 999px; border: 1px solid var(--border); overflow: hidden; margin: 8px 0 18px; position: relative; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, #10b981, #2563eb); border-radius: 999px; transition: width .25s ease; }
+  .bar-pct { position: absolute; top: -3px; right: 0; font-size: .7rem; color: var(--muted); }
+  table.bucket { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  table.bucket th, table.bucket td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  table.bucket th { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; background: var(--surface2); font-family: var(--sans); }
+  table.bucket td.num { text-align: right; }
+  table.bucket td .mini-bar { display: inline-block; height: 6px; background: var(--surface2); border-radius: 3px; vertical-align: middle; margin-left: 8px; min-width: 60px; max-width: 120px; }
+  table.bucket td .mini-bar > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .actions button { font: inherit; font-family: var(--sans); font-size: .82rem; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); cursor: pointer; }
+  .actions button.danger { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+  .actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .pill { display: inline-block; padding: 2px 9px; font-size: .7rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .pill.ok { color: #15803d; border-color: #86efac; background: #ecfdf5; }
+  .pill.warn { color: #b45309; border-color: #fcd34d; background: #fef3c7; }
+  .pill.bad { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; }
+  .hint { font-size: .76rem; color: var(--muted); margin-top: 4px; }
+  .form-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .form-row label { font-size: .8rem; color: var(--muted); }
+  .form-row input[type="number"], .form-row select {
+    width: 110px; box-sizing: border-box; font-family: var(--mono); font-size: .85rem;
+    padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text);
+  }
+  details { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-top: 12px; }
+  details > summary { cursor: pointer; font-size: .85rem; }
+  .small { font-size: .78rem; color: var(--muted); }
+  code.b { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-size: .85em; }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Browser Storage Quota Inspector</h1>
+  <p class="subtitle">Most browsers grant a single origin a slice of disk — usually a few hundred MB on the low end, up to ~60% of free disk space on Chrome — shared across <code>localStorage</code>, <code>sessionStorage</code>, IndexedDB, Cache Storage, the File System Access API, and Service Worker registrations. This page calls <code>navigator.storage.estimate()</code> for the total and adds up each individual API for a per-bucket breakdown.</p>
+
+  <div class="card" style="padding:16px;">
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="k">Used</div>
+        <div class="v" id="usedV">—</div>
+        <div class="sub" id="usedSub">via storage.estimate()</div>
+      </div>
+      <div class="stat">
+        <div class="k">Quota</div>
+        <div class="v" id="quotaV">—</div>
+        <div class="sub" id="quotaSub">approx, may grow with disk</div>
+      </div>
+      <div class="stat">
+        <div class="k">Available</div>
+        <div class="v" id="availV">—</div>
+        <div class="sub">quota − used</div>
+      </div>
+      <div class="stat">
+        <div class="k">Persisted</div>
+        <div class="v" id="persistedV">—</div>
+        <div class="sub" id="persistedSub">protected from eviction</div>
+      </div>
+    </div>
+
+    <div class="bar"><div class="bar-fill" id="barFill" style="width:0"></div></div>
+    <div class="hint" id="barLabel" style="margin-top:-12px;text-align:right;">0% of quota</div>
+
+    <div class="actions">
+      <button class="primary" id="refresh">↻ Refresh</button>
+      <button id="persist">Request persistent storage</button>
+      <button class="danger" id="clearAll">Clear all (this origin)</button>
+    </div>
+    <p class="hint">Persistence only affects this origin. "Clear all" wipes <code>localStorage</code>, <code>sessionStorage</code>, cookies (this origin only), every IndexedDB database we can list, and every Cache Storage bucket. Use it to start fresh while testing.</p>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Breakdown by API</h2>
+    <table class="bucket" id="bucketTable">
+      <thead><tr><th>Bucket</th><th>Items</th><th>Approx size</th><th>Status</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="small" style="margin-top:10px;">Sizes for <code>localStorage</code>/<code>sessionStorage</code>/cookies are measured directly (UTF-16 byte count). IndexedDB and Cache Storage sizes are <i>estimated</i> by serializing each record/response — the engine's on-disk overhead, indexes, and compression are not captured.</p>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Stress test</h2>
+    <p class="small" style="margin-top:0;">Write a chunk of data to a bucket and watch the numbers move. The data is keyed under <code>__quota-tester__</code> so the Clear button can find it.</p>
+    <div class="form-row">
+      <label>Bucket
+        <select id="testBucket">
+          <option value="local">localStorage</option>
+          <option value="session">sessionStorage</option>
+          <option value="idb">IndexedDB</option>
+          <option value="cache">Cache Storage</option>
+        </select>
+      </label>
+      <label>Size (KB)
+        <input type="number" id="testSize" value="256" min="1" step="1">
+      </label>
+      <label>Records
+        <input type="number" id="testCount" value="1" min="1" step="1">
+      </label>
+      <button id="testWrite" class="primary" style="font-family:var(--sans);font-size:.85rem;padding:6px 14px;border:1px solid var(--accent);border-radius:var(--radius);background:var(--accent);color:#fff;cursor:pointer;">Write test data</button>
+      <button id="testClear" class="danger" style="font-family:var(--sans);font-size:.85rem;padding:6px 14px;border:1px solid #fca5a5;border-radius:var(--radius);background:#fee2e2;color:#b91c1c;cursor:pointer;">Remove test data</button>
+    </div>
+    <div id="testLog" class="hint" style="margin-top:10px;font-family:var(--mono);"></div>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">What each API stores</h2>
+    <ul style="font-size:.85rem;color:var(--muted);line-height:1.7;padding-left:18px;margin:0;">
+      <li><b>localStorage</b> — synchronous string K/V, ~5 MB hard cap per origin in every browser. Survives reloads, cleared when the user clears site data.</li>
+      <li><b>sessionStorage</b> — same shape as localStorage but scoped to the tab. Wiped on tab close.</li>
+      <li><b>IndexedDB</b> — async object store, structured cloneable values (Blobs, Files, ArrayBuffers OK). Counts against the global quota.</li>
+      <li><b>Cache Storage</b> — Request/Response pairs, the storage powering Service Worker offline assets. Also against the global quota.</li>
+      <li><b>OPFS</b> (Origin Private File System) — sandboxed filesystem via <code>navigator.storage.getDirectory()</code>. Counts against quota; sizes <i>not</i> walked here (would be slow on large trees).</li>
+      <li><b>Cookies</b> — capped at 4 KB each, ~150 cookies per origin in most browsers, doesn't count against <code>storage.estimate()</code>.</li>
+    </ul>
+    <details>
+      <summary>Quota rules of thumb</summary>
+      <div class="small" style="margin-top:8px;line-height:1.7;">
+        <b>Chrome:</b> up to 60% of free disk space, single origin can use up to 60% of <i>that</i>. Eviction is "best-effort" — least-recently-used origins get cleared first.<br>
+        <b>Firefox:</b> 10% of disk per group of eTLD+1, max 10 GB per origin.<br>
+        <b>Safari:</b> stricter — 1 GB per origin and a 7-day eviction window for non-persistent storage on sites the user hasn't interacted with recently.<br>
+        Call <code class="b">navigator.storage.persist()</code> to request persistent storage; if granted, the origin survives quota pressure.
+      </div>
+    </details>
+  </div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const TEST_KEY = '__quota-tester__';
+const TEST_DB = '__quota_tester_db__';
+const TEST_CACHE = '__quota-tester-cache__';
+
+function fmtBytes(n) {
+  if (n == null || isNaN(n)) return '—';
+  if (n < 1024) return n + ' B';
+  const u = ['KB','MB','GB','TB'];
+  let i = -1; let v = n;
+  do { v /= 1024; i++; } while (v >= 1024 && i < u.length - 1);
+  return v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2) + ' ' + u[i];
+}
+
+function stringBytes(s) {
+  // localStorage stores UTF-16, so 2 bytes per code unit is a fair approximation
+  return s ? s.length * 2 : 0;
+}
+
+function measureStorage(s) {
+  let bytes = 0, n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const k = s.key(i);
+    bytes += stringBytes(k) + stringBytes(s.getItem(k));
+    n++;
+  }
+  return { bytes, n };
+}
+
+function measureCookies() {
+  if (!document.cookie) return { bytes: 0, n: 0 };
+  const parts = document.cookie.split(/;\s*/).filter(Boolean);
+  let bytes = 0;
+  for (const p of parts) bytes += p.length;
+  return { bytes, n: parts.length };
+}
+
+async function measureIDB() {
+  if (!indexedDB.databases) return { bytes: null, n: null, note: 'enumeration unsupported' };
+  let dbs;
+  try { dbs = await indexedDB.databases(); } catch(e) { return { bytes: null, n: null, note: 'denied' }; }
+  let bytes = 0, n = 0;
+  for (const d of dbs) {
+    if (!d.name) continue;
+    try {
+      const db = await new Promise((res, rej) => {
+        const req = indexedDB.open(d.name);
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => rej(req.error);
+        req.onblocked = () => rej(new Error('blocked'));
+      });
+      for (const store of [...db.objectStoreNames]) {
+        const tx = db.transaction(store, 'readonly');
+        const os = tx.objectStore(store);
+        const rows = await new Promise((res, rej) => {
+          const r = os.getAll();
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => rej(r.error);
+        });
+        for (const row of rows) {
+          try { bytes += JSON.stringify(row).length * 2; } catch(e) {}
+          n++;
+        }
+      }
+      db.close();
+    } catch(e) {}
+  }
+  return { bytes, n, dbCount: dbs.length };
+}
+
+async function measureCacheStorage() {
+  if (!('caches' in self)) return { bytes: null, n: null, note: 'no Cache API' };
+  let keys;
+  try { keys = await caches.keys(); } catch(e) { return { bytes: null, n: null, note: 'denied' }; }
+  let bytes = 0, n = 0;
+  for (const k of keys) {
+    try {
+      const c = await caches.open(k);
+      const reqs = await c.keys();
+      for (const r of reqs) {
+        const resp = await c.match(r);
+        if (!resp) continue;
+        const clen = resp.headers.get('content-length');
+        if (clen) bytes += parseInt(clen, 10) || 0;
+        else {
+          try {
+            const blob = await resp.clone().blob();
+            bytes += blob.size;
+          } catch(e) {}
+        }
+        n++;
+      }
+    } catch(e) {}
+  }
+  return { bytes, n, cacheCount: keys.length };
+}
+
+async function inspect() {
+  let est = { quota: 0, usage: 0 };
+  if (navigator.storage && navigator.storage.estimate) {
+    try { est = await navigator.storage.estimate(); } catch(e) {}
+  }
+
+  $('usedV').textContent = fmtBytes(est.usage);
+  $('quotaV').textContent = fmtBytes(est.quota);
+  $('availV').textContent = fmtBytes(Math.max(0, (est.quota || 0) - (est.usage || 0)));
+
+  const pct = est.quota ? (est.usage / est.quota) * 100 : 0;
+  $('barFill').style.width = Math.min(100, pct) + '%';
+  $('barLabel').textContent = (pct < 0.01 && pct > 0 ? '<0.01' : pct.toFixed(2)) + '% of quota used';
+
+  let persisted = false;
+  if (navigator.storage && navigator.storage.persisted) {
+    try { persisted = await navigator.storage.persisted(); } catch(e) {}
+  }
+  $('persistedV').innerHTML = persisted
+    ? '<span class="pill ok">yes</span>'
+    : '<span class="pill warn">no</span>';
+
+  const usageDetails = est.usageDetails || {};
+
+  const local = measureStorage(localStorage);
+  const session = measureStorage(sessionStorage);
+  const cookies = measureCookies();
+  const [idb, cache] = await Promise.all([measureIDB(), measureCacheStorage()]);
+
+  const rows = [
+    { name: 'localStorage', n: local.n, size: local.bytes, note: '≤ 5 MB hard cap', status: local.bytes > 4_500_000 ? 'bad' : (local.bytes > 1_000_000 ? 'warn' : 'ok') },
+    { name: 'sessionStorage', n: session.n, size: session.bytes, note: 'tab-scoped', status: session.bytes > 4_500_000 ? 'bad' : 'ok' },
+    { name: 'IndexedDB', n: idb.n, size: idb.bytes, note: idb.dbCount != null ? `${idb.dbCount} database${idb.dbCount === 1 ? '' : 's'}` : (idb.note || ''), status: 'ok', estVal: usageDetails.indexedDB },
+    { name: 'Cache Storage', n: cache.n, size: cache.bytes, note: cache.cacheCount != null ? `${cache.cacheCount} cache${cache.cacheCount === 1 ? '' : 's'}` : (cache.note || ''), status: 'ok', estVal: usageDetails.caches },
+    { name: 'Cookies', n: cookies.n, size: cookies.bytes, note: 'not counted in quota', status: cookies.bytes > 100_000 ? 'warn' : 'ok' },
+    { name: 'Service Worker registrations', n: null, size: usageDetails.serviceWorkerRegistrations ?? null, note: 'from usageDetails (Chrome only)', status: 'ok' }
+  ];
+
+  const max = Math.max(1, ...rows.map(r => r.size || 0));
+  const tbody = $('bucketTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const sizeShown = (r.size != null) ? r.size : (r.estVal != null ? r.estVal : null);
+    const sizeStr = sizeShown != null ? fmtBytes(sizeShown) : (r.note?.includes('unsupported') || r.note?.includes('denied') ? '—' : (r.estVal != null ? fmtBytes(r.estVal) + ' (engine)' : '—'));
+    const bar = sizeShown != null ? `<span class="mini-bar"><i style="width:${(sizeShown / max) * 100}%"></i></span>` : '';
+    tr.innerHTML = `
+      <td><b>${r.name}</b><div class="small" style="font-family:var(--sans);color:var(--muted);">${r.note || ''}</div></td>
+      <td class="num">${r.n == null ? '—' : r.n}</td>
+      <td class="num">${sizeStr}${bar}</td>
+      <td><span class="pill ${r.status}">${r.status}</span></td>`;
+    tbody.appendChild(tr);
+  }
+
+  if (Object.keys(usageDetails).length) {
+    $('usedSub').textContent = 'usageDetails: ' + Object.keys(usageDetails).join(', ');
+  }
+}
+
+$('refresh').addEventListener('click', inspect);
+
+$('persist').addEventListener('click', async () => {
+  if (!navigator.storage || !navigator.storage.persist) {
+    alert('navigator.storage.persist() not available in this browser.');
+    return;
+  }
+  const ok = await navigator.storage.persist();
+  alert(ok ? 'Persistent storage granted.' : 'Persistent storage denied — browser may need user interaction or PWA install.');
+  inspect();
+});
+
+$('clearAll').addEventListener('click', async () => {
+  if (!confirm('Clear localStorage, sessionStorage, all cookies on this path, every IndexedDB DB we can enumerate, and every Cache Storage bucket?')) return;
+  try { localStorage.clear(); } catch(e) {}
+  try { sessionStorage.clear(); } catch(e) {}
+  document.cookie.split(/;\s*/).forEach(p => {
+    const [k] = p.split('=');
+    if (k) document.cookie = k + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+  });
+  if (indexedDB.databases) {
+    try {
+      const dbs = await indexedDB.databases();
+      await Promise.all(dbs.filter(d => d.name).map(d => new Promise(res => {
+        const req = indexedDB.deleteDatabase(d.name);
+        req.onsuccess = req.onerror = req.onblocked = () => res();
+      })));
+    } catch(e) {}
+  }
+  if ('caches' in self) {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    } catch(e) {}
+  }
+  inspect();
+});
+
+function log(msg, isError) {
+  const el = $('testLog');
+  const line = document.createElement('div');
+  line.textContent = msg;
+  if (isError) line.style.color = '#b91c1c';
+  el.appendChild(line);
+  while (el.children.length > 8) el.removeChild(el.firstChild);
+}
+
+function randomString(bytes) {
+  // 1 char ≈ 2 bytes in UTF-16, so length = bytes / 2
+  const len = Math.max(1, Math.floor(bytes / 2));
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const arr = new Uint32Array(len);
+  crypto.getRandomValues(arr);
+  let out = '';
+  for (let i = 0; i < len; i++) out += alphabet[arr[i] % alphabet.length];
+  return out;
+}
+
+$('testWrite').addEventListener('click', async () => {
+  const bucket = $('testBucket').value;
+  const sizeKB = Math.max(1, parseInt($('testSize').value, 10) || 1);
+  const count = Math.max(1, parseInt($('testCount').value, 10) || 1);
+  const bytes = sizeKB * 1024;
+  const t0 = performance.now();
+  try {
+    if (bucket === 'local' || bucket === 'session') {
+      const s = bucket === 'local' ? localStorage : sessionStorage;
+      for (let i = 0; i < count; i++) {
+        s.setItem(TEST_KEY + i, randomString(bytes));
+      }
+    } else if (bucket === 'idb') {
+      await new Promise((res, rej) => {
+        const open = indexedDB.open(TEST_DB, 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('blobs', { autoIncrement: true });
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction('blobs', 'readwrite');
+          for (let i = 0; i < count; i++) {
+            tx.objectStore('blobs').add({ tag: TEST_KEY, blob: randomString(bytes) });
+          }
+          tx.oncomplete = () => { db.close(); res(); };
+          tx.onerror = () => rej(tx.error);
+        };
+        open.onerror = () => rej(open.error);
+      });
+    } else if (bucket === 'cache') {
+      const c = await caches.open(TEST_CACHE);
+      for (let i = 0; i < count; i++) {
+        const url = `https://example.invalid/${TEST_KEY}/${i}`;
+        await c.put(new Request(url), new Response(randomString(bytes), { headers: { 'Content-Type': 'text/plain' } }));
+      }
+    }
+    log(`Wrote ${count} × ${sizeKB} KB to ${bucket} in ${(performance.now() - t0).toFixed(0)} ms`);
+  } catch(e) {
+    log(`Failed: ${e?.name || ''} ${e?.message || e}`, true);
+  }
+  inspect();
+});
+
+$('testClear').addEventListener('click', async () => {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(TEST_KEY)) localStorage.removeItem(k);
+    }
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith(TEST_KEY)) sessionStorage.removeItem(k);
+    }
+    if (indexedDB.databases) {
+      await new Promise(res => { const r = indexedDB.deleteDatabase(TEST_DB); r.onsuccess = r.onerror = r.onblocked = () => res(); });
+    }
+    if ('caches' in self) await caches.delete(TEST_CACHE);
+    log('Removed test data');
+  } catch(e) {
+    log(`Failed: ${e?.message || e}`, true);
+  }
+  inspect();
+});
+
+inspect();
+</script>
+</body>
+</html>

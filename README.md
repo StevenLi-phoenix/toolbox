@@ -41,6 +41,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS View Transitions Generator](cssviewtransition.html) | Design same-document `view-transition-name` morphs with custom `::view-transition-old/new` keyframes — morph, slide, flip, zoom presets, reduced-motion fallback, and a live `startViewTransition()` sandbox. |
 | [CSS field-sizing Generator](fieldsizing.html) | Build CSS rules that auto-size `textarea`, `input`, and `select` to their content with `field-sizing: content`. Live preview, `ch`/`lh` guardrails, and an `@supports` fallback. |
 | [CSS light-dark() Playground](lightdark.html) | Build dual-theme CSS variables with the `light-dark()` function — one declaration, both themes, no `@media (prefers-color-scheme)`. Live light/dark/auto preview and copy-ready CSS. |
 | [CSS @scope Builder](cssscope.html) | Generate `@scope` blocks with a scoping root and optional donut limit for component-scoped styles. Presets, live iframe preview, and copy-ready CSS. |
@@ -164,6 +165,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Trusted Types Policy Generator](trustedtypes.html) | Generate `require-trusted-types-for 'script'` and `trusted-types` CSP directives plus the `createHTML` / `createScript` / `createScriptURL` policy code — with default fallback, Report-Only rollout, and a violation listener. |
 | [OAuth 2.0 Device Flow Builder](deviceflow.html) | Walk through the RFC 8628 Device Authorization grant — build the initial POST, render the `user_code` with a QR for `verification_uri_complete`, plan the polling loop with `slow_down`/`expired_token` handling, and copy curl/fetch snippets. |
 | [URLPattern Tester](urlpattern.html) | Test the `URLPattern` web API against URLs — named groups (`:id`), wildcards, modifiers (`?`/`+`/`*`), and inline regex. Shows captured groups and copy-ready JavaScript. |
 | [Multipart Body Inspector](multipart.html) | Parse a raw `multipart/form-data`, `multipart/related`, or `multipart/mixed` HTTP body — auto-detect boundary, list per-part headers, filename, content-type, and download binary parts. |
@@ -207,6 +209,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Browser Storage Quota Inspector](storagequota.html) | Inspect `navigator.storage.estimate()` plus a per-API breakdown of `localStorage`, `sessionStorage`, IndexedDB, Cache Storage, and cookies. Includes a stress-test writer and a persistent-storage toggle. |
 | [Source Map Decoder](sourcemap.html) | Decode JavaScript source maps — parse VLQ `mappings`, browse embedded sources, and look up the original location for a generated `line:column` from a stack trace. |
 | [Browser Fingerprint Inspector](fingerprint.html) | Probe the signals your browser exposes — UA, screen, canvas hash, WebGL renderer, audio stack, font list, timezone, client hints — and compute a stable SHA-256 fingerprint. Useful for privacy audits and bot-detection research. |
 | [AbortSignal Playground](abortsignal.html) | Experiment with `AbortController`, `AbortSignal.timeout()`, and `AbortSignal.any()` — timeout, manual cancel, or race multiple signals against a live `fetch()` or sleep helper. |

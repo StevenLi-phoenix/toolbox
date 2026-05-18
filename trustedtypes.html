@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trusted Types Policy Generator — Free Online Tool</title>
+<meta name="description" content="Generate a Content-Security-Policy that enforces Trusted Types and the matching createHTML / createScript / createScriptURL policy code. Pick sinks, allowed policies, fallback policy, and report-only rollout.">
+<meta name="keywords" content="trusted types, require-trusted-types-for, trusted-types csp, createHTML, createScript, createScriptURL, DOM XSS, default policy, trusted types fallback, CSP3">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/trustedtypes.html">
+<meta property="og:title" content="Trusted Types Policy Generator">
+<meta property="og:description" content="Build a CSP that enforces Trusted Types plus the policy code to wrap HTML / script / script-URL sinks. Includes report-only rollout.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/trustedtypes.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .row { margin-bottom: 12px; }
+  .row > label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .row input[type="text"], .row select, .row input[type="number"], .row textarea {
+    width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: .85rem;
+    padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text);
+  }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .seg button { background: var(--surface2); color: var(--muted); border: 0; padding: 5px 12px; font-size: .8rem; cursor: pointer; font-family: var(--sans); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  pre.code {
+    margin: 0; padding: 14px 16px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .82rem;
+    overflow-x: auto; white-space: pre; line-height: 1.55;
+  }
+  .out-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 10px; flex-wrap: wrap; }
+  .tag { display: inline-block; padding: 3px 9px; font-size: .72rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: var(--surface2); cursor: pointer; }
+  .tag:hover { color: var(--text); }
+  .hint { font-size: .76rem; color: var(--muted); margin-top: 4px; }
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: .85rem; }
+  @media (max-width: 600px) { .checks { grid-template-columns: 1fr; } }
+  .checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); text-transform: none; letter-spacing: 0; margin: 0; }
+  .browser { font-size: .8rem; color: var(--muted); }
+  .browser b { color: var(--text); }
+  .pill-ok { color: #15803d; }
+  .pill-bad { color: #b91c1c; }
+  .pill { display: inline-block; padding: 2px 9px; font-size: .7rem; border-radius: 999px; border: 1px solid var(--border); }
+  .pill.ok { color: #15803d; border-color: #86efac; background: #ecfdf5; }
+  .pill.bad { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; }
+  table.sinks { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 8px; }
+  table.sinks th, table.sinks td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  table.sinks th { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; background: var(--surface2); }
+  table.sinks code { font-family: var(--mono); font-size: .85em; background: var(--surface2); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="index.html" class="back">&larr; All Tools</a>
+  <h1>Trusted Types Policy Generator</h1>
+  <p class="subtitle">Trusted Types kills DOM XSS by making it a CSP violation to assign a plain string to a dangerous sink like <code>.innerHTML</code>, <code>document.write</code>, <code>eval</code>, or <code>&lt;script src&gt;</code>. Strings must come from a named <i>policy</i> you create with <code>trustedTypes.createPolicy(name, rules)</code>. Configure the header and the policy code below.</p>
+
+  <div class="card" style="padding:16px;">
+    <div class="layout">
+      <div>
+        <div class="row">
+          <label>Enforcement mode</label>
+          <div class="seg" id="modeSeg">
+            <button data-v="report">Report-Only (rollout)</button>
+            <button class="on" data-v="enforce">Enforce</button>
+          </div>
+          <div class="hint">Start with <code>Content-Security-Policy-Report-Only</code> while you find every violating sink, then flip to enforcing.</div>
+        </div>
+
+        <div class="row">
+          <label>Sinks to lock down</label>
+          <div class="checks">
+            <label><input type="checkbox" id="sinkScript" checked> <code>'script'</code> (innerHTML, etc.)</label>
+          </div>
+          <div class="hint">Currently only <code>'script'</code> is defined in the spec. The directive shape allows future values like <code>'plugin'</code>.</div>
+        </div>
+
+        <div class="row">
+          <label>Allowed policy names</label>
+          <input type="text" id="policies" value="app-html jquery" placeholder="space-separated names">
+          <div class="hint">Space-separated list of names that <code>trustedTypes.createPolicy(name, …)</code> may register. Use <code>'none'</code> to forbid all policies, or <code>'allow-duplicates'</code> to allow the same policy name to be created more than once.</div>
+        </div>
+
+        <div class="row">
+          <label>Wildcards & specials</label>
+          <div class="checks">
+            <label><input type="checkbox" id="wild"> <code>*</code> (any policy name)</label>
+            <label><input type="checkbox" id="allowDup" checked> <code>'allow-duplicates'</code></label>
+            <label><input type="checkbox" id="defaultPol"> Include <code>'default'</code> in list</label>
+            <label><input type="checkbox" id="none"> <code>'none'</code> (forbid all)</label>
+          </div>
+          <div class="hint"><code>'default'</code> is a special policy name — see "Default fallback" below.</div>
+        </div>
+
+        <div class="row">
+          <label>Report-To group</label>
+          <input type="text" id="reportTo" value="" placeholder="e.g. csp-endpoint">
+          <div class="hint">Optional. Adds <code>report-to</code> to the CSP and emits a paired <code>Report-To</code> header so violations are uploaded to your endpoint.</div>
+        </div>
+
+        <div class="row">
+          <label>Extras</label>
+          <div class="checks">
+            <label><input type="checkbox" id="metaTag"> Also emit <code>&lt;meta&gt;</code> form</label>
+            <label><input type="checkbox" id="includeDefault" checked> Generate default fallback policy</label>
+            <label><input type="checkbox" id="includeReporter" checked> Include violation reporter snippet</label>
+            <label><input type="checkbox" id="useDompurify"> Use DOMPurify in <code>createHTML</code></label>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="out-head">
+          <strong style="font-size:.9rem;">CSP header</strong>
+          <span><button class="tag" type="button" id="copyCsp">Copy header</button></span>
+        </div>
+        <pre class="code" id="cspOut"></pre>
+
+        <div class="out-head" style="margin-top:14px;">
+          <strong style="font-size:.9rem;">Policy code (drop into your bundle, run before any user code)</strong>
+          <span><button class="tag" type="button" id="copyJs">Copy JS</button></span>
+        </div>
+        <pre class="code" id="jsOut"></pre>
+      </div>
+    </div>
+
+    <p class="browser" style="margin-top:10px;">
+      <b>Support:</b> Shipped in Chrome 83 / Edge 83 (May 2020). Firefox 134 ships behind <code>dom.security.trusted_types.enabled</code>. Safari does not yet implement Trusted Types — feature-detect with <code>'trustedTypes' in window</code> and supply a <code>tt</code> polyfill (<code>@github/template-tags</code>, <code>trusted-types/types</code>) for the gap. <span id="supportPill" class="pill" style="float:right;">checking…</span>
+    </p>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Sinks Trusted Types protects</h2>
+    <table class="sinks">
+      <thead><tr><th>Type</th><th>Sinks (assigning a plain string throws)</th><th>Required wrapper</th></tr></thead>
+      <tbody>
+        <tr><td><b>TrustedHTML</b></td><td><code>el.innerHTML</code>, <code>el.outerHTML</code>, <code>document.write</code>, <code>document.writeln</code>, <code>iframe.srcdoc</code>, <code>DOMParser.parseFromString</code>, <code>Range.createContextualFragment</code>, <code>el.insertAdjacentHTML</code></td><td><code>trustedTypes.createPolicy(name, { createHTML })</code></td></tr>
+        <tr><td><b>TrustedScript</b></td><td><code>el.text</code> on <code>&lt;script&gt;</code>, <code>el.innerText</code>/<code>textContent</code> on <code>&lt;script&gt;</code>, inline event handlers, <code>eval()</code>, <code>Function()</code>, <code>setTimeout(string, …)</code>, <code>setInterval(string, …)</code></td><td><code>createScript</code></td></tr>
+        <tr><td><b>TrustedScriptURL</b></td><td><code>el.src</code> on <code>&lt;script&gt;</code>, <code>importScripts()</code>, <code>SharedWorker</code>, <code>Worker</code>, <code>ServiceWorker.register()</code></td><td><code>createScriptURL</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="padding:16px; margin-top:16px;">
+    <h2 style="font-size:.95rem;margin-bottom:8px;">Rollout playbook</h2>
+    <ol style="font-size:.85rem;color:var(--muted);line-height:1.7;padding-left:20px;margin:0;">
+      <li><b>Inventory.</b> Search your codebase for <code>innerHTML</code>, <code>document.write</code>, <code>eval</code>, dynamic <code>script.src</code> assignments. Note every library that touches them (jQuery's <code>$.html()</code>, Lit's <code>unsafeHTML</code>, etc.).</li>
+      <li><b>Ship Report-Only.</b> Deploy the CSP-Report-Only header with a <code>report-to</code> endpoint and collect violations from real users for a week. Don't ship the default policy yet — let everything fail loudly so you see it.</li>
+      <li><b>Wrap sinks library-by-library.</b> Create one policy per library (<code>app-html</code>, <code>jquery</code>, <code>lit</code>, …). Sanitize inside <code>createHTML</code> with DOMPurify or equivalent.</li>
+      <li><b>Add a default policy as a guard.</b> Once you're close to clean, ship the <code>default</code> policy that logs + sanitizes anything still slipping through. It buys safety while you finish migrating.</li>
+      <li><b>Flip to enforcing.</b> Remove <code>-Report-Only</code>. The default policy stays as a belt-and-braces layer.</li>
+      <li><b>Watch for new sinks.</b> Trusted Types only protects sinks that are <i>defined</i> — new spec additions land enforced. Re-run the inventory periodically.</li>
+    </ol>
+  </div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = 'enforce';
+
+function buildDirective() {
+  const sinkScript = $('sinkScript').checked;
+  const sinks = [];
+  if (sinkScript) sinks.push("'script'");
+  const reqTtFor = sinks.length ? `require-trusted-types-for ${sinks.join(' ')}` : '';
+
+  const useNone = $('none').checked;
+  let policyList;
+  if (useNone) {
+    policyList = `trusted-types 'none'`;
+  } else {
+    const names = $('policies').value.trim().split(/\s+/).filter(Boolean);
+    const parts = [...names];
+    if ($('defaultPol').checked && !parts.includes('default')) parts.push('default');
+    if ($('wild').checked) parts.push('*');
+    if ($('allowDup').checked) parts.push(`'allow-duplicates'`);
+    policyList = `trusted-types${parts.length ? ' ' + parts.join(' ') : ''}`;
+  }
+
+  const reportTo = $('reportTo').value.trim();
+  const reportPart = reportTo ? `report-to ${reportTo}` : '';
+
+  return [reqTtFor, policyList, reportPart].filter(Boolean).join('; ');
+}
+
+function buildCspOutput() {
+  const directive = buildDirective();
+  const header = mode === 'enforce' ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only';
+  const reportTo = $('reportTo').value.trim();
+  const lines = [];
+
+  lines.push(`# HTTP response header`);
+  lines.push(`${header}: ${directive}`);
+
+  if (reportTo) {
+    lines.push('');
+    lines.push(`Report-To: {"group":"${reportTo}","max_age":10886400,"endpoints":[{"url":"https://example.com/csp-report"}]}`);
+  }
+
+  if ($('metaTag').checked) {
+    lines.push('');
+    lines.push(`<!-- HTML meta tag form (no Report-Only, no Report-To, no reporting) -->`);
+    lines.push(`<meta http-equiv="Content-Security-Policy" content="${directive}">`);
+  }
+
+  return lines.join('\n');
+}
+
+function buildJsOutput() {
+  const names = $('policies').value.trim().split(/\s+/).filter(Boolean);
+  const useDompurify = $('useDompurify').checked;
+  const includeDefault = $('includeDefault').checked;
+  const includeReporter = $('includeReporter').checked;
+
+  const out = [];
+
+  out.push(`// Run this BEFORE any code that touches innerHTML/eval/script src.`);
+  out.push(`// Top of your bundle entry, or in a <script> tag right after the CSP header.`);
+  out.push('');
+  out.push(`if (window.trustedTypes && trustedTypes.createPolicy) {`);
+
+  if (useDompurify) {
+    out.push(`  // Assumes DOMPurify is loaded globally (window.DOMPurify).`);
+  }
+
+  for (const name of (names.length ? names : ['app-html'])) {
+    out.push(`  const ${jsName(name)}Policy = trustedTypes.createPolicy(${JSON.stringify(name)}, {`);
+    out.push(`    createHTML: (input) => ${useDompurify ? `DOMPurify.sanitize(input, { RETURN_TRUSTED_TYPE: true })` : `input /* TODO: sanitize before returning */`},`);
+    out.push(`    createScript: (input) => { throw new Error('${name}: createScript not allowed'); },`);
+    out.push(`    createScriptURL: (input) => {`);
+    out.push(`      const u = new URL(input, location.origin);`);
+    out.push(`      const ALLOWED = ['https://cdn.example.com', location.origin];`);
+    out.push(`      if (!ALLOWED.some(a => u.href.startsWith(a))) throw new Error('${name}: blocked URL ' + u.href);`);
+    out.push(`      return u.href;`);
+    out.push(`    }`);
+    out.push(`  });`);
+    out.push('');
+    out.push(`  // Usage:`);
+    out.push(`  //   el.innerHTML = ${jsName(name)}Policy.createHTML('<b>Hi</b>');`);
+    out.push('');
+  }
+
+  if (includeDefault) {
+    out.push(`  // Default fallback — runs when any sink is assigned a plain string`);
+    out.push(`  // and no explicit policy wrapper was used. Sanitize + log.`);
+    out.push(`  trustedTypes.createPolicy('default', {`);
+    out.push(`    createHTML: (input, sink) => {`);
+    out.push(`      console.warn('Default policy createHTML — wrap this sink explicitly', { sink, input });`);
+    out.push(`      return ${useDompurify ? `DOMPurify.sanitize(input)` : `String(input).replace(/<\\\/?(script|iframe|object|embed)[^>]*>/gi, '')`};`);
+    out.push(`    },`);
+    out.push(`    createScript: (input, sink) => {`);
+    out.push(`      console.error('Default policy createScript blocked', { sink });`);
+    out.push(`      throw new Error('inline script blocked by default policy');`);
+    out.push(`    },`);
+    out.push(`    createScriptURL: (input, sink) => {`);
+    out.push(`      console.error('Default policy createScriptURL blocked', { sink, input });`);
+    out.push(`      throw new Error('dynamic script URL blocked by default policy');`);
+    out.push(`    }`);
+    out.push(`  });`);
+    out.push('');
+  }
+
+  out.push(`} else {`);
+  out.push(`  // Browser doesn't support Trusted Types (Safari). The CSP directive is`);
+  out.push(`  // ignored there — keep the rest of your XSS defenses (escaping, CSP script-src) intact.`);
+  out.push(`  console.info('Trusted Types unavailable — CSP will not enforce here');`);
+  out.push(`}`);
+
+  if (includeReporter) {
+    out.push('');
+    out.push(`// Listen for Trusted Types violations in the browser console`);
+    out.push(`// (also reported via report-to if configured in the CSP).`);
+    out.push(`document.addEventListener('securitypolicyviolation', (e) => {`);
+    out.push(`  if (e.violatedDirective.startsWith('require-trusted-types-for') ||`);
+    out.push(`      e.violatedDirective.startsWith('trusted-types')) {`);
+    out.push(`    console.error('Trusted Types violation:', {`);
+    out.push(`      sample: e.sample,`);
+    out.push(`      sourceFile: e.sourceFile,`);
+    out.push(`      lineNumber: e.lineNumber,`);
+    out.push(`      violatedDirective: e.violatedDirective`);
+    out.push(`    });`);
+    out.push(`  }`);
+    out.push(`});`);
+  }
+
+  return out.join('\n');
+}
+
+function jsName(s) {
+  return s.replace(/[^a-zA-Z0-9]+(.)/g, (_, c) => c.toUpperCase()).replace(/[^a-zA-Z0-9_$]/g, '');
+}
+
+function detect() {
+  const pill = $('supportPill');
+  if ('trustedTypes' in window && typeof window.trustedTypes.createPolicy === 'function') {
+    pill.textContent = 'your browser: supported';
+    pill.classList.add('ok');
+  } else {
+    pill.textContent = 'your browser: not supported';
+    pill.classList.add('bad');
+  }
+}
+
+function render() {
+  $('cspOut').textContent = buildCspOutput();
+  $('jsOut').textContent = buildJsOutput();
+}
+
+document.querySelectorAll('#modeSeg button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#modeSeg button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    mode = b.dataset.v;
+    render();
+  });
+});
+['policies', 'reportTo'].forEach(id => $(id).addEventListener('input', render));
+['sinkScript', 'wild', 'allowDup', 'defaultPol', 'none', 'metaTag', 'includeDefault', 'includeReporter', 'useDompurify'].forEach(id => $(id).addEventListener('change', render));
+
+function wireCopy(btnId, srcId) {
+  $(btnId).addEventListener('click', e => {
+    navigator.clipboard.writeText($(srcId).textContent).then(() => {
+      const old = e.target.textContent;
+      e.target.textContent = 'Copied!';
+      setTimeout(() => e.target.textContent = old, 1100);
+    });
+  });
+}
+wireCopy('copyCsp', 'cspOut');
+wireCopy('copyJs', 'jsOut');
+
+detect();
+render();
+</script>
+</body>
+</html>
