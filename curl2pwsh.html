@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cURL to PowerShell Converter — Invoke-WebRequest / Invoke-RestMethod</title>
+<meta name="description" content="Convert a cURL command to PowerShell — generates Invoke-WebRequest or Invoke-RestMethod with -Method, -Headers, -Body, basic auth, and a -SkipCertificateCheck fallback. 100% client-side.">
+<meta name="keywords" content="curl to powershell, curl to invoke-webrequest, curl to invoke-restmethod, powershell http, curl converter, pwsh, windows powershell, invoke-restmethod">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/curl2pwsh.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.panels textarea{width:100%;min-height:240px;font-family:var(--mono);font-size:.84rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);resize:vertical;box-sizing:border-box}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:10px}
+.opts label{display:flex;flex-direction:column;gap:4px;font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.opts select,.opts input{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.stats{display:flex;flex-wrap:wrap;gap:18px;margin-top:10px;font-size:.82rem;color:var(--muted)}
+.stats strong{color:var(--text);font-family:var(--mono)}
+.note{font-size:.82rem;color:var(--muted);line-height:1.55;margin-top:8px}
+.warnings{margin-top:10px;font-size:.82rem;color:var(--warning);font-family:var(--mono);white-space:pre-wrap;min-height:1.1em}
+.tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:.7rem;background:var(--surface2);color:var(--muted);margin-right:4px;font-family:var(--mono)}
+@media(max-width:768px){.panels{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>cURL to PowerShell</h1>
+<p class="subtitle">Paste a <code>curl</code> command and get an equivalent PowerShell <code>Invoke-WebRequest</code> or <code>Invoke-RestMethod</code> call. Handles method, headers, body (JSON or form), basic auth, cookies, and TLS-skip — and warns when a flag has no clean PowerShell equivalent.</p>
+
+<div class="card">
+  <div class="panels">
+    <div>
+      <label style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">cURL command</label>
+      <textarea id="src" spellcheck="false"></textarea>
+    </div>
+    <div>
+      <label style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">PowerShell</label>
+      <textarea id="out" spellcheck="false" readonly></textarea>
+    </div>
+  </div>
+  <div class="opts">
+    <label>Cmdlet
+      <select id="cmdlet">
+        <option value="iwr">Invoke-WebRequest (full response)</option>
+        <option value="irm">Invoke-RestMethod (parsed body)</option>
+      </select>
+    </label>
+    <label>PowerShell version
+      <select id="ver">
+        <option value="7">PowerShell 7+ (Core / pwsh)</option>
+        <option value="5">Windows PowerShell 5.1</option>
+      </select>
+    </label>
+    <label>Variable name
+      <input type="text" id="varname" value="$response" maxlength="40">
+    </label>
+    <label>Body style
+      <select id="bodyStyle">
+        <option value="auto">Auto (hashtable for JSON)</option>
+        <option value="here">Here-string only</option>
+        <option value="single">Single-quoted only</option>
+      </select>
+    </label>
+    <label>Quote style
+      <select id="quote">
+        <option value="single">Single quotes (literal)</option>
+        <option value="double">Double quotes (interpolate)</option>
+      </select>
+    </label>
+  </div>
+  <div class="btnrow">
+    <button class="btn" onclick="run()">Convert</button>
+    <button class="btn btn-secondary" onclick="copyOut()">Copy PowerShell</button>
+    <button class="btn btn-secondary" onclick="loadSample('post')">Sample: POST JSON</button>
+    <button class="btn btn-secondary" onclick="loadSample('form')">Sample: form POST</button>
+    <button class="btn btn-secondary" onclick="loadSample('auth')">Sample: basic auth</button>
+    <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+  </div>
+  <div class="stats">
+    <span>method <strong id="sMethod">—</strong></span>
+    <span>headers <strong id="sHdr">0</strong></span>
+    <span>body bytes <strong id="sBody">0</strong></span>
+    <span>flags <strong id="sFlags">0</strong></span>
+  </div>
+  <div class="warnings" id="warn"></div>
+</div>
+
+<div class="card">
+  <h2>Supported flags</h2>
+  <p class="note">
+    <span class="tag">-X / --request</span>
+    <span class="tag">-H / --header</span>
+    <span class="tag">-d / --data / --data-raw / --data-binary</span>
+    <span class="tag">--data-urlencode</span>
+    <span class="tag">-F / --form (best-effort)</span>
+    <span class="tag">-u / --user</span>
+    <span class="tag">-b / --cookie</span>
+    <span class="tag">-A / --user-agent</span>
+    <span class="tag">-e / --referer</span>
+    <span class="tag">-I / --head</span>
+    <span class="tag">-L / --location</span>
+    <span class="tag">-k / --insecure</span>
+    <span class="tag">--compressed</span>
+    <span class="tag">--max-time / --connect-timeout</span>
+    <span class="tag">-o / --output</span>
+  </p>
+  <p class="note">PowerShell 7+ accepts <code>-SkipCertificateCheck</code> on <code>Invoke-WebRequest</code> and <code>Invoke-RestMethod</code>; for Windows PowerShell 5.1 we fall back to a <code>ServerCertificateValidationCallback</code> override. Both cmdlets also accept <code>-Authentication Basic -Credential</code>, which is what we generate from <code>-u user:pass</code>.</p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let lastWarnings=[];
+
+function unquote(t){
+  if(!t) return '';
+  if((t.startsWith('"')&&t.endsWith('"'))||(t.startsWith("'")&&t.endsWith("'"))) return t.slice(1,-1);
+  return t;
+}
+
+function tokenize(input){
+  const cleaned=input.replace(/\\\r?\n/g,' ').replace(/\^\r?\n/g,' ');
+  const tokens=[];
+  let cur=''; let quote='';
+  for(let i=0;i<cleaned.length;i++){
+    const ch=cleaned[i];
+    if(quote){
+      if(ch===quote){cur+=ch;quote='';continue;}
+      if(ch==='\\' && quote==='"' && i+1<cleaned.length){cur+=ch+cleaned[++i];continue;}
+      cur+=ch; continue;
+    }
+    if(ch==='"' || ch==="'"){quote=ch; cur+=ch; continue;}
+    if(/\s/.test(ch)){
+      if(cur){tokens.push(cur); cur='';}
+      continue;
+    }
+    cur+=ch;
+  }
+  if(cur) tokens.push(cur);
+  return tokens;
+}
+
+function parseCurl(input){
+  const tokens=tokenize(input.trim());
+  const p={url:'',method:'',headers:{},body:null,bodyParts:[],formFields:[],basic:'',cookie:'',ua:'',referer:'',insecure:false,follow:false,head:false,compressed:false,timeout:0,outFile:'',extraFlags:[]};
+  if(!tokens.length) throw new Error('Paste a curl command first.');
+  let i=0;
+  if(tokens[0]==='curl' || tokens[0]==='curl.exe') i=1;
+  const next=()=>unquote(tokens[++i]||'');
+  for(;i<tokens.length;i++){
+    const t=tokens[i];
+    if(t==='-X'||t==='--request'){p.method=(next()||'GET').toUpperCase();continue;}
+    if(t==='-H'||t==='--header'){
+      const raw=next(); const idx=raw.indexOf(':');
+      if(idx!==-1){
+        const k=raw.slice(0,idx).trim();
+        const v=raw.slice(idx+1).trim();
+        if(k) p.headers[k]=v;
+      } else p.extraFlags.push('Ignored malformed -H: '+raw);
+      continue;
+    }
+    if(t==='-d'||t==='--data'||t==='--data-raw'||t==='--data-binary'){
+      const v=next();
+      p.bodyParts.push(v);
+      if(!p.method) p.method='POST';
+      continue;
+    }
+    if(t==='--data-urlencode'){
+      const v=next();
+      const eq=v.indexOf('=');
+      let enc=v;
+      if(eq!==-1){
+        const key=v.slice(0,eq);
+        const val=v.slice(eq+1);
+        enc=key+'='+encodeURIComponent(val);
+      } else enc=encodeURIComponent(v);
+      p.bodyParts.push(enc);
+      if(!p.method) p.method='POST';
+      continue;
+    }
+    if(t==='-F'||t==='--form'){
+      p.formFields.push(next());
+      if(!p.method) p.method='POST';
+      continue;
+    }
+    if(t==='-u'||t==='--user'){p.basic=next();continue;}
+    if(t==='-b'||t==='--cookie'){p.cookie=next();continue;}
+    if(t==='-A'||t==='--user-agent'){p.ua=next();continue;}
+    if(t==='-e'||t==='--referer'){p.referer=next();continue;}
+    if(t==='-I'||t==='--head'){p.head=true; if(!p.method) p.method='HEAD'; continue;}
+    if(t==='-L'||t==='--location'){p.follow=true;continue;}
+    if(t==='-k'||t==='--insecure'){p.insecure=true;continue;}
+    if(t==='--compressed'){p.compressed=true;continue;}
+    if(t==='--max-time'||t==='--connect-timeout'){p.timeout=parseInt(next(),10)||0;continue;}
+    if(t==='-o'||t==='--output'){p.outFile=next();continue;}
+    if(t==='--url'){p.url=next();continue;}
+    if(t==='-G'||t==='--get'){p.method='GET';continue;}
+    if(t==='-s'||t==='--silent'||t==='-i'||t==='--include'||t==='-v'||t==='--verbose'||t==='--globoff'){continue;}
+    if(t.startsWith('http://')||t.startsWith('https://')||/^["']https?:\/\//.test(t)){p.url=unquote(t);continue;}
+    if(t.startsWith('-')){p.extraFlags.push('Skipped flag: '+t); continue;}
+    if(!p.url) p.url=unquote(t);
+  }
+  if(p.bodyParts.length) p.body=p.bodyParts.join('&');
+  if(!p.method) p.method='GET';
+  return p;
+}
+
+function psEscape(s,quote){
+  s=String(s==null?'':s);
+  if(quote==='double') return '"'+s.replace(/`/g,'``').replace(/"/g,'`"').replace(/\$/g,'`$')+'"';
+  return "'"+s.replace(/'/g,"''")+"'";
+}
+
+function detectJson(body,headers){
+  const ct=headers['Content-Type']||headers['content-type']||'';
+  if(/json/i.test(ct)) return tryParseJson(body);
+  return tryParseJson(body);
+}
+
+function tryParseJson(s){
+  if(!s) return null;
+  try{return JSON.parse(s);}catch{return null;}
+}
+
+function toPSValue(v,indent,quote){
+  if(v===null) return '$null';
+  if(typeof v==='boolean') return v?'$true':'$false';
+  if(typeof v==='number') return String(v);
+  if(Array.isArray(v)){
+    if(!v.length) return '@()';
+    return '@(\n'+v.map(x=>indent+'  '+toPSValue(x,indent+'  ',quote)).join(',\n')+'\n'+indent+')';
+  }
+  if(typeof v==='object'){
+    const ks=Object.keys(v);
+    if(!ks.length) return '@{}';
+    return '@{\n'+ks.map(k=>indent+'  '+psKey(k)+' = '+toPSValue(v[k],indent+'  ',quote)).join('\n')+'\n'+indent+'}';
+  }
+  return psEscape(String(v),quote);
+}
+
+function psKey(k){
+  if(/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) return k;
+  return "'"+k.replace(/'/g,"''")+"'";
+}
+
+function build(p,opts){
+  lastWarnings=[...p.extraFlags];
+  const ver=opts.ver;
+  const cmd=opts.cmdlet==='irm'?'Invoke-RestMethod':'Invoke-WebRequest';
+  const q=opts.quote;
+  const Q=s=>psEscape(s,q);
+  const lines=[];
+
+  let setupLines=[];
+  let cmdArgs=[];
+
+  if(opts.cmdlet==='iwr' && p.head){
+    cmdArgs.push('-Method Head');
+  } else if(p.method && p.method!=='GET'){
+    cmdArgs.push('-Method '+p.method);
+  }
+
+  cmdArgs.push('-Uri '+Q(p.url||'https://example.com'));
+
+  const headerKeys=Object.keys(p.headers).filter(k=>{
+    const lk=k.toLowerCase();
+    return lk!=='content-type' && lk!=='user-agent';
+  });
+  const ct=p.headers['Content-Type']||p.headers['content-type']||'';
+  if(headerKeys.length){
+    const hashLines=headerKeys.map(k=>'  '+psKey(k)+' = '+Q(p.headers[k]));
+    setupLines.push('$headers = @{\n'+hashLines.join('\n')+'\n}');
+    cmdArgs.push('-Headers $headers');
+  }
+  if(ct) cmdArgs.push('-ContentType '+Q(ct));
+  const ua=p.ua||p.headers['User-Agent']||p.headers['user-agent'];
+  if(ua) cmdArgs.push('-UserAgent '+Q(ua));
+
+  if(p.basic){
+    const idx=p.basic.indexOf(':');
+    const user=idx===-1?p.basic:p.basic.slice(0,idx);
+    const pass=idx===-1?'':p.basic.slice(idx+1);
+    setupLines.push('$securePass = ConvertTo-SecureString '+Q(pass)+' -AsPlainText -Force\n$credential = New-Object System.Management.Automation.PSCredential('+Q(user)+', $securePass)');
+    if(ver==='7'){
+      cmdArgs.push('-Authentication Basic');
+      cmdArgs.push('-Credential $credential');
+    } else {
+      cmdArgs.push('-Credential $credential');
+      lastWarnings.push('Windows PowerShell 5.1: -Credential alone may not send Basic on the first request. Add an Authorization header if the server needs it preemptively.');
+    }
+  }
+
+  if(p.cookie){
+    setupLines.push('$session = New-Object Microsoft.PowerShell.Commands.WebRequestSession\n$session.Cookies.Add((New-Object System.Net.Cookie('+Q('curl-cookie')+', '+Q(p.cookie)+', '+Q('/')+', '+Q(new URL(p.url||'https://example.com').hostname)+')))');
+    cmdArgs.push('-WebSession $session');
+    lastWarnings.push('Cookie was added as a single name=value blob; if -b had a Netscape file or multiple cookies, split them into individual $session.Cookies.Add() calls.');
+  }
+
+  if(p.referer){
+    setupLines.push('$headers = if ($headers) { $headers } else { @{} }');
+    setupLines.push('$headers[\'Referer\'] = '+Q(p.referer));
+    if(!cmdArgs.some(a=>a.includes('$headers'))) cmdArgs.push('-Headers $headers');
+  }
+
+  if(p.body!==null && !p.formFields.length){
+    let bodyExpr=null;
+    const isJson=/json/i.test(ct);
+    const json=isJson?tryParseJson(p.body):null;
+    if(opts.bodyStyle==='here'){
+      bodyExpr="@'\n"+p.body+"\n'@";
+    } else if(opts.bodyStyle==='single'){
+      bodyExpr=Q(p.body);
+    } else {
+      if(json && typeof json==='object'){
+        setupLines.push('$bodyObj = '+toPSValue(json,'',q));
+        bodyExpr='($bodyObj | ConvertTo-Json -Depth 10 -Compress:$false)';
+      } else if(p.body.includes('\n')){
+        bodyExpr="@'\n"+p.body+"\n'@";
+      } else {
+        bodyExpr=Q(p.body);
+      }
+    }
+    cmdArgs.push('-Body '+bodyExpr);
+  }
+
+  if(p.formFields.length){
+    const parts=[];
+    let hasFile=false;
+    for(const f of p.formFields){
+      const eq=f.indexOf('=');
+      if(eq===-1) continue;
+      const k=f.slice(0,eq);
+      let v=f.slice(eq+1);
+      if(v.startsWith('@')){
+        hasFile=true;
+        parts.push('  '+psKey(k)+' = Get-Item '+Q(v.slice(1)));
+      } else {
+        parts.push('  '+psKey(k)+' = '+Q(v));
+      }
+    }
+    setupLines.push('$form = @{\n'+parts.join('\n')+'\n}');
+    cmdArgs.push('-Form $form');
+    if(ver!=='7') lastWarnings.push('-Form requires PowerShell 7+. For 5.1, build a multipart body manually with System.Net.Http.MultipartFormDataContent.');
+    if(hasFile && ver!=='7') lastWarnings.push('File upload via -F was preserved as Get-Item; in 5.1 you will need a manual multipart body.');
+  }
+
+  if(p.follow && opts.cmdlet==='iwr') cmdArgs.push('-MaximumRedirection 10');
+  if(p.follow===false && ver==='7'){/* default follows */}
+
+  if(p.insecure){
+    if(ver==='7') cmdArgs.push('-SkipCertificateCheck');
+    else setupLines.push('[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }');
+  }
+
+  if(p.compressed && ver==='7'){
+    /* PS7 handles decompression automatically when Accept-Encoding present */
+    if(!p.headers['Accept-Encoding'] && !p.headers['accept-encoding']){
+      setupLines.push('# --compressed: PS7 decompresses automatically when Accept-Encoding is sent');
+    }
+  } else if(p.compressed){
+    lastWarnings.push('--compressed: in Windows PowerShell 5.1 you must enable decompression on the HttpWebRequest, or use System.IO.Compression on the response.');
+  }
+
+  if(p.timeout) cmdArgs.push('-TimeoutSec '+p.timeout);
+  if(p.outFile){
+    cmdArgs.push('-OutFile '+Q(p.outFile));
+    if(opts.cmdlet==='irm') lastWarnings.push('-OutFile with Invoke-RestMethod also returns the body; use Invoke-WebRequest if you only want to save the file.');
+  }
+
+  const varName=opts.varname||'$response';
+  if(setupLines.length) lines.push(setupLines.join('\n\n'));
+  const argLines=cmdArgs.map(a=>'  '+a);
+  lines.push(varName+' = '+cmd+' `\n'+argLines.join(' `\n'));
+  if(opts.cmdlet==='iwr'){
+    lines.push('# '+varName+'.StatusCode, '+varName+'.Headers, '+varName+'.Content');
+  } else {
+    lines.push('# '+varName+' is the parsed body (JSON → PSCustomObject, XML → XmlDocument)');
+  }
+  return lines.join('\n\n');
+}
+
+function run(){
+  const text=$('src').value;
+  $('warn').textContent='';
+  if(!text.trim()){$('out').value='';setStats('—',0,0,0);return;}
+  try{
+    const p=parseCurl(text);
+    const opts={
+      cmdlet:$('cmdlet').value,
+      ver:$('ver').value,
+      varname:$('varname').value||'$response',
+      bodyStyle:$('bodyStyle').value,
+      quote:$('quote').value
+    };
+    const code=build(p,opts);
+    $('out').value=code;
+    const hCount=Object.keys(p.headers).length;
+    const bodyBytes=p.body?new TextEncoder().encode(p.body).length:0;
+    setStats(p.method,hCount,bodyBytes,p.extraFlags.length);
+    $('warn').textContent=lastWarnings.length?'⚠ '+lastWarnings.join('\n⚠ '):'';
+  }catch(e){
+    $('out').value='# Error: '+e.message;
+    setStats('—',0,0,0);
+  }
+}
+
+function setStats(m,h,b,f){$('sMethod').textContent=m;$('sHdr').textContent=h;$('sBody').textContent=b;$('sFlags').textContent=f}
+
+function copyOut(){
+  const t=$('out').value; if(!t) return;
+  navigator.clipboard.writeText(t).then(()=>{
+    const b=event.target; const old=b.textContent; b.textContent='Copied ✓';
+    setTimeout(()=>b.textContent=old,1100);
+  });
+}
+
+const SAMPLES={
+  post:`curl 'https://api.example.com/v1/users' \\
+  -X POST \\
+  -H 'Content-Type: application/json' \\
+  -H 'Authorization: Bearer YOUR_TOKEN' \\
+  --data-raw '{"name":"Ada Lovelace","role":"admin","active":true,"tags":["math","compute"]}'`,
+  form:`curl -X POST 'https://httpbin.org/post' \\
+  -F 'name=Ada' \\
+  -F 'avatar=@./avatar.png' \\
+  -F 'note=hello world'`,
+  auth:`curl -u 'admin:s3cr3t!' \\
+  -H 'Accept: application/json' \\
+  --compressed \\
+  --max-time 30 \\
+  'https://api.example.com/private/status'`
+};
+
+function loadSample(kind){$('src').value=SAMPLES[kind]||SAMPLES.post;run();}
+function clearAll(){$('src').value='';$('out').value='';$('warn').textContent='';setStats('—',0,0,0);}
+
+['src','cmdlet','ver','varname','bodyStyle','quote'].forEach(id=>{
+  const el=$(id);
+  el.addEventListener('input',run);
+  el.addEventListener('change',run);
+});
+
+loadSample('post');
+</script>
+</body>
+</html>

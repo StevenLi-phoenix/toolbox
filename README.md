@@ -36,6 +36,7 @@
 | [OPML Builder & Parser](opml.html) | Round-trip OPML feed lists ⇄ JSON, URLs, or Markdown for RSS reader exports, backups, and Feedly→FreshRSS migrations. |
 | [YAML Diff Viewer](yamldiff.html) | Compare two YAML documents structurally — order-insensitive maps, list identity keys, and add/remove/change reporting for Kubernetes manifests and Helm values. |
 | [JSON → .env Converter](json2env.html) | Flatten nested JSON into `KEY=value` for `.env` files, `docker --env-file`, Kubernetes Secrets, or shell `export`. Configurable separator, prefix, casing, quoting, and array handling. |
+| [CSV → Markdown Table](csv2md.html) | Convert CSV / TSV to a GitHub-flavored Markdown table with auto column alignment by data type, pipe escaping, header detection, and `<br>` folding for multi-line cells. |
 
 ## CSS & Styling
 
@@ -112,6 +113,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [GitHub Markdown Alert Builder](ghalert.html) | Build GitHub-style alerts — `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` — with a live preview that mirrors GitHub's rendering and a wrap-at-column formatter. |
 | [Speed Reader (RSVP)](speedread.html) | Read text rapidly one word at a time at your chosen WPM, with adjustable focus letter, chunking, and pause-on-punctuation. |
 | [Markdown Preview](markdown.html) | Write Markdown and see it rendered live. |
 | [Markdown to PDF](md2pdf.html) | Convert Markdown to beautifully formatted PDFs instantly. |
@@ -165,6 +167,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [cURL → PowerShell](curl2pwsh.html) | Convert a `curl` command to `Invoke-WebRequest` or `Invoke-RestMethod` — method, headers, JSON / form body, basic auth, cookies, and a `-SkipCertificateCheck` fallback for PowerShell 7 and Windows PowerShell 5.1. |
 | [Trusted Types Policy Generator](trustedtypes.html) | Generate `require-trusted-types-for 'script'` and `trusted-types` CSP directives plus the `createHTML` / `createScript` / `createScriptURL` policy code — with default fallback, Report-Only rollout, and a violation listener. |
 | [OAuth 2.0 Device Flow Builder](deviceflow.html) | Walk through the RFC 8628 Device Authorization grant — build the initial POST, render the `user_code` with a QR for `verification_uri_complete`, plan the polling loop with `slow_down`/`expired_token` handling, and copy curl/fetch snippets. |
 | [URLPattern Tester](urlpattern.html) | Test the `URLPattern` web API against URLs — named groups (`:id`), wildcards, modifiers (`?`/`+`/`*`), and inline regex. Shows captured groups and copy-ready JavaScript. |

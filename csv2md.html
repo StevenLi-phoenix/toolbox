@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV to Markdown Table Converter — Free Online Tool</title>
+<meta name="description" content="Convert CSV / TSV data to a GitHub-flavored Markdown table. Auto column alignment by data type, pipe escaping, header detection, and HTML <br> conversion for multi-line cells.">
+<meta name="keywords" content="csv to markdown, csv to md, tsv to markdown, markdown table generator, github markdown, csv2md, table converter">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/csv2md.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.panels textarea{width:100%;min-height:240px;font-family:var(--mono);font-size:.84rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);resize:vertical;box-sizing:border-box}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:10px}
+.opts label{display:flex;flex-direction:column;gap:4px;font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.opts select,.opts input{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.stats{display:flex;flex-wrap:wrap;gap:18px;margin-top:10px;font-size:.82rem;color:var(--muted)}
+.stats strong{color:var(--text);font-family:var(--mono)}
+.preview-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:10px;margin-top:10px}
+.preview-table{border-collapse:collapse;font-size:.85rem;width:100%}
+.preview-table th,.preview-table td{padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;white-space:pre-wrap}
+.preview-table th{background:var(--surface2);font-weight:600}
+.preview-table td.num,.preview-table th.num{text-align:right;font-family:var(--mono)}
+.preview-table td.center,.preview-table th.center{text-align:center}
+.note{font-size:.82rem;color:var(--muted);line-height:1.55;margin-top:8px}
+.err{color:var(--error);font-size:.82rem;font-family:var(--mono);margin-top:6px;min-height:1.1em}
+@media(max-width:768px){.panels{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CSV to Markdown Table</h1>
+<p class="subtitle">Paste CSV or TSV data and get a GitHub-flavored Markdown table with sensible column alignment. Detects numeric columns, escapes pipes, and folds newlines inside cells into <code>&lt;br&gt;</code> so the table stays valid.</p>
+
+<div class="card">
+  <div class="panels">
+    <div>
+      <label style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">CSV / TSV input</label>
+      <textarea id="src" spellcheck="false" placeholder="name,role,salary&#10;Ada Lovelace,Engineer,98000&#10;Grace Hopper,Admiral,120000"></textarea>
+    </div>
+    <div>
+      <label style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">Markdown output</label>
+      <textarea id="out" spellcheck="false" readonly></textarea>
+    </div>
+  </div>
+  <div class="opts">
+    <label>Delimiter
+      <select id="delim">
+        <option value="auto">Auto-detect</option>
+        <option value=",">Comma ( , )</option>
+        <option value="	">Tab</option>
+        <option value=";">Semicolon ( ; )</option>
+        <option value="|">Pipe ( | )</option>
+      </select>
+    </label>
+    <label>First row
+      <select id="hdr">
+        <option value="1">Is a header</option>
+        <option value="0">Is data (auto-name)</option>
+      </select>
+    </label>
+    <label>Alignment
+      <select id="align">
+        <option value="auto">Auto (numbers right)</option>
+        <option value="left">All left</option>
+        <option value="right">All right</option>
+        <option value="center">All center</option>
+        <option value="none">None (no colons)</option>
+      </select>
+    </label>
+    <label>Multi-line cells
+      <select id="multi">
+        <option value="br">Fold to &lt;br&gt;</option>
+        <option value="space">Replace with space</option>
+        <option value="literal">Keep \n literal</option>
+      </select>
+    </label>
+    <label>Pad columns
+      <select id="pad">
+        <option value="1">Yes (pretty)</option>
+        <option value="0">No (compact)</option>
+      </select>
+    </label>
+    <label>Empty cell text
+      <input type="text" id="empty" value="" maxlength="20" placeholder="(leave blank)">
+    </label>
+  </div>
+  <div class="btnrow">
+    <button class="btn" onclick="run()">Convert</button>
+    <button class="btn btn-secondary" onclick="copyOut()">Copy Markdown</button>
+    <button class="btn btn-secondary" onclick="loadSample()">Load Sample</button>
+    <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+  </div>
+  <div class="stats">
+    <span>rows <strong id="sRows">0</strong></span>
+    <span>columns <strong id="sCols">0</strong></span>
+    <span>delimiter <strong id="sDelim">—</strong></span>
+    <span>numeric columns <strong id="sNum">0</strong></span>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<div class="card">
+  <h2>Live preview</h2>
+  <div class="preview-wrap" id="prev"></div>
+  <p class="note">The preview renders the same alignment the Markdown will produce. GitHub, GitLab, Bitbucket, and most static-site generators all support the colon-based syntax (<code>:---</code>, <code>:---:</code>, <code>---:</code>).</p>
+</div>
+
+<div class="card">
+  <h2>Tips</h2>
+  <ul class="note" style="padding-left:20px">
+    <li>Pipe characters inside cells (<code>|</code>) are escaped as <code>\|</code> automatically — required by CommonMark tables.</li>
+    <li>Auto-detect prefers tabs first, then commas, semicolons, and pipes by scanning the first 5 non-blank lines.</li>
+    <li>Numeric column detection treats a column as numeric when ≥80% of non-empty cells parse as numbers (with optional <code>,</code> thousands and a single leading <code>$</code> or <code>%</code>).</li>
+    <li>Padding adds spaces so the raw Markdown is human-readable in a diff — it does not change how the rendered table looks.</li>
+  </ul>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $=id=>document.getElementById(id);
+
+function detectDelim(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim()).slice(0,5);
+  if(!lines.length) return ',';
+  const cands=['\t',',',';','|'];
+  let best=','; let bestScore=-1;
+  for(const d of cands){
+    const counts=lines.map(l=>splitCsvLine(l,d).length);
+    if(counts[0]<2) continue;
+    const allSame=counts.every(c=>c===counts[0]);
+    const score=counts[0]*(allSame?10:1);
+    if(score>bestScore){bestScore=score;best=d;}
+  }
+  return best;
+}
+
+function splitCsvLine(line,delim){
+  const out=[]; let cur=''; let inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(inQ){
+      if(c==='"'){
+        if(line[i+1]==='"'){cur+='"';i++;}
+        else inQ=false;
+      } else cur+=c;
+    } else {
+      if(c==='"'){inQ=true;}
+      else if(c===delim){out.push(cur);cur='';}
+      else cur+=c;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function parseCsv(text,delim){
+  const rows=[];
+  let cur=''; let row=[]; let inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){
+        if(text[i+1]==='"'){cur+='"';i++;}
+        else inQ=false;
+      } else cur+=c;
+    } else {
+      if(c==='"'){inQ=true;}
+      else if(c===delim){row.push(cur);cur='';}
+      else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur='';}
+      else if(c==='\r'){}
+      else cur+=c;
+    }
+  }
+  if(cur.length||row.length){row.push(cur);rows.push(row);}
+  while(rows.length && rows[rows.length-1].length===1 && rows[rows.length-1][0]==='') rows.pop();
+  return rows;
+}
+
+function isNumeric(s){
+  if(s==null) return false;
+  const t=String(s).trim().replace(/^[$]|%$/g,'').replace(/,/g,'');
+  if(!t) return false;
+  return /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t);
+}
+
+function detectNumericCols(rows){
+  if(!rows.length) return [];
+  const n=rows[0].length;
+  const out=[];
+  for(let c=0;c<n;c++){
+    let num=0,total=0;
+    for(let r=0;r<rows.length;r++){
+      const v=(rows[r][c]||'').trim();
+      if(!v) continue;
+      total++;
+      if(isNumeric(v)) num++;
+    }
+    out.push(total>0 && num/total>=0.8);
+  }
+  return out;
+}
+
+function escCell(s,multi){
+  s=String(s==null?'':s);
+  s=s.replace(/\|/g,'\\|');
+  if(multi==='br') s=s.replace(/\r?\n/g,'<br>');
+  else if(multi==='space') s=s.replace(/\r?\n/g,' ');
+  else s=s.replace(/\r?\n/g,'\\n');
+  return s;
+}
+
+function buildMarkdown(rows,opts){
+  if(!rows.length) return '';
+  const hasHdr=opts.hdr;
+  const header=hasHdr?rows[0]:rows[0].map((_,i)=>'col'+(i+1));
+  const data=hasHdr?rows.slice(1):rows;
+  const ncol=header.length;
+  for(const r of data){while(r.length<ncol) r.push('');}
+
+  const numericCols=detectNumericCols(data.length?data:[header]);
+  const aligns=[];
+  for(let i=0;i<ncol;i++){
+    if(opts.align==='left') aligns.push('left');
+    else if(opts.align==='right') aligns.push('right');
+    else if(opts.align==='center') aligns.push('center');
+    else if(opts.align==='none') aligns.push('none');
+    else aligns.push(numericCols[i]?'right':'left');
+  }
+
+  const cells=[header.map(c=>escCell(c,opts.multi))];
+  for(const r of data) cells.push(r.map(c=>{const v=String(c).trim()===''?opts.empty:c;return escCell(v,opts.multi)}));
+
+  const widths=new Array(ncol).fill(3);
+  if(opts.pad){
+    for(const row of cells){
+      for(let i=0;i<ncol;i++){
+        const len=(row[i]||'').length;
+        if(len>widths[i]) widths[i]=len;
+      }
+    }
+  } else {
+    for(let i=0;i<ncol;i++) widths[i]=0;
+  }
+
+  const padCell=(s,i,align)=>{
+    if(!opts.pad) return s;
+    const w=widths[i];
+    const len=s.length;
+    if(len>=w) return s;
+    const need=w-len;
+    if(align==='right') return ' '.repeat(need)+s;
+    if(align==='center'){const l=Math.floor(need/2);return ' '.repeat(l)+s+' '.repeat(need-l);}
+    return s+' '.repeat(need);
+  };
+
+  const sepFor=(i,align)=>{
+    const w=Math.max(widths[i],3);
+    if(align==='none') return '-'.repeat(w);
+    if(align==='left') return ':'+'-'.repeat(w-1);
+    if(align==='right') return '-'.repeat(w-1)+':';
+    if(align==='center') return ':'+'-'.repeat(w-2)+':';
+    return '-'.repeat(w);
+  };
+
+  const headerRow='| '+header.map((c,i)=>padCell(escCell(c,opts.multi),i,aligns[i])).join(' | ')+' |';
+  const sepRow='| '+aligns.map((a,i)=>sepFor(i,a)).join(' | ')+' |';
+  const dataRows=data.map(r=>'| '+r.map((c,i)=>{const v=String(c).trim()===''?opts.empty:c;return padCell(escCell(v,opts.multi),i,aligns[i])}).join(' | ')+' |');
+
+  return [headerRow,sepRow,...dataRows].join('\n');
+}
+
+function renderPreview(rows,opts){
+  const prev=$('prev');
+  prev.innerHTML='';
+  if(!rows.length){prev.textContent='(no rows)';return;}
+  const hasHdr=opts.hdr;
+  const header=hasHdr?rows[0]:rows[0].map((_,i)=>'col'+(i+1));
+  const data=hasHdr?rows.slice(1):rows;
+  const ncol=header.length;
+  for(const r of data){while(r.length<ncol) r.push('');}
+  const numericCols=detectNumericCols(data.length?data:[header]);
+  const aligns=[];
+  for(let i=0;i<ncol;i++){
+    if(opts.align==='left'||opts.align==='none') aligns.push('left');
+    else if(opts.align==='right') aligns.push('right');
+    else if(opts.align==='center') aligns.push('center');
+    else aligns.push(numericCols[i]?'right':'left');
+  }
+  const tbl=document.createElement('table');
+  tbl.className='preview-table';
+  const thead=document.createElement('thead');
+  const trH=document.createElement('tr');
+  for(let i=0;i<ncol;i++){
+    const th=document.createElement('th');
+    th.textContent=header[i]||'';
+    th.className=aligns[i]==='right'?'num':aligns[i]==='center'?'center':'';
+    trH.appendChild(th);
+  }
+  thead.appendChild(trH);
+  tbl.appendChild(thead);
+  const tbody=document.createElement('tbody');
+  for(const r of data){
+    const tr=document.createElement('tr');
+    for(let i=0;i<ncol;i++){
+      const td=document.createElement('td');
+      const v=String(r[i]==null?'':r[i]).trim()===''?opts.empty:(r[i]||'');
+      if(opts.multi==='br'){td.innerHTML=escapeHtml(v).replace(/\r?\n/g,'<br>');}
+      else if(opts.multi==='space') td.textContent=v.replace(/\r?\n/g,' ');
+      else td.textContent=v.replace(/\r?\n/g,'\\n');
+      td.className=aligns[i]==='right'?'num':aligns[i]==='center'?'center':'';
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  tbl.appendChild(tbody);
+  prev.appendChild(tbl);
+}
+
+function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function run(){
+  const text=$('src').value;
+  $('err').textContent='';
+  if(!text.trim()){$('out').value='';$('prev').innerHTML='';setStats(0,0,'—',0);return;}
+  let delim=$('delim').value;
+  if(delim==='auto') delim=detectDelim(text);
+  try{
+    const rows=parseCsv(text,delim);
+    if(!rows.length){$('out').value='';$('prev').innerHTML='';setStats(0,0,labelDelim(delim),0);return;}
+    const ncol=Math.max(...rows.map(r=>r.length));
+    for(const r of rows){while(r.length<ncol) r.push('');}
+    const opts={
+      hdr:$('hdr').value==='1',
+      align:$('align').value,
+      multi:$('multi').value,
+      pad:$('pad').value==='1',
+      empty:$('empty').value
+    };
+    const md=buildMarkdown(rows,opts);
+    $('out').value=md;
+    renderPreview(rows,opts);
+    const numCols=detectNumericCols(opts.hdr?rows.slice(1):rows).filter(Boolean).length;
+    setStats(opts.hdr?rows.length-1:rows.length, ncol, labelDelim(delim), numCols);
+  }catch(e){
+    $('err').textContent='Error: '+e.message;
+  }
+}
+
+function labelDelim(d){return d==='\t'?'tab':d===','?'comma':d===';'?'semicolon':d==='|'?'pipe':d}
+
+function setStats(r,c,d,n){$('sRows').textContent=r;$('sCols').textContent=c;$('sDelim').textContent=d;$('sNum').textContent=n}
+
+function copyOut(){
+  const t=$('out').value;
+  if(!t) return;
+  navigator.clipboard.writeText(t).then(()=>{
+    const b=event.target; const old=b.textContent; b.textContent='Copied ✓';
+    setTimeout(()=>b.textContent=old,1100);
+  });
+}
+
+function loadSample(){
+  $('src').value=`product,units,unit_price,notes
+"Pencil, HB",240,0.45,"Bulk box | shipping included"
+Notebook,80,2.99,"A5\nlined"
+Stapler,15,7.50,
+Eraser,500,0.12,Soft rubber
+Highlighter,60,1.25,"4-pack | yellow"`;
+  run();
+}
+
+function clearAll(){$('src').value='';$('out').value='';$('err').textContent='';$('prev').innerHTML='';setStats(0,0,'—',0);}
+
+['src','delim','hdr','align','multi','pad','empty'].forEach(id=>{
+  const el=$(id);
+  el.addEventListener('input',run);
+  el.addEventListener('change',run);
+});
+
+loadSample();
+</script>
+</body>
+</html>
