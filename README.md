@@ -42,6 +42,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS Text Truncate & Line Clamp](csstruncate.html) | Generate CSS for single-line ellipsis, multi-line clamping (`line-clamp` + `-webkit-line-clamp` fallback), or soft fade-out endings with a live resizable preview. |
+| [Color Delta E Calculator](deltae.html) | Measure perceptual color difference between two sRGB colors with **CIE76**, **CIE94**, and **CIEDE2000**. Includes L\*a\*b\* component breakdown and a just-noticeable-difference verdict. |
 | [CSS View Transitions Generator](cssviewtransition.html) | Design same-document `view-transition-name` morphs with custom `::view-transition-old/new` keyframes — morph, slide, flip, zoom presets, reduced-motion fallback, and a live `startViewTransition()` sandbox. |
 | [CSS field-sizing Generator](fieldsizing.html) | Build CSS rules that auto-size `textarea`, `input`, and `select` to their content with `field-sizing: content`. Live preview, `ch`/`lh` guardrails, and an `@supports` fallback. |
 | [CSS light-dark() Playground](lightdark.html) | Build dual-theme CSS variables with the `light-dark()` function — one declaration, both themes, no `@media (prefers-color-scheme)`. Live light/dark/auto preview and copy-ready CSS. |
@@ -296,6 +298,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Stopwatch with Lap Timer](stopwatch.html) | Millisecond-accurate stopwatch with split / lap tracking, keyboard shortcuts, best & worst highlighting, and CSV / Markdown export — state survives reloads. |
 | [Pomodoro Timer](pomodoro.html) | Customizable work/break intervals with audio alerts and tracking. |
 | [Time Card / Timesheet Calculator](timecard.html) | Log clock-in / clock-out shifts and compute total hours, regular vs overtime, gross pay, and weekly breakdowns. |
 | [Kanban Board](kanban.html) | Drag-and-drop Kanban board with customizable columns. |

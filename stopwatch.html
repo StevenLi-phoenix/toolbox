@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stopwatch with Lap Timer — Free Online Tool</title>
+<meta name="description" content="Free precision stopwatch with lap timing, split times, keyboard shortcuts, and CSV / Markdown export. Millisecond accuracy, runs entirely in your browser, survives reloads.">
+<meta name="keywords" content="stopwatch, lap timer, split time, online stopwatch, dev timing, race timer, milliseconds">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/stopwatch.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .clock {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    margin: 20px 0 12px;
+  }
+  .clock .main {
+    font-size: clamp(2.8rem, 9vw, 4.6rem);
+    font-weight: 700;
+    letter-spacing: .02em;
+    color: var(--text);
+    line-height: 1;
+  }
+  .clock .main .ms { font-size: .55em; color: var(--muted); margin-left: .15em; }
+  .clock .since-lap {
+    font-size: 1.1rem; color: var(--muted); margin-top: 6px;
+  }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 18px 0 4px; }
+  .actions button {
+    min-width: 110px; font-size: 1rem; padding: 12px 20px;
+  }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-stop { background: var(--error, #b91c1c); color: #fff; border-color: var(--error, #b91c1c); }
+  .btn-stop:hover { filter: brightness(1.08); }
+  .hint { text-align: center; font-size: .82rem; color: var(--muted); margin-top: 6px; }
+  .laps-card { margin-top: 18px; }
+  table.laps { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .9rem; }
+  table.laps th, table.laps td {
+    border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: right;
+  }
+  table.laps th { background: var(--surface2); font-weight: 600; color: var(--muted); text-transform: uppercase; font-size: .72rem; letter-spacing: .04em; }
+  table.laps td:first-child, table.laps th:first-child { text-align: left; width: 60px; }
+  table.laps tr.best td { background: rgba(34,197,94,.10); }
+  table.laps tr.worst td { background: rgba(239,68,68,.10); }
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px; margin-top: 14px;
+  }
+  .stat {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+  .stat .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 1rem; color: var(--text); margin-top: 2px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .toolbar button { font-size: .82rem; padding: 6px 12px; }
+  .empty { text-align: center; color: var(--muted); font-size: .9rem; padding: 24px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Stopwatch with Lap Timer</h1>
+<p class="subtitle">A precise, millisecond-accurate stopwatch with lap times, split tracking, keyboard shortcuts, and CSV / Markdown export &mdash; the state is saved locally so a reload won't lose your run.</p>
+
+<div class="card">
+  <div class="clock">
+    <div class="main"><span id="hms">00:00:00</span><span class="ms" id="ms">.000</span></div>
+    <div class="since-lap">Since last lap: <span id="sinceLap">00:00.000</span></div>
+  </div>
+  <div class="actions">
+    <button id="btnStart" class="btn btn-primary" onclick="toggle()">Start</button>
+    <button id="btnLap" class="btn btn-secondary" onclick="lap()" disabled>Lap</button>
+    <button id="btnReset" class="btn btn-secondary" onclick="reset()">Reset</button>
+  </div>
+  <div class="hint">
+    <b>Space</b> start/stop · <b>L</b> lap · <b>R</b> reset · <b>C</b> copy table
+  </div>
+</div>
+
+<div class="card laps-card">
+  <h2 style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">
+    <span>Laps</span>
+    <span style="font-size:.82rem;color:var(--muted);font-weight:400" id="lapCount">0 laps</span>
+  </h2>
+  <div id="lapsBody"></div>
+  <div class="toolbar" id="toolbar" style="display:none">
+    <button class="btn btn-secondary" onclick="copyAs('md')">Copy as Markdown</button>
+    <button class="btn btn-secondary" onclick="copyAs('csv')">Copy as CSV</button>
+    <button class="btn btn-secondary" onclick="downloadCsv()">Download CSV</button>
+    <button class="btn btn-secondary" onclick="clearLaps()">Clear laps</button>
+    <span id="copied" style="font-size:.82rem;color:var(--success);align-self:center;display:none">Copied!</span>
+  </div>
+  <div class="stats" id="stats" style="display:none"></div>
+</div>
+
+<div class="card">
+  <h2>Notes</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Time is read from <code>performance.now()</code>, which is monotonic &mdash; system clock changes, sleep, or DST will not skew the count. Display refreshes via <code>requestAnimationFrame</code> for smooth motion and updates only when the tab is visible to save battery.<br><br>
+    The laps table highlights the fastest split in green and the slowest in red. The "since last lap" readout is the split &mdash; the time elapsed between consecutive laps. Cumulative time is the total since you pressed Start.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const LS_KEY = 'toolbox.stopwatch.v1';
+
+let state = load() || { running: false, startedAt: 0, accumulated: 0, lapAt: 0, laps: [] };
+let rafId = null;
+
+function save() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    // running across reloads doesn't make sense — settle to paused at current elapsed
+    if (s.running) {
+      const now = performance.now();
+      s.accumulated += now - s.startedAt;
+      s.running = false;
+      s.startedAt = 0;
+      s.lapAt = s.accumulated;
+    }
+    return s;
+  } catch (e) { return null; }
+}
+
+function elapsed() {
+  if (state.running) return state.accumulated + (performance.now() - state.startedAt);
+  return state.accumulated;
+}
+
+function fmtHMS(ms) {
+  if (ms < 0) ms = 0;
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
+}
+function fmtMs(ms) {
+  if (ms < 0) ms = 0;
+  return '.' + String(Math.floor(ms % 1000)).padStart(3, '0');
+}
+function fmtFull(ms) {
+  return fmtHMS(ms) + fmtMs(ms);
+}
+function fmtSplit(ms) {
+  if (ms < 0) ms = 0;
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  const millis = Math.floor(ms % 1000);
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(millis).padStart(3,'0')}`;
+}
+
+function tick() {
+  const e = elapsed();
+  $('hms').textContent = fmtHMS(e);
+  $('ms').textContent = fmtMs(e);
+  $('sinceLap').textContent = fmtSplit(e - state.lapAt);
+  if (state.running) rafId = requestAnimationFrame(tick);
+}
+
+function toggle() {
+  if (state.running) {
+    state.accumulated += performance.now() - state.startedAt;
+    state.running = false;
+    state.startedAt = 0;
+    cancelAnimationFrame(rafId);
+    $('btnStart').textContent = 'Start';
+    $('btnStart').classList.remove('btn-stop');
+    $('btnStart').classList.add('btn-primary');
+    $('btnLap').disabled = true;
+  } else {
+    state.running = true;
+    state.startedAt = performance.now();
+    $('btnStart').textContent = 'Stop';
+    $('btnStart').classList.add('btn-stop');
+    $('btnStart').classList.remove('btn-primary');
+    $('btnLap').disabled = false;
+    tick();
+  }
+  save();
+}
+
+function lap() {
+  const e = elapsed();
+  if (e <= state.lapAt) return;
+  state.laps.push({ cumulative: e, split: e - state.lapAt });
+  state.lapAt = e;
+  renderLaps();
+  save();
+}
+
+function reset() {
+  state.running = false;
+  state.startedAt = 0;
+  state.accumulated = 0;
+  state.lapAt = 0;
+  state.laps = [];
+  cancelAnimationFrame(rafId);
+  $('btnStart').textContent = 'Start';
+  $('btnStart').classList.remove('btn-stop');
+  $('btnStart').classList.add('btn-primary');
+  $('btnLap').disabled = true;
+  $('hms').textContent = '00:00:00';
+  $('ms').textContent = '.000';
+  $('sinceLap').textContent = '00:00.000';
+  renderLaps();
+  save();
+}
+
+function clearLaps() {
+  state.laps = [];
+  state.lapAt = elapsed();
+  renderLaps();
+  save();
+}
+
+function renderLaps() {
+  const body = $('lapsBody');
+  $('lapCount').textContent = state.laps.length + ' lap' + (state.laps.length === 1 ? '' : 's');
+  if (state.laps.length === 0) {
+    body.innerHTML = '<div class="empty">No laps yet — press <b>Lap</b> (or <b>L</b>) while the stopwatch is running.</div>';
+    $('toolbar').style.display = 'none';
+    $('stats').style.display = 'none';
+    return;
+  }
+  const splits = state.laps.map(l => l.split);
+  const fast = Math.min(...splits);
+  const slow = Math.max(...splits);
+  const rows = state.laps.map((l, i) => {
+    const cls = l.split === fast ? ' class="best"' : l.split === slow && splits.length > 1 ? ' class="worst"' : '';
+    return `<tr${cls}><td>#${i + 1}</td><td>${fmtSplit(l.split)}</td><td>${fmtFull(l.cumulative)}</td></tr>`;
+  }).reverse().join('');
+  body.innerHTML = `<table class="laps"><thead><tr><th>Lap</th><th>Split</th><th>Cumulative</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('toolbar').style.display = '';
+
+  const total = splits.reduce((a, b) => a + b, 0);
+  const avg = total / splits.length;
+  const stats = [
+    ['Best split', fmtSplit(fast)],
+    ['Worst split', fmtSplit(slow)],
+    ['Average', fmtSplit(avg)],
+    ['Total laps', String(splits.length)],
+  ];
+  $('stats').style.display = '';
+  $('stats').innerHTML = stats.map(([k, v]) => `<div class="stat"><div class="lbl">${k}</div><div class="v">${v}</div></div>`).join('');
+}
+
+function tableData() {
+  return state.laps.map((l, i) => ({ lap: i + 1, split: fmtSplit(l.split), cumulative: fmtFull(l.cumulative) }));
+}
+
+function copyAs(fmt) {
+  const data = tableData();
+  if (!data.length) return;
+  let txt;
+  if (fmt === 'md') {
+    txt = '| Lap | Split | Cumulative |\n|----:|:------|:-----------|\n' +
+      data.map(r => `| ${r.lap} | ${r.split} | ${r.cumulative} |`).join('\n');
+  } else {
+    txt = 'lap,split,cumulative\n' + data.map(r => `${r.lap},${r.split},${r.cumulative}`).join('\n');
+  }
+  navigator.clipboard.writeText(txt).then(() => {
+    const c = $('copied'); c.style.display = ''; setTimeout(() => c.style.display = 'none', 1100);
+  });
+}
+
+function downloadCsv() {
+  const data = tableData();
+  if (!data.length) return;
+  const csv = 'lap,split,cumulative\n' + data.map(r => `${r.lap},${r.split},${r.cumulative}`).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.href = url;
+  a.download = `stopwatch-${ts}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea, select')) return;
+  if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); toggle(); }
+  else if (e.key === 'l' || e.key === 'L') { if (state.running) lap(); }
+  else if (e.key === 'r' || e.key === 'R') { reset(); }
+  else if (e.key === 'c' || e.key === 'C') { copyAs('md'); }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.running) tick();
+});
+
+// initial paint
+$('hms').textContent = fmtHMS(state.accumulated);
+$('ms').textContent = fmtMs(state.accumulated);
+$('sinceLap').textContent = fmtSplit(state.accumulated - state.lapAt);
+renderLaps();
+</script>
+</body>
+</html>
