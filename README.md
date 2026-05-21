@@ -42,6 +42,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS @counter-style Generator](csscounterstyle.html) | Build custom CSS list markers with the `@counter-style` at-rule — pick system (cyclic, numeric, alphabetic, symbolic, additive, fixed, extends), symbols, prefix/suffix, range, pad, and fallback with a live ordered-list preview. |
+| [CSS Scroll-Driven Animations Builder](scrolldriven.html) | Generate CSS for `animation-timeline: scroll()` and `view()` — pick axis, scroller, view inset, and `animation-range` (cover, contain, entry, exit, *-crossing) with a live scrolling iframe preview. |
 | [CSS Text Truncate & Line Clamp](csstruncate.html) | Generate CSS for single-line ellipsis, multi-line clamping (`line-clamp` + `-webkit-line-clamp` fallback), or soft fade-out endings with a live resizable preview. |
 | [Color Delta E Calculator](deltae.html) | Measure perceptual color difference between two sRGB colors with **CIE76**, **CIE94**, and **CIEDE2000**. Includes L\*a\*b\* component breakdown and a just-noticeable-difference verdict. |
 | [CSS View Transitions Generator](cssviewtransition.html) | Design same-document `view-transition-name` morphs with custom `::view-transition-old/new` keyframes — morph, slide, flip, zoom presets, reduced-motion fallback, and a live `startViewTransition()` sandbox. |
@@ -214,6 +216,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Web Share API Tester](webshare.html) | Trigger `navigator.share()` with custom title, text, URL, and files. Probe `canShare()` per MIME type, inspect `AbortError`/`NotAllowedError`/`DataError`, and copy a ready-to-paste JS snippet. |
 | [Browser Storage Quota Inspector](storagequota.html) | Inspect `navigator.storage.estimate()` plus a per-API breakdown of `localStorage`, `sessionStorage`, IndexedDB, Cache Storage, and cookies. Includes a stress-test writer and a persistent-storage toggle. |
 | [Source Map Decoder](sourcemap.html) | Decode JavaScript source maps — parse VLQ `mappings`, browse embedded sources, and look up the original location for a generated `line:column` from a stack trace. |
 | [Browser Fingerprint Inspector](fingerprint.html) | Probe the signals your browser exposes — UA, screen, canvas hash, WebGL renderer, audio stack, font list, timezone, client hints — and compute a stable SHA-256 fingerprint. Useful for privacy audits and bot-detection research. |
