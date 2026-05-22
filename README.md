@@ -42,6 +42,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS Sticky Footer Generator](stickyfooter.html) | Generate CSS for a footer that stays pinned to the viewport bottom when content is short and scrolls naturally when long — flexbox, CSS Grid, legacy negative-margin, and `dvh` variants with a live device-sized preview. |
 | [CSS @counter-style Generator](csscounterstyle.html) | Build custom CSS list markers with the `@counter-style` at-rule — pick system (cyclic, numeric, alphabetic, symbolic, additive, fixed, extends), symbols, prefix/suffix, range, pad, and fallback with a live ordered-list preview. |
 | [CSS Scroll-Driven Animations Builder](scrolldriven.html) | Generate CSS for `animation-timeline: scroll()` and `view()` — pick axis, scroller, view inset, and `animation-range` (cover, contain, entry, exit, *-crossing) with a live scrolling iframe preview. |
 | [CSS Text Truncate & Line Clamp](csstruncate.html) | Generate CSS for single-line ellipsis, multi-line clamping (`line-clamp` + `-webkit-line-clamp` fallback), or soft fade-out endings with a live resizable preview. |
@@ -216,6 +217,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [YouTube Embed Builder](youtubeembed.html) | Paste any YouTube URL and build a clean embed iframe — start/end time, autoplay, captions, loop, controls, related-off, and privacy mode (`youtube-nocookie.com`). Live preview, iframe / URL / oEmbed output. |
+| [Stripe Test Card Numbers](stripetestcards.html) | Searchable reference of Stripe's test card numbers — successful charges, declines (`insufficient_funds`, `lost_card`, `stolen_card`, expired, CVC), 3D Secure / SCA challenge flows, AVS failures, and dispute triggers. Click to copy. |
 | [Web Share API Tester](webshare.html) | Trigger `navigator.share()` with custom title, text, URL, and files. Probe `canShare()` per MIME type, inspect `AbortError`/`NotAllowedError`/`DataError`, and copy a ready-to-paste JS snippet. |
 | [Browser Storage Quota Inspector](storagequota.html) | Inspect `navigator.storage.estimate()` plus a per-API breakdown of `localStorage`, `sessionStorage`, IndexedDB, Cache Storage, and cookies. Includes a stress-test writer and a persistent-storage toggle. |
 | [Source Map Decoder](sourcemap.html) | Decode JavaScript source maps — parse VLQ `mappings`, browse embedded sources, and look up the original location for a generated `line:column` from a stack trace. |
