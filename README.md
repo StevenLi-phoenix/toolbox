@@ -42,6 +42,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS text-wrap Playground](csstextwrap.html) | Compare `text-wrap: balance / pretty / stable / wrap / nowrap` side-by-side at the same width — live ragged-edge metrics, orphan detection, and copy-ready CSS for headings and prose. |
+| [CSS text-emphasis Playground](textemphasis.html) | Design `text-emphasis` marks (dot, circle, sesame, triangle, double-circle, custom string) with color, position, and skip rules — live preview for horizontal and vertical (CJK) writing modes. |
 | [CSS Sticky Footer Generator](stickyfooter.html) | Generate CSS for a footer that stays pinned to the viewport bottom when content is short and scrolls naturally when long — flexbox, CSS Grid, legacy negative-margin, and `dvh` variants with a live device-sized preview. |
 | [CSS @counter-style Generator](csscounterstyle.html) | Build custom CSS list markers with the `@counter-style` at-rule — pick system (cyclic, numeric, alphabetic, symbolic, additive, fixed, extends), symbols, prefix/suffix, range, pad, and fallback with a live ordered-list preview. |
 | [CSS Scroll-Driven Animations Builder](scrolldriven.html) | Generate CSS for `animation-timeline: scroll()` and `view()` — pick axis, scroller, view inset, and `animation-range` (cover, contain, entry, exit, *-crossing) with a live scrolling iframe preview. |
@@ -217,6 +219,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [HTML &lt;details&gt; Accordion Builder](detailsbuilder.html) | Build accessible zero-JS disclosures and exclusive accordions with the `name=` attribute — chevron presets, `interpolate-size` animation, optional FAQPage JSON-LD schema, and copy-ready HTML + CSS. |
 | [YouTube Embed Builder](youtubeembed.html) | Paste any YouTube URL and build a clean embed iframe — start/end time, autoplay, captions, loop, controls, related-off, and privacy mode (`youtube-nocookie.com`). Live preview, iframe / URL / oEmbed output. |
 | [Stripe Test Card Numbers](stripetestcards.html) | Searchable reference of Stripe's test card numbers — successful charges, declines (`insufficient_funds`, `lost_card`, `stolen_card`, expired, CVC), 3D Secure / SCA challenge flows, AVS failures, and dispute triggers. Click to copy. |
 | [Web Share API Tester](webshare.html) | Trigger `navigator.share()` with custom title, text, URL, and files. Probe `canShare()` per MIME type, inspect `AbortError`/`NotAllowedError`/`DataError`, and copy a ready-to-paste JS snippet. |
