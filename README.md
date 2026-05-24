@@ -120,6 +120,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Emoji ZWJ Sequence Builder](emojizwj.html) | Combine emoji with the Zero-Width Joiner (`U+200D`) — family combos, professions, gendered and skin-tone modifiers, with codepoints, UTF-8 bytes, and JS / HTML escapes. |
 | [GitHub Markdown Alert Builder](ghalert.html) | Build GitHub-style alerts — `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` — with a live preview that mirrors GitHub's rendering and a wrap-at-column formatter. |
 | [Speed Reader (RSVP)](speedread.html) | Read text rapidly one word at a time at your chosen WPM, with adjustable focus letter, chunking, and pause-on-punctuation. |
 | [Markdown Preview](markdown.html) | Write Markdown and see it rendered live. |
@@ -219,6 +220,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [Intl.NumberFormat Playground](intlnumberformat.html) | Test JavaScript's `Intl.NumberFormat` with live locale, style (decimal / currency / percent / unit), notation, sign, and rounding options — `formatToParts` breakdown and 15-locale side-by-side comparison. |
+| [Intl.RelativeTimeFormat Playground](intlrelativetime.html) | Render "3 days ago" / "in 2 hours" across locales — auto-bucket a date diff into the right unit, compare `numeric: auto` vs `always`, and copy a ready-to-paste JS snippet. |
 | [HTML &lt;details&gt; Accordion Builder](detailsbuilder.html) | Build accessible zero-JS disclosures and exclusive accordions with the `name=` attribute — chevron presets, `interpolate-size` animation, optional FAQPage JSON-LD schema, and copy-ready HTML + CSS. |
 | [YouTube Embed Builder](youtubeembed.html) | Paste any YouTube URL and build a clean embed iframe — start/end time, autoplay, captions, loop, controls, related-off, and privacy mode (`youtube-nocookie.com`). Live preview, iframe / URL / oEmbed output. |
 | [Stripe Test Card Numbers](stripetestcards.html) | Searchable reference of Stripe's test card numbers — successful charges, declines (`insufficient_funds`, `lost_card`, `stolen_card`, expired, CVC), 3D Secure / SCA challenge flows, AVS failures, and dispute triggers. Click to copy. |
