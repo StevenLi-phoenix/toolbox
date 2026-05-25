@@ -42,6 +42,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Pixel ↔ REM / EM Converter](px2rem.html) | Convert CSS `px` to `rem`, `em`, `pt`, `%`, `vw`, `vh` with adjustable base font size — bulk rewrite CSS values, reference scale, and a live size preview. |
 | [CSS text-wrap Playground](csstextwrap.html) | Compare `text-wrap: balance / pretty / stable / wrap / nowrap` side-by-side at the same width — live ragged-edge metrics, orphan detection, and copy-ready CSS for headings and prose. |
 | [CSS text-emphasis Playground](textemphasis.html) | Design `text-emphasis` marks (dot, circle, sesame, triangle, double-circle, custom string) with color, position, and skip rules — live preview for horizontal and vertical (CJK) writing modes. |
 | [CSS Sticky Footer Generator](stickyfooter.html) | Generate CSS for a footer that stays pinned to the viewport bottom when content is short and scrolls naturally when long — flexbox, CSS Grid, legacy negative-margin, and `dvh` variants with a live device-sized preview. |
@@ -120,6 +121,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Line Ending Converter](lineending.html) | Convert text between CRLF (Windows), LF (Unix / macOS), and CR (classic Mac) — visualize hidden newline bytes, detect mixed endings, strip trailing whitespace, and download with the right encoding. |
 | [Emoji ZWJ Sequence Builder](emojizwj.html) | Combine emoji with the Zero-Width Joiner (`U+200D`) — family combos, professions, gendered and skin-tone modifiers, with codepoints, UTF-8 bytes, and JS / HTML escapes. |
 | [GitHub Markdown Alert Builder](ghalert.html) | Build GitHub-style alerts — `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` — with a live preview that mirrors GitHub's rendering and a wrap-at-column formatter. |
 | [Speed Reader (RSVP)](speedread.html) | Read text rapidly one word at a time at your chosen WPM, with adjustable focus letter, chunking, and pause-on-punctuation. |
@@ -284,6 +286,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [5 Whys Root Cause Analyzer](fivewhys.html) | Drill from the symptom of an incident, bug, or process failure to the underlying root cause — guided why chain, corrective-action list, common pitfalls, and copy-ready Markdown for your postmortem. |
 | [Changelog Bullet Generator](changelog.html) | Turn commit notes into polished release notes. |
 | [Commit Message Generator](commitmsg.html) | Build Conventional Commit messages from context. |
 | [Issue Triage Assistant](issuetriage.html) | Turn a bug report into a crisp triage summary. |

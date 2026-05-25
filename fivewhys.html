@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5 Whys Root Cause Analyzer — Free Online Tool</title>
+<meta name="description" content="Walk through the 5 Whys technique to find the root cause of an incident, bug, or process failure. Drill through cause chains, branch into multiple paths, and export as Markdown or a postmortem-ready section.">
+<meta name="keywords" content="5 whys, five whys, root cause analysis, rca, incident analysis, postmortem, lean methodology, blameless postmortem">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/fivewhys.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .problem-input {
+    width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--sans); font-size: 1rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+  }
+  .why-chain { margin-top: 12px; }
+  .why-row {
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 10px; align-items: start; margin-bottom: 10px;
+  }
+  .why-badge {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 6px 10px;
+    font-family: var(--mono); font-size: .78rem; color: var(--muted);
+    white-space: nowrap; min-width: 64px; text-align: center; font-weight: 600;
+  }
+  .why-row.deep .why-badge { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+  .why-row.root .why-badge { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .why-text {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--sans); font-size: .95rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+    resize: vertical; min-height: 44px;
+  }
+  .why-actions { display: flex; flex-direction: column; gap: 4px; }
+  .icon-btn {
+    width: 32px; height: 32px; padding: 0; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); border-radius: var(--radius);
+    cursor: pointer; font-size: .9rem;
+  }
+  .icon-btn:hover { border-color: var(--accent); }
+  .icon-btn.danger:hover { border-color: var(--error, #dc2626); color: var(--error, #dc2626); }
+  .toolbar {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    margin-top: 12px; align-items: center;
+  }
+  .toolbar button {
+    padding: 8px 14px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); border-radius: var(--radius); cursor: pointer;
+    font-family: var(--sans); font-size: .85rem;
+  }
+  .toolbar button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .toolbar button:hover { border-color: var(--accent); }
+  .summary {
+    margin-top: 14px; padding: 14px; background: var(--surface2);
+    border-left: 4px solid var(--accent); border-radius: var(--radius);
+  }
+  .summary-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .summary-root { font-weight: 600; color: var(--text); line-height: 1.5; }
+  .actions-list {
+    list-style: none; padding: 0; margin: 8px 0 0;
+  }
+  .actions-list li {
+    padding: 8px 10px; border-bottom: 1px solid var(--border);
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center;
+  }
+  .actions-list input[type="text"] {
+    border: none; background: transparent; color: var(--text);
+    font-family: var(--sans); font-size: .9rem; padding: 4px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .actions-list input[type="text"]:focus { outline: none; border-bottom-color: var(--accent); }
+  .add-action {
+    padding: 8px 10px; border: 1px dashed var(--border); border-radius: var(--radius);
+    background: transparent; color: var(--muted); cursor: pointer; width: 100%;
+    margin-top: 8px; font-size: .85rem;
+  }
+  .add-action:hover { color: var(--accent); border-color: var(--accent); }
+  pre.export {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px; font-family: var(--mono);
+    font-size: .82rem; line-height: 1.55; max-height: 360px; overflow: auto;
+    white-space: pre-wrap; word-break: break-word; color: var(--text);
+  }
+  .pitfalls { font-size: .85rem; line-height: 1.6; color: var(--muted); }
+  .pitfalls li { margin-bottom: 6px; }
+  .pitfalls code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; color: var(--text); font-size: .82rem; }
+  .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .examples button {
+    padding: 6px 10px; border: 1px solid var(--border); background: var(--bg);
+    color: var(--muted); border-radius: var(--radius); cursor: pointer; font-size: .8rem;
+  }
+  .examples button:hover { color: var(--accent); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>5 Whys Root Cause Analyzer</h1>
+<p class="subtitle">Drill from the symptom of an incident, bug, or process breakdown to the underlying root cause by asking <em>"why?"</em> five times. Then turn the chain into action items and copy-ready Markdown for your postmortem.</p>
+
+<div class="card">
+  <h2>The problem (symptom)</h2>
+  <input id="problem" type="text" class="problem-input" placeholder="e.g. The deploy pipeline failed at 14:32 UTC and blocked 6 PRs for 45 minutes." oninput="updateExport()">
+  <div class="examples">
+    <span style="font-size:.78rem;color:var(--muted);align-self:center">Try:</span>
+    <button onclick="loadExample('incident')">SEV-2 incident</button>
+    <button onclick="loadExample('bug')">Recurring bug</button>
+    <button onclick="loadExample('process')">Process failure</button>
+    <button onclick="loadExample('miss')">Missed deadline</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why chain</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-top:0">Ask "Why did that happen?" for each previous answer. Five is a heuristic — stop when you hit a cause you can act on (the root), not when you hit a person to blame.</p>
+  <div class="why-chain" id="chain"></div>
+  <div class="toolbar">
+    <button class="primary" onclick="addWhy()">+ Add another why</button>
+    <button onclick="markRoot()" id="rootBtn">📌 Mark current as root cause</button>
+    <button onclick="reset()">Reset chain</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Root cause &amp; corrective actions</h2>
+  <div class="summary">
+    <div class="summary-label">Root cause</div>
+    <div class="summary-root" id="rootDisplay">Add at least one why to identify a root cause.</div>
+  </div>
+  <h3 style="margin-top:18px;font-size:.95rem">Corrective actions</h3>
+  <p style="font-size:.8rem;color:var(--muted);margin:4px 0">Each action should be specific, owned, and verifiable. Address the <em>root</em>, not the symptom.</p>
+  <ul class="actions-list" id="actionsList"></ul>
+  <button class="add-action" onclick="addAction()">+ Add corrective action</button>
+</div>
+
+<div class="card">
+  <h2>Export</h2>
+  <div class="toolbar">
+    <button class="primary" id="copyBtn" onclick="copyExport()">Copy as Markdown</button>
+    <button onclick="downloadExport()">Download .md</button>
+    <button onclick="copyAsText()">Copy as plain text</button>
+  </div>
+  <pre class="export" id="export"></pre>
+</div>
+
+<div class="card">
+  <h2>Common pitfalls</h2>
+  <ul class="pitfalls">
+    <li><strong>Stopping too early.</strong> "The build broke because the test failed." That's a symptom, not a cause. Why did the test fail? Why did that change ship without being caught?</li>
+    <li><strong>Stopping at a person.</strong> "Because Alice forgot." Almost never the real root — keep going. <em>Why was it possible for Alice (or anyone) to forget?</em> The system, not the person, is usually the cause.</li>
+    <li><strong>Drifting to single linear chain.</strong> Real incidents have multiple contributing causes. Use "Add another why" to branch — duplicate the row and follow a parallel chain.</li>
+    <li><strong>Conflating <code>cause</code> with <code>trigger</code>.</strong> The trigger is what set it off this time. The cause is the latent condition that let the trigger turn into an incident.</li>
+    <li><strong>Treating "5" as sacred.</strong> Three is fine if you're truly at a root. Seven is fine if you're not. Stop at the deepest cause you can act on.</li>
+    <li><strong>No action items.</strong> A root cause without a corrective action is just a story. Each root must produce at least one specific, owned, dated action.</li>
+  </ul>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let whys = [''];
+let rootIdx = -1;
+let actions = [{ text: '', owner: '', due: '' }];
+
+const EXAMPLES = {
+  incident: {
+    problem: 'The deploy pipeline failed at 14:32 UTC and blocked 6 PRs for 45 minutes.',
+    whys: [
+      'The CI job timed out after 30 minutes on the integration-test step.',
+      'The new integration test calls a slow third-party sandbox that takes ~3 minutes per case.',
+      'The sandbox call was added last week without a timeout or mock layer.',
+      'The PR template does not flag external-dependency tests for a separate review.',
+      'We have no policy distinguishing "fast" CI from "long-running" CI; everything runs on every push.'
+    ],
+    root: 4,
+    actions: [
+      { text: 'Move slow integration tests to a nightly suite, gated separately', owner: 'platform-team', due: 'this sprint' },
+      { text: 'Add a CI lint rule that flags new tests calling external sandboxes', owner: 'devex', due: 'next sprint' }
+    ]
+  },
+  bug: {
+    problem: 'Users report intermittent 500 errors on the /checkout endpoint, ~2 per hour.',
+    whys: [
+      'The endpoint occasionally times out waiting for the inventory service.',
+      'The inventory service has a connection pool of 10, and we spike to 40 concurrent at checkout.',
+      'The connection pool size was set at launch and never tuned for current traffic.',
+      'We have no alerting on pool saturation, so the symptom only surfaces as 500s.'
+    ],
+    root: 3,
+    actions: [
+      { text: 'Right-size connection pool based on p99 concurrent demand + 50% headroom', owner: 'backend-team', due: 'this week' },
+      { text: 'Add pool-saturation metric + alert at 80% for the inventory client', owner: 'sre', due: 'this week' }
+    ]
+  },
+  process: {
+    problem: 'Three customer-facing bugs slipped past code review and made it to production this month.',
+    whys: [
+      'Reviewers approved without testing the change locally.',
+      'PRs were sized too large (>500 lines) to mentally simulate the change.',
+      'We have no upper bound on PR size in our contributing guide.',
+      'Authors are rewarded for "shipped" tickets, not for "shippable" PRs.'
+    ],
+    root: 3,
+    actions: [
+      { text: 'Set a soft PR size limit (400 lines) in the PR template; auto-comment over the cap', owner: 'devex', due: 'this sprint' },
+      { text: 'Add "PR size" as a tracked quality metric alongside throughput', owner: 'eng-mgmt', due: 'next quarter' }
+    ]
+  },
+  miss: {
+    problem: 'We shipped the v2 launch 3 weeks late.',
+    whys: [
+      'The auth integration took longer than estimated.',
+      'The provider\'s docs were out of date and we discovered breaking changes in week 3.',
+      'We did not build a thin end-to-end auth prototype during planning.',
+      'Our planning process estimates implementation but not unknowns / discovery.'
+    ],
+    root: 3,
+    actions: [
+      { text: 'Add a "spike / prototype" line item to every project plan for unknown integrations', owner: 'product', due: 'next planning cycle' },
+      { text: 'Track estimation accuracy per team to surface where discovery is underweighted', owner: 'eng-mgmt', due: 'ongoing' }
+    ]
+  }
+};
+
+function render() {
+  const chain = $('chain');
+  chain.innerHTML = '';
+  whys.forEach((why, i) => {
+    const row = document.createElement('div');
+    row.className = 'why-row';
+    if (i >= 5) row.classList.add('deep');
+    if (i === rootIdx) row.classList.add('root');
+    row.innerHTML =
+      '<div class="why-badge">' + (i === rootIdx ? '🎯 root' : 'Why #' + (i + 1)) + '</div>' +
+      '<textarea class="why-text" placeholder="' + (i === 0 ? 'Why did the problem happen?' : 'Why did #' + i + ' happen?') + '" oninput="setWhy(' + i + ', this.value)">' + escapeHtml(why) + '</textarea>' +
+      '<div class="why-actions">' +
+        (whys.length > 1 ? '<button class="icon-btn danger" title="Remove" onclick="removeWhy(' + i + ')">×</button>' : '') +
+        (i === whys.length - 1 ? '<button class="icon-btn" title="Add another why" onclick="addWhy()">+</button>' : '') +
+      '</div>';
+    chain.appendChild(row);
+  });
+  renderRoot();
+  renderActions();
+  updateExport();
+}
+
+function escapeHtml(s) {
+  return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function setWhy(i, v) {
+  whys[i] = v;
+  renderRoot();
+  updateExport();
+}
+
+function addWhy() {
+  whys.push('');
+  render();
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.why-text');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }, 0);
+}
+
+function removeWhy(i) {
+  whys.splice(i, 1);
+  if (whys.length === 0) whys = [''];
+  if (rootIdx === i) rootIdx = -1;
+  else if (rootIdx > i) rootIdx--;
+  render();
+}
+
+function markRoot() {
+  let last = -1;
+  for (let i = whys.length - 1; i >= 0; i--) {
+    if (whys[i].trim()) { last = i; break; }
+  }
+  rootIdx = last;
+  render();
+}
+
+function reset() {
+  whys = [''];
+  rootIdx = -1;
+  actions = [{ text: '', owner: '', due: '' }];
+  $('problem').value = '';
+  render();
+}
+
+function renderRoot() {
+  const el = $('rootDisplay');
+  if (rootIdx >= 0 && whys[rootIdx] && whys[rootIdx].trim()) {
+    el.textContent = whys[rootIdx];
+    el.style.color = 'var(--text)';
+  } else {
+    const lastWith = whys.filter(w => w.trim()).pop();
+    if (lastWith) {
+      el.innerHTML = '<em style="color:var(--muted)">Inferred (last why):</em> ' + escapeHtml(lastWith);
+    } else {
+      el.textContent = 'Add at least one why to identify a root cause.';
+      el.style.color = 'var(--muted)';
+    }
+  }
+}
+
+function addAction() {
+  actions.push({ text: '', owner: '', due: '' });
+  renderActions();
+  updateExport();
+}
+
+function removeAction(i) {
+  actions.splice(i, 1);
+  if (actions.length === 0) actions = [{ text: '', owner: '', due: '' }];
+  renderActions();
+  updateExport();
+}
+
+function setAction(i, field, val) {
+  actions[i][field] = val;
+  updateExport();
+}
+
+function renderActions() {
+  const list = $('actionsList');
+  list.innerHTML = '';
+  actions.forEach((a, i) => {
+    const li = document.createElement('li');
+    li.innerHTML =
+      '<input type="checkbox" disabled>' +
+      '<div style="display:grid;grid-template-columns:1fr 140px 140px;gap:8px">' +
+        '<input type="text" placeholder="Action…" value="' + escapeHtml(a.text) + '" oninput="setAction(' + i + ',\'text\',this.value)">' +
+        '<input type="text" placeholder="Owner" value="' + escapeHtml(a.owner) + '" oninput="setAction(' + i + ',\'owner\',this.value)">' +
+        '<input type="text" placeholder="Due" value="' + escapeHtml(a.due) + '" oninput="setAction(' + i + ',\'due\',this.value)">' +
+      '</div>' +
+      '<button class="icon-btn danger" title="Remove" onclick="removeAction(' + i + ')">×</button>';
+    list.appendChild(li);
+  });
+}
+
+function buildMarkdown() {
+  const problem = $('problem').value.trim() || '(no problem stated)';
+  const lines = ['# Root Cause Analysis — 5 Whys', ''];
+  lines.push('**Problem:** ' + problem);
+  lines.push('');
+  lines.push('## Why chain');
+  lines.push('');
+  whys.forEach((w, i) => {
+    if (!w.trim()) return;
+    const marker = i === rootIdx ? ' 🎯 **root cause**' : '';
+    lines.push((i + 1) + '. **Why?** ' + w + marker);
+  });
+  if (whys.every(w => !w.trim())) lines.push('_(none yet)_');
+  lines.push('');
+  let root = '';
+  if (rootIdx >= 0 && whys[rootIdx]) root = whys[rootIdx];
+  else { const last = whys.filter(w => w.trim()).pop(); if (last) root = last; }
+  if (root) {
+    lines.push('## Root cause');
+    lines.push('');
+    lines.push('> ' + root);
+    lines.push('');
+  }
+  const real = actions.filter(a => a.text.trim());
+  if (real.length) {
+    lines.push('## Corrective actions');
+    lines.push('');
+    real.forEach(a => {
+      const parts = ['- [ ] ' + a.text];
+      if (a.owner.trim()) parts.push('_(owner: ' + a.owner + ')_');
+      if (a.due.trim()) parts.push('_(due: ' + a.due + ')_');
+      lines.push(parts.join(' '));
+    });
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+function buildPlainText() {
+  const problem = $('problem').value.trim() || '(no problem stated)';
+  const lines = ['ROOT CAUSE ANALYSIS — 5 WHYS', '', 'Problem: ' + problem, '', 'Why chain:'];
+  whys.forEach((w, i) => {
+    if (!w.trim()) return;
+    const marker = i === rootIdx ? '  [ROOT]' : '';
+    lines.push('  ' + (i + 1) + '. Why? ' + w + marker);
+  });
+  let root = '';
+  if (rootIdx >= 0 && whys[rootIdx]) root = whys[rootIdx];
+  else { const last = whys.filter(w => w.trim()).pop(); if (last) root = last; }
+  if (root) lines.push('', 'Root cause: ' + root);
+  const real = actions.filter(a => a.text.trim());
+  if (real.length) {
+    lines.push('', 'Corrective actions:');
+    real.forEach(a => {
+      let s = '  - ' + a.text;
+      if (a.owner.trim()) s += ' (owner: ' + a.owner + ')';
+      if (a.due.trim()) s += ' (due: ' + a.due + ')';
+      lines.push(s);
+    });
+  }
+  return lines.join('\n');
+}
+
+function updateExport() {
+  $('export').textContent = buildMarkdown();
+}
+
+async function copyExport() {
+  const btn = $('copyBtn');
+  try {
+    await navigator.clipboard.writeText(buildMarkdown());
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => btn.textContent = orig, 1200);
+  } catch (e) { fallbackCopy(buildMarkdown()); }
+}
+
+async function copyAsText() {
+  try { await navigator.clipboard.writeText(buildPlainText()); }
+  catch (e) { fallbackCopy(buildPlainText()); }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  ta.remove();
+}
+
+function downloadExport() {
+  const blob = new Blob([buildMarkdown()], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '5-whys-rca.md';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 100);
+}
+
+function loadExample(key) {
+  const ex = EXAMPLES[key];
+  $('problem').value = ex.problem;
+  whys = ex.whys.slice();
+  rootIdx = ex.root;
+  actions = ex.actions.slice();
+  render();
+}
+
+$('problem').addEventListener('input', updateExport);
+
+loadExample('incident');
+</script>
+</body>
+</html>
