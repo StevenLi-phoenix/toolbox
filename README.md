@@ -42,6 +42,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS hyphens & word-break Playground](hyphensbreak.html) | Compare `hyphens`, `word-break`, `overflow-wrap`, and `line-break` on the same text at the same column width — tune `hyphenate-character` & `hyphenate-limit-chars`, spot which combo actually breaks the unbreakable URL. |
 | [Pixel ↔ REM / EM Converter](px2rem.html) | Convert CSS `px` to `rem`, `em`, `pt`, `%`, `vw`, `vh` with adjustable base font size — bulk rewrite CSS values, reference scale, and a live size preview. |
 | [CSS text-wrap Playground](csstextwrap.html) | Compare `text-wrap: balance / pretty / stable / wrap / nowrap` side-by-side at the same width — live ragged-edge metrics, orphan detection, and copy-ready CSS for headings and prose. |
 | [CSS text-emphasis Playground](textemphasis.html) | Design `text-emphasis` marks (dot, circle, sesame, triangle, double-circle, custom string) with color, position, and skip rules — live preview for horizontal and vertical (CJK) writing modes. |
@@ -177,6 +178,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Resource Hints Builder](resourcehints.html) | Generate `<link rel="preload / prefetch / preconnect / dns-prefetch / modulepreload">` with the right `as`, `type`, `crossorigin`, `fetchpriority`, `imagesrcset`, and `media` — plus the equivalent HTTP `Link:` response header. |
 | [cURL → PowerShell](curl2pwsh.html) | Convert a `curl` command to `Invoke-WebRequest` or `Invoke-RestMethod` — method, headers, JSON / form body, basic auth, cookies, and a `-SkipCertificateCheck` fallback for PowerShell 7 and Windows PowerShell 5.1. |
 | [Trusted Types Policy Generator](trustedtypes.html) | Generate `require-trusted-types-for 'script'` and `trusted-types` CSP directives plus the `createHTML` / `createScript` / `createScriptURL` policy code — with default fallback, Report-Only rollout, and a violation listener. |
 | [OAuth 2.0 Device Flow Builder](deviceflow.html) | Walk through the RFC 8628 Device Authorization grant — build the initial POST, render the `user_code` with a QR for `verification_uri_complete`, plan the polling loop with `slow_down`/`expired_token` handling, and copy curl/fetch snippets. |
@@ -222,6 +224,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [HTML Popover API Builder](popover.html) | Build native HTML `popover`s — `auto / manual / hint` types, `popovertarget` triggers, anchor positioning, `::backdrop` styling, and `@starting-style` entry animation. Live preview, zero JS required for show/hide. |
 | [Intl.NumberFormat Playground](intlnumberformat.html) | Test JavaScript's `Intl.NumberFormat` with live locale, style (decimal / currency / percent / unit), notation, sign, and rounding options — `formatToParts` breakdown and 15-locale side-by-side comparison. |
 | [Intl.RelativeTimeFormat Playground](intlrelativetime.html) | Render "3 days ago" / "in 2 hours" across locales — auto-bucket a date diff into the right unit, compare `numeric: auto` vs `always`, and copy a ready-to-paste JS snippet. |
 | [HTML &lt;details&gt; Accordion Builder](detailsbuilder.html) | Build accessible zero-JS disclosures and exclusive accordions with the `name=` attribute — chevron presets, `interpolate-size` animation, optional FAQPage JSON-LD schema, and copy-ready HTML + CSS. |
