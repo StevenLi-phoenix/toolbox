@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TypeScript Interface → Zod Schema — Free Online Tool</title>
+<meta name="description" content="Convert TypeScript interfaces and type aliases into Zod schemas. Handles unions, intersections, arrays, tuples, literals, enums, optional properties, nested types, and recursive references.">
+<meta name="keywords" content="typescript to zod, ts to zod, interface to zod, zod schema generator, zod from typescript, type validator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ts2zod.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  textarea {
+    width: 100%; box-sizing: border-box;
+    min-height: 440px; resize: vertical;
+    font-family: var(--mono); font-size: .85rem; line-height: 1.55;
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px;
+  }
+  .controls { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 12px; font-size: .88rem; color: var(--text); }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .errors { font-family: var(--mono); font-size: .82rem; color: var(--warning); margin-top: 8px; min-height: 1.2em; }
+  .ok { color: var(--success); }
+  .legend { font-size: .82rem; color: var(--muted); margin-top: 6px; line-height: 1.55; }
+  .legend code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; color: var(--text); font-size: .8rem; }
+  @media (max-width: 880px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>TypeScript → Zod Schema</h1>
+<p class="subtitle">Drop in TypeScript <code>interface</code> or <code>type</code> declarations and get back equivalent <a href="https://zod.dev" target="_blank" rel="noopener">Zod</a> schemas — the runtime mirror of your compile-time types. Useful when you want one source of truth that validates HTTP payloads, form input, or env vars without writing parsers by hand.</p>
+
+<div class="card">
+  <div class="controls">
+    <label><input type="checkbox" id="strict" onchange="convert()"> Use <code>.strict()</code> on objects</label>
+    <label><input type="checkbox" id="passthrough" onchange="convert()"> Use <code>.passthrough()</code> on objects</label>
+    <label><input type="checkbox" id="readonly" onchange="convert()"> Mark <code>readonly</code> props with <code>.readonly()</code></label>
+    <label><input type="checkbox" id="importLine" checked onchange="convert()"> Include <code>import { z } from "zod";</code></label>
+  </div>
+  <div class="panels">
+    <div>
+      <label class="head" for="ts">TypeScript source</label>
+      <textarea id="ts" oninput="convert()" spellcheck="false">interface User {
+  id: string;
+  email: string;
+  age?: number;
+  role: "admin" | "user" | "guest";
+  tags: string[];
+  metadata: Record<string, unknown>;
+  address?: {
+    street: string;
+    city: string;
+    zip: string | null;
+  };
+  createdAt: Date;
+}
+
+type Status = "pending" | "active" | "archived";
+
+type Result<T> = { ok: true; value: T } | { ok: false; error: string };</textarea>
+    </div>
+    <div>
+      <label class="head" for="zod">Zod output</label>
+      <textarea id="zod" readonly spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div id="errors" class="errors"></div>
+</div>
+
+<div class="card">
+  <h2>What's supported</h2>
+  <div class="legend">
+    <p><strong>Primitives</strong> — <code>string</code>, <code>number</code>, <code>boolean</code>, <code>bigint</code>, <code>null</code>, <code>undefined</code>, <code>any</code>, <code>unknown</code>, <code>never</code>, <code>void</code>, <code>Date</code>.</p>
+    <p><strong>Composites</strong> — arrays (<code>T[]</code>, <code>Array&lt;T&gt;</code>, <code>ReadonlyArray&lt;T&gt;</code>), tuples (<code>[A, B, C]</code>), records (<code>Record&lt;K, V&gt;</code>), nested objects, and inline object literals.</p>
+    <p><strong>Type operators</strong> — unions (<code>A | B</code>), intersections (<code>A &amp; B</code>), literal types (<code>"foo"</code>, <code>42</code>, <code>true</code>, <code>null</code>), optional properties (<code>name?: T</code>), nullable (<code>T | null</code>).</p>
+    <p><strong>Declarations</strong> — <code>interface X { … }</code> (including <code>extends</code>) and <code>type X = …</code>. Generic parameters on type aliases are inlined into the schema as <code>z.any()</code> placeholders — Zod doesn't have first-class generics.</p>
+    <p><strong>Not supported</strong> — conditional types, mapped types, template literal types, <code>typeof</code> queries, <code>keyof</code>, function signatures. They emit <code>z.unknown()</code> with a comment.</p>
+  </div>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---------- Tokenizer ----------
+function tokenize(src) {
+  const toks = [];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (/\s/.test(c)) { i++; continue; }
+    // Line comment
+    if (c === '/' && src[i + 1] === '/') {
+      while (i < src.length && src[i] !== '\n') i++;
+      continue;
+    }
+    // Block comment
+    if (c === '/' && src[i + 1] === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+    // Strings
+    if (c === '"' || c === "'" || c === '`') {
+      const q = c;
+      let s = q;
+      i++;
+      while (i < src.length && src[i] !== q) {
+        if (src[i] === '\\') { s += src[i] + src[i + 1]; i += 2; continue; }
+        s += src[i]; i++;
+      }
+      s += q;
+      i++;
+      toks.push({ t: 'str', v: s });
+      continue;
+    }
+    // Numbers
+    if (/[0-9]/.test(c) || (c === '-' && /[0-9]/.test(src[i + 1] || ''))) {
+      let s = '';
+      if (c === '-') { s = '-'; i++; }
+      while (i < src.length && /[0-9_.eE+\-]/.test(src[i])) { s += src[i]; i++; }
+      toks.push({ t: 'num', v: s });
+      continue;
+    }
+    // Identifier
+    if (/[A-Za-z_$]/.test(c)) {
+      let s = '';
+      while (i < src.length && /[A-Za-z0-9_$]/.test(src[i])) { s += src[i]; i++; }
+      toks.push({ t: 'id', v: s });
+      continue;
+    }
+    // Punctuation (multi-char first)
+    const two = src.slice(i, i + 2);
+    if (['=>', '&&', '||', '??'].includes(two)) { toks.push({ t: 'op', v: two }); i += 2; continue; }
+    toks.push({ t: 'op', v: c });
+    i++;
+  }
+  toks.push({ t: 'eof', v: '' });
+  return toks;
+}
+
+// ---------- Parser ----------
+class Parser {
+  constructor(toks) { this.toks = toks; this.p = 0; this.errors = []; }
+  peek(n = 0) { return this.toks[this.p + n]; }
+  eat() { return this.toks[this.p++]; }
+  accept(t, v) {
+    const cur = this.peek();
+    if (cur.t === t && (v == null || cur.v === v)) { this.p++; return cur; }
+    return null;
+  }
+  expect(t, v) {
+    const got = this.accept(t, v);
+    if (!got) {
+      const cur = this.peek();
+      this.errors.push(`Expected ${v || t}, got ${cur.v || cur.t}`);
+      return cur;
+    }
+    return got;
+  }
+  parseProgram() {
+    const decls = [];
+    while (this.peek().t !== 'eof') {
+      // skip 'export' / 'declare'
+      while (this.accept('id', 'export') || this.accept('id', 'declare')) {}
+      const cur = this.peek();
+      if (cur.t === 'id' && cur.v === 'interface') {
+        decls.push(this.parseInterface());
+      } else if (cur.t === 'id' && cur.v === 'type') {
+        decls.push(this.parseTypeAlias());
+      } else if (cur.t === 'op' && cur.v === ';') {
+        this.eat();
+      } else {
+        this.errors.push(`Unexpected token "${cur.v}" at top level`);
+        this.eat();
+      }
+    }
+    return decls;
+  }
+  parseInterface() {
+    this.eat(); // 'interface'
+    const name = this.expect('id').v;
+    // generics
+    let generics = [];
+    if (this.accept('op', '<')) {
+      generics = this.parseGenericParams();
+    }
+    let extendsList = [];
+    if (this.accept('id', 'extends')) {
+      do {
+        const ext = this.parseTypeRef();
+        extendsList.push(ext);
+      } while (this.accept('op', ','));
+    }
+    const body = this.parseObjectType();
+    return { kind: 'interface', name, generics, extends: extendsList, body };
+  }
+  parseTypeAlias() {
+    this.eat(); // 'type'
+    const name = this.expect('id').v;
+    let generics = [];
+    if (this.accept('op', '<')) {
+      generics = this.parseGenericParams();
+    }
+    this.expect('op', '=');
+    const type = this.parseType();
+    this.accept('op', ';');
+    return { kind: 'alias', name, generics, type };
+  }
+  parseGenericParams() {
+    const params = [];
+    do {
+      const nm = this.expect('id').v;
+      // skip 'extends X' and '= D'
+      if (this.accept('id', 'extends')) this.parseType();
+      if (this.accept('op', '=')) this.parseType();
+      params.push(nm);
+    } while (this.accept('op', ','));
+    this.expect('op', '>');
+    return params;
+  }
+  parseObjectType() {
+    this.expect('op', '{');
+    const members = [];
+    while (!this.accept('op', '}')) {
+      if (this.peek().t === 'eof') { this.errors.push('Unclosed { in object type'); break; }
+      // index signature: [k: string]: V
+      if (this.accept('op', '[')) {
+        const keyName = this.expect('id').v;
+        this.expect('op', ':');
+        const keyType = this.parseType();
+        this.expect('op', ']');
+        this.expect('op', ':');
+        const valType = this.parseType();
+        this.accept('op', ';'); this.accept('op', ',');
+        members.push({ kind: 'index', keyType, valType });
+        continue;
+      }
+      // readonly?
+      let isReadonly = false;
+      if (this.peek().t === 'id' && this.peek().v === 'readonly' && this.peek(1).t === 'id') {
+        this.eat();
+        isReadonly = true;
+      }
+      // name (id or string literal)
+      let key;
+      if (this.peek().t === 'str') { key = this.eat().v; }
+      else if (this.peek().t === 'id' || this.peek().t === 'num') { key = this.eat().v; }
+      else { this.errors.push(`Bad member name "${this.peek().v}"`); this.eat(); continue; }
+      const optional = !!this.accept('op', '?');
+      this.expect('op', ':');
+      const type = this.parseType();
+      this.accept('op', ';'); this.accept('op', ',');
+      members.push({ kind: 'prop', key, optional, readonly: isReadonly, type });
+    }
+    return { kind: 'object', members };
+  }
+  parseType() {
+    // intersection of unions; unions of intersections — TS allows | & at top
+    // parse union of intersections
+    let left = this.parseIntersection();
+    while (this.accept('op', '|')) {
+      const right = this.parseIntersection();
+      if (left.kind === 'union') left.types.push(right);
+      else left = { kind: 'union', types: [left, right] };
+    }
+    return left;
+  }
+  parseIntersection() {
+    let left = this.parsePostfix();
+    while (this.accept('op', '&')) {
+      const right = this.parsePostfix();
+      if (left.kind === 'intersection') left.types.push(right);
+      else left = { kind: 'intersection', types: [left, right] };
+    }
+    return left;
+  }
+  parsePostfix() {
+    let t = this.parseAtom();
+    while (true) {
+      if (this.accept('op', '[')) {
+        if (this.accept('op', ']')) {
+          t = { kind: 'array', inner: t };
+        } else {
+          // indexed access type T[K] — fall back to unknown
+          while (!this.accept('op', ']')) {
+            if (this.peek().t === 'eof') break;
+            this.eat();
+          }
+          t = { kind: 'unknown', note: 'indexed access type' };
+        }
+      } else break;
+    }
+    return t;
+  }
+  parseAtom() {
+    const cur = this.peek();
+    // leading | from union split
+    if (cur.t === 'op' && cur.v === '(') {
+      this.eat();
+      const inner = this.parseType();
+      this.expect('op', ')');
+      return inner;
+    }
+    if (cur.t === 'op' && cur.v === '{') {
+      return this.parseObjectType();
+    }
+    if (cur.t === 'op' && cur.v === '[') {
+      // tuple
+      this.eat();
+      const items = [];
+      if (!this.accept('op', ']')) {
+        do {
+          items.push(this.parseType());
+        } while (this.accept('op', ','));
+        this.expect('op', ']');
+      }
+      return { kind: 'tuple', items };
+    }
+    if (cur.t === 'str') { this.eat(); return { kind: 'literal', val: cur.v }; }
+    if (cur.t === 'num') { this.eat(); return { kind: 'literal-num', val: cur.v }; }
+    if (cur.t === 'id') {
+      if (cur.v === 'true' || cur.v === 'false') { this.eat(); return { kind: 'literal-bool', val: cur.v }; }
+      return this.parseTypeRef();
+    }
+    if (cur.t === 'op' && cur.v === '-') {
+      // negative number literal
+      this.eat();
+      const n = this.expect('num');
+      return { kind: 'literal-num', val: '-' + n.v };
+    }
+    this.errors.push(`Unexpected token "${cur.v}" in type`);
+    this.eat();
+    return { kind: 'unknown', note: 'parse error' };
+  }
+  parseTypeRef() {
+    const name = this.eat().v;
+    let args = null;
+    if (this.peek().t === 'op' && this.peek().v === '<') {
+      // Naive: scan generic args
+      this.eat();
+      args = [];
+      if (!this.accept('op', '>')) {
+        do {
+          args.push(this.parseType());
+        } while (this.accept('op', ','));
+        // Handle '>>': split into two ops if needed; our tokenizer makes each '>' a single op.
+        this.expect('op', '>');
+      }
+    }
+    return { kind: 'ref', name, args };
+  }
+}
+
+// ---------- Emitter ----------
+function emit(node, opts) {
+  switch (node.kind) {
+    case 'object': return emitObject(node, opts);
+    case 'array': return `z.array(${emit(node.inner, opts)})`;
+    case 'tuple':
+      if (node.items.length === 0) return 'z.tuple([])';
+      return `z.tuple([${node.items.map(t => emit(t, opts)).join(', ')}])`;
+    case 'union': {
+      // Detect optional-only or null-only suffix
+      const types = node.types;
+      const hasUndefined = types.some(t => t.kind === 'ref' && t.name === 'undefined');
+      const hasNull = types.some(t => t.kind === 'ref' && t.name === 'null') || types.some(t => t.kind === 'literal' && t.val === 'null');
+      const others = types.filter(t => !(t.kind === 'ref' && (t.name === 'undefined' || t.name === 'null')) && !(t.kind === 'literal' && t.val === 'null'));
+      let base;
+      if (others.length === 0) base = 'z.unknown()';
+      else if (others.length === 1) base = emit(others[0], opts);
+      else {
+        // If all literals string → z.enum
+        if (others.every(t => t.kind === 'literal')) {
+          base = `z.enum([${others.map(t => t.val).join(', ')}])`;
+        } else if (others.every(t => t.kind === 'literal' || t.kind === 'literal-num' || t.kind === 'literal-bool')) {
+          base = `z.union([${others.map(t => emit(t, opts)).join(', ')}])`;
+        } else {
+          base = `z.union([${others.map(t => emit(t, opts)).join(', ')}])`;
+        }
+      }
+      let res = base;
+      if (hasNull) res += '.nullable()';
+      if (hasUndefined) res += '.optional()';
+      return res;
+    }
+    case 'intersection':
+      if (node.types.length === 1) return emit(node.types[0], opts);
+      return node.types.slice(1).reduce(
+        (acc, t) => `z.intersection(${acc}, ${emit(t, opts)})`,
+        emit(node.types[0], opts)
+      );
+    case 'literal': return `z.literal(${node.val})`;
+    case 'literal-num': return `z.literal(${node.val})`;
+    case 'literal-bool': return `z.literal(${node.val})`;
+    case 'unknown': return node.note ? `z.unknown() /* ${node.note} */` : 'z.unknown()';
+    case 'ref': return emitRef(node, opts);
+    default: return 'z.unknown()';
+  }
+}
+
+function emitRef(node, opts) {
+  const n = node.name;
+  switch (n) {
+    case 'string': return 'z.string()';
+    case 'number': return 'z.number()';
+    case 'boolean': return 'z.boolean()';
+    case 'bigint': return 'z.bigint()';
+    case 'symbol': return 'z.symbol()';
+    case 'Date': return 'z.date()';
+    case 'any': return 'z.any()';
+    case 'unknown': return 'z.unknown()';
+    case 'never': return 'z.never()';
+    case 'void': return 'z.void()';
+    case 'null': return 'z.null()';
+    case 'undefined': return 'z.undefined()';
+    case 'object': return 'z.object({}).passthrough()';
+    case 'Array': case 'ReadonlyArray':
+      return node.args && node.args[0] ? `z.array(${emit(node.args[0], opts)})` : 'z.array(z.unknown())';
+    case 'Record': {
+      if (node.args && node.args.length === 2) {
+        const keyT = emit(node.args[0], opts);
+        const valT = emit(node.args[1], opts);
+        // Zod 3 uses z.record(keySchema, valueSchema)
+        return `z.record(${keyT}, ${valT})`;
+      }
+      return 'z.record(z.string(), z.unknown())';
+    }
+    case 'Partial':
+      if (node.args && node.args[0]) return `${emit(node.args[0], opts)}.partial()`;
+      return 'z.unknown()';
+    case 'Required':
+      if (node.args && node.args[0]) return `${emit(node.args[0], opts)}.required()`;
+      return 'z.unknown()';
+    case 'Readonly':
+      if (node.args && node.args[0]) return `${emit(node.args[0], opts)}.readonly()`;
+      return 'z.unknown()';
+    case 'Promise':
+      if (node.args && node.args[0]) return `z.promise(${emit(node.args[0], opts)})`;
+      return 'z.promise(z.unknown())';
+    case 'Map':
+      if (node.args && node.args.length === 2) return `z.map(${emit(node.args[0], opts)}, ${emit(node.args[1], opts)})`;
+      return 'z.map(z.unknown(), z.unknown())';
+    case 'Set':
+      if (node.args && node.args[0]) return `z.set(${emit(node.args[0], opts)})`;
+      return 'z.set(z.unknown())';
+  }
+  // Reference to another declared schema → schemaCamel
+  if (opts.declaredNames.has(n)) {
+    return schemaName(n);
+  }
+  // Unknown reference
+  return `z.lazy(() => ${schemaName(n)}) /* unresolved: ${n} */`;
+}
+
+function emitObject(node, opts) {
+  const propLines = [];
+  let hasIndex = null;
+  for (const m of node.members) {
+    if (m.kind === 'index') { hasIndex = m; continue; }
+    let val = emit(m.type, opts);
+    if (m.optional) val += '.optional()';
+    if (opts.readonly && m.readonly) val += '.readonly()';
+    const safeKey = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(m.key) ? m.key : JSON.stringify(m.key);
+    propLines.push(`  ${safeKey}: ${val},`);
+  }
+  let out = '';
+  if (propLines.length === 0) {
+    out = 'z.object({})';
+  } else {
+    out = `z.object({\n${propLines.join('\n')}\n})`;
+  }
+  if (opts.strict) out += '.strict()';
+  else if (opts.passthrough) out += '.passthrough()';
+  if (hasIndex) {
+    const v = emit(hasIndex.valType, opts);
+    out += `.catchall(${v})`;
+  }
+  return out;
+}
+
+function schemaName(name) {
+  return name.charAt(0).toLowerCase() + name.slice(1) + 'Schema';
+}
+
+function convert() {
+  const src = $('ts').value;
+  const opts = {
+    strict: $('strict').checked,
+    passthrough: $('passthrough').checked,
+    readonly: $('readonly').checked,
+    declaredNames: new Set(),
+  };
+  if (opts.strict && opts.passthrough) {
+    // mutually exclusive — passthrough wins
+    opts.strict = false;
+  }
+  try {
+    const toks = tokenize(src);
+    const parser = new Parser(toks);
+    const decls = parser.parseProgram();
+    decls.forEach(d => opts.declaredNames.add(d.name));
+
+    const parts = [];
+    if ($('importLine').checked) parts.push('import { z } from "zod";');
+    if ($('importLine').checked) parts.push('');
+
+    for (const d of decls) {
+      let body;
+      if (d.kind === 'interface') {
+        // Merge extends as intersections
+        const baseObj = emitObject(d.body, opts);
+        if (d.extends.length === 0) body = baseObj;
+        else {
+          const extParts = d.extends.map(e => emit(e, opts));
+          body = [baseObj, ...extParts].reduce((a, b) => `z.intersection(${a}, ${b})`);
+        }
+      } else {
+        body = emit(d.type, opts);
+      }
+      const varName = schemaName(d.name);
+      let line = `export const ${varName} = ${body};`;
+      // Add inferred type alias when name differs
+      line += `\nexport type ${d.name} = z.infer<typeof ${varName}>;`;
+      parts.push(line);
+      parts.push('');
+    }
+    $('zod').value = parts.join('\n').trimEnd() + '\n';
+    if (parser.errors.length) {
+      $('errors').innerHTML = `<span>Warnings: ${parser.errors.length}</span><br>` +
+        parser.errors.slice(0, 5).map(e => '• ' + e.replace(/</g, '&lt;')).join('<br>');
+    } else {
+      $('errors').innerHTML = `<span class="ok">Parsed ${decls.length} declaration${decls.length === 1 ? '' : 's'}.</span>`;
+    }
+  } catch (e) {
+    $('errors').textContent = 'Error: ' + e.message;
+    $('zod').value = '';
+  }
+}
+
+convert();
+</script>
+</body>
+</html>

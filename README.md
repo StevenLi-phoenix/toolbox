@@ -37,11 +37,13 @@
 | [YAML Diff Viewer](yamldiff.html) | Compare two YAML documents structurally — order-insensitive maps, list identity keys, and add/remove/change reporting for Kubernetes manifests and Helm values. |
 | [JSON → .env Converter](json2env.html) | Flatten nested JSON into `KEY=value` for `.env` files, `docker --env-file`, Kubernetes Secrets, or shell `export`. Configurable separator, prefix, casing, quoting, and array handling. |
 | [CSV → Markdown Table](csv2md.html) | Convert CSV / TSV to a GitHub-flavored Markdown table with auto column alignment by data type, pipe escaping, header detection, and `<br>` folding for multi-line cells. |
+| [TypeScript → Zod Schema](ts2zod.html) | Convert TypeScript `interface` and `type` declarations into Zod schemas — handles unions, intersections, tuples, literal types, optional / readonly props, nested objects, and built-in generics like `Record`, `Partial`, `Array`. |
 
 ## CSS & Styling
 
 | Tool | Description |
 |------|-------------|
+| [CSS Spacing Scale Generator](spacingscale.html) | Generate a consistent spacing scale — linear, geometric, modular, Fibonacci, T-shirt, or 4-/8-pt grid — and export as custom-property tokens, Tailwind config, Sass map, JSON design tokens, or utility classes with a visual step preview. |
 | [CSS hyphens & word-break Playground](hyphensbreak.html) | Compare `hyphens`, `word-break`, `overflow-wrap`, and `line-break` on the same text at the same column width — tune `hyphenate-character` & `hyphenate-limit-chars`, spot which combo actually breaks the unbreakable URL. |
 | [Pixel ↔ REM / EM Converter](px2rem.html) | Convert CSS `px` to `rem`, `em`, `pt`, `%`, `vw`, `vh` with adjustable base font size — bulk rewrite CSS values, reference scale, and a live size preview. |
 | [CSS text-wrap Playground](csstextwrap.html) | Compare `text-wrap: balance / pretty / stable / wrap / nowrap` side-by-side at the same width — live ragged-edge metrics, orphan detection, and copy-ready CSS for headings and prose. |
@@ -123,6 +125,7 @@
 | Tool | Description |
 |------|-------------|
 | [Line Ending Converter](lineending.html) | Convert text between CRLF (Windows), LF (Unix / macOS), and CR (classic Mac) — visualize hidden newline bytes, detect mixed endings, strip trailing whitespace, and download with the right encoding. |
+| [Slack mrkdwn Preview](slackpreview.html) | Render Slack-flavored *mrkdwn* exactly like a Slack thread — single-asterisk bold, underscore italics, tilde strikethrough, `<url\|label>` links, user / channel / subteam mentions, `:emoji:` shortcodes, and message-cap warnings. |
 | [Emoji ZWJ Sequence Builder](emojizwj.html) | Combine emoji with the Zero-Width Joiner (`U+200D`) — family combos, professions, gendered and skin-tone modifiers, with codepoints, UTF-8 bytes, and JS / HTML escapes. |
 | [GitHub Markdown Alert Builder](ghalert.html) | Build GitHub-style alerts — `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` — with a live preview that mirrors GitHub's rendering and a wrap-at-column formatter. |
 | [Speed Reader (RSVP)](speedread.html) | Read text rapidly one word at a time at your chosen WPM, with adjustable focus letter, chunking, and pause-on-punctuation. |
