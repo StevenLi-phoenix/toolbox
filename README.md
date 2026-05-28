@@ -227,6 +227,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Logfmt Parser & Formatter](logfmt.html) | Parse `key=value` log lines (Heroku, Go `slog`, Splunk) into a structured table — handles quoted values, `\"` / `\\` escapes, and repeated keys — then re-serialize edited pairs with correct quoting. Copy as JSON or TSV. |
+| [MTU & Packet Overhead Calculator](mtu.html) | Stack tunnel headers (WireGuard, IPSec ESP, GRE, PPPoE, VXLAN, 6in4) on top of an Ethernet link and see the effective inner MTU, TCP MSS for v4/v6, UDP payload, and PMTUD blackhole warnings. |
+| [DSCP / ToS / ECN Decoder](dscp.html) | Flip the 8 bits of the IP ToS / Traffic Class byte — DSCP code points (EF, AF, CS), ECN state (Not-ECT, ECT(0/1), CE), legacy IP precedence — with iptables / `tc` / `setsockopt` snippets for any value. |
 | [HTML Popover API Builder](popover.html) | Build native HTML `popover`s — `auto / manual / hint` types, `popovertarget` triggers, anchor positioning, `::backdrop` styling, and `@starting-style` entry animation. Live preview, zero JS required for show/hide. |
 | [Intl.NumberFormat Playground](intlnumberformat.html) | Test JavaScript's `Intl.NumberFormat` with live locale, style (decimal / currency / percent / unit), notation, sign, and rounding options — `formatToParts` breakdown and 15-locale side-by-side comparison. |
 | [Intl.RelativeTimeFormat Playground](intlrelativetime.html) | Render "3 days ago" / "in 2 hours" across locales — auto-bucket a date diff into the right unit, compare `numeric: auto` vs `always`, and copy a ready-to-paste JS snippet. |

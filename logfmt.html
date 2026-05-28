@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logfmt Parser & Formatter — Free Online Tool</title>
+<meta name="description" content="Parse and build logfmt (key=value) log lines used by Heroku, Go services, Splunk, and others. Inspect quoted values, escape rules, and edit fields in a table — then format back to a clean log line. 100% client-side.">
+<meta name="keywords" content="logfmt parser, logfmt formatter, key value log, heroku log, go log, splunk log, structured log, log parser online, dev tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/logfmt.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:768px){.row{grid-template-columns:1fr}}
+textarea{width:100%;min-height:160px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--mono);font-size:.88rem;background:var(--bg);color:var(--text);box-sizing:border-box;resize:vertical;line-height:1.5}
+label.head{display:block;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;font-weight:600}
+.pairs{display:grid;gap:6px;margin-top:8px}
+.pair{display:grid;grid-template-columns:1fr 2fr auto;gap:6px;align-items:center}
+.pair input{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem;width:100%;box-sizing:border-box}
+.pair .k{font-weight:600}
+.pair button{padding:4px 10px;background:none;border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-size:.95rem;line-height:1}
+.pair button:hover{color:var(--error);border-color:var(--error)}
+.lines{display:flex;flex-direction:column;gap:14px;max-height:520px;overflow:auto}
+.line-card{border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;background:var(--surface)}
+.line-head{display:flex;justify-content:space-between;align-items:center;font-size:.76rem;color:var(--muted);margin-bottom:6px;font-family:var(--mono)}
+.kv-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-family:var(--mono);font-size:.82rem}
+.kv-grid .k{font-weight:600;color:var(--accent);word-break:break-all}
+.kv-grid .v{word-break:break-all;color:var(--text)}
+.kv-grid .v.quoted{color:var(--success)}
+.kv-grid .v.empty{color:var(--muted);font-style:italic}
+.kv-grid .v.bool{color:var(--warning)}
+.kv-grid .v.num{color:var(--accent)}
+.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:.82rem;color:var(--muted)}
+.stats strong{color:var(--text);font-family:var(--mono)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.tab{padding:6px 14px;border:1px solid var(--border);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;background:var(--surface);color:var(--muted);cursor:pointer;font-size:.85rem;font-weight:600}
+.tab.active{background:var(--bg);color:var(--text);border-color:var(--border);position:relative;top:1px}
+.panel{display:none}
+.panel.active{display:block}
+.note{font-size:.8rem;color:var(--muted);line-height:1.6;margin-top:6px}
+.tag{display:inline-block;padding:2px 8px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:.72rem;font-family:var(--mono);color:var(--muted)}
+pre.out{padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--mono);font-size:.86rem;white-space:pre-wrap;word-break:break-word;line-height:1.5;margin:0}
+.err{color:var(--error);font-family:var(--mono);font-size:.82rem;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Logfmt Parser &amp; Formatter</h1>
+<p class="subtitle">Logfmt is the loose <code>key=value key="quoted value"</code> log convention popularized by Heroku, Go's <code>log/slog</code>, and Splunk. This tool parses any pasted log lines into a structured table, lets you edit fields, and re-serializes them with correct quoting and escaping. Mixed quoted/unquoted values, embedded equals signs, and backslash escapes are all handled.</p>
+
+<div class="card">
+  <div class="tabs">
+    <div class="tab active" data-tab="parse">Parse</div>
+    <div class="tab" data-tab="build">Build</div>
+  </div>
+
+  <div class="panel active" id="parse-panel">
+    <label class="head" for="input">Paste logfmt lines (one per line)</label>
+    <textarea id="input" spellcheck="false" oninput="parse()">level=info ts=2024-08-12T10:31:55Z msg="started server" addr=:8080 commit=ab12cd3
+level=warn ts=2024-08-12T10:32:01Z msg="slow query" duration_ms=1842 query="SELECT * FROM users WHERE email='a@b.c'" rows=14
+level=error ts=2024-08-12T10:32:14Z msg="db connection lost" err="dial tcp 10.0.1.4:5432: i/o timeout" retry=3 backoff=2.5s
+level=debug ts=2024-08-12T10:32:18Z msg=ok cache_hit=true ratio=0.8742 user_id=42</textarea>
+    <div class="actions">
+      <button onclick="copyJSON()">Copy as JSON</button>
+      <button onclick="copyTable()">Copy as TSV</button>
+      <button onclick="$('input').value='';parse()">Clear</button>
+    </div>
+    <div class="stats">
+      <span>lines parsed <strong id="stLines">0</strong></span>
+      <span>pairs <strong id="stPairs">0</strong></span>
+      <span>unique keys <strong id="stKeys">0</strong></span>
+      <span>warnings <strong id="stWarn">0</strong></span>
+    </div>
+    <div id="errs"></div>
+    <div class="lines" id="lines"></div>
+  </div>
+
+  <div class="panel" id="build-panel">
+    <label class="head">Compose key/value pairs</label>
+    <div class="pairs" id="pairs"></div>
+    <div class="actions">
+      <button onclick="addPair()">+ Add pair</button>
+      <button onclick="loadPreset()">Load Heroku preset</button>
+    </div>
+    <label class="head" style="margin-top:14px">Output</label>
+    <pre class="out" id="builtOut"></pre>
+    <div class="actions">
+      <button onclick="copyBuilt()">Copy line</button>
+    </div>
+    <div class="note">Values containing whitespace, <code>=</code>, or quotes are wrapped in <code>"..."</code> with <code>\</code> and <code>"</code> escaped per the logfmt convention.</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Logfmt rules at a glance</h2>
+  <div class="note">
+    <ul style="margin:0;padding-left:20px;line-height:1.7">
+      <li>Pairs are space-separated: <code>key=value key2=value2</code>. Whitespace inside a quoted value is preserved.</li>
+      <li>Keys are bare identifiers (no quoting). Reserved/invalid characters in a key make the pair ambiguous.</li>
+      <li>A bare value runs until the next unescaped whitespace. To include spaces, <code>=</code>, or quotes, wrap in double quotes.</li>
+      <li>Inside <code>"..."</code>, backslash escapes <code>\\</code> and <code>\"</code> are honored. Other backslashes are kept verbatim.</li>
+      <li>A key with no value (<code>flag</code>) parses as <code>flag=true</code> — same as Heroku's convention.</li>
+      <li>Repeated keys are kept in order; the table shows all occurrences.</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $(t.dataset.tab + '-panel').classList.add('active');
+  };
+});
+
+function parseLine(line) {
+  const pairs = [];
+  const warnings = [];
+  let i = 0;
+  const n = line.length;
+  while (i < n) {
+    while (i < n && (line[i] === ' ' || line[i] === '\t')) i++;
+    if (i >= n) break;
+    let keyStart = i;
+    while (i < n && line[i] !== '=' && line[i] !== ' ' && line[i] !== '\t') i++;
+    const key = line.slice(keyStart, i);
+    if (!key) { i++; continue; }
+    if (i >= n || line[i] !== '=') {
+      pairs.push({ k: key, v: 'true', quoted: false, implicit: true });
+      continue;
+    }
+    i++;
+    if (i < n && line[i] === '"') {
+      i++;
+      let v = '';
+      let closed = false;
+      while (i < n) {
+        const c = line[i];
+        if (c === '\\' && i + 1 < n) {
+          const nx = line[i+1];
+          if (nx === '"' || nx === '\\') { v += nx; i += 2; continue; }
+          if (nx === 'n') { v += '\n'; i += 2; continue; }
+          if (nx === 't') { v += '\t'; i += 2; continue; }
+          v += c; i++; continue;
+        }
+        if (c === '"') { closed = true; i++; break; }
+        v += c; i++;
+      }
+      if (!closed) warnings.push('unterminated quoted value for key "' + key + '"');
+      pairs.push({ k: key, v, quoted: true });
+    } else {
+      let valStart = i;
+      while (i < n && line[i] !== ' ' && line[i] !== '\t') i++;
+      pairs.push({ k: key, v: line.slice(valStart, i), quoted: false });
+    }
+  }
+  return { pairs, warnings };
+}
+
+function classifyValue(v, quoted, implicit) {
+  if (implicit) return 'bool';
+  if (v === '') return 'empty';
+  if (v === 'true' || v === 'false' || v === 'null' || v === 'nil') return 'bool';
+  if (/^-?\d+(\.\d+)?$/.test(v)) return 'num';
+  if (quoted) return 'quoted';
+  return 'plain';
+}
+
+function escapeHTML(s) {
+  return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+let parsed = [];
+
+function parse() {
+  const text = $('input').value;
+  const lines = text.split(/\r?\n/);
+  parsed = [];
+  let totalPairs = 0;
+  const keys = new Set();
+  let warnCount = 0;
+  const errs = [];
+  for (let li = 0; li < lines.length; li++) {
+    const raw = lines[li];
+    if (!raw.trim()) continue;
+    const { pairs, warnings } = parseLine(raw);
+    parsed.push({ raw, pairs, warnings, idx: li + 1 });
+    totalPairs += pairs.length;
+    pairs.forEach(p => keys.add(p.k));
+    warnCount += warnings.length;
+    if (warnings.length) errs.push('line ' + (li+1) + ': ' + warnings.join('; '));
+  }
+  $('stLines').textContent = parsed.length;
+  $('stPairs').textContent = totalPairs;
+  $('stKeys').textContent = keys.size;
+  $('stWarn').textContent = warnCount;
+  $('errs').innerHTML = errs.length ? '<div class="err">' + errs.map(escapeHTML).join('<br>') + '</div>' : '';
+  render();
+}
+
+function render() {
+  const box = $('lines');
+  box.innerHTML = '';
+  parsed.forEach(line => {
+    const card = document.createElement('div');
+    card.className = 'line-card';
+    const head = '<div class="line-head"><span>Line ' + line.idx + ' &middot; ' + line.pairs.length + ' pairs</span><span class="tag">' + line.raw.length + ' chars</span></div>';
+    const grid = ['<div class="kv-grid">'];
+    line.pairs.forEach(p => {
+      const cls = classifyValue(p.v, p.quoted, p.implicit);
+      const vClass = 'v ' + cls;
+      let display;
+      if (cls === 'empty') display = '(empty)';
+      else display = escapeHTML(p.v);
+      grid.push('<div class="k">' + escapeHTML(p.k) + '</div>');
+      grid.push('<div class="' + vClass + '">' + display + '</div>');
+    });
+    grid.push('</div>');
+    card.innerHTML = head + grid.join('');
+    box.appendChild(card);
+  });
+}
+
+function needsQuote(v) {
+  if (v === '') return true;
+  return /[\s="\\]/.test(v);
+}
+
+function encodeValue(v) {
+  if (!needsQuote(v)) return v;
+  return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\t/g, '\\t') + '"';
+}
+
+function buildLine(pairs) {
+  return pairs
+    .filter(p => p.k && p.k.length)
+    .map(p => p.k + '=' + encodeValue(p.v ?? ''))
+    .join(' ');
+}
+
+function copyJSON() {
+  const out = parsed.map(line => {
+    const o = {};
+    line.pairs.forEach(p => {
+      if (o[p.k] === undefined) o[p.k] = p.v;
+      else if (Array.isArray(o[p.k])) o[p.k].push(p.v);
+      else o[p.k] = [o[p.k], p.v];
+    });
+    return o;
+  });
+  navigator.clipboard.writeText(JSON.stringify(out, null, 2));
+}
+
+function copyTable() {
+  const keys = [];
+  const seen = new Set();
+  parsed.forEach(line => line.pairs.forEach(p => { if (!seen.has(p.k)) { seen.add(p.k); keys.push(p.k); } }));
+  const rows = [keys.join('\t')];
+  parsed.forEach(line => {
+    const map = {};
+    line.pairs.forEach(p => { map[p.k] = p.v; });
+    rows.push(keys.map(k => (map[k] ?? '').replace(/\t/g,' ')).join('\t'));
+  });
+  navigator.clipboard.writeText(rows.join('\n'));
+}
+
+let buildPairs = [
+  { k: 'level', v: 'info' },
+  { k: 'ts', v: new Date().toISOString() },
+  { k: 'msg', v: 'request handled' },
+  { k: 'method', v: 'GET' },
+  { k: 'path', v: '/api/users' },
+  { k: 'status', v: '200' },
+  { k: 'duration_ms', v: '47' }
+];
+
+function renderBuild() {
+  const box = $('pairs');
+  box.innerHTML = '';
+  buildPairs.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'pair';
+    row.innerHTML = '<input class="k" placeholder="key" value="' + escapeHTML(p.k) + '"><input class="v" placeholder="value" value="' + escapeHTML(p.v) + '"><button title="remove">&times;</button>';
+    const [k, v, btn] = row.children;
+    k.oninput = () => { buildPairs[i].k = k.value; updateBuilt(); };
+    v.oninput = () => { buildPairs[i].v = v.value; updateBuilt(); };
+    btn.onclick = () => { buildPairs.splice(i, 1); renderBuild(); updateBuilt(); };
+    box.appendChild(row);
+  });
+}
+
+function updateBuilt() {
+  $('builtOut').textContent = buildLine(buildPairs);
+}
+
+function addPair() {
+  buildPairs.push({ k: '', v: '' });
+  renderBuild();
+  updateBuilt();
+}
+
+function loadPreset() {
+  buildPairs = [
+    { k: 'app', v: 'web.1' },
+    { k: 'request_id', v: 'd9b9-4f3c-89' },
+    { k: 'fwd', v: '203.0.113.42' },
+    { k: 'dyno', v: 'web.1' },
+    { k: 'connect', v: '0ms' },
+    { k: 'service', v: '128ms' },
+    { k: 'status', v: '200' },
+    { k: 'bytes', v: '1543' },
+    { k: 'protocol', v: 'https' },
+    { k: 'msg', v: 'request complete with note "ok"' }
+  ];
+  renderBuild();
+  updateBuilt();
+}
+
+function copyBuilt() {
+  navigator.clipboard.writeText($('builtOut').textContent);
+}
+
+renderBuild();
+updateBuilt();
+parse();
+</script>
+</body>
+</html>
