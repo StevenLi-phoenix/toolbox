@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sec-Fetch-* Header Decoder — Free Online Tool</title>
+<meta name="description" content="Decode the Fetch Metadata request headers — Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site, Sec-Fetch-User, Sec-Fetch-Storage-Access — to understand exactly how a request was originated, classify it as same-origin / cross-site / nav / preflight, and generate a resource-isolation policy snippet to reject suspicious requests. 100% client-side.">
+<meta name="keywords" content="sec-fetch-dest, sec-fetch-mode, sec-fetch-site, sec-fetch-user, sec-fetch-storage-access, fetch metadata, resource isolation, csrf protection, request classifier, dev tool">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/secfetch.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:900px){.row{grid-template-columns:1fr}}
+label.head{display:block;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;font-weight:600}
+textarea{width:100%;min-height:160px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--mono);font-size:.85rem;background:var(--bg);color:var(--text);box-sizing:border-box;resize:vertical;line-height:1.6}
+.field{margin-bottom:12px}
+.field select,.field input{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem;box-sizing:border-box}
+.cards{display:grid;gap:8px;margin-top:10px}
+.dcard{padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.dcard .h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.dcard .nm{font-family:var(--mono);font-weight:600;color:var(--accent);font-size:.86rem}
+.dcard .val{font-family:var(--mono);background:var(--surface2);padding:2px 8px;border-radius:6px;font-size:.78rem;border:1px solid var(--border)}
+.dcard .desc{font-size:.82rem;color:var(--muted);margin-top:6px;line-height:1.55}
+.dcard.bad{border-color:var(--error)}
+.dcard.bad .nm{color:var(--error)}
+.dcard.missing{opacity:.65;border-style:dashed}
+.dcard.missing .nm{color:var(--muted)}
+.verdict{padding:14px 16px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface);font-family:var(--mono);font-size:.86rem;line-height:1.55}
+.verdict.ok{border-color:var(--success);background:rgba(34,197,94,.08)}
+.verdict.warn{border-color:var(--warning);background:rgba(234,179,8,.08)}
+.verdict.danger{border-color:var(--error);background:rgba(239,68,68,.08)}
+.verdict h3{margin:0 0 6px 0;font-family:var(--sans);font-size:.95rem}
+.verdict ul{margin:6px 0 0 0;padding-left:20px;font-family:var(--sans);font-size:.84rem;color:var(--text)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+pre.out{padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--mono);font-size:.85rem;white-space:pre-wrap;word-break:break-word;line-height:1.55;margin:0;max-height:280px;overflow:auto}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.tab{padding:6px 14px;border:1px solid var(--border);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;background:var(--surface);color:var(--muted);cursor:pointer;font-size:.85rem;font-weight:600}
+.tab.active{background:var(--bg);color:var(--text);position:relative;top:1px}
+.panel{display:none}
+.panel.active{display:block}
+.preset-btn{padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);cursor:pointer;font-size:.78rem;font-family:var(--mono)}
+.preset-btn:hover{border-color:var(--accent);color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:6px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--border);font-family:var(--mono);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.76rem;text-transform:uppercase;letter-spacing:.04em}
+td code{background:var(--surface2);padding:1px 6px;border-radius:4px;font-size:.78rem;color:var(--accent)}
+.note{font-size:.8rem;color:var(--muted);line-height:1.6;margin-top:6px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1><code>Sec-Fetch-*</code> Header Decoder</h1>
+<p class="subtitle">The Fetch Metadata headers tell your server <em>how</em> a request was made — was it a top-level nav, a fetch from your own page, an iframe load from a foreign origin, an image preload? Paste raw request headers (or build one with the picker), and decode each value, classify the request, and generate a resource-isolation policy snippet that rejects the suspicious combinations.</p>
+
+<div class="card">
+  <div class="tabs">
+    <div class="tab active" data-tab="parse">Parse</div>
+    <div class="tab" data-tab="build">Build</div>
+  </div>
+
+  <div class="panel active" id="parse-panel">
+    <label class="head">Paste request headers</label>
+    <textarea id="raw" oninput="parse()" spellcheck="false">GET /api/orders HTTP/1.1
+Host: example.com
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
+Sec-Fetch-Storage-Access: none
+Origin: https://example.com
+Accept: application/json</textarea>
+    <div class="actions">
+      <button onclick="parse()">Decode</button>
+      <button onclick="$('raw').value='';parse()">Clear</button>
+    </div>
+    <label class="head" style="margin-top:10px">Presets</label>
+    <div class="actions" style="gap:6px">
+      <button class="preset-btn" onclick="loadPreset('nav-top')">Top-level nav (typed URL)</button>
+      <button class="preset-btn" onclick="loadPreset('nav-link')">Same-site link click</button>
+      <button class="preset-btn" onclick="loadPreset('xhr')">Same-origin fetch (XHR/JSON)</button>
+      <button class="preset-btn" onclick="loadPreset('image')">Cross-site image hotlink</button>
+      <button class="preset-btn" onclick="loadPreset('iframe')">Cross-site iframe</button>
+      <button class="preset-btn" onclick="loadPreset('csrf')">Cross-site form POST (CSRF)</button>
+      <button class="preset-btn" onclick="loadPreset('preflight')">CORS preflight (OPTIONS)</button>
+    </div>
+  </div>
+
+  <div class="panel" id="build-panel">
+    <label class="head">Build a request</label>
+    <div class="controls">
+      <div class="field">
+        <label class="head">Dest</label>
+        <select id="bDest" onchange="buildOut()">
+          <option>empty</option><option>document</option><option>iframe</option><option>image</option><option>script</option><option>style</option><option>font</option><option>audio</option><option>video</option><option>track</option><option>worker</option><option>sharedworker</option><option>serviceworker</option><option>manifest</option><option>object</option><option>embed</option><option>report</option><option>fencedframe</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="head">Mode</label>
+        <select id="bMode" onchange="buildOut()">
+          <option>cors</option><option>no-cors</option><option>same-origin</option><option>navigate</option><option>websocket</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="head">Site</label>
+        <select id="bSite" onchange="buildOut()">
+          <option>same-origin</option><option>same-site</option><option>cross-site</option><option>none</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="head">User</label>
+        <select id="bUser" onchange="buildOut()">
+          <option value="?1">?1 (user-initiated)</option>
+          <option value="">(omitted)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="head">Storage-Access</label>
+        <select id="bSA" onchange="buildOut()">
+          <option>none</option><option>active</option><option>inactive</option><option value="">(omitted)</option>
+        </select>
+      </div>
+    </div>
+    <label class="head">Generated headers</label>
+    <pre class="out" id="built"></pre>
+    <div class="actions">
+      <button onclick="copyBuilt()">Copy headers</button>
+      <button onclick="useBuilt()">Decode this</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Decoded</h2>
+  <div class="cards" id="cards"></div>
+  <h2 style="margin-top:18px">Classification</h2>
+  <div class="verdict" id="verdict"></div>
+</div>
+
+<div class="card">
+  <h2>Resource Isolation Policy snippet</h2>
+  <div class="note">Drop this into a middleware to reject browser-originated requests that no legitimate page would make. The standard <a href="https://web.dev/articles/fetch-metadata" rel="noopener" target="_blank">Fetch Metadata isolation policy</a> blocks cross-site nav into non-navigatable destinations and cross-site embeds of sensitive endpoints.</div>
+  <div class="row">
+    <div>
+      <label class="head">Express / Node</label>
+      <pre class="out" id="policyNode"></pre>
+    </div>
+    <div>
+      <label class="head">Nginx</label>
+      <pre class="out" id="policyNginx"></pre>
+    </div>
+  </div>
+  <div class="actions">
+    <button onclick="copy('policyNode')">Copy Node</button>
+    <button onclick="copy('policyNginx')">Copy Nginx</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Value reference</h2>
+  <table>
+    <thead><tr><th>Header</th><th>Values</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>Sec-Fetch-Dest</code></td><td><code>empty, document, iframe, image, script, style, font, audio, video, worker, manifest, …</code></td><td>The destination — what element / API initiated the request.</td></tr>
+      <tr><td><code>Sec-Fetch-Mode</code></td><td><code>cors, no-cors, same-origin, navigate, websocket</code></td><td>The request mode (e.g. how CORS rules apply).</td></tr>
+      <tr><td><code>Sec-Fetch-Site</code></td><td><code>same-origin, same-site, cross-site, none</code></td><td>Relationship between the initiator origin and the target origin. <code>none</code> = user typed the URL.</td></tr>
+      <tr><td><code>Sec-Fetch-User</code></td><td><code>?1</code> (always — omitted otherwise)</td><td>Only set on navigations triggered by a user gesture.</td></tr>
+      <tr><td><code>Sec-Fetch-Storage-Access</code></td><td><code>none, active, inactive</code></td><td>Whether the request would carry first-party cookies in a third-party context (Storage Access API).</td></tr>
+    </tbody>
+  </table>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $(t.dataset.tab + '-panel').classList.add('active');
+  };
+});
+
+const DEST_DESC = {
+  empty: 'No element / generated by fetch() or XHR with no explicit destination.',
+  document: 'Top-level navigation — the browser is loading a new top-level document.',
+  iframe: 'Nested navigation — being loaded inside an <iframe>.',
+  image: 'Image request — <img>, <picture>, CSS background, image preload.',
+  script: 'Script request — <script src>, importScripts(), module import.',
+  style: 'Stylesheet — <link rel="stylesheet"> or @import.',
+  font: 'Font file — @font-face, font preload.',
+  audio: 'Audio — <audio>, AudioContext fetch.',
+  video: 'Video — <video> media or preload.',
+  track: '<track> caption / subtitle file.',
+  worker: 'Web Worker script.',
+  sharedworker: 'SharedWorker script.',
+  serviceworker: 'Service Worker script (install / update).',
+  manifest: 'Web app manifest.',
+  object: '<object> embed.',
+  embed: '<embed> resource.',
+  report: 'Reporting API endpoint (CSP, NEL, Reporting).',
+  fencedframe: 'Fenced frame nested navigation.'
+};
+
+const MODE_DESC = {
+  cors: 'CORS-enabled — server must send Access-Control-Allow-Origin to be readable.',
+  'no-cors': 'No-CORS — opaque response, no JS access to body (used for <img>, <script src>, etc).',
+  'same-origin': 'Refuse the request if not same-origin (no opaque, no CORS).',
+  navigate: 'Top-level navigation or iframe nav — the browser is steering the user, not fetch().',
+  websocket: 'WebSocket handshake.'
+};
+
+const SITE_DESC = {
+  'same-origin': 'Initiator origin equals target origin.',
+  'same-site': 'Initiator and target share the same registrable domain (eTLD+1) but different origin.',
+  'cross-site': 'Initiator is a different registrable domain — treat with suspicion.',
+  'none': 'No initiator — the user typed the URL, used a bookmark, or it\'s the home page.'
+};
+
+const SA_DESC = {
+  none: 'Storage Access not in play — request is same-site or the API was not requested.',
+  active: 'Storage Access has been granted — request carries first-party cookies in a third-party context.',
+  inactive: 'Storage Access was requested but not active for this request.'
+};
+
+const HEADERS = [
+  { name: 'Sec-Fetch-Dest', key: 'dest', desc: DEST_DESC },
+  { name: 'Sec-Fetch-Mode', key: 'mode', desc: MODE_DESC },
+  { name: 'Sec-Fetch-Site', key: 'site', desc: SITE_DESC },
+  { name: 'Sec-Fetch-User', key: 'user', desc: { '?1': 'Triggered by an explicit user gesture (clicked link, typed URL).' } },
+  { name: 'Sec-Fetch-Storage-Access', key: 'sa', desc: SA_DESC }
+];
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function parseHeaders(raw) {
+  const headers = {};
+  raw.split(/\r?\n/).forEach(line => {
+    const m = line.match(/^\s*([A-Za-z0-9-]+)\s*:\s*(.+?)\s*$/);
+    if (m) headers[m[1].toLowerCase()] = m[2];
+  });
+  return {
+    dest: headers['sec-fetch-dest'],
+    mode: headers['sec-fetch-mode'],
+    site: headers['sec-fetch-site'],
+    user: headers['sec-fetch-user'],
+    sa: headers['sec-fetch-storage-access'],
+    method: (raw.match(/^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b/m) || [])[1] || ''
+  };
+}
+
+function classify(h) {
+  const issues = [];
+  const goods = [];
+
+  if (!h.dest && !h.mode && !h.site) {
+    return { level: 'warn', title: 'No Fetch Metadata headers present',
+      items: ['Modern browsers (Chrome 76+, Firefox 90+, Safari 16.4+) send these on every request. Either this is an old browser, a non-browser client (curl, server-to-server), or the headers were stripped by a proxy.'] };
+  }
+
+  if (h.site === 'cross-site' && ['document','iframe'].includes(h.dest) && h.mode === 'navigate') {
+    if (h.user === '?1') goods.push('User-initiated cross-site navigation — looks legitimate.');
+    else issues.push('Cross-site navigation without Sec-Fetch-User: ?1 — could be a programmatic redirect or click-jacking attempt.');
+  }
+
+  if (h.site === 'cross-site' && h.mode !== 'navigate' && !['image','script','style','font','audio','video','track'].includes(h.dest)) {
+    issues.push('Cross-site, non-navigation request to a non-resource endpoint — classic CSRF / data-exfiltration pattern.');
+  }
+
+  if (h.method === 'POST' && h.site === 'cross-site' && h.mode !== 'cors') {
+    issues.push('Cross-site POST without CORS mode — likely a CSRF form submission.');
+  }
+
+  if (h.dest === 'document' && h.mode !== 'navigate') {
+    issues.push('Sec-Fetch-Dest: document with mode != navigate is inconsistent.');
+  }
+
+  if (h.site === 'same-origin' && h.dest === 'empty' && h.mode === 'cors') {
+    goods.push('Same-origin fetch() / XHR — typical SPA API call.');
+  }
+
+  if (h.site === 'none' && h.mode === 'navigate' && h.user === '?1') {
+    goods.push('User-initiated top-level navigation (typed URL, bookmark, or home).');
+  }
+
+  if (h.sa === 'active') {
+    issues.push('Storage Access is active — request carries first-party cookies in a third-party context. Make sure the endpoint is intended to be embeddable.');
+  }
+
+  if (h.mode === 'no-cors' && ['document','iframe','empty'].includes(h.dest)) {
+    issues.push('Mode no-cors on a document/iframe/empty destination is unusual.');
+  }
+
+  let level = 'ok', title = 'Looks consistent';
+  if (issues.length) { level = 'danger'; title = 'Suspicious — review carefully'; }
+  else if (goods.length === 0) { level = 'warn'; title = 'Unusual but not flagged'; }
+  return { level, title, items: issues.concat(goods.map(g => '✓ ' + g)) };
+}
+
+function describe(name, val, desc) {
+  if (val === undefined) return { html: '(missing)', cls: 'missing' };
+  const d = desc[val];
+  if (!d) return { html: 'Unknown value <code>' + escapeHTML(val) + '</code>.', cls: 'bad' };
+  return { html: escapeHTML(d), cls: '' };
+}
+
+function render(h) {
+  const box = $('cards');
+  box.innerHTML = '';
+  HEADERS.forEach(meta => {
+    const v = h[meta.key];
+    const d = describe(meta.name, v, meta.desc);
+    const card = document.createElement('div');
+    card.className = 'dcard ' + d.cls;
+    card.innerHTML = '<div class="h"><span class="nm">' + meta.name + '</span><span class="val">' + (v === undefined ? '— not present —' : escapeHTML(v)) + '</span></div><div class="desc">' + d.html + '</div>';
+    box.appendChild(card);
+  });
+  const cls = classify(h);
+  const v = $('verdict');
+  v.className = 'verdict ' + cls.level;
+  v.innerHTML = '<h3>' + escapeHTML(cls.title) + '</h3>' + (cls.items.length ? '<ul>' + cls.items.map(i => '<li>' + escapeHTML(i) + '</li>').join('') + '</ul>' : '');
+}
+
+function policyNode() {
+  return [
+    "// Resource isolation policy — express middleware",
+    "function fetchMetadataPolicy(req, res, next) {",
+    "  const site = req.get('sec-fetch-site');",
+    "  if (!site) return next();  // not a modern browser",
+    "  // Always allow same-origin and direct user navigation",
+    "  if (site === 'same-origin' || site === 'same-site' || site === 'none') return next();",
+    "  // Allow CORS preflight",
+    "  if (req.method === 'OPTIONS') return next();",
+    "  const dest = req.get('sec-fetch-dest');",
+    "  const mode = req.get('sec-fetch-mode');",
+    "  // Allow only the cross-site embeds you intend (e.g. public images)",
+    "  if (mode === 'navigate' && ['document'].includes(dest) && req.method === 'GET') return next();",
+    "  return res.status(403).send('cross-site request blocked by fetch metadata policy');",
+    "}",
+    "app.use(fetchMetadataPolicy);"
+  ].join('\n');
+}
+
+function policyNginx() {
+  return [
+    "# Resource isolation policy — nginx",
+    "map $http_sec_fetch_site $isolation_block {",
+    "  default 0;",
+    "  ''            0;            # no header — not a modern browser",
+    "  same-origin   0;",
+    "  same-site     0;",
+    "  none          0;",
+    "  cross-site    1;",
+    "}",
+    "map $http_sec_fetch_mode $is_navigate { default 0; navigate 1; }",
+    "",
+    "server {",
+    "  # Allow only top-level cross-site navigations + CORS preflight",
+    "  if ($request_method = OPTIONS) { set $isolation_block 0; }",
+    "  if ($is_navigate) { set $isolation_block 0; }",
+    "  if ($isolation_block) { return 403; }",
+    "  # ... rest of your server block",
+    "}"
+  ].join('\n');
+}
+
+function parse() {
+  const h = parseHeaders($('raw').value);
+  render(h);
+  $('policyNode').textContent = policyNode();
+  $('policyNginx').textContent = policyNginx();
+}
+
+const presets = {
+  'nav-top':   "GET / HTTP/1.1\nHost: example.com\nSec-Fetch-Dest: document\nSec-Fetch-Mode: navigate\nSec-Fetch-Site: none\nSec-Fetch-User: ?1\nSec-Fetch-Storage-Access: none\nAccept: text/html",
+  'nav-link':  "GET /docs HTTP/1.1\nHost: example.com\nSec-Fetch-Dest: document\nSec-Fetch-Mode: navigate\nSec-Fetch-Site: same-origin\nSec-Fetch-User: ?1\nSec-Fetch-Storage-Access: none\nReferer: https://example.com/\nAccept: text/html",
+  'xhr':       "GET /api/orders HTTP/1.1\nHost: example.com\nSec-Fetch-Dest: empty\nSec-Fetch-Mode: cors\nSec-Fetch-Site: same-origin\nSec-Fetch-Storage-Access: none\nOrigin: https://example.com\nAccept: application/json",
+  'image':     "GET /og.png HTTP/1.1\nHost: example.com\nSec-Fetch-Dest: image\nSec-Fetch-Mode: no-cors\nSec-Fetch-Site: cross-site\nSec-Fetch-Storage-Access: none\nReferer: https://attacker.example/\nAccept: image/*",
+  'iframe':    "GET /embed/widget HTTP/1.1\nHost: example.com\nSec-Fetch-Dest: iframe\nSec-Fetch-Mode: navigate\nSec-Fetch-Site: cross-site\nSec-Fetch-Storage-Access: none\nReferer: https://attacker.example/\nAccept: text/html",
+  'csrf':      "POST /transfer HTTP/1.1\nHost: bank.example\nSec-Fetch-Dest: document\nSec-Fetch-Mode: navigate\nSec-Fetch-Site: cross-site\nSec-Fetch-User: ?1\nSec-Fetch-Storage-Access: active\nOrigin: https://attacker.example\nContent-Type: application/x-www-form-urlencoded",
+  'preflight': "OPTIONS /api/orders HTTP/1.1\nHost: example.com\nSec-Fetch-Dest: empty\nSec-Fetch-Mode: cors\nSec-Fetch-Site: cross-site\nSec-Fetch-Storage-Access: none\nOrigin: https://app.example\nAccess-Control-Request-Method: POST\nAccess-Control-Request-Headers: content-type"
+};
+
+function loadPreset(name) {
+  $('raw').value = presets[name];
+  parse();
+}
+
+function buildOut() {
+  const lines = ['GET / HTTP/1.1', 'Host: example.com'];
+  if ($('bDest').value) lines.push('Sec-Fetch-Dest: ' + $('bDest').value);
+  if ($('bMode').value) lines.push('Sec-Fetch-Mode: ' + $('bMode').value);
+  if ($('bSite').value) lines.push('Sec-Fetch-Site: ' + $('bSite').value);
+  if ($('bUser').value) lines.push('Sec-Fetch-User: ' + $('bUser').value);
+  if ($('bSA').value) lines.push('Sec-Fetch-Storage-Access: ' + $('bSA').value);
+  $('built').textContent = lines.join('\n');
+}
+
+function copyBuilt() {
+  navigator.clipboard.writeText($('built').textContent);
+}
+
+function useBuilt() {
+  $('raw').value = $('built').textContent;
+  document.querySelector('.tab[data-tab="parse"]').click();
+  parse();
+}
+
+function copy(id) {
+  navigator.clipboard.writeText($(id).textContent);
+}
+
+buildOut();
+parse();
+</script>
+</body>
+</html>

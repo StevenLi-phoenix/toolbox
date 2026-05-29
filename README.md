@@ -43,6 +43,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS @supports Builder](csssupports.html) | Compose CSS feature queries clause by clause — combine property tests with `and` / `or` / `not`, test `selector(:has())`, `font-tech()`, `font-format()`, see live whether your browser passes each clause via `CSS.supports()`, and copy a clean rule with presets for `:has`, subgrid, anchor positioning, view transitions, `color-mix`, OKLCH, and more. |
 | [CSS Spacing Scale Generator](spacingscale.html) | Generate a consistent spacing scale — linear, geometric, modular, Fibonacci, T-shirt, or 4-/8-pt grid — and export as custom-property tokens, Tailwind config, Sass map, JSON design tokens, or utility classes with a visual step preview. |
 | [CSS hyphens & word-break Playground](hyphensbreak.html) | Compare `hyphens`, `word-break`, `overflow-wrap`, and `line-break` on the same text at the same column width — tune `hyphenate-character` & `hyphenate-limit-chars`, spot which combo actually breaks the unbreakable URL. |
 | [Pixel ↔ REM / EM Converter](px2rem.html) | Convert CSS `px` to `rem`, `em`, `pt`, `%`, `vw`, `vh` with adjustable base font size — bulk rewrite CSS values, reference scale, and a live size preview. |
@@ -181,6 +182,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Sec-Fetch-* Header Decoder](secfetch.html) | Decode the Fetch Metadata request headers — `Sec-Fetch-Dest`, `Sec-Fetch-Mode`, `Sec-Fetch-Site`, `Sec-Fetch-User`, `Sec-Fetch-Storage-Access` — classify each request as same-origin / cross-site / nav / preflight / CSRF-shaped, and generate a Resource Isolation Policy middleware snippet (Express & Nginx) to block suspicious combinations. |
 | [Resource Hints Builder](resourcehints.html) | Generate `<link rel="preload / prefetch / preconnect / dns-prefetch / modulepreload">` with the right `as`, `type`, `crossorigin`, `fetchpriority`, `imagesrcset`, and `media` — plus the equivalent HTTP `Link:` response header. |
 | [cURL → PowerShell](curl2pwsh.html) | Convert a `curl` command to `Invoke-WebRequest` or `Invoke-RestMethod` — method, headers, JSON / form body, basic auth, cookies, and a `-SkipCertificateCheck` fallback for PowerShell 7 and Windows PowerShell 5.1. |
 | [Trusted Types Policy Generator](trustedtypes.html) | Generate `require-trusted-types-for 'script'` and `trusted-types` CSP directives plus the `createHTML` / `createScript` / `createScriptURL` policy code — with default fallback, Report-Only rollout, and a violation listener. |
@@ -227,6 +229,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [IntersectionObserver Builder & Playground](intersectionobserver.html) | Compose an `IntersectionObserver` with custom `root`, `rootMargin`, and `threshold` list — scroll a live target through the viewport box, watch every `IntersectionObserverEntry` fire in real time with ratio + isIntersecting state, copy a ready-to-paste snippet with presets for lazy-load, infinite scroll sentinel, sticky-on-pin, and scrollspy patterns. |
 | [Logfmt Parser & Formatter](logfmt.html) | Parse `key=value` log lines (Heroku, Go `slog`, Splunk) into a structured table — handles quoted values, `\"` / `\\` escapes, and repeated keys — then re-serialize edited pairs with correct quoting. Copy as JSON or TSV. |
 | [MTU & Packet Overhead Calculator](mtu.html) | Stack tunnel headers (WireGuard, IPSec ESP, GRE, PPPoE, VXLAN, 6in4) on top of an Ethernet link and see the effective inner MTU, TCP MSS for v4/v6, UDP payload, and PMTUD blackhole warnings. |
 | [DSCP / ToS / ECN Decoder](dscp.html) | Flip the 8 bits of the IP ToS / Traffic Class byte — DSCP code points (EF, AF, CS), ECN state (Not-ECT, ECT(0/1), CE), legacy IP precedence — with iptables / `tc` / `setsockopt` snippets for any value. |
