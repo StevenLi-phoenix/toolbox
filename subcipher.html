@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Substitution Cipher Solver — Free Online Tool</title>
+<meta name="description" content="Crack monoalphabetic substitution ciphers (cryptograms) in your browser — letter frequency analysis, interactive A→? mapping, English bigram scoring, and a hill-climbing auto-solver. Pure client-side, no data leaves your browser.">
+<meta name="keywords" content="substitution cipher solver, cryptogram solver, monoalphabetic cipher, frequency analysis, hill climbing, cryptanalysis, cipher cracker, ctf">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/subcipher.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 880px) { .grid2 { grid-template-columns: 1fr; } }
+  textarea {
+    width: 100%; min-height: 160px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .9rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical; line-height: 1.55;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; font-weight: 600; }
+  .keymap { display: grid; grid-template-columns: repeat(13, 1fr); gap: 4px; margin-top: 8px; }
+  @media (max-width: 880px) { .keymap { grid-template-columns: repeat(7, 1fr); } }
+  .keycell { display: flex; flex-direction: column; align-items: center; padding: 6px 2px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; font-family: var(--mono); }
+  .keycell b { font-size: .82rem; color: var(--muted); }
+  .keycell input { width: 28px; text-align: center; font-family: var(--mono); font-size: .95rem; font-weight: 700; background: transparent; border: none; border-bottom: 1px solid var(--border); color: var(--accent); padding: 2px 0; text-transform: uppercase; outline: none; }
+  .keycell input:focus { border-bottom-color: var(--accent); background: var(--bg); }
+  .keycell.locked input { color: var(--success); }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin-top: 8px; }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .freq-table { display: grid; grid-template-columns: repeat(13, 1fr); gap: 3px; margin-top: 8px; font-family: var(--mono); font-size: .72rem; }
+  @media (max-width: 880px) { .freq-table { grid-template-columns: repeat(7, 1fr); } }
+  .freq-cell { text-align: center; padding: 4px 0; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+  .freq-cell b { display: block; font-size: .82rem; color: var(--text); }
+  .freq-cell span { color: var(--muted); font-size: .68rem; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .preset-btn { padding: 5px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); cursor: pointer; font-size: .78rem; font-family: var(--mono); }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .verdict { padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); font-size: .85rem; line-height: 1.55; margin-top: 10px; }
+  .verdict strong { font-family: var(--mono); color: var(--accent); }
+  .plainview { font-family: var(--mono); font-size: .95rem; line-height: 1.7; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); min-height: 160px; white-space: pre-wrap; word-break: break-word; }
+  .plainview .solved { color: var(--success); font-weight: 600; }
+  .plainview .unsolved { color: var(--muted); }
+  .progress { font-family: var(--mono); font-size: .82rem; color: var(--muted); margin-top: 6px; }
+  .progress strong { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Substitution Cipher Solver</h1>
+<p class="subtitle">Crack a monoalphabetic substitution cipher (cryptogram) by hand or let a hill-climbing solver guess the key from English letter and bigram frequencies. Type in any cell to assign a plaintext letter; locked cells stay fixed during auto-solve. Works on any cipher where each letter is replaced by a unique other letter.</p>
+
+<div class="card">
+  <div class="grid2">
+    <div>
+      <label class="head" for="cipher">Ciphertext</label>
+      <textarea id="cipher" oninput="onInput()" spellcheck="false">Bpr xfovi nuksw zsm gfxhe sjru epr tomy esoq. Eposh oh m srcrw ksuq xuyhetspmtpoe rcrueohr eseme yepou xsweot om srcrw kohzm.</textarea>
+    </div>
+    <div>
+      <label class="head">Plaintext (live)</label>
+      <div id="plain" class="plainview"></div>
+    </div>
+  </div>
+  <div class="actions" style="margin-top: 10px;">
+    <button onclick="autoSolve()">⚡ Auto-solve (hill-climb)</button>
+    <button onclick="freqSeed()">↻ Seed by frequency</button>
+    <button onclick="resetKey()">Clear key</button>
+    <button onclick="invertSelection()">Invert (swap cipher↔plain)</button>
+    <span style="flex:1"></span>
+    <button onclick="copyPlain()">Copy plaintext</button>
+  </div>
+  <div class="progress" id="progress"></div>
+</div>
+
+<div class="card">
+  <h2>Key — cipher letter ↦ plaintext guess</h2>
+  <p class="subtitle" style="font-size:.85rem;margin-top:-4px">Type a plaintext letter under each cipher letter. Empty cells stay <code>?</code>. Locked (green) cells aren't changed by the auto-solver.</p>
+  <div id="keymap" class="keymap"></div>
+  <div class="stats">
+    <span>solved letters <strong id="solvedCount">0</strong> / 26</span>
+    <span>locked <strong id="lockedCount">0</strong></span>
+    <span>english score <strong id="score">—</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Cipher letter frequency vs English</h2>
+  <p class="subtitle" style="font-size:.85rem;margin-top:-4px">English letter order (high→low): E T A O I N S H R D L C U M W F G Y P B V K J X Q Z. The most common cipher letter is usually <strong>E</strong>; the next two are usually <strong>T</strong> and <strong>A</strong>.</p>
+  <div id="freq" class="freq-table"></div>
+</div>
+
+<div class="card">
+  <h2>Presets</h2>
+  <div class="actions">
+    <button class="preset-btn" onclick="preset('classic')">Classic cryptogram</button>
+    <button class="preset-btn" onclick="preset('rot13')">ROT13 sample</button>
+    <button class="preset-btn" onclick="preset('keyword')">Keyword cipher</button>
+    <button class="preset-btn" onclick="preset('long')">Long quote (best for auto-solve)</button>
+    <button class="preset-btn" onclick="preset('short')">Short message (tricky)</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How the auto-solver works</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65">
+    The solver starts from the frequency-seeded key (most common cipher letter → E, next → T, and so on), then repeatedly swaps two plaintext letters in the key. After each swap it scores the candidate plaintext using the log-probability of English bigrams (LL, TH, HE, IN, ER…). If the swap raises the score, it's kept; otherwise it's reverted. After a few thousand swaps with periodic random restarts, the score plateaus on a fluent English key for messages longer than ~80 letters. Short cryptograms (under 50 letters) rarely have enough signal to fully crack — use the manual keymap above to fix obvious words like "THE" and "AND", lock those cells, and rerun.
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65">
+    Substitution ciphers preserve word boundaries, letter repetition, and punctuation, so once you spot a three-letter word that appears often, it's almost certainly <code>THE</code>. A doubled letter at the end of a word is usually <code>LL</code>, <code>EE</code>, <code>SS</code>, or <code>OO</code>. Apostrophe-S patterns give away <code>'S</code> and <code>'T</code>.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const ENG_FREQ_ORDER = 'ETAOINSHRDLCUMWFGYPBVKJXQZ';
+const ENG_LETTER_FREQ = {
+  E:12.70,T:9.06,A:8.17,O:7.51,I:6.97,N:6.75,S:6.33,H:6.09,R:5.99,D:4.25,
+  L:4.03,C:2.78,U:2.76,M:2.41,W:2.36,F:2.23,G:2.02,Y:1.97,P:1.93,B:1.49,
+  V:0.98,K:0.77,J:0.15,X:0.15,Q:0.10,Z:0.07
+};
+// Compact English bigram log-prob table (top ~120). Values are log10(freq) shifted to be positive-ish; missing bigrams get a floor penalty.
+const BIGRAMS = {
+  TH:2.71,HE:2.61,IN:2.42,ER:2.27,AN:2.24,RE:2.13,ON:1.99,AT:1.98,EN:1.97,ND:1.95,
+  TI:1.94,ES:1.92,OR:1.91,TE:1.88,OF:1.87,ED:1.86,IS:1.85,IT:1.85,AL:1.84,AR:1.82,
+  ST:1.80,TO:1.79,NT:1.78,NG:1.77,SE:1.76,HA:1.74,AS:1.72,OU:1.69,IO:1.69,LE:1.69,
+  VE:1.66,CO:1.65,ME:1.62,DE:1.59,HI:1.55,RI:1.53,RO:1.53,IC:1.51,NE:1.50,EA:1.49,
+  RA:1.48,CE:1.47,LI:1.45,CH:1.43,LL:1.41,BE:1.40,MA:1.40,SI:1.40,OM:1.39,UR:1.36,
+  CA:1.35,EL:1.34,TA:1.33,LA:1.33,NS:1.30,DI:1.29,FO:1.28,HO:1.28,PE:1.27,EC:1.26,
+  PR:1.25,NO:1.24,CT:1.23,US:1.22,AC:1.22,OT:1.21,IL:1.21,TR:1.21,LY:1.20,NC:1.19,
+  ET:1.19,UT:1.18,SS:1.18,SO:1.17,RS:1.17,UN:1.16,LO:1.16,WA:1.15,GE:1.15,IE:1.14,
+  WH:1.13,EE:1.12,WI:1.11,EM:1.10,AD:1.10,EX:1.09,IM:1.08,UL:1.08,CI:1.07,SH:1.07,
+  FT:1.06,EI:1.05,SP:1.05,FI:1.04,OS:1.03,OW:1.02,AI:1.02,GH:1.01,IR:1.01,OL:1.00,
+  AM:0.99,PA:0.98,AB:0.97,PO:0.96,KE:0.95,AP:0.94,UC:0.93,GR:0.92,BL:0.91,TU:0.90,
+  WE:0.89,IF:0.88,RT:0.87,FE:0.86,DA:0.85,RD:0.84,SU:0.83,IA:0.82,EP:0.81,SC:0.80,
+  YO:0.79,FR:0.78,UM:0.77,GO:0.76,AY:0.75,UE:0.74,MI:0.73,OO:0.72,UP:0.71,GA:0.70
+};
+const FLOOR = -3; // log-prob penalty for unseen bigrams
+
+let key = {};       // cipher letter -> plaintext letter ('' = unknown)
+let locked = {};    // cipher letter -> true if user locked
+
+function init() {
+  for (const c of A) { key[c] = ''; locked[c] = false; }
+  renderKeyMap();
+  update();
+}
+
+function renderKeyMap() {
+  const cipherFreq = computeCipherFreq($('cipher').value);
+  // Sort by frequency descending so the user sees the most common cipher letters first
+  const ordered = [...A].sort((a, b) => (cipherFreq[b] || 0) - (cipherFreq[a] || 0));
+  const box = $('keymap');
+  box.innerHTML = '';
+  for (const c of ordered) {
+    const cell = document.createElement('div');
+    cell.className = 'keycell' + (locked[c] ? ' locked' : '');
+    cell.innerHTML = `<b>${c}</b><input maxlength="1" data-c="${c}" value="${key[c] || ''}" title="cipher ${c} → plaintext (dbl-click to lock)">`;
+    box.appendChild(cell);
+  }
+  box.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const c = e.target.dataset.c;
+      let v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+      // If user types a letter already assigned elsewhere, clear the other slot to keep the mapping a bijection
+      if (v) {
+        for (const k of A) if (k !== c && key[k] === v) key[k] = '';
+      }
+      key[c] = v;
+      e.target.value = v;
+      update();
+      // sync any cleared sibling cells
+      box.querySelectorAll('input').forEach(other => {
+        if (other !== e.target) other.value = key[other.dataset.c] || '';
+      });
+    });
+    inp.addEventListener('dblclick', e => {
+      const c = e.target.dataset.c;
+      locked[c] = !locked[c];
+      e.target.parentElement.classList.toggle('locked', locked[c]);
+      update();
+    });
+  });
+}
+
+function computeCipherFreq(text) {
+  const freq = {};
+  let total = 0;
+  for (const ch of text.toUpperCase()) {
+    if (ch >= 'A' && ch <= 'Z') { freq[ch] = (freq[ch] || 0) + 1; total++; }
+  }
+  for (const c of A) freq[c] = freq[c] || 0;
+  freq._total = total;
+  return freq;
+}
+
+function applyKey(text) {
+  let out = '';
+  let solved = 0, totalLetters = 0;
+  for (const ch of text) {
+    const up = ch.toUpperCase();
+    const isLetter = up >= 'A' && up <= 'Z';
+    if (!isLetter) { out += ch; continue; }
+    totalLetters++;
+    const mapped = key[up];
+    if (mapped) {
+      solved++;
+      out += ch === up ? mapped : mapped.toLowerCase();
+    } else {
+      out += '?';
+    }
+  }
+  return { out, solved, totalLetters };
+}
+
+function scoreEnglish(text) {
+  let s = 0, n = 0;
+  const upper = text.toUpperCase();
+  for (let i = 0; i < upper.length - 1; i++) {
+    const a = upper[i], b = upper[i + 1];
+    if (a < 'A' || a > 'Z' || b < 'A' || b > 'Z') continue;
+    const bg = a + b;
+    s += BIGRAMS[bg] !== undefined ? BIGRAMS[bg] : FLOOR;
+    n++;
+  }
+  return n > 0 ? s / n : 0;
+}
+
+function update() {
+  const cipher = $('cipher').value;
+  const { out, solved, totalLetters } = applyKey(cipher);
+  // Render plaintext, highlighting unsolved chars
+  const plainEl = $('plain');
+  plainEl.innerHTML = '';
+  for (const ch of out) {
+    if (ch === '?') {
+      const s = document.createElement('span');
+      s.className = 'unsolved';
+      s.textContent = '·';
+      plainEl.appendChild(s);
+    } else if (ch.match(/[a-z]/i)) {
+      const s = document.createElement('span');
+      s.className = 'solved';
+      s.textContent = ch;
+      plainEl.appendChild(s);
+    } else {
+      plainEl.appendChild(document.createTextNode(ch));
+    }
+  }
+  const assignedCount = A.split('').filter(c => key[c]).length;
+  const lockedTotal = A.split('').filter(c => locked[c]).length;
+  $('solvedCount').textContent = assignedCount;
+  $('lockedCount').textContent = lockedTotal;
+  const score = scoreEnglish(out.replace(/[^a-zA-Z]/g, ''));
+  $('score').textContent = score.toFixed(3);
+  renderFreq();
+}
+
+function renderFreq() {
+  const cipherFreq = computeCipherFreq($('cipher').value);
+  const total = cipherFreq._total || 1;
+  const ordered = [...A].sort((a, b) => cipherFreq[b] - cipherFreq[a]);
+  const box = $('freq');
+  box.innerHTML = '';
+  for (let i = 0; i < ordered.length; i++) {
+    const c = ordered[i];
+    const pct = ((cipherFreq[c] / total) * 100).toFixed(1);
+    const guess = ENG_FREQ_ORDER[i] || '?';
+    const cell = document.createElement('div');
+    cell.className = 'freq-cell';
+    cell.title = `cipher ${c}: ${cipherFreq[c]} occurrences (${pct}%) — by rank suggests plaintext ${guess}`;
+    cell.innerHTML = `<b>${c}</b><span>${pct}%</span><span style="color:var(--accent)">→${guess}</span>`;
+    box.appendChild(cell);
+  }
+}
+
+function freqSeed() {
+  const cipherFreq = computeCipherFreq($('cipher').value);
+  const ordered = [...A].sort((a, b) => cipherFreq[b] - cipherFreq[a]);
+  for (let i = 0; i < 26; i++) {
+    if (!locked[ordered[i]]) key[ordered[i]] = ENG_FREQ_ORDER[i];
+  }
+  renderKeyMap();
+  update();
+}
+
+function resetKey() {
+  for (const c of A) if (!locked[c]) key[c] = '';
+  renderKeyMap();
+  update();
+}
+
+function invertSelection() {
+  // Swap cipher and plaintext: treat current plaintext as new ciphertext using current key.
+  const cipher = $('cipher').value;
+  $('cipher').value = applyKey(cipher).out.toUpperCase();
+  resetKey();
+}
+
+function copyPlain() {
+  navigator.clipboard.writeText(applyKey($('cipher').value).out).then(() => {
+    $('progress').innerHTML = '<strong>Copied!</strong> plaintext on clipboard.';
+    setTimeout(update, 1500);
+  });
+}
+
+function onInput() { renderKeyMap(); update(); }
+
+// --- Hill climbing solver ---
+function autoSolve() {
+  const cipher = $('cipher').value.toUpperCase();
+  const cipherLetters = cipher.replace(/[^A-Z]/g, '');
+  if (cipherLetters.length < 20) {
+    $('progress').innerHTML = '<strong>Too short:</strong> need at least 20 cipher letters for hill-climbing. Try a longer message or solve by hand.';
+    return;
+  }
+  // Initialize from frequency seed if key is mostly empty
+  const assigned = A.split('').filter(c => key[c]).length;
+  if (assigned < 5) freqSeed();
+
+  // Build current plaintext-letter assignment as array (one per cipher letter, ordered by cipher's A..Z)
+  const cipherByFreqRank = [...A].sort((a, b) => {
+    const fa = (cipher.match(new RegExp(a, 'g')) || []).length;
+    const fb = (cipher.match(new RegExp(b, 'g')) || []).length;
+    return fb - fa;
+  });
+
+  // Working key: array of plaintext letters indexed by cipher letter (A=0..Z=25)
+  let workKey = {};
+  for (const c of A) workKey[c] = key[c] || '';
+  // Fill any blanks with unused English letters
+  let used = new Set(Object.values(workKey).filter(x => x));
+  const unused = ENG_FREQ_ORDER.split('').filter(c => !used.has(c));
+  let unusedIdx = 0;
+  for (const c of A) if (!workKey[c]) workKey[c] = unused[unusedIdx++];
+
+  const transformWith = (k) => {
+    let out = '';
+    for (const ch of cipher) out += (ch >= 'A' && ch <= 'Z') ? (k[ch] || '?') : ch;
+    return out;
+  };
+  let bestScore = scoreEnglish(transformWith(workKey));
+  let bestKey = { ...workKey };
+
+  const MAX_ITERS = 4000;
+  const RESTART_EVERY = 1000;
+  let iter = 0;
+  const startTime = performance.now();
+
+  while (iter < MAX_ITERS) {
+    // Pick two cipher letters at random, neither locked, and swap their plaintext assignments
+    const a = A[Math.floor(Math.random() * 26)];
+    const b = A[Math.floor(Math.random() * 26)];
+    if (a === b || locked[a] || locked[b]) { iter++; continue; }
+    const tmp = workKey[a]; workKey[a] = workKey[b]; workKey[b] = tmp;
+    const sc = scoreEnglish(transformWith(workKey));
+    if (sc > bestScore) {
+      bestScore = sc;
+      bestKey = { ...workKey };
+    } else {
+      // Revert
+      workKey[b] = workKey[a]; workKey[a] = tmp;
+    }
+    iter++;
+    if (iter % RESTART_EVERY === 0) {
+      // Random shuffle of non-locked letters as a restart, but keep bestKey
+      const candidates = A.split('').filter(c => !locked[c]);
+      const plain = candidates.map(c => workKey[c]);
+      for (let i = plain.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [plain[i], plain[j]] = [plain[j], plain[i]];
+      }
+      candidates.forEach((c, i) => workKey[c] = plain[i]);
+    }
+  }
+  const dt = (performance.now() - startTime).toFixed(0);
+  for (const c of A) if (!locked[c]) key[c] = bestKey[c];
+  renderKeyMap();
+  update();
+  $('progress').innerHTML = `Hill-climb done in <strong>${dt}ms</strong> · ${MAX_ITERS} iterations · best english score <strong>${bestScore.toFixed(3)}</strong>. If the plaintext still looks garbled, lock the words you trust and rerun.`;
+}
+
+// --- Presets ---
+function preset(name) {
+  const samples = {
+    'classic': 'Bpr xfovi nuksw zsm gfxhe sjru epr tomy esoq. Eposh oh m srcrw ksuq xuyhetspmtpoe rcrueohr eseme yepou xsweot om srcrw kohzm.',
+    'rot13': 'Gur dhvpx oebja sbk whzcf bire gur ynml qbt. Cnpx zl obk jvgu svir qbmra yvdhbe whtf.',
+    'keyword': 'KQS HFVRG NLOAB MOY KVTBQ OZSL KQS XPCV WOD. P TQOSBPM PQ KQS BFLQOFB OM YOR OBT WHCKKZS, HBO P GHRSBG OB KQS BSCK FY KQS MJB.',
+    'long': 'Op zb pmw efyp pe le, op zb pmw zaqyp eu izwy, op zb pmw foe eu zayczeh, op zb pmw foe eu deemzymweyy, op zb pmw yfxeh eu mzopmp, op zb pmw efxc eu cwybfzq, op zb pmw ywoye eu Mzopmp, op zb pmw zomyeh eu Cohcheyy, ze cfc oamzhopmzhp eyeqypmzhp wevefe ay; ze cfc heipuhe ay, ze cfc fmmehu vw mzy.',
+    'short': 'Vbc evw etbf!'
+  };
+  if (samples[name]) {
+    $('cipher').value = samples[name];
+    resetKey();
+    update();
+    $('progress').innerHTML = '';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

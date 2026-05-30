@@ -43,6 +43,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS scrollbar-gutter Playground](scrollbargutter.html) | See exactly how `scrollbar-gutter: auto` vs `stable` vs `stable both-edges` changes layout at the moment the scrollbar appears — toggle content length to watch the shift (or not), pair with `scrollbar-width` & `overflow-y`, and copy the recipe that stops the page from jumping when a modal opens. |
 | [CSS @supports Builder](csssupports.html) | Compose CSS feature queries clause by clause — combine property tests with `and` / `or` / `not`, test `selector(:has())`, `font-tech()`, `font-format()`, see live whether your browser passes each clause via `CSS.supports()`, and copy a clean rule with presets for `:has`, subgrid, anchor positioning, view transitions, `color-mix`, OKLCH, and more. |
 | [CSS Spacing Scale Generator](spacingscale.html) | Generate a consistent spacing scale — linear, geometric, modular, Fibonacci, T-shirt, or 4-/8-pt grid — and export as custom-property tokens, Tailwind config, Sass map, JSON design tokens, or utility classes with a visual step preview. |
 | [CSS hyphens & word-break Playground](hyphensbreak.html) | Compare `hyphens`, `word-break`, `overflow-wrap`, and `line-break` on the same text at the same column width — tune `hyphenate-character` & `hyphenate-limit-chars`, spot which combo actually breaks the unbreakable URL. |
@@ -153,6 +154,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Substitution Cipher Solver](subcipher.html) | Crack a monoalphabetic substitution cipher (cryptogram) by hand or let a hill-climbing solver guess the key from English letter and bigram frequencies. Interactive A→? mapping with lockable cells, live frequency table vs ETAOIN ranking, and one-click ROT13 / classic-cryptogram presets. |
 | [WebAuthn / Passkey Decoder](webauthn.html) | Decode WebAuthn registration and authentication responses — `clientDataJSON`, CBOR `attestationObject`, `authenticatorData` flags, AAGUID lookup, credential ID, and the COSE-encoded public key (EC2/RSA/OKP). |
 | [JWE Decoder & Inspector](jwe.html) | Inspect JSON Web Encryption tokens (RFC 7516) — split the five compact segments, decode the protected header, surface key-management (`alg`) and content-encryption (`enc`) algorithms, and validate IV/tag lengths. |
 | [AWS Signature V4 Calculator](sigv4.html) | Compute every step of an AWS SigV4 signature — canonical request, string-to-sign, `kDate→kRegion→kService→kSigning` HMAC chain, and Authorization header or pre-signed URL. Includes AWS sample-vector presets. |
@@ -229,6 +231,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Display DPI / PPI Calculator](dpicalc.html) | Compute pixel density (PPI), dot pitch, physical size, and the minimum viewing distance at which the human eye stops resolving individual pixels — for any width × height × diagonal. Includes presets for popular phones, monitors, and TVs plus in-browser DPR / screen detection. |
 | [IntersectionObserver Builder & Playground](intersectionobserver.html) | Compose an `IntersectionObserver` with custom `root`, `rootMargin`, and `threshold` list — scroll a live target through the viewport box, watch every `IntersectionObserverEntry` fire in real time with ratio + isIntersecting state, copy a ready-to-paste snippet with presets for lazy-load, infinite scroll sentinel, sticky-on-pin, and scrollspy patterns. |
 | [Logfmt Parser & Formatter](logfmt.html) | Parse `key=value` log lines (Heroku, Go `slog`, Splunk) into a structured table — handles quoted values, `\"` / `\\` escapes, and repeated keys — then re-serialize edited pairs with correct quoting. Copy as JSON or TSV. |
 | [MTU & Packet Overhead Calculator](mtu.html) | Stack tunnel headers (WireGuard, IPSec ESP, GRE, PPPoE, VXLAN, 6in4) on top of an Ethernet link and see the effective inner MTU, TCP MSS for v4/v6, UDP payload, and PMTUD blackhole warnings. |

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Display DPI / PPI Calculator — Free Online Tool</title>
+<meta name="description" content="Compute pixel density (DPI / PPI), dot pitch, viewing distance, and retina classification from any display's width × height × diagonal size. Includes presets for popular phones, monitors, and TVs. Detects your current device's DPR and physical pixel density in-browser.">
+<meta name="keywords" content="dpi calculator, ppi calculator, pixel density, dot pitch, retina display, viewing distance, screen size, monitor dpi, device pixel ratio, dpr">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dpicalc.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid3 { grid-template-columns: 1fr; } }
+  .field label { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; font-weight: 600; }
+  .field input, .field select {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .95rem;
+    box-sizing: border-box;
+  }
+  .toggle { display: flex; gap: 4px; margin-bottom: 12px; }
+  .toggle button {
+    flex: 1; padding: 7px 10px; background: var(--surface); border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; font-size: .82rem; font-family: var(--sans);
+    border-radius: var(--radius);
+  }
+  .toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 14px; }
+  .res-card { padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .res-card .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .res-card .value { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; color: var(--text); line-height: 1.1; }
+  .res-card .sub { font-size: .76rem; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+  .retina { padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--border); font-size: .9rem; line-height: 1.55; margin-top: 12px; }
+  .retina.yes { border-color: var(--success); background: rgba(34,197,94,.08); color: var(--text); }
+  .retina.no { border-color: var(--warning); background: rgba(234,179,8,.06); color: var(--text); }
+  .retina strong { font-family: var(--mono); color: var(--accent); }
+  .preset-btn { padding: 6px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); cursor: pointer; font-size: .8rem; font-family: var(--sans); margin: 3px 3px 0 0; }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .preset-btn .ppi { color: var(--muted); font-family: var(--mono); font-size: .72rem; margin-left: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 8px; }
+  th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  th { color: var(--muted); font-weight: 600; font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
+  td.dist { color: var(--accent); font-weight: 700; }
+  .device { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: .85rem; line-height: 1.6; font-family: var(--mono); }
+  .device dt { color: var(--muted); float: left; clear: left; width: 200px; }
+  .device dd { margin: 0; padding-left: 200px; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Display DPI / PPI Calculator</h1>
+<p class="subtitle">Compute pixel density (PPI), dot pitch, and the minimum viewing distance at which the human eye stops resolving individual pixels. Useful for picking a monitor, sizing a UI element on a phone, or deciding whether <code>@2x</code> assets are worth shipping.</p>
+
+<div class="card">
+  <div class="grid3">
+    <div class="field">
+      <label for="width">Width (pixels)</label>
+      <input type="number" id="width" value="3840" min="1" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="height">Height (pixels)</label>
+      <input type="number" id="height" value="2160" min="1" oninput="calc()">
+    </div>
+    <div class="field">
+      <label for="diag">Diagonal size</label>
+      <input type="number" id="diag" value="27" min="0.1" step="0.1" oninput="calc()">
+    </div>
+  </div>
+  <div class="toggle" style="margin-top:6px">
+    <button id="unit-in" class="active" onclick="setUnit('in')">Inches</button>
+    <button id="unit-cm" onclick="setUnit('cm')">Centimeters</button>
+    <button id="unit-mm" onclick="setUnit('mm')">Millimeters</button>
+  </div>
+
+  <div class="results" id="results"></div>
+  <div class="retina" id="retina"></div>
+</div>
+
+<div class="card">
+  <h2>Minimum viewing distance for "retina" sharpness</h2>
+  <p class="subtitle" style="font-size:.85rem;margin-top:-4px">A pixel becomes individually invisible when it subtends less than 1 arcminute on the retina (the threshold of 20/20 vision). Below this distance, you can technically resolve the pixel grid; above it, the display looks perfectly smooth.</p>
+  <table>
+    <thead>
+      <tr><th>Distance metric</th><th>Inches</th><th>Centimeters</th><th>Notes</th></tr>
+    </thead>
+    <tbody id="distTable"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Your current device</h2>
+  <p class="subtitle" style="font-size:.85rem;margin-top:-4px">In-browser detection. The browser only knows CSS pixels and the device pixel ratio (DPR); the <em>physical</em> PPI requires a known screen size, which the browser can't measure.</p>
+  <dl class="device" id="device"></dl>
+</div>
+
+<div class="card">
+  <h2>Presets</h2>
+  <p class="subtitle" style="font-size:.85rem;margin-top:-4px">Pick a device to autofill the resolution and diagonal.</p>
+  <div id="presets"></div>
+</div>
+
+<div class="card">
+  <h2>Reference: where common PPI values sit</h2>
+  <table>
+    <thead><tr><th>PPI band</th><th>Examples</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td>72–96</td><td>Older monitors, projectors, TVs at couch distance</td><td>Pixel grid visible up close; "1× assets" target.</td></tr>
+      <tr><td>96–150</td><td>1080p/1440p desktop monitors</td><td>The historical baseline for Windows / web design.</td></tr>
+      <tr><td>150–220</td><td>4K 27" / Apple "Retina" desktops, tablets</td><td>Smooth at arm's length; benefits from 2× assets.</td></tr>
+      <tr><td>220–400</td><td>Laptops (MacBook), high-end tablets</td><td>Pixel grid invisible at normal use distance.</td></tr>
+      <tr><td>400–600+</td><td>Modern smartphones</td><td>Effectively impossible to resolve individual pixels.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let unit = 'in';
+
+const PRESETS = [
+  { name: 'iPhone 15 Pro', w: 2556, h: 1179, d: 6.1, dUnit: 'in' },
+  { name: 'iPhone 15 Pro Max', w: 2796, h: 1290, d: 6.7, dUnit: 'in' },
+  { name: 'iPhone SE (3rd gen)', w: 1334, h: 750, d: 4.7, dUnit: 'in' },
+  { name: 'Galaxy S24 Ultra', w: 3120, h: 1440, d: 6.8, dUnit: 'in' },
+  { name: 'Pixel 8 Pro', w: 2992, h: 1344, d: 6.7, dUnit: 'in' },
+  { name: 'iPad Pro 12.9"', w: 2732, h: 2048, d: 12.9, dUnit: 'in' },
+  { name: 'iPad mini', w: 2266, h: 1488, d: 8.3, dUnit: 'in' },
+  { name: 'MacBook Air 13" M2', w: 2560, h: 1664, d: 13.6, dUnit: 'in' },
+  { name: 'MacBook Pro 14"', w: 3024, h: 1964, d: 14.2, dUnit: 'in' },
+  { name: 'MacBook Pro 16"', w: 3456, h: 2234, d: 16.2, dUnit: 'in' },
+  { name: 'iMac 24"', w: 4480, h: 2520, d: 23.5, dUnit: 'in' },
+  { name: 'Studio Display 27"', w: 5120, h: 2880, d: 27, dUnit: 'in' },
+  { name: 'Pro Display XDR 32"', w: 6016, h: 3384, d: 32, dUnit: 'in' },
+  { name: '1080p 24" monitor', w: 1920, h: 1080, d: 24, dUnit: 'in' },
+  { name: '1440p 27" monitor', w: 2560, h: 1440, d: 27, dUnit: 'in' },
+  { name: '4K 27" monitor', w: 3840, h: 2160, d: 27, dUnit: 'in' },
+  { name: '4K 32" monitor', w: 3840, h: 2160, d: 32, dUnit: 'in' },
+  { name: '5K 27" monitor', w: 5120, h: 2880, d: 27, dUnit: 'in' },
+  { name: 'Ultrawide 34" 3440×1440', w: 3440, h: 1440, d: 34, dUnit: 'in' },
+  { name: 'Ultrawide 49" 5120×1440', w: 5120, h: 1440, d: 49, dUnit: 'in' },
+  { name: '1080p 55" TV', w: 1920, h: 1080, d: 55, dUnit: 'in' },
+  { name: '4K 55" TV', w: 3840, h: 2160, d: 55, dUnit: 'in' },
+  { name: '4K 65" TV', w: 3840, h: 2160, d: 65, dUnit: 'in' },
+  { name: '8K 75" TV', w: 7680, h: 4320, d: 75, dUnit: 'in' }
+];
+
+function toInches(v) {
+  if (unit === 'in') return v;
+  if (unit === 'cm') return v / 2.54;
+  if (unit === 'mm') return v / 25.4;
+  return v;
+}
+
+function setUnit(u) {
+  // Convert the current diagonal value when changing units so the physical size stays the same
+  const cur = parseFloat($('diag').value) || 0;
+  let inches;
+  if (unit === 'in') inches = cur;
+  else if (unit === 'cm') inches = cur / 2.54;
+  else inches = cur / 25.4;
+  unit = u;
+  let conv;
+  if (u === 'in') conv = inches;
+  else if (u === 'cm') conv = inches * 2.54;
+  else conv = inches * 25.4;
+  $('diag').value = (Math.round(conv * 100) / 100).toString();
+  $('unit-in').classList.toggle('active', u === 'in');
+  $('unit-cm').classList.toggle('active', u === 'cm');
+  $('unit-mm').classList.toggle('active', u === 'mm');
+  calc();
+}
+
+function calc() {
+  const w = parseFloat($('width').value) || 0;
+  const h = parseFloat($('height').value) || 0;
+  const dRaw = parseFloat($('diag').value) || 0;
+  const dIn = toInches(dRaw);
+  const results = $('results');
+  if (w <= 0 || h <= 0 || dIn <= 0) {
+    results.innerHTML = '<div class="res-card"><div class="label">Need valid inputs</div><div class="value">—</div></div>';
+    $('retina').innerHTML = '';
+    $('distTable').innerHTML = '';
+    return;
+  }
+  const diagPixels = Math.sqrt(w * w + h * h);
+  const ppi = diagPixels / dIn;
+  const dotPitchMm = 25.4 / ppi;
+  const physWidthIn = w / ppi;
+  const physHeightIn = h / ppi;
+  const physWidthCm = physWidthIn * 2.54;
+  const physHeightCm = physHeightIn * 2.54;
+  const aspectGcd = gcd(w, h);
+  const aspect = `${w / aspectGcd}:${h / aspectGcd}`;
+  const megapixels = (w * h) / 1_000_000;
+
+  results.innerHTML = `
+    <div class="res-card"><div class="label">Pixel density</div><div class="value">${ppi.toFixed(1)} PPI</div><div class="sub">${(ppi * ppi).toFixed(0)} pixels per in²</div></div>
+    <div class="res-card"><div class="label">Dot pitch</div><div class="value">${dotPitchMm.toFixed(4)} mm</div><div class="sub">${(dotPitchMm * 1000).toFixed(1)} µm per pixel</div></div>
+    <div class="res-card"><div class="label">Physical size</div><div class="value">${physWidthIn.toFixed(2)}″ × ${physHeightIn.toFixed(2)}″</div><div class="sub">${physWidthCm.toFixed(2)} × ${physHeightCm.toFixed(2)} cm</div></div>
+    <div class="res-card"><div class="label">Aspect ratio</div><div class="value">${aspect}</div><div class="sub">${(w / h).toFixed(3)}:1</div></div>
+    <div class="res-card"><div class="label">Total pixels</div><div class="value">${megapixels.toFixed(2)} MP</div><div class="sub">${(w * h).toLocaleString()} pixels</div></div>
+    <div class="res-card"><div class="label">Diagonal</div><div class="value">${dIn.toFixed(2)}″</div><div class="sub">${(dIn * 2.54).toFixed(2)} cm · ${diagPixels.toFixed(0)} px</div></div>
+  `;
+
+  // Retina classification: at 12 inches (typical phone), 18 inches (tablet), 24 inches (laptop), 30 inches (desktop)
+  // 1 arcminute at distance D inches = 2 * D * tan(1/120 deg) ≈ D / 3438 inches
+  const minDist = 3438 / ppi; // inches needed for 1 arcmin per pixel
+  const minDistCm = minDist * 2.54;
+  const retinaEl = $('retina');
+  const verdict = minDist <= 12 ? 'phone' : (minDist <= 18 ? 'tablet' : (minDist <= 24 ? 'laptop' : (minDist <= 36 ? 'desktop' : 'TV')));
+  const okAt = (label, distIn) => minDist <= distIn ? `<span style="color:var(--success)">✓ ${label}</span>` : `<span style="color:var(--muted)">✗ ${label}</span>`;
+  const isRetina = minDist <= 18;
+  retinaEl.className = 'retina ' + (isRetina ? 'yes' : 'no');
+  retinaEl.innerHTML = `
+    <strong>${ppi.toFixed(1)} PPI</strong> is pixel-invisible from <strong>${minDist.toFixed(1)}″</strong> (${minDistCm.toFixed(1)} cm) — about the typical distance for a <strong>${verdict}</strong>.<br>
+    Verdict at common distances: ${okAt('phone (12″)', 12)} · ${okAt('tablet (18″)', 18)} · ${okAt('laptop (24″)', 24)} · ${okAt('desktop (30″)', 30)} · ${okAt('TV couch (10 ft)', 120)}
+  `;
+
+  // Distance table
+  $('distTable').innerHTML = `
+    <tr><td>Pixels just resolvable (1 arcmin)</td><td class="dist">${minDist.toFixed(2)}″</td><td class="dist">${minDistCm.toFixed(1)} cm</td><td>Below this distance you can see individual pixels.</td></tr>
+    <tr><td>Comfortable reading (0.5 arcmin per pixel)</td><td>${(minDist * 2).toFixed(2)}″</td><td>${(minDistCm * 2).toFixed(1)} cm</td><td>Antialiased text looks fully smooth.</td></tr>
+    <tr><td>4K HDR cinema standard (1.6× height)</td><td>${(physHeightIn * 1.6).toFixed(1)}″</td><td>${(physHeightCm * 1.6).toFixed(1)} cm</td><td>SMPTE recommended seat distance from screen.</td></tr>
+    <tr><td>THX cinema standard (36° FOV)</td><td>${(physWidthIn / (2 * Math.tan((36 / 2) * Math.PI / 180))).toFixed(1)}″</td><td>${(physWidthCm / (2 * Math.tan((36 / 2) * Math.PI / 180))).toFixed(1)} cm</td><td>Immersive but not overwhelming.</td></tr>
+  `;
+}
+
+function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
+
+function renderPresets() {
+  const box = $('presets');
+  box.innerHTML = '';
+  // group: phones, tablets, laptops, monitors, TVs
+  PRESETS.forEach(p => {
+    const ppi = Math.sqrt(p.w * p.w + p.h * p.h) / p.d;
+    const b = document.createElement('button');
+    b.className = 'preset-btn';
+    b.innerHTML = `${p.name} <span class="ppi">${p.w}×${p.h} · ${p.d}″ · ${ppi.toFixed(0)} PPI</span>`;
+    b.onclick = () => {
+      $('width').value = p.w;
+      $('height').value = p.h;
+      unit = 'in';
+      $('diag').value = p.d;
+      $('unit-in').classList.add('active');
+      $('unit-cm').classList.remove('active');
+      $('unit-mm').classList.remove('active');
+      calc();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+    box.appendChild(b);
+  });
+}
+
+function renderDevice() {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = window.screen.width;
+  const cssH = window.screen.height;
+  const physW = Math.round(cssW * dpr);
+  const physH = Math.round(cssH * dpr);
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+  $('device').innerHTML = `
+    <dt>Device pixel ratio (DPR)</dt><dd>${dpr}×</dd>
+    <dt>CSS pixels (screen)</dt><dd>${cssW} × ${cssH} px</dd>
+    <dt>Physical pixels (estimated)</dt><dd>${physW} × ${physH} px</dd>
+    <dt>Viewport (this window)</dt><dd>${viewportW} × ${viewportH} px</dd>
+    <dt>Color depth</dt><dd>${window.screen.colorDepth || '?'} bits</dd>
+    <dt>Orientation</dt><dd>${(window.screen.orientation && window.screen.orientation.type) || '?'}</dd>
+  `;
+}
+
+renderPresets();
+renderDevice();
+calc();
+</script>
+</body>
+</html>
