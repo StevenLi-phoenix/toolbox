@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Service Worker Cache Strategy Generator — Free Online Tool</title>
+<meta name="description" content="Generate a production-ready Service Worker with route-matched caching strategies — Cache First, Network First, Stale While Revalidate, Network Only, Cache Only — plus precache lists, version bumps, cleanup on activate, and an offline fallback page. Vanilla JS, zero dependencies, no Workbox required.">
+<meta name="keywords" content="service worker, cache strategy, cache first, network first, stale while revalidate, precache, offline fallback, pwa, workbox alternative, sw.js generator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/serviceworker.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .field input[type=text], .field input[type=number], .field select, .field textarea {
+    width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+    box-sizing: border-box;
+  }
+  .field textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
+  .check {
+    display: flex; gap: 8px; align-items: center; font-size: .88rem; cursor: pointer;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  }
+  .check input { cursor: pointer; accent-color: var(--accent); }
+
+  .routes { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  .route {
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--surface);
+    display: grid; grid-template-columns: 1fr 1fr 130px 90px 40px; gap: 10px; align-items: end;
+  }
+  @media (max-width: 800px) { .route { grid-template-columns: 1fr 1fr; } }
+  .route .field label { font-size: .7rem; }
+  .route .field input, .route .field select { padding: 6px 10px; font-size: .85rem; }
+  .route .strategy-pill {
+    padding: 4px 8px; border-radius: 4px; font-size: .7rem; font-family: var(--mono);
+    text-align: center; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  .route .strategy-pill[data-s="cache-first"] { background: rgba(34,197,94,.15); color: var(--success); }
+  .route .strategy-pill[data-s="network-first"] { background: rgba(99,102,241,.15); color: var(--accent); }
+  .route .strategy-pill[data-s="stale-while-revalidate"] { background: rgba(234,179,8,.18); color: var(--warning); }
+  .route .strategy-pill[data-s="network-only"] { background: rgba(239,68,68,.15); color: var(--error); }
+  .route .strategy-pill[data-s="cache-only"] { background: var(--surface2); color: var(--muted); }
+  .route button.del {
+    padding: 6px 8px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: var(--radius); cursor: pointer; font-size: 1rem;
+  }
+  .route button.del:hover { color: var(--error); border-color: var(--error); }
+  .add-route {
+    padding: 9px 14px; background: var(--bg); border: 1px dashed var(--border); border-radius: var(--radius);
+    color: var(--accent); cursor: pointer; font-size: .88rem; width: 100%; margin-top: 8px;
+  }
+  .add-route:hover { border-color: var(--accent); }
+
+  pre.out {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; font-family: var(--mono); font-size: .82rem; white-space: pre;
+    overflow-x: auto; line-height: 1.5; margin: 0; max-height: 600px; overflow-y: auto;
+  }
+  .out-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .out-tabs button {
+    padding: 6px 12px; background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+    border-radius: var(--radius); cursor: pointer; font-size: .82rem; font-family: var(--mono);
+  }
+  .out-tabs button.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .copy-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .copy-row button {
+    padding: 7px 14px; background: var(--accent); color: white; border: none; border-radius: var(--radius);
+    cursor: pointer; font-size: .85rem;
+  }
+  .copy-row button.alt { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 8px; }
+  th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--mono); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
+  td code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .warn { padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--warning); background: rgba(234,179,8,.06); font-size: .85rem; line-height: 1.55; margin-top: 12px; }
+  .warn strong { color: var(--warning); font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Service Worker Cache Strategy Generator</h1>
+<p class="subtitle">Build a complete <code>sw.js</code> with a different caching strategy per URL pattern — precache the shell, stale-while-revalidate for images, network-first for the API, and a clean offline fallback page. Bumping <code>CACHE_VERSION</code> blows away the old cache on the next activate.</p>
+
+<div class="card">
+  <h2>Global config</h2>
+  <div class="controls">
+    <div class="field">
+      <label for="cacheName">Cache name prefix</label>
+      <input type="text" id="cacheName" value="my-app" oninput="render()">
+    </div>
+    <div class="field">
+      <label for="version">Cache version (bump to invalidate)</label>
+      <input type="text" id="version" value="v1" oninput="render()">
+    </div>
+    <div class="field">
+      <label for="scope">Scope (informational)</label>
+      <input type="text" id="scope" value="/" oninput="render()">
+    </div>
+    <div class="field">
+      <label for="maxEntries">Default runtime cache cap (entries)</label>
+      <input type="number" id="maxEntries" value="60" min="0" oninput="render()">
+    </div>
+  </div>
+
+  <div class="controls" style="margin-top:12px">
+    <label class="check"><input type="checkbox" id="skipWaiting" checked onchange="render()"> <code>skipWaiting()</code> on install</label>
+    <label class="check"><input type="checkbox" id="clientsClaim" checked onchange="render()"> <code>clients.claim()</code> on activate</label>
+    <label class="check"><input type="checkbox" id="navPreload" onchange="render()"> Enable navigation preload</label>
+    <label class="check"><input type="checkbox" id="offlinePage" checked onchange="render()"> Serve offline fallback page</label>
+  </div>
+
+  <div class="controls" style="margin-top:12px">
+    <div class="field">
+      <label for="precache">Precache URLs (one per line — your app shell)</label>
+      <textarea id="precache" oninput="render()">/
+/index.html
+/styles.css
+/app.js
+/offline.html
+/icon-192.png</textarea>
+    </div>
+    <div class="field">
+      <label for="offlineUrl">Offline fallback URL (for failed navigations)</label>
+      <input type="text" id="offlineUrl" value="/offline.html" oninput="render()">
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Runtime route strategies</h2>
+  <p class="subtitle" style="font-size:.85rem;margin-top:-4px">Each route matches by URL substring, prefix, or regex. The first route that matches the request URL wins. Anything that matches no route falls through to network.</p>
+  <div class="routes" id="routes"></div>
+  <button class="add-route" onclick="addRoute()">+ Add route</button>
+</div>
+
+<div class="card">
+  <h2>Generated files</h2>
+  <div class="out-tabs">
+    <button class="active" id="tab-sw" onclick="setTab('sw')">sw.js</button>
+    <button id="tab-reg" onclick="setTab('reg')">register snippet</button>
+    <button id="tab-offline" onclick="setTab('offline')">offline.html</button>
+  </div>
+  <pre class="out" id="output"></pre>
+  <div class="copy-row">
+    <button onclick="copyOut()">Copy</button>
+    <button class="alt" onclick="downloadOut()">Download</button>
+    <span id="copied" style="color:var(--success);font-size:.82rem"></span>
+  </div>
+  <div class="warn">
+    <strong>Heads up:</strong> Service Workers only run over HTTPS (or <code>localhost</code>). Browsers cache <code>sw.js</code> aggressively — most respect a 24-hour TTL maximum, but you should serve <code>sw.js</code> with <code>Cache-Control: max-age=0, must-revalidate</code> to be safe. Always bump <code>CACHE_VERSION</code> when you change the precache list, or users will keep seeing stale files until they close every tab.
+  </div>
+</div>
+
+<div class="card">
+  <h2>Which strategy to use for what</h2>
+  <table>
+    <thead><tr><th>Strategy</th><th>Best for</th><th>How it behaves offline</th></tr></thead>
+    <tbody>
+      <tr><td><code>cache-first</code></td><td>Versioned static assets (hashed JS/CSS, fonts, images that never change).</td><td>Serves cached copy instantly; only hits network on cache miss. Fastest. Cache never auto-refreshes — relies on URL changing.</td></tr>
+      <tr><td><code>network-first</code></td><td>HTML pages, JSON APIs where freshness matters more than speed.</td><td>Tries network; on failure (timeout or offline) falls back to cache. Slower when online; resilient when not.</td></tr>
+      <tr><td><code>stale-while-revalidate</code></td><td>Avatar images, news feeds, comment counts — anything where slightly stale is fine but you want updates.</td><td>Serves cached copy instantly while fetching a fresh one in the background for next time. Best UX for non-critical content.</td></tr>
+      <tr><td><code>network-only</code></td><td>Auth endpoints, analytics, anything that must never be cached.</td><td>Always fetches from network. Throws / fails offline — useful for endpoints where stale data is wrong data.</td></tr>
+      <tr><td><code>cache-only</code></td><td>Pre-cached resources you know are in cache and never change.</td><td>Serves only from cache. Errors if not precached.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let currentTab = 'sw';
+let routes = [];
+
+const DEFAULT_ROUTES = [
+  { pattern: '/api/', match: 'prefix', strategy: 'network-first', cache: 'api', timeout: 3 },
+  { pattern: '\\.(?:png|jpg|jpeg|gif|svg|webp|avif)$', match: 'regex', strategy: 'stale-while-revalidate', cache: 'images', timeout: 0 },
+  { pattern: '\\.(?:js|css|woff2?)$', match: 'regex', strategy: 'cache-first', cache: 'static', timeout: 0 },
+  { pattern: '/analytics', match: 'prefix', strategy: 'network-only', cache: '', timeout: 0 }
+];
+
+function addRoute(r) {
+  routes.push(r || { pattern: '/example/', match: 'prefix', strategy: 'cache-first', cache: 'misc', timeout: 0 });
+  renderRoutes();
+  render();
+}
+
+function delRoute(i) {
+  routes.splice(i, 1);
+  renderRoutes();
+  render();
+}
+
+function updateRoute(i, key, value) {
+  routes[i][key] = value;
+  renderRoutes();
+  render();
+}
+
+function renderRoutes() {
+  const box = $('routes');
+  box.innerHTML = '';
+  routes.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = 'route';
+    div.innerHTML = `
+      <div class="field">
+        <label>URL pattern</label>
+        <input type="text" value="${escapeAttr(r.pattern)}" data-i="${i}" data-k="pattern">
+      </div>
+      <div class="field">
+        <label>Match by</label>
+        <select data-i="${i}" data-k="match">
+          <option value="prefix" ${r.match === 'prefix' ? 'selected' : ''}>URL starts with</option>
+          <option value="contains" ${r.match === 'contains' ? 'selected' : ''}>URL contains</option>
+          <option value="regex" ${r.match === 'regex' ? 'selected' : ''}>URL matches regex</option>
+          <option value="same-origin" ${r.match === 'same-origin' ? 'selected' : ''}>Same origin only</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Strategy</label>
+        <select data-i="${i}" data-k="strategy">
+          <option value="cache-first" ${r.strategy === 'cache-first' ? 'selected' : ''}>cache-first</option>
+          <option value="network-first" ${r.strategy === 'network-first' ? 'selected' : ''}>network-first</option>
+          <option value="stale-while-revalidate" ${r.strategy === 'stale-while-revalidate' ? 'selected' : ''}>stale-while-revalidate</option>
+          <option value="network-only" ${r.strategy === 'network-only' ? 'selected' : ''}>network-only</option>
+          <option value="cache-only" ${r.strategy === 'cache-only' ? 'selected' : ''}>cache-only</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Cache bucket</label>
+        <input type="text" value="${escapeAttr(r.cache || '')}" data-i="${i}" data-k="cache" placeholder="optional">
+      </div>
+      <button class="del" data-i="${i}" title="Remove route">&times;</button>
+    `;
+    box.appendChild(div);
+  });
+  box.querySelectorAll('input, select').forEach(el => {
+    el.addEventListener('input', e => updateRoute(parseInt(e.target.dataset.i, 10), e.target.dataset.k, e.target.value));
+  });
+  box.querySelectorAll('button.del').forEach(b => {
+    b.addEventListener('click', e => delRoute(parseInt(e.currentTarget.dataset.i, 10)));
+  });
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function buildSW() {
+  const cacheName = $('cacheName').value.trim() || 'app';
+  const version = $('version').value.trim() || 'v1';
+  const skipWaiting = $('skipWaiting').checked;
+  const clientsClaim = $('clientsClaim').checked;
+  const navPreload = $('navPreload').checked;
+  const offlinePage = $('offlinePage').checked;
+  const offlineUrl = $('offlineUrl').value.trim() || '/offline.html';
+  const maxEntries = parseInt($('maxEntries').value, 10) || 0;
+  const precache = $('precache').value.split('\n').map(l => l.trim()).filter(Boolean);
+
+  const buckets = new Set();
+  routes.forEach(r => { if (r.cache && r.strategy !== 'network-only') buckets.add(r.cache); });
+
+  const usedStrategies = new Set(routes.map(r => r.strategy));
+
+  let sw = `// sw.js — generated ${new Date().toISOString().slice(0, 10)}
+// Bump CACHE_VERSION whenever the precache list or any cached asset changes.
+
+const CACHE_VERSION = '${version}';
+const CACHE_PREFIX = '${cacheName}';
+const PRECACHE = \`\${CACHE_PREFIX}-precache-\${CACHE_VERSION}\`;
+${[...buckets].map(b => `const ${bucketConst(b)} = \`\${CACHE_PREFIX}-${b}-\${CACHE_VERSION}\`;`).join('\n')}
+${offlinePage ? `const OFFLINE_URL = '${offlineUrl}';\n` : ''}
+const PRECACHE_URLS = ${JSON.stringify(precache, null, 2)};
+
+const MAX_ENTRIES = ${maxEntries};
+
+// ---------- Install: precache the shell ----------
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(PRECACHE).then(cache => cache.addAll(PRECACHE_URLS))${skipWaiting ? `
+      .then(() => self.skipWaiting())` : ''}
+  );
+});
+
+// ---------- Activate: clean up old versions ----------
+self.addEventListener('activate', event => {
+  const expected = new Set([PRECACHE${buckets.size ? ', ' + [...buckets].map(bucketConst).join(', ') : ''}]);
+  event.waitUntil((async () => {${navPreload ? `
+    if (self.registration.navigationPreload) {
+      await self.registration.navigationPreload.enable();
+    }` : ''}
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter(k => k.startsWith(CACHE_PREFIX + '-') && !expected.has(k))
+      .map(k => caches.delete(k))
+    );${clientsClaim ? `
+    await self.clients.claim();` : ''}
+  })());
+});
+
+// ---------- Strategy implementations ----------
+${strategyCode(usedStrategies, maxEntries)}
+
+${offlinePage ? `
+// ---------- Navigation fallback to offline page ----------
+async function navigationFallback(event) {
+  try {${navPreload ? `
+    const preload = await event.preloadResponse;
+    if (preload) return preload;` : ''}
+    return await fetch(event.request);
+  } catch (err) {
+    const cache = await caches.open(PRECACHE);
+    return (await cache.match(OFFLINE_URL)) || Response.error();
+  }
+}
+` : ''}
+
+// ---------- Fetch router ----------
+self.addEventListener('fetch', event => {
+  const { request } = event;
+  // Skip non-GET — POST/PUT/etc. should never be cached.
+  if (request.method !== 'GET') return;
+
+${offlinePage ? `  // HTML navigations → network with offline fallback
+  if (request.mode === 'navigate') {
+    event.respondWith(navigationFallback(event));
+    return;
+  }
+
+` : ''}  const url = new URL(request.url);
+${routes.map(r => routeIf(r)).join('\n')}
+});
+
+// ---------- Helpers ----------
+${maxEntries > 0 ? trimCacheHelper() : ''}
+`;
+
+  return sw.trim() + '\n';
+}
+
+function bucketConst(b) {
+  return 'CACHE_' + b.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+}
+
+function strategyCode(used, maxEntries) {
+  const parts = [];
+  if (used.has('cache-first')) parts.push(`
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      await cache.put(request, response.clone());${maxEntries > 0 ? `
+      trimCache(cacheName, MAX_ENTRIES);` : ''}
+    }
+    return response;
+  } catch (err) {
+    return cached || Response.error();
+  }
+}`.trim());
+
+  if (used.has('network-first')) parts.push(`
+async function networkFirst(request, cacheName, timeoutSec) {
+  const cache = await caches.open(cacheName);
+  const timeoutPromise = timeoutSec > 0
+    ? new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutSec * 1000))
+    : null;
+  try {
+    const fetchPromise = fetch(request);
+    const response = await (timeoutPromise ? Promise.race([fetchPromise, timeoutPromise]) : fetchPromise);
+    if (response.ok) {
+      await cache.put(request, response.clone());${maxEntries > 0 ? `
+      trimCache(cacheName, MAX_ENTRIES);` : ''}
+    }
+    return response;
+  } catch (err) {
+    const cached = await cache.match(request);
+    return cached || Response.error();
+  }
+}`.trim());
+
+  if (used.has('stale-while-revalidate')) parts.push(`
+async function staleWhileRevalidate(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  const fetchPromise = fetch(request).then(response => {
+    if (response.ok) {
+      cache.put(request, response.clone());${maxEntries > 0 ? `
+      trimCache(cacheName, MAX_ENTRIES);` : ''}
+    }
+    return response;
+  }).catch(() => cached);
+  return cached || fetchPromise;
+}`.trim());
+
+  if (used.has('network-only')) parts.push(`
+function networkOnly(request) {
+  return fetch(request);
+}`.trim());
+
+  if (used.has('cache-only')) parts.push(`
+async function cacheOnly(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  return cached || Response.error();
+}`.trim());
+
+  return parts.join('\n\n');
+}
+
+function trimCacheHelper() {
+  return `async function trimCache(cacheName, max) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  if (keys.length <= max) return;
+  await Promise.all(keys.slice(0, keys.length - max).map(k => cache.delete(k)));
+}`;
+}
+
+function routeIf(r) {
+  const cond = matchCondition(r);
+  const cacheRef = r.cache && r.strategy !== 'network-only' ? bucketConst(r.cache) : '';
+  let call;
+  switch (r.strategy) {
+    case 'cache-first': call = `cacheFirst(request, ${cacheRef})`; break;
+    case 'network-first':
+      const t = parseInt(r.timeout, 10) || 0;
+      call = `networkFirst(request, ${cacheRef}, ${t})`;
+      break;
+    case 'stale-while-revalidate': call = `staleWhileRevalidate(request, ${cacheRef})`; break;
+    case 'network-only': call = `networkOnly(request)`; break;
+    case 'cache-only': call = `cacheOnly(request, ${cacheRef})`; break;
+  }
+  return `  if (${cond}) {
+    event.respondWith(${call});
+    return;
+  }`;
+}
+
+function matchCondition(r) {
+  const p = JSON.stringify(r.pattern);
+  switch (r.match) {
+    case 'prefix': return `url.pathname.startsWith(${p})`;
+    case 'contains': return `url.pathname.includes(${p})`;
+    case 'regex': return `new RegExp(${p}).test(url.pathname)`;
+    case 'same-origin': return `url.origin === self.location.origin`;
+    default: return 'false';
+  }
+}
+
+function buildRegister() {
+  const scope = $('scope').value || '/';
+  return `// Register the Service Worker — paste into your main JS bundle.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '${scope}' })
+      .then(reg => {
+        console.log('SW registered:', reg.scope);
+
+        // Listen for updates and prompt the user
+        reg.addEventListener('updatefound', () => {
+          const newSW = reg.installing;
+          newSW && newSW.addEventListener('statechange', () => {
+            if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+              // A new version is waiting. Surface this to the user.
+              console.log('New Service Worker waiting — reload to activate.');
+              // newSW.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+      })
+      .catch(err => console.warn('SW registration failed:', err));
+  });
+}
+`;
+}
+
+function buildOffline() {
+  // The inline script in the template below is split across a `+` so the
+  // HTML parser for THIS page doesn't see a literal </ ​script> and close
+  // the outer <script> tag early.
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're offline</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 540px; margin: 12vh auto; padding: 0 24px;
+      color: #1a1a1a; line-height: 1.5;
+    }
+    h1 { font-size: 1.8rem; margin: 0 0 12px; }
+    p { color: #525252; }
+    button {
+      padding: 10px 18px; background: #4f46e5; color: white; border: none;
+      border-radius: 6px; cursor: pointer; font-size: .95rem; margin-top: 16px;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0a0a0a; color: #f5f5f5; }
+      p { color: #a3a3a3; }
+    }
+  </style>
+</head>
+<body>
+  <h1>You're offline</h1>
+  <p>This page isn't available without an internet connection. Check your network and try again.</p>
+  <button onclick="location.reload()">Try again</button>
+  <` + `script>
+    window.addEventListener('online', () => location.reload());
+  </` + `script>
+</body>
+</html>
+`;
+}
+
+function render() {
+  let out;
+  if (currentTab === 'sw') out = buildSW();
+  else if (currentTab === 'reg') out = buildRegister();
+  else out = buildOffline();
+  $('output').textContent = out;
+}
+
+function setTab(t) {
+  currentTab = t;
+  ['sw', 'reg', 'offline'].forEach(x => $('tab-' + x).classList.toggle('active', x === t));
+  render();
+}
+
+function copyOut() {
+  navigator.clipboard.writeText($('output').textContent).then(() => {
+    $('copied').textContent = '✓ copied';
+    setTimeout(() => $('copied').textContent = '', 1500);
+  });
+}
+
+function downloadOut() {
+  const name = currentTab === 'sw' ? 'sw.js' : currentTab === 'reg' ? 'register-sw.js' : 'offline.html';
+  const blob = new Blob([$('output').textContent], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+routes = JSON.parse(JSON.stringify(DEFAULT_ROUTES));
+renderRoutes();
+render();
+</script>
+</body>
+</html>

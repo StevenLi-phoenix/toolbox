@@ -43,6 +43,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS Multi-Column Layout Builder](csscolumns.html) | Build magazine-style multi-column layouts with live preview — pick `column-count` or `column-width`, set `column-gap`, `column-rule`, `column-fill`, toggle `column-span: all` headings, and lock items together with `break-inside: avoid`. Copy-ready CSS plus a news-layout recipe that never strands an orphan heading. |
 | [CSS scrollbar-gutter Playground](scrollbargutter.html) | See exactly how `scrollbar-gutter: auto` vs `stable` vs `stable both-edges` changes layout at the moment the scrollbar appears — toggle content length to watch the shift (or not), pair with `scrollbar-width` & `overflow-y`, and copy the recipe that stops the page from jumping when a modal opens. |
 | [CSS @supports Builder](csssupports.html) | Compose CSS feature queries clause by clause — combine property tests with `and` / `or` / `not`, test `selector(:has())`, `font-tech()`, `font-format()`, see live whether your browser passes each clause via `CSS.supports()`, and copy a clean rule with presets for `:has`, subgrid, anchor positioning, view transitions, `color-mix`, OKLCH, and more. |
 | [CSS Spacing Scale Generator](spacingscale.html) | Generate a consistent spacing scale — linear, geometric, modular, Fibonacci, T-shirt, or 4-/8-pt grid — and export as custom-property tokens, Tailwind config, Sass map, JSON design tokens, or utility classes with a visual step preview. |
@@ -231,6 +232,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [Core Web Vitals Score Calculator](webvitals.html) | Score `LCP`, `INP`, `CLS` (plus `FCP`, `TTFB`, legacy `FID`) against Google's official Good / Needs Improvement / Poor thresholds — see a pass/fail per metric, an overall verdict for the URL, and a focused optimization checklist for whichever metric is failing. |
+| [Service Worker Cache Strategy Generator](serviceworker.html) | Generate a production-ready `sw.js` with per-route caching — cache-first, network-first, stale-while-revalidate, network-only, cache-only — plus precache list, version-bump cleanup, navigation preload, and an offline fallback page. Vanilla JS, zero dependencies, no Workbox. |
 | [Display DPI / PPI Calculator](dpicalc.html) | Compute pixel density (PPI), dot pitch, physical size, and the minimum viewing distance at which the human eye stops resolving individual pixels — for any width × height × diagonal. Includes presets for popular phones, monitors, and TVs plus in-browser DPR / screen detection. |
 | [IntersectionObserver Builder & Playground](intersectionobserver.html) | Compose an `IntersectionObserver` with custom `root`, `rootMargin`, and `threshold` list — scroll a live target through the viewport box, watch every `IntersectionObserverEntry` fire in real time with ratio + isIntersecting state, copy a ready-to-paste snippet with presets for lazy-load, infinite scroll sentinel, sticky-on-pin, and scrollspy patterns. |
 | [Logfmt Parser & Formatter](logfmt.html) | Parse `key=value` log lines (Heroku, Go `slog`, Splunk) into a structured table — handles quoted values, `\"` / `\\` escapes, and repeated keys — then re-serialize edited pairs with correct quoting. Copy as JSON or TSV. |

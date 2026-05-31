@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Core Web Vitals Score Calculator — Free Online Tool</title>
+<meta name="description" content="Score Core Web Vitals (LCP, INP, CLS) and the supporting metrics (FCP, TTFB) against Google's official Good / Needs Improvement / Poor thresholds. Drop in CrUX or Lighthouse numbers, see a percentile-based pass/fail per metric, and grab the optimization checklist for the metric that fails.">
+<meta name="keywords" content="core web vitals, web vitals calculator, lcp, inp, cls, fcp, ttfb, fid, performance score, lighthouse score, page experience, crux, threshold">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/webvitals.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .metric {
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; background: var(--surface);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .metric .name { font-family: var(--mono); font-weight: 700; font-size: .95rem; color: var(--text); display: flex; justify-content: space-between; align-items: center; }
+  .metric .pill { font-size: .65rem; padding: 2px 8px; border-radius: 6px; font-family: var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+  .metric .pill.core { background: rgba(99,102,241,.15); color: var(--accent); }
+  .metric .pill.support { background: var(--surface2); color: var(--muted); }
+  .metric .desc { font-size: .78rem; color: var(--muted); line-height: 1.45; }
+  .metric input {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1.05rem;
+    box-sizing: border-box;
+  }
+  .metric .unit { font-size: .75rem; color: var(--muted); font-family: var(--mono); margin-top: -4px; }
+  .verdict {
+    margin-top: 8px; padding: 8px 10px; border-radius: var(--radius); font-size: .8rem;
+    font-family: var(--mono); display: flex; justify-content: space-between; align-items: center;
+    border: 1px solid var(--border); background: var(--bg);
+  }
+  .verdict .label { font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; }
+  .verdict.good { border-color: var(--success); background: rgba(34,197,94,.10); }
+  .verdict.good .label { color: var(--success); }
+  .verdict.needs { border-color: var(--warning); background: rgba(234,179,8,.10); }
+  .verdict.needs .label { color: var(--warning); }
+  .verdict.poor { border-color: var(--error); background: rgba(239,68,68,.10); }
+  .verdict.poor .label { color: var(--error); }
+  .verdict.empty { color: var(--muted); }
+  .bar { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--success) 0%, var(--success) var(--g,33%), var(--warning) var(--g,33%), var(--warning) var(--n,66%), var(--error) var(--n,66%), var(--error) 100%); position: relative; }
+  .bar .marker { position: absolute; top: -3px; width: 3px; height: 12px; background: var(--text); border-radius: 1px; transform: translateX(-1.5px); }
+  .bar .ticks { display: flex; justify-content: space-between; margin-top: 8px; font-size: .68rem; font-family: var(--mono); color: var(--muted); }
+
+  .summary { padding: 18px 20px; border: 2px solid var(--border); border-radius: var(--radius); margin-top: 4px; background: var(--surface); display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+  .summary .big { font-family: var(--mono); font-size: 2.4rem; font-weight: 800; line-height: 1; }
+  .summary.pass { border-color: var(--success); background: rgba(34,197,94,.08); }
+  .summary.pass .big { color: var(--success); }
+  .summary.fail { border-color: var(--error); background: rgba(239,68,68,.08); }
+  .summary.fail .big { color: var(--error); }
+  .summary.partial { border-color: var(--warning); background: rgba(234,179,8,.08); }
+  .summary.partial .big { color: var(--warning); }
+  .summary .text { flex: 1; min-width: 240px; font-size: .9rem; line-height: 1.55; }
+  .summary .text strong { font-family: var(--mono); }
+
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .preset-btn {
+    padding: 5px 10px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text); cursor: pointer; font-size: .78rem;
+    font-family: var(--sans);
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  table.thresh { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 8px; }
+  table.thresh th, table.thresh td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  table.thresh th { color: var(--muted); font-weight: 600; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+  table.thresh td.good { color: var(--success); font-weight: 700; }
+  table.thresh td.needs { color: var(--warning); font-weight: 700; }
+  table.thresh td.poor { color: var(--error); font-weight: 700; }
+
+  .fixlist { padding-left: 20px; margin: 0; font-size: .85rem; line-height: 1.65; }
+  .fixlist li { margin-bottom: 4px; }
+  .fix-section { margin-top: 12px; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); }
+  .fix-section h3 { font-family: var(--mono); margin: 0 0 6px 0; font-size: .92rem; color: var(--accent); }
+  .fix-section.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Core Web Vitals Score Calculator</h1>
+<p class="subtitle">Drop in the metric values from Lighthouse, PageSpeed Insights, CrUX, or your own RUM and see which ones pass Google's official thresholds — and which page experience signal will sink your search ranking. The three <strong>Core</strong> Web Vitals (<code>LCP</code>, <code>INP</code>, <code>CLS</code>) must all be Good for a URL to count as passing.</p>
+
+<div class="card">
+  <div class="preset-row">
+    <strong style="font-size:.82rem;color:var(--muted);align-self:center;margin-right:6px">Try:</strong>
+    <button class="preset-btn" onclick="loadPreset('great')">Fast site (all green)</button>
+    <button class="preset-btn" onclick="loadPreset('typical')">Typical e-commerce</button>
+    <button class="preset-btn" onclick="loadPreset('slow')">Image-heavy blog</button>
+    <button class="preset-btn" onclick="loadPreset('spa')">JS-heavy SPA</button>
+    <button class="preset-btn" onclick="loadPreset('blank')">Clear</button>
+  </div>
+
+  <div class="metrics" id="metrics"></div>
+
+  <div class="summary" id="summary"></div>
+</div>
+
+<div class="card">
+  <h2>What needs to improve</h2>
+  <p class="subtitle" style="font-size:.85rem;margin-top:-4px">A focused checklist for the metric that's failing — the highest-impact things to try first.</p>
+  <div id="fixes"></div>
+</div>
+
+<div class="card">
+  <h2>Official thresholds (75th percentile of page loads)</h2>
+  <p class="subtitle" style="font-size:.85rem;margin-top:-4px">A metric is <strong>Good</strong> only when the 75th-percentile value across mobile and desktop hits the Good threshold. Above the Poor cutoff it's Poor; in between it's Needs Improvement. These thresholds come from <code>web.dev/vitals</code> (March 2024 INP migration).</p>
+  <table class="thresh">
+    <thead><tr><th>Metric</th><th>What it measures</th><th>Good</th><th>Needs improvement</th><th>Poor</th></tr></thead>
+    <tbody>
+      <tr><td><strong>LCP</strong></td><td>Largest Contentful Paint — time to render the largest visible element</td><td class="good">&le; 2.5 s</td><td class="needs">2.5 – 4.0 s</td><td class="poor">&gt; 4.0 s</td></tr>
+      <tr><td><strong>INP</strong></td><td>Interaction to Next Paint — slowest interaction latency (replaced FID in Mar 2024)</td><td class="good">&le; 200 ms</td><td class="needs">200 – 500 ms</td><td class="poor">&gt; 500 ms</td></tr>
+      <tr><td><strong>CLS</strong></td><td>Cumulative Layout Shift — sum of layout shift scores over the session window</td><td class="good">&le; 0.1</td><td class="needs">0.1 – 0.25</td><td class="poor">&gt; 0.25</td></tr>
+      <tr><td>FCP</td><td>First Contentful Paint — time until any text or image renders</td><td class="good">&le; 1.8 s</td><td class="needs">1.8 – 3.0 s</td><td class="poor">&gt; 3.0 s</td></tr>
+      <tr><td>TTFB</td><td>Time to First Byte — time until the first response byte arrives</td><td class="good">&le; 0.8 s</td><td class="needs">0.8 – 1.8 s</td><td class="poor">&gt; 1.8 s</td></tr>
+      <tr><td>FID <span style="color:var(--muted)">(legacy)</span></td><td>First Input Delay — replaced by INP on March 12, 2024</td><td class="good">&le; 100 ms</td><td class="needs">100 – 300 ms</td><td class="poor">&gt; 300 ms</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Notes &amp; FAQs</h2>
+  <ul style="font-size:.88rem;line-height:1.65;padding-left:22px;margin:0">
+    <li><strong>Why the 75th percentile?</strong> A site passes a Core Web Vital only when 75% of real-user visits hit the Good threshold. A median ("typical") visit doing fine isn't enough — the long tail counts.</li>
+    <li><strong>Lab vs field.</strong> Lighthouse (lab) gives you a single number; CrUX (field) gives you the percentile of your real users. The thresholds are identical; the inputs aren't. Use CrUX p75 values when comparing to "passing".</li>
+    <li><strong>INP vs FID.</strong> FID only measured the <em>first</em> interaction's delay, missing pages that get sluggish later. INP looks at the worst (or near-worst) interaction across the whole visit. INP replaced FID in Core Web Vitals on <strong>March 12, 2024</strong>.</li>
+    <li><strong>CLS session window.</strong> Modern CLS sums shifts within a 5-second window with a 1-second gap, then reports the worst window — not the lifetime total. Late shifts after user input are excluded.</li>
+    <li><strong>Mobile vs desktop.</strong> Google ranks pages using mobile-first CrUX data. Desktop scores can be much greener — don't let the desktop pass mask a failing mobile score.</li>
+  </ul>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// All thresholds in the metric's native unit (seconds for time-based, unitless for CLS / INP-ms)
+const METRICS = [
+  { id: 'lcp', name: 'LCP', long: 'Largest Contentful Paint', unit: 's', step: 0.1, max: 10, good: 2.5, poor: 4.0, core: true, desc: 'Render time of the largest above-the-fold element (image, video poster, big heading).' },
+  { id: 'inp', name: 'INP', long: 'Interaction to Next Paint', unit: 'ms', step: 10, max: 2000, good: 200, poor: 500, core: true, desc: 'Worst interaction latency from input to next paint across the visit. Replaced FID.' },
+  { id: 'cls', name: 'CLS', long: 'Cumulative Layout Shift', unit: '', step: 0.01, max: 1, good: 0.1, poor: 0.25, core: true, desc: 'Sum of unexpected layout shifts in the worst 5 s session window. Unitless 0 – 1+.' },
+  { id: 'fcp', name: 'FCP', long: 'First Contentful Paint', unit: 's', step: 0.1, max: 10, good: 1.8, poor: 3.0, core: false, desc: 'Time until the first text or image is painted. Supporting metric.' },
+  { id: 'ttfb', name: 'TTFB', long: 'Time to First Byte', unit: 's', step: 0.05, max: 5, good: 0.8, poor: 1.8, core: false, desc: 'Time from navigation start to the first response byte. Server + network.' },
+  { id: 'fid', name: 'FID', long: 'First Input Delay (legacy)', unit: 'ms', step: 10, max: 1000, good: 100, poor: 300, core: false, desc: 'Replaced by INP in March 2024. Still reported by some tools — fill if you have it.' }
+];
+
+const PRESETS = {
+  great: { lcp: 1.6, inp: 120, cls: 0.04, fcp: 1.0, ttfb: 0.4, fid: 40 },
+  typical: { lcp: 3.1, inp: 240, cls: 0.12, fcp: 2.0, ttfb: 1.0, fid: 80 },
+  slow: { lcp: 5.2, inp: 180, cls: 0.32, fcp: 3.5, ttfb: 1.2, fid: 50 },
+  spa: { lcp: 2.4, inp: 620, cls: 0.06, fcp: 1.4, ttfb: 0.5, fid: 110 },
+  blank: { lcp: '', inp: '', cls: '', fcp: '', ttfb: '', fid: '' }
+};
+
+const FIXES = {
+  lcp: {
+    title: 'Speed up Largest Contentful Paint',
+    items: [
+      'Identify the LCP element in DevTools → Performance → "LCP" lane. It is almost always a hero image, big background, or H1 with a webfont.',
+      'Preload the LCP image: <code>&lt;link rel="preload" as="image" href="hero.avif" fetchpriority="high"&gt;</code>.',
+      'Serve the LCP image in AVIF/WebP, sized exactly for the viewport via <code>srcset</code>/<code>sizes</code>. A 4 MB JPEG is the #1 LCP killer.',
+      'Add <code>fetchpriority="high"</code> to the LCP <code>&lt;img&gt;</code> and remove <code>loading="lazy"</code> from it.',
+      'Eliminate render-blocking CSS/JS in the <code>&lt;head&gt;</code>: inline critical CSS, defer non-critical JS, move <code>&lt;script&gt;</code> tags above the LCP.',
+      'Cut TTFB first if it is &gt; 600 ms — LCP can never beat TTFB + image download time.',
+      'Use <code>font-display: swap</code> or <code>optional</code> so a missing webfont does not gate the headline render.'
+    ]
+  },
+  inp: {
+    title: 'Reduce Interaction to Next Paint',
+    items: [
+      'Find slow interactions in DevTools → Performance → Interactions track. INP picks the slowest (or 98th percentile for many interactions).',
+      'Break long tasks (&gt; 50 ms) with <code>scheduler.yield()</code>, <code>await new Promise(r =&gt; setTimeout(r))</code>, or <code>requestIdleCallback</code> between phases.',
+      'Move heavy work (parsing, hashing, image processing) into a <strong>Web Worker</strong> so the main thread stays free to paint.',
+      'Avoid synchronous layout in click handlers: read all DOM measurements first, then write — never alternate.',
+      'On React, wrap non-urgent updates in <code>startTransition()</code> and use <code>useDeferredValue</code> for typeahead-style state.',
+      'Audit third-party scripts (analytics, A/B test, chat widgets). Defer them with <code>async</code>, <code>defer</code>, or load on idle.',
+      'Replace large hydration with islands / partial hydration — the cost shows up as INP on the first tap.'
+    ]
+  },
+  cls: {
+    title: 'Stop Cumulative Layout Shift',
+    items: [
+      'Always set <code>width</code> and <code>height</code> on images, videos, and iframes — the browser reserves the box before the asset loads.',
+      'Reserve space for ads, embeds, and skeleton loaders using <code>min-height</code> or <code>aspect-ratio</code>.',
+      'Avoid injecting content above existing content. New banners should slide in <em>over</em> (position: fixed) or push from the bottom.',
+      'Use <code>font-display: optional</code> or preload the webfont so the FOUT swap does not reflow paragraphs.',
+      'When animating, prefer <code>transform</code> and <code>opacity</code> — they do not trigger layout shifts. Animating <code>top</code>/<code>height</code> does.',
+      'Audit cookie banners and consent UIs — they are the #1 source of CLS on news sites.',
+      'For carousels, use <code>contain: layout</code> and pre-set the height in CSS.'
+    ]
+  },
+  fcp: {
+    title: 'Improve First Contentful Paint',
+    items: [
+      'Reduce TTFB first — FCP is bounded below by it.',
+      'Inline critical CSS for above-the-fold content; defer the rest with <code>media="print" onload="this.media=\'all\'"</code> or async stylesheets.',
+      'Remove or defer render-blocking JS in <code>&lt;head&gt;</code>. Use <code>defer</code> for scripts that read the DOM, <code>async</code> for independent ones.',
+      'Use <code>&lt;link rel="preconnect"&gt;</code> for the first 1–3 critical origins (CDN, fonts, API).',
+      'Self-host or preload webfonts — third-party Google Fonts <code>&lt;link&gt;</code> adds a DNS + TLS handshake before any text paints.'
+    ]
+  },
+  ttfb: {
+    title: 'Cut Time to First Byte',
+    items: [
+      'Cache HTML at the CDN edge — most TTFB wins come from skipping the origin entirely.',
+      'Enable HTTP/2 or HTTP/3 if you have not. Connection setup is most of the cost for cold visits.',
+      'Move your origin closer to users (multi-region or edge functions). Cross-Atlantic round trips alone eat 150 – 200 ms.',
+      'Profile the origin: slow DB queries, N+1 queries, and synchronous external API calls dominate TTFB for dynamic pages.',
+      'Use <code>103 Early Hints</code> to start preloading critical assets before the origin finishes generating the page.'
+    ]
+  },
+  fid: {
+    title: 'FID is legacy — switch to INP',
+    items: [
+      'FID was replaced by INP in Core Web Vitals on March 12, 2024. Track INP instead — the fix list is largely the same.',
+      'If you must keep FID green for an older tool: shrink the JS executing during page load. The first input is usually delayed by a long compile/eval task.'
+    ]
+  }
+};
+
+function bucket(v, m) {
+  if (v === '' || isNaN(v)) return 'empty';
+  if (v <= m.good) return 'good';
+  if (v <= m.poor) return 'needs';
+  return 'poor';
+}
+
+function renderMetrics() {
+  const box = $('metrics');
+  box.innerHTML = '';
+  METRICS.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'metric';
+    div.innerHTML = `
+      <div class="name">${m.name} — ${m.long} <span class="pill ${m.core ? 'core' : 'support'}">${m.core ? 'Core' : 'Support'}</span></div>
+      <div class="desc">${m.desc}</div>
+      <input type="number" id="in-${m.id}" min="0" max="${m.max}" step="${m.step}" placeholder="enter ${m.unit || 'value'}" oninput="score()">
+      <div class="unit">Threshold: <strong style="color:var(--success)">&le; ${m.good}${m.unit}</strong> good · <strong style="color:var(--error)">&gt; ${m.poor}${m.unit}</strong> poor</div>
+      <div class="verdict empty" id="v-${m.id}"><span class="label">Enter a value</span><span>—</span></div>
+    `;
+    box.appendChild(div);
+  });
+}
+
+function score() {
+  let coreGood = 0, coreFilled = 0, coreTotal = 0;
+  let worstCore = null;
+  let worstCoreScore = -1;
+
+  METRICS.forEach(m => {
+    const raw = $('in-' + m.id).value;
+    const v = raw === '' ? '' : parseFloat(raw);
+    const b = bucket(v, m);
+    const el = $('v-' + m.id);
+    el.className = 'verdict ' + b;
+    if (b === 'empty') {
+      el.innerHTML = `<span class="label">Enter a value</span><span>—</span>`;
+    } else {
+      const labels = { good: 'Good', needs: 'Needs Improvement', poor: 'Poor' };
+      el.innerHTML = `<span class="label">${labels[b]}</span><span>${v}${m.unit}</span>`;
+    }
+    if (m.core) {
+      coreTotal++;
+      if (b !== 'empty') {
+        coreFilled++;
+        if (b === 'good') coreGood++;
+        const rank = b === 'poor' ? 2 : (b === 'needs' ? 1 : 0);
+        if (rank > worstCoreScore) { worstCoreScore = rank; worstCore = m; }
+      }
+    }
+  });
+
+  // Overall summary
+  const s = $('summary');
+  if (coreFilled === 0) {
+    s.className = 'summary';
+    s.innerHTML = `<div class="big" style="color:var(--muted)">—</div><div class="text">Enter at least one Core metric (LCP, INP, or CLS) above. A URL passes Core Web Vitals only when <strong>all three</strong> Core metrics are Good at the 75th percentile of real-user visits.</div>`;
+    renderFixes(null);
+    return;
+  }
+
+  if (coreFilled === coreTotal && coreGood === coreTotal) {
+    s.className = 'summary pass';
+    s.innerHTML = `<div class="big">PASS</div><div class="text">All three Core Web Vitals are Good. This URL counts as passing Core Web Vitals in CrUX. Keep monitoring INP — it is the most variable metric and can regress as you add JS.</div>`;
+    renderFixes(null);
+  } else if (worstCoreScore === 2) {
+    s.className = 'summary fail';
+    const missing = coreTotal - coreFilled;
+    s.innerHTML = `<div class="big">FAIL</div><div class="text"><strong>${worstCore.name}</strong> is in the Poor band. The URL does not pass Core Web Vitals${missing ? ` (${missing} core metric${missing === 1 ? '' : 's'} still empty)` : ''}. Focus on fixing the failing metric first — see the checklist below.</div>`;
+    renderFixes(worstCore.id);
+  } else {
+    s.className = 'summary partial';
+    s.innerHTML = `<div class="big">NEEDS WORK</div><div class="text">${coreGood} of ${coreFilled} Core metric${coreFilled === 1 ? '' : 's'} entered hit Good. <strong>${worstCore.name}</strong> is the closest to falling out of Good — it needs improvement to pass the URL.</div>`;
+    renderFixes(worstCore.id);
+  }
+}
+
+function renderFixes(metricId) {
+  const box = $('fixes');
+  if (!metricId) {
+    box.innerHTML = '<p style="color:var(--muted);font-size:.88rem;margin:0">Enter the metrics above and the focused fix list for the failing metric appears here.</p>';
+    return;
+  }
+  const f = FIXES[metricId];
+  box.innerHTML = `
+    <div class="fix-section">
+      <h3>${f.title}</h3>
+      <ol class="fixlist">
+        ${f.items.map(i => `<li>${i}</li>`).join('')}
+      </ol>
+    </div>
+  `;
+}
+
+function loadPreset(name) {
+  const p = PRESETS[name];
+  METRICS.forEach(m => { $('in-' + m.id).value = p[m.id] ?? ''; });
+  score();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+renderMetrics();
+loadPreset('typical');
+</script>
+</body>
+</html>
