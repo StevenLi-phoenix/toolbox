@@ -185,6 +185,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [W3C Trace Context Decoder](tracecontext.html) | Parse `traceparent` and `tracestate` headers from OpenTelemetry, Jaeger, Zipkin, and AWS X-Ray — see the version, 128-bit trace-id, 64-bit span-id, and the sampled flag, validate against the spec, or generate a fresh header to inject into a curl request. |
 | [Sec-Fetch-* Header Decoder](secfetch.html) | Decode the Fetch Metadata request headers — `Sec-Fetch-Dest`, `Sec-Fetch-Mode`, `Sec-Fetch-Site`, `Sec-Fetch-User`, `Sec-Fetch-Storage-Access` — classify each request as same-origin / cross-site / nav / preflight / CSRF-shaped, and generate a Resource Isolation Policy middleware snippet (Express & Nginx) to block suspicious combinations. |
 | [Resource Hints Builder](resourcehints.html) | Generate `<link rel="preload / prefetch / preconnect / dns-prefetch / modulepreload">` with the right `as`, `type`, `crossorigin`, `fetchpriority`, `imagesrcset`, and `media` — plus the equivalent HTTP `Link:` response header. |
 | [cURL → PowerShell](curl2pwsh.html) | Convert a `curl` command to `Invoke-WebRequest` or `Invoke-RestMethod` — method, headers, JSON / form body, basic auth, cookies, and a `-SkipCertificateCheck` fallback for PowerShell 7 and Windows PowerShell 5.1. |
@@ -232,6 +233,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [Circuit Breaker Pattern Simulator](circuitbreaker.html) | Watch the **Closed → Open → Half-Open** state machine in action — tune failure threshold, recovery probes, and reset timeout, stream simulated requests, and copy production-ready config for Polly, Resilience4j, opossum, or gobreaker. |
+| [POSIX errno Reference](errno.html) | Searchable reference for 130+ POSIX / Linux / macOS / FreeBSD errno values — look up `EAGAIN`, `EACCES`, `EPIPE`, `ECONNRESET` by number, symbol, or message and see which platforms agree on the number and which don't. |
 | [Core Web Vitals Score Calculator](webvitals.html) | Score `LCP`, `INP`, `CLS` (plus `FCP`, `TTFB`, legacy `FID`) against Google's official Good / Needs Improvement / Poor thresholds — see a pass/fail per metric, an overall verdict for the URL, and a focused optimization checklist for whichever metric is failing. |
 | [Service Worker Cache Strategy Generator](serviceworker.html) | Generate a production-ready `sw.js` with per-route caching — cache-first, network-first, stale-while-revalidate, network-only, cache-only — plus precache list, version-bump cleanup, navigation preload, and an offline fallback page. Vanilla JS, zero dependencies, no Workbox. |
 | [Display DPI / PPI Calculator](dpicalc.html) | Compute pixel density (PPI), dot pitch, physical size, and the minimum viewing distance at which the human eye stops resolving individual pixels — for any width × height × diagonal. Includes presets for popular phones, monitors, and TVs plus in-browser DPR / screen detection. |

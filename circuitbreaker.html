@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circuit Breaker Pattern Simulator — Free Online Tool</title>
+<meta name="description" content="Interactive circuit breaker state machine simulator. Tune the failure threshold, success threshold, and reset timeout for the Closed / Open / Half-Open pattern, stream simulated requests, watch state transitions in real time, and copy Polly / Resilience4j config.">
+<meta name="keywords" content="circuit breaker simulator, resilience pattern, fault tolerance, polly config, resilience4j, half-open state, failure threshold, reset timeout, retry pattern">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/circuitbreaker.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .ctrl {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 10px 12px;
+  }
+  .ctrl label { display: block; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .ctrl input, .ctrl select {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .92rem; box-sizing: border-box;
+  }
+  .ctrl small { display: block; font-size: .72rem; color: var(--muted); margin-top: 4px; }
+
+  .states { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 6px; }
+  .state {
+    border: 2px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 14px 12px; text-align: center;
+    transition: all .25s;
+    position: relative;
+  }
+  .state .name { font-family: var(--mono); font-weight: 800; font-size: 1rem; letter-spacing: .04em; }
+  .state .desc { font-size: .78rem; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+  .state.active.closed   { border-color: var(--success); background: rgba(34,197,94,.10); }
+  .state.active.closed .name { color: var(--success); }
+  .state.active.open     { border-color: var(--error); background: rgba(239,68,68,.10); }
+  .state.active.open .name { color: var(--error); }
+  .state.active.half     { border-color: var(--warning); background: rgba(234,179,8,.10); }
+  .state.active.half .name { color: var(--warning); }
+
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  button.primary {
+    background: var(--accent); color: #fff; border: none;
+    padding: 8px 16px; border-radius: var(--radius); cursor: pointer;
+    font-size: .9rem; font-family: var(--sans);
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  button.success {
+    background: var(--success); color: #fff; border: none;
+    padding: 7px 13px; border-radius: var(--radius); cursor: pointer;
+    font-size: .85rem; font-family: var(--sans);
+  }
+  button.danger {
+    background: var(--error); color: #fff; border: none;
+    padding: 7px 13px; border-radius: var(--radius); cursor: pointer;
+    font-size: .85rem; font-family: var(--sans);
+  }
+  button.ghost {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    padding: 7px 13px; border-radius: var(--radius); cursor: pointer;
+    font-size: .85rem; font-family: var(--sans);
+  }
+  button.ghost.active { border-color: var(--accent); color: var(--accent); }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat {
+    padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); text-align: center;
+  }
+  .stat .lbl { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .val { font-family: var(--mono); font-size: 1.2rem; font-weight: 700; margin-top: 2px; }
+  .stat .val.ok { color: var(--success); }
+  .stat .val.err { color: var(--error); }
+  .stat .val.warn { color: var(--warning); }
+
+  .timeline {
+    display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px;
+    padding: 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); min-height: 36px; max-height: 110px; overflow-y: auto;
+    font-family: var(--mono); font-size: .75rem;
+  }
+  .dot {
+    width: 16px; height: 16px; border-radius: 4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: .65rem; font-weight: 700;
+  }
+  .dot.ok { background: var(--success); }
+  .dot.fail { background: var(--error); }
+  .dot.rej { background: var(--surface2); color: var(--muted); border: 1px dashed var(--border); }
+
+  .log {
+    margin-top: 8px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg);
+    font-family: var(--mono); font-size: .8rem; line-height: 1.55;
+    max-height: 220px; overflow-y: auto;
+  }
+  .log .l-state { color: var(--accent); }
+  .log .l-ok { color: var(--success); }
+  .log .l-err { color: var(--error); }
+  .log .l-rej { color: var(--muted); }
+  .log .l-time { color: var(--muted); font-size: .72rem; margin-right: 6px; }
+
+  pre.snippet {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; font-family: var(--mono); font-size: .82rem;
+    overflow-x: auto; line-height: 1.55; margin: 6px 0 0; white-space: pre;
+  }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  @media (max-width: 600px) {
+    .states { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Circuit Breaker Pattern Simulator</h1>
+<p class="subtitle">Watch the <strong>Closed &rarr; Open &rarr; Half-Open</strong> state machine of the classic Michael Nygard circuit breaker pattern. Tune the failure threshold, the recovery probe count, and the reset timeout, then send simulated requests &mdash; or just let the auto-driver pull a slider through good and bad upstream behavior. See which requests pass, which fail, and which get rejected by an open breaker.</p>
+
+<div class="card">
+  <h2>Breaker config</h2>
+  <div class="controls">
+    <div class="ctrl">
+      <label>Failure threshold</label>
+      <input type="number" id="failTh" min="1" max="50" value="5" onchange="resetBreaker()">
+      <small>Consecutive failures before opening</small>
+    </div>
+    <div class="ctrl">
+      <label>Success threshold (half-open)</label>
+      <input type="number" id="succTh" min="1" max="20" value="2" onchange="resetBreaker()">
+      <small>Consecutive successes to close again</small>
+    </div>
+    <div class="ctrl">
+      <label>Reset timeout (ms)</label>
+      <input type="number" id="resetMs" min="100" max="60000" step="100" value="3000" onchange="resetBreaker()">
+      <small>How long to stay open before probing</small>
+    </div>
+    <div class="ctrl">
+      <label>Upstream behavior</label>
+      <select id="mode">
+        <option value="healthy">Healthy (10% fail)</option>
+        <option value="degraded" selected>Degraded (60% fail)</option>
+        <option value="down">Down (100% fail)</option>
+        <option value="recovery">Recovering (was down, now 5% fail)</option>
+      </select>
+      <small>Sets the upstream's simulated error rate</small>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>State machine</h2>
+  <div class="states">
+    <div id="sClosed" class="state closed active"><div class="name">CLOSED</div><div class="desc">Requests flow through. Counting failures.</div></div>
+    <div id="sOpen" class="state open"><div class="name">OPEN</div><div class="desc">All requests rejected fast. Waiting for reset timer.</div></div>
+    <div id="sHalf" class="state half"><div class="name">HALF-OPEN</div><div class="desc">Limited probes. Success closes, failure re-opens.</div></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="lbl">State</div><div class="val" id="stateVal">CLOSED</div></div>
+    <div class="stat"><div class="lbl">Consec fail</div><div class="val err" id="consecFail">0</div></div>
+    <div class="stat"><div class="lbl">Consec succ</div><div class="val ok" id="consecSucc">0</div></div>
+    <div class="stat"><div class="lbl">Reset in</div><div class="val warn" id="resetIn">—</div></div>
+    <div class="stat"><div class="lbl">Total ok</div><div class="val ok" id="totOk">0</div></div>
+    <div class="stat"><div class="lbl">Total fail</div><div class="val err" id="totFail">0</div></div>
+    <div class="stat"><div class="lbl">Total rejected</div><div class="val" id="totRej">0</div></div>
+  </div>
+
+  <div class="btn-row">
+    <button class="primary" onclick="sendOne()">Send 1 request</button>
+    <button class="success" onclick="sendForced(true)">Force success</button>
+    <button class="danger" onclick="sendForced(false)">Force failure</button>
+    <button id="autoBtn" class="ghost" onclick="toggleAuto()">Auto: off</button>
+    <button class="ghost" onclick="resetBreaker()">Reset breaker</button>
+  </div>
+
+  <h3 style="margin-top:14px;font-size:.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Recent requests</h3>
+  <div class="timeline" id="timeline"></div>
+
+  <h3 style="margin-top:14px;font-size:.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Event log</h3>
+  <div class="log" id="log"></div>
+</div>
+
+<div class="card">
+  <h2>Copy as config</h2>
+  <div class="tabs">
+    <button class="ghost active" data-tab="polly" onclick="showTab('polly')">.NET Polly v8</button>
+    <button class="ghost" data-tab="resilience4j" onclick="showTab('resilience4j')">Java Resilience4j</button>
+    <button class="ghost" data-tab="opossum" onclick="showTab('opossum')">Node opossum</button>
+    <button class="ghost" data-tab="gobreaker" onclick="showTab('gobreaker')">Go gobreaker</button>
+  </div>
+  <pre class="snippet" id="snippet"></pre>
+</div>
+
+<div class="card">
+  <h2>How it works</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65">
+    Originally laid out by Michael Nygard in <em>Release It!</em> (2007), the circuit breaker wraps a remote call so an upstream outage doesn't cascade into your own service melting down under doomed retries. In the <strong>Closed</strong> state every call goes through and failures are counted. After <em>N</em> consecutive failures the breaker flips to <strong>Open</strong> and starts rejecting calls instantly &mdash; the upstream gets a chance to recover and your threads stop piling up waiting on dead connections. After a cooldown the breaker enters <strong>Half-Open</strong> and lets a tiny number of probe requests through. If they succeed, the breaker closes; if they fail, it snaps back open and the cooldown timer starts again. Tune the failure threshold to match your normal error rate plus headroom, and pick a reset timeout shorter than your user's patience but longer than the typical upstream blip.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let state = 'CLOSED';
+let consecFail = 0;
+let consecSucc = 0;
+let totOk = 0, totFail = 0, totRej = 0;
+let openedAt = 0;
+let autoTimer = null;
+let tickTimer = null;
+const dots = [];
+const MAX_DOTS = 60;
+
+function failRate() {
+  const m = $('mode').value;
+  return { healthy: 0.10, degraded: 0.60, down: 1.0, recovery: 0.05 }[m];
+}
+
+function setState(s, reason) {
+  if (state === s) return;
+  state = s;
+  ['sClosed','sOpen','sHalf'].forEach(id => $(id).classList.remove('active'));
+  $({CLOSED:'sClosed', OPEN:'sOpen', 'HALF-OPEN':'sHalf'}[s]).classList.add('active');
+  $('stateVal').textContent = s;
+  log(`state → <span class="l-state">${s}</span> &middot; ${reason}`);
+  if (s === 'OPEN') openedAt = Date.now();
+  if (s === 'CLOSED') { consecFail = 0; consecSucc = 0; }
+  if (s === 'HALF-OPEN') { consecSucc = 0; consecFail = 0; }
+  refreshStats();
+}
+
+function refreshStats() {
+  $('consecFail').textContent = consecFail;
+  $('consecSucc').textContent = consecSucc;
+  $('totOk').textContent = totOk;
+  $('totFail').textContent = totFail;
+  $('totRej').textContent = totRej;
+  if (state === 'OPEN') {
+    const left = Math.max(0, +$('resetMs').value - (Date.now() - openedAt));
+    $('resetIn').textContent = left > 0 ? (left/1000).toFixed(1) + 's' : 'now';
+  } else {
+    $('resetIn').textContent = '—';
+  }
+}
+
+function maybeReset() {
+  if (state === 'OPEN' && Date.now() - openedAt >= +$('resetMs').value) {
+    setState('HALF-OPEN', 'reset timer expired — sending probe');
+  }
+}
+
+function sendOne() {
+  const r = Math.random() >= failRate();
+  attempt(r);
+}
+function sendForced(ok) { attempt(ok); }
+
+function attempt(ok) {
+  maybeReset();
+  if (state === 'OPEN') {
+    totRej++;
+    pushDot('rej');
+    log(`<span class="l-rej">request rejected fast (breaker OPEN)</span>`);
+    refreshStats();
+    return;
+  }
+  if (ok) {
+    totOk++;
+    consecSucc++;
+    consecFail = 0;
+    pushDot('ok');
+    log(`<span class="l-ok">request OK</span>`);
+    if (state === 'HALF-OPEN' && consecSucc >= +$('succTh').value) {
+      setState('CLOSED', `${consecSucc} consecutive probes succeeded`);
+    }
+  } else {
+    totFail++;
+    consecFail++;
+    consecSucc = 0;
+    pushDot('fail');
+    log(`<span class="l-err">request failed</span>`);
+    if (state === 'HALF-OPEN') {
+      setState('OPEN', 'probe failed — re-opening');
+    } else if (state === 'CLOSED' && consecFail >= +$('failTh').value) {
+      setState('OPEN', `failure threshold (${consecFail}) reached`);
+    }
+  }
+  refreshStats();
+}
+
+function pushDot(kind) {
+  dots.push(kind);
+  if (dots.length > MAX_DOTS) dots.shift();
+  const tl = $('timeline');
+  tl.innerHTML = dots.map(d => {
+    const ch = d === 'ok' ? '✓' : d === 'fail' ? '✗' : '—';
+    return `<span class="dot ${d}">${ch}</span>`;
+  }).join('');
+}
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  const el = $('log');
+  el.insertAdjacentHTML('afterbegin', `<div><span class="l-time">${t}</span>${msg}</div>`);
+  while (el.children.length > 80) el.lastChild.remove();
+}
+
+function resetBreaker() {
+  if (autoTimer) toggleAuto();
+  state = 'CLOSED';
+  consecFail = 0; consecSucc = 0;
+  totOk = 0; totFail = 0; totRej = 0;
+  openedAt = 0;
+  dots.length = 0;
+  $('timeline').innerHTML = '';
+  $('log').innerHTML = '';
+  ['sClosed','sOpen','sHalf'].forEach(id => $(id).classList.remove('active'));
+  $('sClosed').classList.add('active');
+  $('stateVal').textContent = 'CLOSED';
+  refreshStats();
+  log('breaker reset');
+  renderSnippet();
+}
+
+function toggleAuto() {
+  const btn = $('autoBtn');
+  if (autoTimer) {
+    clearInterval(autoTimer); autoTimer = null;
+    btn.textContent = 'Auto: off';
+    btn.classList.remove('active');
+  } else {
+    autoTimer = setInterval(sendOne, 350);
+    btn.textContent = 'Auto: on';
+    btn.classList.add('active');
+  }
+}
+
+const SNIPPETS = {
+  polly: cfg => `// Polly v8 — Microsoft.Extensions.Resilience
+new ResiliencePipelineBuilder<HttpResponseMessage>()
+  .AddCircuitBreaker(new CircuitBreakerStrategyOptions<HttpResponseMessage>
+  {
+      FailureRatio       = 1.0,                        // any failures count
+      MinimumThroughput  = ${cfg.failTh},
+      SamplingDuration   = TimeSpan.FromSeconds(30),
+      BreakDuration      = TimeSpan.FromMilliseconds(${cfg.resetMs}),
+      ShouldHandle       = new PredicateBuilder<HttpResponseMessage>()
+                              .Handle<HttpRequestException>()
+                              .HandleResult(r => (int)r.StatusCode >= 500),
+  })
+  .Build();`,
+  resilience4j: cfg => `# Resilience4j — application.yml
+resilience4j.circuitbreaker:
+  instances:
+    backend:
+      slidingWindowType: COUNT_BASED
+      slidingWindowSize: ${cfg.failTh}
+      minimumNumberOfCalls: ${cfg.failTh}
+      failureRateThreshold: 100
+      waitDurationInOpenState: ${cfg.resetMs}ms
+      permittedNumberOfCallsInHalfOpenState: ${cfg.succTh}
+      automaticTransitionFromOpenToHalfOpenEnabled: true`,
+  opossum: cfg => `// Node — opossum
+const CircuitBreaker = require('opossum');
+
+const breaker = new CircuitBreaker(callUpstream, {
+  errorThresholdPercentage: 50,
+  volumeThreshold:          ${cfg.failTh},
+  resetTimeout:             ${cfg.resetMs},   // ms in OPEN before HALF-OPEN
+  rollingCountTimeout:      10000,
+  rollingCountBuckets:      10,
+});
+
+breaker.on('open',     () => console.log('breaker OPEN'));
+breaker.on('halfOpen', () => console.log('breaker HALF-OPEN'));
+breaker.on('close',    () => console.log('breaker CLOSED'));`,
+  gobreaker: cfg => `// Go — sony/gobreaker
+import "github.com/sony/gobreaker"
+
+cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+    Name:        "backend",
+    MaxRequests: ${cfg.succTh},                              // probes in half-open
+    Interval:    0,                                          // never auto-reset counts
+    Timeout:     ${cfg.resetMs} * time.Millisecond,          // open → half-open
+    ReadyToTrip: func(c gobreaker.Counts) bool {
+        return c.ConsecutiveFailures >= ${cfg.failTh}
+    },
+})`,
+};
+
+let tab = 'polly';
+function showTab(name) {
+  tab = name;
+  document.querySelectorAll('[data-tab]').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+  renderSnippet();
+}
+function renderSnippet() {
+  const cfg = {
+    failTh: +$('failTh').value,
+    succTh: +$('succTh').value,
+    resetMs: +$('resetMs').value,
+  };
+  $('snippet').textContent = SNIPPETS[tab](cfg);
+}
+document.querySelectorAll('#failTh,#succTh,#resetMs').forEach(el => el.addEventListener('input', renderSnippet));
+
+tickTimer = setInterval(() => { maybeReset(); refreshStats(); }, 200);
+renderSnippet();
+refreshStats();
+log('breaker armed in CLOSED state');
+</script>
+</body>
+</html>

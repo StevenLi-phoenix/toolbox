@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>W3C Trace Context Decoder — Free Online Tool</title>
+<meta name="description" content="Decode and validate W3C traceparent and tracestate headers from OpenTelemetry, Jaeger, Zipkin, and other distributed tracing systems. Parse version, trace-id, parent-id (span-id), and the sampled flag — or generate a fresh, spec-valid header.">
+<meta name="keywords" content="traceparent decoder, tracestate parser, w3c trace context, opentelemetry header, distributed tracing, otel, trace-id, span-id, sampled flag">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tracecontext.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea, input.full {
+    width: 100%; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .9rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+    word-break: break-all;
+  }
+  textarea { min-height: 70px; }
+  .raw-color {
+    word-break: break-all; font-family: var(--mono); font-size: 1rem;
+    line-height: 1.7; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  }
+  .seg-v { color: #6366f1; }
+  .seg-t { color: #db2777; }
+  .seg-p { color: #ea580c; }
+  .seg-f { color: #059669; }
+  .dot   { color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .76rem; margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+  .parts { display: grid; gap: 12px; margin-top: 12px; }
+  .part {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); overflow: hidden;
+  }
+  .part-head {
+    padding: 9px 14px; background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: .82rem; gap: 10px; flex-wrap: wrap;
+  }
+  .part-head b { font-size: .92rem; }
+  .part-head .meta { color: var(--muted); font-family: var(--mono); font-size: .76rem; }
+  .part-body { padding: 12px 14px; font-family: var(--mono); font-size: .85rem; line-height: 1.6; word-break: break-all; }
+  .part-body .lbl { color: var(--muted); font-size: .76rem; }
+  .flag-grid {
+    display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px;
+    margin-top: 8px; font-family: var(--mono); font-size: .75rem; text-align: center;
+  }
+  .flag-cell {
+    padding: 8px 4px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface2);
+  }
+  .flag-cell.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .flag-cell b { display: block; font-size: 1rem; }
+  .flag-cell span { font-size: .68rem; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); font-size: .72rem; color: var(--muted);
+    font-family: var(--mono); margin-right: 4px;
+  }
+  .pill.ok { color: var(--success); border-color: var(--success); }
+  .pill.warn { color: var(--warning); border-color: var(--warning); }
+  .pill.bad { color: var(--error); border-color: var(--error); }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+  .examples button {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 11px; border-radius: 999px;
+    font-size: .78rem; cursor: pointer; font-family: var(--mono);
+  }
+  .examples button:hover { border-color: var(--accent); color: var(--accent); }
+  .err { color: var(--error); font-size: .85rem; margin-top: 8px; min-height: 1.2em; }
+  .ts-row {
+    display: grid; grid-template-columns: 160px 1fr; gap: 10px;
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: .85rem; align-items: center; font-family: var(--mono);
+    margin-bottom: 6px;
+  }
+  .ts-row .k { color: var(--accent); font-weight: 700; word-break: break-all; }
+  .ts-row .v { color: var(--text); word-break: break-all; }
+  .ts-row.bad { border-color: var(--error); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  button.primary {
+    background: var(--accent); color: #fff; border: none;
+    padding: 7px 14px; border-radius: var(--radius); cursor: pointer;
+    font-size: .88rem; font-family: var(--sans);
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  button.ghost {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    padding: 7px 14px; border-radius: var(--radius); cursor: pointer;
+    font-size: .88rem; font-family: var(--sans);
+  }
+  .gen-out {
+    margin-top: 10px; font-family: var(--mono); font-size: .88rem;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); word-break: break-all;
+  }
+  @media (max-width: 600px) {
+    .flag-grid { grid-template-columns: repeat(4, 1fr); }
+    .ts-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>W3C Trace Context Decoder</h1>
+<p class="subtitle">Parse <code>traceparent</code> and <code>tracestate</code> HTTP headers from <strong>OpenTelemetry</strong>, Jaeger, Zipkin, AWS X-Ray, and any service that follows the <a href="https://www.w3.org/TR/trace-context/" target="_blank" rel="noopener">W3C Trace Context</a> spec. See the version, 128-bit trace-id, 64-bit parent (span) id, and the sampled flag &mdash; or generate a spec-valid header to inject into a request.</p>
+
+<div class="card">
+  <h2>Decode <code>traceparent</code></h2>
+  <div class="examples">
+    <button onclick="loadExample('basic')">basic</button>
+    <button onclick="loadExample('sampled')">sampled</button>
+    <button onclick="loadExample('notsampled')">not sampled</button>
+    <button onclick="loadExample('zeroid')">invalid (all-zero id)</button>
+    <button onclick="loadExample('badver')">invalid (version ff)</button>
+  </div>
+  <textarea id="tp" oninput="decode()" spellcheck="false" placeholder="00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"></textarea>
+  <div class="err" id="tpErr"></div>
+  <div class="raw-color" id="tpColor" style="display:none"></div>
+  <div class="legend" id="legend" style="display:none">
+    <span><i style="background:#6366f1"></i> version</span>
+    <span><i style="background:#db2777"></i> trace-id (16 B)</span>
+    <span><i style="background:#ea580c"></i> parent-id / span-id (8 B)</span>
+    <span><i style="background:#059669"></i> trace-flags</span>
+  </div>
+  <div class="parts" id="parts"></div>
+</div>
+
+<div class="card">
+  <h2>Decode <code>tracestate</code> <span style="font-size:.75rem;color:var(--muted);font-weight:400">&middot; vendor-specific payload, comma-separated</span></h2>
+  <textarea id="ts" oninput="decodeTs()" spellcheck="false" placeholder="rojo=00f067aa0ba902b7,congo=t61rcWkgMzE"></textarea>
+  <div class="err" id="tsErr"></div>
+  <div id="tsParts"></div>
+</div>
+
+<div class="card">
+  <h2>Generate a fresh traceparent</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:0">Creates a new random trace-id + parent-id using <code>crypto.getRandomValues</code>. Useful when you need to inject a header into a curl request or a smoke test.</p>
+  <div class="btn-row">
+    <button class="primary" onclick="generate(true)">Generate &mdash; sampled</button>
+    <button class="ghost" onclick="generate(false)">Generate &mdash; not sampled</button>
+    <button class="ghost" onclick="copyGen()">Copy</button>
+  </div>
+  <div class="gen-out" id="genOut">&mdash;</div>
+</div>
+
+<div class="card">
+  <h2>About W3C Trace Context</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    The Trace Context spec (W3C Recommendation, Feb 2020) standardises two HTTP headers so traces survive across heterogeneous systems &mdash; an OpenTelemetry-instrumented Go service can hand the trace to a Java service using Jaeger which then hands it to a Rust service using Datadog, and they all stitch into one span tree. <code>traceparent</code> carries the four primary fields in a fixed-length compact format. <code>tracestate</code> carries vendor-specific extension data without forcing every implementation to understand it. The version field is reserved for future fields; today only <code>00</code> exists. The only trace-flag bit defined in v0 is the low bit, <code>sampled</code> &mdash; if the upstream caller drops the trace, downstream services usually drop it too.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const HEX = /^[0-9a-f]+$/;
+
+const EXAMPLES = {
+  basic: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+  sampled: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+  notsampled: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00',
+  zeroid: '00-00000000000000000000000000000000-b7ad6b7169203331-01',
+  badver: 'ff-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01'
+};
+
+function loadExample(k) {
+  $('tp').value = EXAMPLES[k];
+  $('ts').value = k === 'basic' ? 'rojo=00f067aa0ba902b7,congo=t61rcWkgMzE' : '';
+  decode(); decodeTs();
+}
+
+function setErr(id, msg) { $(id).textContent = msg || ''; }
+
+function decode() {
+  const raw = $('tp').value.trim();
+  const parts = $('parts');
+  const colorBox = $('tpColor');
+  const legend = $('legend');
+  parts.innerHTML = '';
+  if (!raw) {
+    colorBox.style.display = 'none';
+    legend.style.display = 'none';
+    setErr('tpErr', '');
+    return;
+  }
+  const segs = raw.split('-');
+  if (segs.length !== 4) {
+    setErr('tpErr', `Expected 4 dash-separated segments (version-traceid-parentid-flags), got ${segs.length}.`);
+    colorBox.style.display = 'none';
+    legend.style.display = 'none';
+    return;
+  }
+  const [ver, traceId, parentId, flags] = segs;
+  const errs = [];
+  if (!/^[0-9a-f]{2}$/.test(ver)) errs.push('version must be 2 lowercase hex chars');
+  if (ver === 'ff') errs.push('version ff is reserved and invalid');
+  if (!/^[0-9a-f]{32}$/.test(traceId)) errs.push('trace-id must be 32 lowercase hex chars (16 bytes)');
+  else if (/^0+$/.test(traceId)) errs.push('trace-id cannot be all zeros');
+  if (!/^[0-9a-f]{16}$/.test(parentId)) errs.push('parent-id must be 16 lowercase hex chars (8 bytes)');
+  else if (/^0+$/.test(parentId)) errs.push('parent-id cannot be all zeros');
+  if (!/^[0-9a-f]{2}$/.test(flags)) errs.push('trace-flags must be 2 lowercase hex chars');
+
+  setErr('tpErr', errs.join('; '));
+  colorBox.innerHTML =
+    '<span class="seg-v">' + ver + '</span>' +
+    '<span class="dot">-</span>' +
+    '<span class="seg-t">' + traceId + '</span>' +
+    '<span class="dot">-</span>' +
+    '<span class="seg-p">' + parentId + '</span>' +
+    '<span class="dot">-</span>' +
+    '<span class="seg-f">' + flags + '</span>';
+  colorBox.style.display = 'block';
+  legend.style.display = 'flex';
+
+  const flagsByte = /^[0-9a-f]{2}$/.test(flags) ? parseInt(flags, 16) : 0;
+  const sampled = (flagsByte & 0x01) === 0x01;
+  const random = (flagsByte & 0x02) === 0x02;
+
+  parts.innerHTML = '';
+  parts.appendChild(renderPart('Version', ver, [
+    ['decimal', /^[0-9a-f]{2}$/.test(ver) ? parseInt(ver, 16).toString() : '—'],
+    ['status', ver === '00' ? '<span class="pill ok">v0 — current</span>' :
+                ver === 'ff' ? '<span class="pill bad">reserved / invalid</span>' :
+                '<span class="pill warn">future version</span>']
+  ]));
+  parts.appendChild(renderPart('Trace ID', traceId, [
+    ['bytes', '16 bytes (128 bits)'],
+    ['decimal (BigInt)', /^[0-9a-f]{32}$/.test(traceId) ? BigInt('0x' + traceId).toString() : '—'],
+    ['valid', /^[0-9a-f]{32}$/.test(traceId) && !/^0+$/.test(traceId) ?
+      '<span class="pill ok">spec-valid</span>' : '<span class="pill bad">invalid</span>']
+  ]));
+  parts.appendChild(renderPart('Parent ID (span ID)', parentId, [
+    ['bytes', '8 bytes (64 bits)'],
+    ['decimal (BigInt)', /^[0-9a-f]{16}$/.test(parentId) ? BigInt('0x' + parentId).toString() : '—'],
+    ['valid', /^[0-9a-f]{16}$/.test(parentId) && !/^0+$/.test(parentId) ?
+      '<span class="pill ok">spec-valid</span>' : '<span class="pill bad">invalid</span>']
+  ]));
+
+  const flagCells = [];
+  for (let bit = 7; bit >= 0; bit--) {
+    const on = ((flagsByte >> bit) & 1) === 1;
+    const labels = ['sampled', 'random', 'rsv', 'rsv', 'rsv', 'rsv', 'rsv', 'rsv'];
+    const lbl = labels[bit];
+    flagCells.push(`<div class="flag-cell${on ? ' on' : ''}"><b>${on ? 1 : 0}</b><span>bit ${bit}</span><span>${lbl}</span></div>`);
+  }
+  const flagPart = document.createElement('div');
+  flagPart.className = 'part';
+  flagPart.innerHTML = `
+    <div class="part-head"><b>Trace Flags</b><span class="meta">0x${flags || '00'} &middot; 0b${flagsByte.toString(2).padStart(8,'0')}</span></div>
+    <div class="part-body">
+      <div><span class="lbl">sampled</span> &mdash; ${sampled ? '<span class="pill ok">yes — record</span>' : '<span class="pill warn">no — don\'t record</span>'}</div>
+      <div style="margin-top:4px"><span class="lbl">random (v1 draft)</span> &mdash; ${random ? '<span class="pill">on</span>' : '<span class="pill">off</span>'}</div>
+      <div class="flag-grid">${flagCells.join('')}</div>
+    </div>`;
+  parts.appendChild(flagPart);
+}
+
+function renderPart(title, value, rows) {
+  const d = document.createElement('div');
+  d.className = 'part';
+  d.innerHTML = `
+    <div class="part-head"><b>${title}</b><span class="meta">${value || '—'}</span></div>
+    <div class="part-body">
+      ${rows.map(([k, v]) => `<div><span class="lbl">${k}</span> &nbsp; ${v}</div>`).join('')}
+    </div>`;
+  return d;
+}
+
+function decodeTs() {
+  const raw = $('ts').value.trim();
+  const box = $('tsParts');
+  box.innerHTML = '';
+  if (!raw) { setErr('tsErr', ''); return; }
+  const entries = raw.split(',').map(s => s.trim()).filter(Boolean);
+  if (entries.length > 32) {
+    setErr('tsErr', `Tracestate has ${entries.length} entries — spec limit is 32.`);
+  } else {
+    setErr('tsErr', '');
+  }
+  for (const entry of entries) {
+    const eq = entry.indexOf('=');
+    const row = document.createElement('div');
+    row.className = 'ts-row';
+    if (eq === -1) {
+      row.classList.add('bad');
+      row.innerHTML = `<div class="k">[malformed]</div><div class="v">${escapeHtml(entry)} — missing '='</div>`;
+    } else {
+      const k = entry.slice(0, eq);
+      const v = entry.slice(eq + 1);
+      const bad = !/^[a-z0-9][a-z0-9_\-*\/@]{0,255}$/.test(k) || v.length === 0 || v.length > 256;
+      if (bad) row.classList.add('bad');
+      row.innerHTML = `<div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(v)}</div>`;
+    }
+    box.appendChild(row);
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function randHex(bytes) {
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function generate(sampled) {
+  let tid, pid;
+  do { tid = randHex(16); } while (/^0+$/.test(tid));
+  do { pid = randHex(8); } while (/^0+$/.test(pid));
+  const flags = sampled ? '01' : '00';
+  const tp = `00-${tid}-${pid}-${flags}`;
+  $('genOut').textContent = tp;
+  $('tp').value = tp;
+  decode();
+}
+
+function copyGen() {
+  const t = $('genOut').textContent;
+  if (!t || t === '—') return;
+  navigator.clipboard.writeText(t);
+}
+
+loadExample('basic');
+</script>
+</body>
+</html>
