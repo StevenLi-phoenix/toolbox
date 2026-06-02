@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wavelength ↔ Frequency Converter — EM Spectrum, RF, Light, Sound</title>
+<meta name="description" content="Free online wavelength to frequency converter. Switch between Hz/kHz/MHz/GHz/THz and m/mm/µm/nm/Å, see which band (radio, microwave, IR, visible, UV, X-ray) the wave falls in, plus photon energy in eV. Sound mode uses speed of sound in air.">
+<meta name="keywords" content="wavelength to frequency, frequency to wavelength, EM spectrum, RF bands, photon energy, eV, visible light, microwave, antenna length, speed of light, speed of sound">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/wavefreq.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .field .row { display: flex; gap: 6px; align-items: center; }
+  .field input, .field select {
+    padding: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1rem;
+    box-sizing: border-box;
+  }
+  .field input { flex: 1; text-align: right; min-width: 0; }
+  .field select { background: var(--surface2); }
+  .result { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 10px; }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1.05rem; word-break: break-all; }
+  .result.ok .v { color: var(--success, #15803d); }
+  .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; vertical-align: middle; margin-right: 6px; border: 1px solid var(--border); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .spectrum {
+    width: 100%; height: 56px; position: relative;
+    background: linear-gradient(to right,
+      #0a0033 0%,    /* radio */
+      #1e3a8a 12%,   /* microwave */
+      #b91c1c 32%,   /* IR */
+      #ef4444 41%,
+      #f59e0b 44%,
+      #facc15 46%,
+      #84cc16 48%,
+      #22c55e 50%,
+      #06b6d4 52%,
+      #3b82f6 54%,
+      #6366f1 56%,
+      #8b5cf6 58%,   /* visible */
+      #a855f7 62%,   /* UV */
+      #be185d 80%,   /* X-ray */
+      #1f2937 100%   /* gamma */
+    );
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 8px;
+  }
+  .spectrum .pointer { position: absolute; top: -6px; width: 2px; height: 68px; background: #fff; box-shadow: 0 0 0 1px #000, 0 0 6px rgba(0,0,0,.6); }
+  .spectrum-labels { display: flex; justify-content: space-between; font-size: .68rem; color: var(--muted); font-family: var(--mono); padding: 0 2px; }
+  .band-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .82rem; }
+  .band-table th, .band-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .band-table th { background: var(--surface2); color: var(--muted); text-transform: uppercase; font-size: .7rem; letter-spacing: .04em; }
+  .band-table tr.match { background: rgba(99,102,241,0.08); }
+  .formulas { font-family: var(--mono); font-size: .82rem; line-height: 1.8; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  .formulas .label { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; margin-right: 4px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .tab { padding: 8px 14px; background: none; border: none; color: var(--muted); cursor: pointer; font-family: var(--sans); font-size: .9rem; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Wavelength ↔ Frequency Converter</h1>
+<p class="subtitle">Enter <em>either</em> a wavelength or a frequency — the other is solved from <code>λ · f = v</code>. Defaults to the speed of light for EM waves (radio, microwave, light, X-ray); switch to sound mode for acoustic wavelengths in air. Also shows photon energy (eV) and a half / quarter-wave dipole length for RF antenna design.</p>
+
+<div class="tabs">
+  <button class="tab active" data-tab="em">Electromagnetic (light, RF)</button>
+  <button class="tab" data-tab="sound">Sound (acoustic)</button>
+</div>
+
+<div class="card">
+  <h2>Presets</h2>
+  <div class="presets" id="presets-em">
+    <button class="btn-secondary" type="button" onclick="loadPreset('fm')">FM radio 100 MHz</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('gsm900')">GSM 900 MHz</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('wifi24')">Wi-Fi 2.4 GHz</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('wifi5')">Wi-Fi 5 GHz</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('wifi6e')">Wi-Fi 6E (6 GHz)</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('5gmm')">5G mmWave (28 GHz)</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('green')">Green light (532 nm)</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('red650')">Red laser (650 nm)</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('h-alpha')">H-α (656.3 nm)</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('xray')">X-ray Cu-Kα (1.54 Å)</button>
+  </div>
+  <div class="presets" id="presets-sound" style="display:none;">
+    <button class="btn-secondary" type="button" onclick="loadPreset('a4')">A4 (440 Hz)</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('c4')">Middle C (261.6 Hz)</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('basskick')">Bass kick (60 Hz)</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('1khz')">1 kHz reference</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('hearing')">Top of hearing (20 kHz)</button>
+    <button class="btn-secondary" type="button" onclick="loadPreset('ultrasonic')">Ultrasonic 40 kHz</button>
+  </div>
+</div>
+
+<div class="grid-two" style="margin-top:16px;">
+  <div class="card">
+    <h2>Inputs</h2>
+    <div class="field">
+      <label>Frequency (f)</label>
+      <div class="row">
+        <input id="f" type="number" step="any" value="2.4">
+        <select id="fU">
+          <option value="1">Hz</option>
+          <option value="1000">kHz</option>
+          <option value="1000000">MHz</option>
+          <option value="1000000000" selected>GHz</option>
+          <option value="1000000000000">THz</option>
+          <option value="1000000000000000">PHz</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Wavelength (λ)</label>
+      <div class="row">
+        <input id="w" type="number" step="any" value="">
+        <select id="wU">
+          <option value="1000">km</option>
+          <option value="1" selected>m</option>
+          <option value="0.01">cm</option>
+          <option value="0.001">mm</option>
+          <option value="0.000001">µm</option>
+          <option value="0.000000001">nm</option>
+          <option value="0.0000000001">Å</option>
+          <option value="0.000000000001">pm</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" id="vRow">
+      <label>Wave speed (v)</label>
+      <div class="row">
+        <input id="v" type="number" step="any" value="299792458" readonly>
+        <span>m/s</span>
+      </div>
+      <div style="font-size:.78rem;color:var(--muted);margin-top:4px;" id="vHint">c = 299 792 458 m/s (vacuum)</div>
+    </div>
+    <div class="field" id="vModeRow" style="display:none;">
+      <label>Medium</label>
+      <div class="row">
+        <select id="vMode" style="flex:1">
+          <option value="343">Air, 20 °C (343 m/s)</option>
+          <option value="331">Air, 0 °C (331 m/s)</option>
+          <option value="1482">Fresh water (1482 m/s)</option>
+          <option value="1531">Seawater (1531 m/s)</option>
+          <option value="5120">Steel (5120 m/s)</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div class="result ok"><div class="k">Frequency</div><div class="v" id="rF">—</div></div>
+    <div class="result ok"><div class="k">Wavelength</div><div class="v" id="rW">—</div></div>
+    <div class="result"><div class="k">Period (T = 1/f)</div><div class="v" id="rT">—</div></div>
+    <div class="result"><div class="k">Wavenumber (k = 2π/λ)</div><div class="v" id="rK">—</div></div>
+    <div class="result" id="rEnergyRow"><div class="k">Photon energy (E = h·f)</div><div class="v" id="rE">—</div></div>
+    <div class="result" id="rBandRow"><div class="k">Spectrum band</div><div class="v"><span class="swatch" id="rSwatch"></span><span id="rBand">—</span></div></div>
+    <div class="result" id="rAntennaRow"><div class="k">Half-wave / Quarter-wave (RF antenna)</div><div class="v" id="rAntenna">—</div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;" id="spectrumCard">
+  <h2>Where on the EM spectrum?</h2>
+  <div class="spectrum"><div class="pointer" id="ptr" style="left: 50%;"></div></div>
+  <div class="spectrum-labels">
+    <span>3 Hz</span><span>30 kHz</span><span>30 MHz</span><span>30 GHz</span><span>30 THz</span><span>visible</span><span>UV</span><span>X-ray</span><span>γ-ray</span>
+  </div>
+  <div style="overflow-x:auto;margin-top:12px;">
+  <table class="band-table" id="bandTable">
+    <thead><tr><th>Band</th><th>Frequency</th><th>Wavelength</th><th>Typical uses</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Formulas</h2>
+  <div class="formulas">
+    <div><span class="label">Wave equation:</span> λ · f = v   (v = c ≈ 3×10⁸ m/s for EM in vacuum)</div>
+    <div><span class="label">Period:</span> T = 1 / f</div>
+    <div><span class="label">Wavenumber:</span> k = 2π / λ   (rad / m)</div>
+    <div><span class="label">Photon energy:</span> E = h · f = h · c / λ,&nbsp;&nbsp; h = 6.62607015×10⁻³⁴ J·s,&nbsp;&nbsp; 1 eV = 1.602176634×10⁻¹⁹ J</div>
+    <div><span class="label">Half-wave dipole:</span> L ≈ 0.95 · λ / 2 (velocity factor 0.95 for wire)</div>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const C  = 299792458;             // m/s
+const H  = 6.62607015e-34;        // J·s
+const EV = 1.602176634e-19;       // J/eV
+
+let mode = 'em';   // 'em' or 'sound'
+let lastEdited = 'f';
+
+const PRESETS = {
+  // EM (frequency input)
+  fm:       {f: 100,   fU: 1e6},
+  gsm900:   {f: 900,   fU: 1e6},
+  wifi24:   {f: 2.4,   fU: 1e9},
+  wifi5:    {f: 5,     fU: 1e9},
+  wifi6e:   {f: 6,     fU: 1e9},
+  '5gmm':   {f: 28,    fU: 1e9},
+  // EM (wavelength input)
+  green:    {w: 532,   wU: 1e-9},
+  red650:   {w: 650,   wU: 1e-9},
+  'h-alpha':{w: 656.28, wU: 1e-9},
+  xray:     {w: 1.54,  wU: 1e-10},
+  // Sound (frequency input)
+  a4:       {f: 440,   fU: 1, sound: true},
+  c4:       {f: 261.626,fU: 1, sound: true},
+  basskick: {f: 60,    fU: 1, sound: true},
+  '1khz':   {f: 1,     fU: 1000, sound: true},
+  hearing:  {f: 20,    fU: 1000, sound: true},
+  ultrasonic:{f: 40,   fU: 1000, sound: true}
+};
+
+const BANDS_EM = [
+  {name: 'ELF (Extremely Low Freq)', fMin: 3,        fMax: 30,         use: 'Submarine comms, power grid (50/60 Hz)', color: '#0a0033'},
+  {name: 'VLF',                       fMin: 3e3,      fMax: 30e3,       use: 'Navigation, time signals', color: '#0a0044'},
+  {name: 'LF / Longwave',             fMin: 30e3,     fMax: 300e3,      use: 'AM longwave, RFID', color: '#0a0066'},
+  {name: 'MF / Mediumwave',           fMin: 300e3,    fMax: 3e6,        use: 'AM broadcast (530–1700 kHz)', color: '#101080'},
+  {name: 'HF / Shortwave',            fMin: 3e6,      fMax: 30e6,       use: 'CB, amateur radio, OTH radar', color: '#1e3a8a'},
+  {name: 'VHF',                       fMin: 30e6,     fMax: 300e6,      use: 'FM radio, TV, aviation, marine', color: '#1e40af'},
+  {name: 'UHF',                       fMin: 300e6,    fMax: 3e9,        use: 'TV, cellular, GPS, Wi-Fi 2.4 G', color: '#2563eb'},
+  {name: 'SHF / Microwave',           fMin: 3e9,      fMax: 30e9,       use: 'Wi-Fi 5/6, satellite, radar', color: '#06b6d4'},
+  {name: 'EHF / mmWave',              fMin: 30e9,     fMax: 300e9,      use: '5G mmWave, automotive radar', color: '#22c55e'},
+  {name: 'Far-IR',                    fMin: 300e9,    fMax: 30e12,      use: 'THz imaging, astronomy', color: '#84cc16'},
+  {name: 'Mid-IR',                    fMin: 30e12,    fMax: 120e12,     use: 'Thermal imaging, CO₂ laser', color: '#facc15'},
+  {name: 'Near-IR',                   fMin: 120e12,   fMax: 400e12,     use: 'Fiber optics, remote controls', color: '#f59e0b'},
+  {name: 'Visible (red)',             fMin: 400e12,   fMax: 484e12,     use: '780–620 nm', color: '#ef4444'},
+  {name: 'Visible (orange)',          fMin: 484e12,   fMax: 508e12,     use: '620–590 nm', color: '#f97316'},
+  {name: 'Visible (yellow)',          fMin: 508e12,   fMax: 526e12,     use: '590–570 nm', color: '#facc15'},
+  {name: 'Visible (green)',           fMin: 526e12,   fMax: 606e12,     use: '570–495 nm', color: '#22c55e'},
+  {name: 'Visible (blue)',            fMin: 606e12,   fMax: 668e12,     use: '495–450 nm', color: '#3b82f6'},
+  {name: 'Visible (violet)',          fMin: 668e12,   fMax: 789e12,     use: '450–380 nm', color: '#8b5cf6'},
+  {name: 'UV-A',                      fMin: 789e12,   fMax: 952e12,     use: '380–315 nm', color: '#a855f7'},
+  {name: 'UV-B / UV-C',               fMin: 952e12,   fMax: 3e16,       use: '315–10 nm, germicidal', color: '#7c3aed'},
+  {name: 'X-ray',                     fMin: 3e16,     fMax: 3e19,       use: 'Medical imaging, crystallography', color: '#be185d'},
+  {name: 'Gamma ray',                 fMin: 3e19,     fMax: 1e25,       use: 'Nuclear decay, cosmic sources', color: '#1f2937'}
+];
+
+document.querySelectorAll('.tab').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    b.classList.add('active');
+    mode = b.dataset.tab;
+    $('presets-em').style.display    = mode === 'em' ? '' : 'none';
+    $('presets-sound').style.display = mode === 'sound' ? '' : 'none';
+    $('vRow').style.display     = mode === 'em' ? '' : 'none';
+    $('vModeRow').style.display = mode === 'sound' ? '' : 'none';
+    $('rEnergyRow').style.display   = mode === 'em' ? '' : 'none';
+    $('rBandRow').style.display     = mode === 'em' ? '' : 'none';
+    $('rAntennaRow').style.display  = mode === 'em' ? '' : 'none';
+    $('spectrumCard').style.display = mode === 'em' ? '' : 'none';
+    if (mode === 'sound') {
+      $('v').value = 343;
+    } else {
+      $('v').value = C;
+    }
+    compute();
+  });
+});
+
+function loadPreset(name) {
+  const p = PRESETS[name]; if (!p) return;
+  if (p.sound) {
+    // Switch to sound tab if needed
+    if (mode !== 'sound') {
+      document.querySelector('.tab[data-tab="sound"]').click();
+    }
+  } else if (mode !== 'em') {
+    document.querySelector('.tab[data-tab="em"]').click();
+  }
+  if (p.f !== undefined) {
+    $('f').value = p.f; $('fU').value = String(p.fU);
+    $('w').value = '';
+    lastEdited = 'f';
+  } else if (p.w !== undefined) {
+    $('w').value = p.w; $('wU').value = String(p.wU);
+    $('f').value = '';
+    lastEdited = 'w';
+  }
+  compute();
+}
+
+function fmt(n, p=5) {
+  if (n === null || !isFinite(n)) return '—';
+  if (Math.abs(n) < 1e-30) return '0';
+  return Number(n.toPrecision(p)).toString();
+}
+
+function formatF(hz) {
+  if (!isFinite(hz) || hz <= 0) return '—';
+  if (hz >= 1e15) return fmt(hz/1e15) + ' PHz';
+  if (hz >= 1e12) return fmt(hz/1e12) + ' THz';
+  if (hz >= 1e9)  return fmt(hz/1e9)  + ' GHz';
+  if (hz >= 1e6)  return fmt(hz/1e6)  + ' MHz';
+  if (hz >= 1e3)  return fmt(hz/1e3)  + ' kHz';
+  return fmt(hz) + ' Hz';
+}
+
+function formatW(m) {
+  if (!isFinite(m) || m <= 0) return '—';
+  if (m >= 1000) return fmt(m/1000) + ' km';
+  if (m >= 1)    return fmt(m) + ' m';
+  if (m >= 0.01) return fmt(m*100) + ' cm';
+  if (m >= 1e-3) return fmt(m*1e3) + ' mm';
+  if (m >= 1e-6) return fmt(m*1e6) + ' µm';
+  if (m >= 1e-9) return fmt(m*1e9) + ' nm';
+  if (m >= 1e-10)return fmt(m*1e10)+ ' Å';
+  return fmt(m*1e12) + ' pm';
+}
+
+function formatT(sec) {
+  if (!isFinite(sec) || sec <= 0) return '—';
+  if (sec >= 1)    return fmt(sec) + ' s';
+  if (sec >= 1e-3) return fmt(sec*1e3) + ' ms';
+  if (sec >= 1e-6) return fmt(sec*1e6) + ' µs';
+  if (sec >= 1e-9) return fmt(sec*1e9) + ' ns';
+  if (sec >= 1e-12)return fmt(sec*1e12)+ ' ps';
+  return fmt(sec*1e15) + ' fs';
+}
+
+function formatE(j) {
+  if (!isFinite(j) || j <= 0) return '—';
+  const ev = j / EV;
+  let evStr;
+  if (ev >= 1e6) evStr = fmt(ev/1e6) + ' MeV';
+  else if (ev >= 1e3) evStr = fmt(ev/1e3) + ' keV';
+  else if (ev >= 1) evStr = fmt(ev) + ' eV';
+  else if (ev >= 1e-3) evStr = fmt(ev*1e3) + ' meV';
+  else if (ev >= 1e-6) evStr = fmt(ev*1e6) + ' µeV';
+  else evStr = fmt(ev,4) + ' eV';
+  return evStr + '   (' + fmt(j,4) + ' J)';
+}
+
+function formatLength(m) {
+  if (!isFinite(m) || m <= 0) return '—';
+  if (m >= 1000) return fmt(m/1000) + ' km';
+  if (m >= 1)    return fmt(m) + ' m';
+  if (m >= 0.01) return fmt(m*100) + ' cm';
+  if (m >= 1e-3) return fmt(m*1e3) + ' mm';
+  return formatW(m);
+}
+
+function getSpeed() {
+  if (mode === 'em') return C;
+  const v = $('vMode').value;
+  if (v === 'custom') return parseFloat($('v').value) || 343;
+  return parseFloat(v);
+}
+
+function findBand(hz) {
+  for (const b of BANDS_EM) {
+    if (hz >= b.fMin && hz < b.fMax) return b;
+  }
+  return null;
+}
+
+function compute() {
+  const v = getSpeed();
+  $('v').value = v;
+  let fHz = null, wM = null;
+  if (lastEdited === 'f') {
+    const fv = parseFloat($('f').value);
+    if (isFinite(fv) && fv > 0) {
+      fHz = fv * parseFloat($('fU').value);
+      wM = v / fHz;
+    }
+  } else {
+    const wv = parseFloat($('w').value);
+    if (isFinite(wv) && wv > 0) {
+      wM = wv * parseFloat($('wU').value);
+      fHz = v / wM;
+    }
+  }
+  if (fHz !== null) {
+    // Mirror computed into the other input (best matching unit)
+    if (lastEdited === 'f') $('w').value = pickBestUnit(wM, 'w');
+    else                    $('f').value = pickBestUnit(fHz, 'f');
+  }
+
+  $('rF').textContent = formatF(fHz);
+  $('rW').textContent = formatW(wM);
+  $('rT').textContent = formatT(fHz ? 1/fHz : null);
+  $('rK').textContent = wM ? fmt(2*Math.PI/wM, 5) + ' rad/m' : '—';
+  $('rE').textContent = formatE(fHz ? H * fHz : null);
+
+  if (mode === 'em') {
+    const band = fHz ? findBand(fHz) : null;
+    $('rSwatch').style.background = band ? band.color : 'transparent';
+    $('rBand').textContent = band ? band.name : '—';
+    if (wM) {
+      const half = 0.95 * wM / 2;
+      const quarter = 0.95 * wM / 4;
+      $('rAntenna').textContent = formatLength(half) + ' / ' + formatLength(quarter);
+    } else {
+      $('rAntenna').textContent = '—';
+    }
+    drawSpectrum(fHz);
+    fillBandTable(fHz);
+  }
+  $('vHint').textContent = mode === 'em'
+    ? 'c = 299 792 458 m/s (vacuum / air n≈1)'
+    : 'v depends on medium and temperature';
+}
+
+function pickBestUnit(value, target) {
+  // Try each option in the unit select and pick the one giving a number with reasonable magnitude
+  const sel = $(target + 'U');
+  let bestVal = value, bestU = sel.options[0].value, bestScore = Infinity;
+  for (const opt of sel.options) {
+    const num = value / parseFloat(opt.value);
+    if (!isFinite(num)) continue;
+    const score = Math.abs(Math.log10(num));
+    if (num >= 0.1 && num < 1000 && score < bestScore) {
+      bestScore = score;
+      bestVal = num;
+      bestU = opt.value;
+    }
+  }
+  sel.value = bestU;
+  return Number(bestVal.toPrecision(7));
+}
+
+function drawSpectrum(hz) {
+  if (!isFinite(hz) || hz <= 0) {
+    $('ptr').style.left = '-10px';
+    return;
+  }
+  // log scale from 1 Hz (10^0) to 10^25 Hz
+  const minLog = 0, maxLog = 25;
+  const x = (Math.log10(hz) - minLog) / (maxLog - minLog);
+  const pct = Math.max(0, Math.min(1, x)) * 100;
+  $('ptr').style.left = pct + '%';
+}
+
+function fillBandTable(hz) {
+  const tbody = $('bandTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  for (const b of BANDS_EM) {
+    const tr = document.createElement('tr');
+    if (hz >= b.fMin && hz < b.fMax) tr.className = 'match';
+    const wMin = C / b.fMax, wMax = C / b.fMin;
+    tr.innerHTML = `<td><span class="swatch" style="background:${b.color}"></span>${b.name}</td><td>${formatF(b.fMin)} – ${formatF(b.fMax)}</td><td>${formatW(wMin)} – ${formatW(wMax)}</td><td>${b.use}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+$('f').addEventListener('input', () => { lastEdited = 'f'; compute(); });
+$('fU').addEventListener('change', () => { lastEdited = 'f'; compute(); });
+$('w').addEventListener('input', () => { lastEdited = 'w'; compute(); });
+$('wU').addEventListener('change', () => { lastEdited = 'w'; compute(); });
+$('vMode').addEventListener('change', () => {
+  if ($('vMode').value === 'custom') {
+    $('v').readOnly = false;
+    $('v').focus();
+  } else {
+    $('v').readOnly = true;
+  }
+  compute();
+});
+$('v').addEventListener('input', compute);
+
+compute();
+</script>
+</body>
+</html>

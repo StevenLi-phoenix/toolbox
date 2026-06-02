@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voltage Divider Calculator — Resistor Pair & Loaded Output</title>
+<meta name="description" content="Free online voltage divider calculator. Solve V_out from V_in, R1, R2, pick nearest E12/E24/E48/E96 standard pair for a target voltage, and check current, power, and load-induced sag.">
+<meta name="keywords" content="voltage divider, resistor divider calculator, R1 R2, vout, sensor scaling, loaded divider, E12 E24, hardware">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/voltagedivider.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .field .row { display: flex; gap: 6px; align-items: center; }
+  .field input, .field select {
+    padding: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1rem;
+    box-sizing: border-box;
+  }
+  .field input { flex: 1; text-align: right; min-width: 0; }
+  .field select { background: var(--surface2); }
+  .result { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 10px; }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1.05rem; word-break: break-all; }
+  .result.ok .v { color: var(--success, #15803d); }
+  .result.warn .v { color: var(--warning, #b45309); }
+  .result.err .v { color: var(--error, #dc2626); }
+  .steps { font-family: var(--mono); font-size: .82rem; line-height: 1.8; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  .steps .label { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; margin-right: 4px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .pair-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .85rem; }
+  .pair-table th, .pair-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+  .pair-table th { background: var(--surface2); color: var(--muted); text-transform: uppercase; font-size: .72rem; letter-spacing: .04em; text-align: right; }
+  .pair-table .best { background: rgba(21,128,61,0.08); }
+  .schem { display: flex; justify-content: center; padding: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  svg { max-width: 100%; height: auto; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .tab { padding: 8px 14px; background: none; border: none; color: var(--muted); cursor: pointer; font-family: var(--sans); font-size: .9rem; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .pane { display: none; }
+  .pane.active { display: block; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Voltage Divider Calculator</h1>
+<p class="subtitle">Compute <code>V<sub>out</sub> = V<sub>in</sub> · R2 / (R1 + R2)</code> for an unloaded divider, find the standard E-series resistor pair closest to a target voltage, and predict how a load resistance R<sub>L</sub> sags the output.</p>
+
+<div class="tabs">
+  <button class="tab active" data-tab="solve">Solve V<sub>out</sub></button>
+  <button class="tab" data-tab="design">Design for target V<sub>out</sub></button>
+  <button class="tab" data-tab="loaded">Loaded divider</button>
+</div>
+
+<!-- =============== SOLVE PANE =============== -->
+<div class="pane active" id="pane-solve">
+<div class="grid-two">
+  <div class="card">
+    <h2>Inputs</h2>
+    <div class="presets">
+      <button class="btn-secondary" type="button" onclick="presetSolve(5,10000,10000)">5V÷2</button>
+      <button class="btn-secondary" type="button" onclick="presetSolve(12,10000,3300)">12V→3V</button>
+      <button class="btn-secondary" type="button" onclick="presetSolve(3.3,1000,2200)">3.3V→2.27V (ADC ref)</button>
+      <button class="btn-secondary" type="button" onclick="presetSolve(24,100000,10000)">24V→2.18V (sense)</button>
+    </div>
+
+    <div class="field">
+      <label>Input Voltage (V<sub>in</sub>)</label>
+      <div class="row"><input id="sVin" type="number" step="any" value="5"><span>V</span></div>
+    </div>
+    <div class="field">
+      <label>R1 (top, to V<sub>in</sub>)</label>
+      <div class="row">
+        <input id="sR1" type="number" step="any" value="10000">
+        <select id="sR1u"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
+      </div>
+    </div>
+    <div class="field">
+      <label>R2 (bottom, to GND)</label>
+      <div class="row">
+        <input id="sR2" type="number" step="any" value="10000">
+        <select id="sR2u"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div class="result ok"><div class="k">V<sub>out</sub></div><div class="v" id="sVout">—</div></div>
+    <div class="result"><div class="k">Divider Ratio (V<sub>out</sub>/V<sub>in</sub>)</div><div class="v" id="sRatio">—</div></div>
+    <div class="result"><div class="k">Quiescent Current I = V<sub>in</sub>/(R1+R2)</div><div class="v" id="sI">—</div></div>
+    <div class="result"><div class="k">Power in R1 (I²·R1)</div><div class="v" id="sP1">—</div></div>
+    <div class="result"><div class="k">Power in R2 (I²·R2)</div><div class="v" id="sP2">—</div></div>
+    <div class="result"><div class="k">Thévenin equivalent (R1‖R2)</div><div class="v" id="sRth">—</div></div>
+  </div>
+</div>
+</div>
+
+<!-- =============== DESIGN PANE =============== -->
+<div class="pane" id="pane-design">
+<div class="grid-two">
+  <div class="card">
+    <h2>Inputs</h2>
+    <div class="presets">
+      <button class="btn-secondary" type="button" onclick="presetDesign(12,3.3,'E24')">12V→3.3V</button>
+      <button class="btn-secondary" type="button" onclick="presetDesign(5,2.5,'E24')">5V→2.5V</button>
+      <button class="btn-secondary" type="button" onclick="presetDesign(24,5,'E96')">24V→5V (E96)</button>
+      <button class="btn-secondary" type="button" onclick="presetDesign(3.3,1.65,'E12')">3.3V→1.65V</button>
+    </div>
+
+    <div class="field">
+      <label>Input Voltage (V<sub>in</sub>)</label>
+      <div class="row"><input id="dVin" type="number" step="any" value="12"><span>V</span></div>
+    </div>
+    <div class="field">
+      <label>Target V<sub>out</sub></label>
+      <div class="row"><input id="dVout" type="number" step="any" value="3.3"><span>V</span></div>
+    </div>
+    <div class="field">
+      <label>Target quiescent current</label>
+      <div class="row">
+        <input id="dI" type="number" step="any" value="1">
+        <select id="dIu"><option value="0.000001">µA</option><option value="0.001" selected>mA</option><option value="1">A</option></select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Standard E-series</label>
+      <div class="row">
+        <select id="dSeries" style="flex:1">
+          <option value="E12">E12 (10 %)</option>
+          <option value="E24" selected>E24 (5 %)</option>
+          <option value="E48">E48 (2 %)</option>
+          <option value="E96">E96 (1 %)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Best standard pair</h2>
+    <div class="result ok"><div class="k">R1 (top)</div><div class="v" id="dR1">—</div></div>
+    <div class="result ok"><div class="k">R2 (bottom)</div><div class="v" id="dR2">—</div></div>
+    <div class="result"><div class="k">Resulting V<sub>out</sub></div><div class="v" id="dVoutActual">—</div></div>
+    <div class="result"><div class="k">Error vs target</div><div class="v" id="dErr">—</div></div>
+    <div class="result"><div class="k">Actual quiescent current</div><div class="v" id="dIactual">—</div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Top 10 closest pairs</h2>
+  <div style="overflow-x:auto;">
+  <table class="pair-table" id="dTable">
+    <thead><tr><th>R1</th><th>R2</th><th>V<sub>out</sub></th><th>Error</th><th>I (quiescent)</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
+</div>
+</div>
+
+<!-- =============== LOADED PANE =============== -->
+<div class="pane" id="pane-loaded">
+<div class="grid-two">
+  <div class="card">
+    <h2>Inputs</h2>
+    <div class="field">
+      <label>V<sub>in</sub></label>
+      <div class="row"><input id="lVin" type="number" step="any" value="5"><span>V</span></div>
+    </div>
+    <div class="field">
+      <label>R1 (top)</label>
+      <div class="row">
+        <input id="lR1" type="number" step="any" value="10">
+        <select id="lR1u"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
+      </div>
+    </div>
+    <div class="field">
+      <label>R2 (bottom)</label>
+      <div class="row">
+        <input id="lR2" type="number" step="any" value="10">
+        <select id="lR2u"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Load R<sub>L</sub> (to GND, across R2)</label>
+      <div class="row">
+        <input id="lRL" type="number" step="any" value="100">
+        <select id="lRLu"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div class="result"><div class="k">Unloaded V<sub>out</sub></div><div class="v" id="lVnl">—</div></div>
+    <div class="result ok"><div class="k">Loaded V<sub>out</sub></div><div class="v" id="lVl">—</div></div>
+    <div class="result"><div class="k">Sag (load error)</div><div class="v" id="lSag">—</div></div>
+    <div class="result"><div class="k">Load current I<sub>L</sub></div><div class="v" id="lIL">—</div></div>
+    <div class="result"><div class="k">Rule of thumb: R<sub>L</sub> ≥ 10·R2?</div><div class="v" id="lRule">—</div></div>
+  </div>
+</div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Schematic</h2>
+  <div class="schem">
+    <svg viewBox="0 0 440 200" width="440" height="200" xmlns="http://www.w3.org/2000/svg" aria-label="voltage divider">
+      <text x="10" y="46" font-family="monospace" font-size="13" fill="currentColor">+V<tspan font-size="9" baseline-shift="sub">in</tspan></text>
+      <line x1="60" y1="40" x2="180" y2="40" stroke="currentColor" stroke-width="2"/>
+      <line x1="180" y1="40" x2="180" y2="60" stroke="currentColor" stroke-width="2"/>
+      <rect x="170" y="60" width="20" height="40" stroke="currentColor" stroke-width="2" fill="none"/>
+      <text x="200" y="85" font-family="monospace" font-size="13" fill="currentColor">R1</text>
+      <line x1="180" y1="100" x2="180" y2="120" stroke="currentColor" stroke-width="2"/>
+      <circle cx="180" cy="120" r="3" fill="currentColor"/>
+      <line x1="180" y1="120" x2="300" y2="120" stroke="currentColor" stroke-width="2"/>
+      <text x="310" y="126" font-family="monospace" font-size="13" fill="currentColor">V<tspan font-size="9" baseline-shift="sub">out</tspan></text>
+      <line x1="180" y1="120" x2="180" y2="140" stroke="currentColor" stroke-width="2"/>
+      <rect x="170" y="140" width="20" height="40" stroke="currentColor" stroke-width="2" fill="none"/>
+      <text x="200" y="165" font-family="monospace" font-size="13" fill="currentColor">R2</text>
+      <line x1="180" y1="180" x2="180" y2="190" stroke="currentColor" stroke-width="2"/>
+      <line x1="165" y1="190" x2="195" y2="190" stroke="currentColor" stroke-width="2"/>
+      <line x1="170" y1="195" x2="190" y2="195" stroke="currentColor" stroke-width="2"/>
+      <line x1="175" y1="200" x2="185" y2="200" stroke="currentColor" stroke-width="2"/>
+    </svg>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h2>Formulas</h2>
+  <div class="steps">
+    <div><span class="label">Unloaded:</span> V<sub>out</sub> = V<sub>in</sub> · R2 / (R1 + R2)</div>
+    <div><span class="label">Quiescent current:</span> I = V<sub>in</sub> / (R1 + R2)</div>
+    <div><span class="label">Power:</span> P<sub>R1</sub> = I² · R1,&nbsp;&nbsp; P<sub>R2</sub> = I² · R2</div>
+    <div><span class="label">Loaded:</span> V<sub>out</sub> = V<sub>in</sub> · (R2‖R<sub>L</sub>) / (R1 + R2‖R<sub>L</sub>),&nbsp;&nbsp; R2‖R<sub>L</sub> = R2·R<sub>L</sub>/(R2+R<sub>L</sub>)</div>
+    <div><span class="label">Thévenin:</span> R<sub>th</sub> = R1 ‖ R2,&nbsp;&nbsp; V<sub>th</sub> = V<sub>out (unloaded)</sub></div>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const SERIES = {
+  E12: [1.0,1.2,1.5,1.8,2.2,2.7,3.3,3.9,4.7,5.6,6.8,8.2],
+  E24: [1.0,1.1,1.2,1.3,1.5,1.6,1.8,2.0,2.2,2.4,2.7,3.0,3.3,3.6,3.9,4.3,4.7,5.1,5.6,6.2,6.8,7.5,8.2,9.1],
+  E48: [1.00,1.05,1.10,1.15,1.21,1.27,1.33,1.40,1.47,1.54,1.62,1.69,1.78,1.87,1.96,2.05,2.15,2.26,2.37,2.49,2.61,2.74,2.87,3.01,3.16,3.32,3.48,3.65,3.83,4.02,4.22,4.42,4.64,4.87,5.11,5.36,5.62,5.90,6.19,6.49,6.81,7.15,7.50,7.87,8.25,8.66,9.09,9.53],
+  E96: [1.00,1.02,1.05,1.07,1.10,1.13,1.15,1.18,1.21,1.24,1.27,1.30,1.33,1.37,1.40,1.43,1.47,1.50,1.54,1.58,1.62,1.65,1.69,1.74,1.78,1.82,1.87,1.91,1.96,2.00,2.05,2.10,2.15,2.21,2.26,2.32,2.37,2.43,2.49,2.55,2.61,2.67,2.74,2.80,2.87,2.94,3.01,3.09,3.16,3.24,3.32,3.40,3.48,3.57,3.65,3.74,3.83,3.92,4.02,4.12,4.22,4.32,4.42,4.53,4.64,4.75,4.87,4.99,5.11,5.23,5.36,5.49,5.62,5.76,5.90,6.04,6.19,6.34,6.49,6.65,6.81,6.98,7.15,7.32,7.50,7.68,7.87,8.06,8.25,8.45,8.66,8.87,9.09,9.31,9.53,9.76]
+};
+
+function fmt(n, p=4) {
+  if (n === null || !isFinite(n)) return '—';
+  if (Math.abs(n) < 1e-12) return '0';
+  return Number(n.toPrecision(p)).toString();
+}
+
+function formatR(ohm) {
+  if (!isFinite(ohm)) return '—';
+  if (ohm >= 1e6) return fmt(ohm/1e6) + ' MΩ';
+  if (ohm >= 1e3) return fmt(ohm/1e3) + ' kΩ';
+  if (ohm >= 1) return fmt(ohm) + ' Ω';
+  return fmt(ohm*1000) + ' mΩ';
+}
+
+function formatV(v) {
+  if (!isFinite(v)) return '—';
+  if (Math.abs(v) >= 1000) return fmt(v/1000) + ' kV';
+  if (Math.abs(v) >= 1) return fmt(v) + ' V';
+  return fmt(v*1000) + ' mV';
+}
+
+function formatI(a) {
+  if (!isFinite(a)) return '—';
+  if (a >= 1) return fmt(a) + ' A';
+  if (a >= 1e-3) return fmt(a*1000) + ' mA';
+  if (a >= 1e-6) return fmt(a*1e6) + ' µA';
+  return fmt(a*1e9) + ' nA';
+}
+
+function formatP(p) {
+  if (!isFinite(p)) return '—';
+  if (p >= 1) return fmt(p) + ' W';
+  if (p >= 1e-3) return fmt(p*1000) + ' mW';
+  return fmt(p*1e6) + ' µW';
+}
+
+function withUnit(val, unitId) {
+  const m = parseFloat($(unitId).value);
+  return val * m;
+}
+
+function listStandards(seriesName) {
+  const base = SERIES[seriesName];
+  const out = [];
+  for (let d = 1; d <= 1e7; d *= 10) {
+    base.forEach(b => out.push(b * d));
+  }
+  return out;
+}
+
+// ---------- Tabs ----------
+document.querySelectorAll('.tab').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    b.classList.add('active');
+    $('pane-' + b.dataset.tab).classList.add('active');
+  });
+});
+
+// ---------- Solve ----------
+function presetSolve(vin, r1, r2) {
+  $('sVin').value = vin;
+  $('sR1').value = r1 >= 1000 ? r1/1000 : r1; $('sR1u').value = r1 >= 1000 ? 1000 : 1;
+  $('sR2').value = r2 >= 1000 ? r2/1000 : r2; $('sR2u').value = r2 >= 1000 ? 1000 : 1;
+  solve();
+}
+
+function solve() {
+  const Vin = parseFloat($('sVin').value);
+  const R1 = withUnit(parseFloat($('sR1').value), 'sR1u');
+  const R2 = withUnit(parseFloat($('sR2').value), 'sR2u');
+  if (!isFinite(Vin) || !isFinite(R1) || !isFinite(R2) || R1 < 0 || R2 < 0) {
+    ['sVout','sRatio','sI','sP1','sP2','sRth'].forEach(id => $(id).textContent = '—');
+    return;
+  }
+  const denom = R1 + R2;
+  if (denom <= 0) {
+    ['sVout','sRatio','sI','sP1','sP2','sRth'].forEach(id => $(id).textContent = '—');
+    return;
+  }
+  const Vout = Vin * R2 / denom;
+  const I = Vin / denom;
+  const P1 = I*I*R1;
+  const P2 = I*I*R2;
+  const Rth = R1*R2/denom;
+  $('sVout').textContent = formatV(Vout);
+  $('sRatio').textContent = fmt(Vout/Vin, 4) + '  (' + fmt(100*Vout/Vin,4) + ' %)';
+  $('sI').textContent = formatI(I);
+  $('sP1').textContent = formatP(P1);
+  $('sP2').textContent = formatP(P2);
+  $('sRth').textContent = formatR(Rth);
+}
+
+['sVin','sR1','sR1u','sR2','sR2u'].forEach(id => $(id).addEventListener('input', solve));
+$('sR1u').addEventListener('change', solve);
+$('sR2u').addEventListener('change', solve);
+
+// ---------- Design ----------
+function presetDesign(vin, vout, series) {
+  $('dVin').value = vin;
+  $('dVout').value = vout;
+  $('dSeries').value = series;
+  design();
+}
+
+function design() {
+  const Vin = parseFloat($('dVin').value);
+  const Vt = parseFloat($('dVout').value);
+  const Iq = parseFloat($('dI').value) * parseFloat($('dIu').value);
+  const series = $('dSeries').value;
+  const tbody = $('dTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  if (!isFinite(Vin) || !isFinite(Vt) || !isFinite(Iq) || Iq <= 0 || Vt <= 0 || Vt >= Vin) {
+    ['dR1','dR2','dVoutActual','dErr','dIactual'].forEach(id => $(id).textContent = '—');
+    return;
+  }
+  // Ideal: Rtotal = Vin/Iq;  R2 = Rtotal · Vt/Vin
+  const RtotalIdeal = Vin / Iq;
+  const standards = listStandards(series);
+  // Pick R2 candidates near the ideal R2, then R1 = (Vin/Vt - 1) * R2
+  const R2ideal = RtotalIdeal * Vt / Vin;
+  // Search a window of R2 candidates (within 20×)
+  const candidates = standards.filter(r => r >= R2ideal/30 && r <= R2ideal*30);
+  const wantR1Ratio = Vin/Vt - 1; // R1 = wantR1Ratio * R2
+  const pairs = [];
+  for (const R2 of candidates) {
+    const R1ideal = wantR1Ratio * R2;
+    // Find nearest 2 standards to R1ideal
+    let best = null;
+    for (const R1 of standards) {
+      if (R1 < R1ideal/4 || R1 > R1ideal*4) continue;
+      const Vout = Vin * R2 / (R1 + R2);
+      const err = (Vout - Vt) / Vt;
+      const I = Vin / (R1 + R2);
+      pairs.push({ R1, R2, Vout, err, I, score: Math.abs(err) + 0.0001*Math.abs(Math.log(I/Iq)) });
+    }
+  }
+  pairs.sort((a,b) => a.score - b.score);
+  // Dedupe by R1,R2
+  const seen = new Set();
+  const top = [];
+  for (const p of pairs) {
+    const k = p.R1+'_'+p.R2;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    top.push(p);
+    if (top.length >= 10) break;
+  }
+  if (top.length === 0) {
+    ['dR1','dR2','dVoutActual','dErr','dIactual'].forEach(id => $(id).textContent = '—');
+    return;
+  }
+  const best = top[0];
+  $('dR1').textContent = formatR(best.R1);
+  $('dR2').textContent = formatR(best.R2);
+  $('dVoutActual').textContent = formatV(best.Vout);
+  $('dErr').textContent = (best.err >= 0 ? '+' : '') + fmt(best.err*100, 3) + ' %';
+  $('dIactual').textContent = formatI(best.I);
+  top.forEach((p, i) => {
+    const tr = document.createElement('tr');
+    if (i === 0) tr.className = 'best';
+    tr.innerHTML = `<td>${formatR(p.R1)}</td><td>${formatR(p.R2)}</td><td>${formatV(p.Vout)}</td><td>${(p.err>=0?'+':'')+fmt(p.err*100,3)} %</td><td>${formatI(p.I)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+['dVin','dVout','dI','dIu','dSeries'].forEach(id => $(id).addEventListener('input', design));
+$('dSeries').addEventListener('change', design);
+$('dIu').addEventListener('change', design);
+
+// ---------- Loaded ----------
+function loaded() {
+  const Vin = parseFloat($('lVin').value);
+  const R1 = withUnit(parseFloat($('lR1').value), 'lR1u');
+  const R2 = withUnit(parseFloat($('lR2').value), 'lR2u');
+  const RL = withUnit(parseFloat($('lRL').value), 'lRLu');
+  if (!isFinite(Vin) || !isFinite(R1) || !isFinite(R2) || !isFinite(RL) || R1 < 0 || R2 < 0 || RL <= 0) {
+    ['lVnl','lVl','lSag','lIL','lRule'].forEach(id => $(id).textContent = '—');
+    return;
+  }
+  const Vnl = Vin * R2 / (R1 + R2);
+  const Rpar = (R2 * RL) / (R2 + RL);
+  const Vl = Vin * Rpar / (R1 + Rpar);
+  const sag = Vnl - Vl;
+  const IL = Vl / RL;
+  $('lVnl').textContent = formatV(Vnl);
+  $('lVl').textContent = formatV(Vl);
+  $('lSag').textContent = formatV(sag) + '  (' + fmt(100*sag/Vnl, 3) + ' %)';
+  $('lIL').textContent = formatI(IL);
+  const ratio = RL / R2;
+  if (ratio >= 10) {
+    $('lRule').textContent = '✓ ' + fmt(ratio,3) + '× — load impact ≲1 %';
+    $('lRule').parentElement.classList.add('ok'); $('lRule').parentElement.classList.remove('warn','err');
+  } else if (ratio >= 3) {
+    $('lRule').textContent = '⚠ ' + fmt(ratio,3) + '× — noticeable sag';
+    $('lRule').parentElement.classList.add('warn'); $('lRule').parentElement.classList.remove('ok','err');
+  } else {
+    $('lRule').textContent = '✗ ' + fmt(ratio,3) + '× — divider dominated by load';
+    $('lRule').parentElement.classList.add('err'); $('lRule').parentElement.classList.remove('ok','warn');
+  }
+}
+
+['lVin','lR1','lR1u','lR2','lR2u','lRL','lRLu'].forEach(id => $(id).addEventListener('input', loaded));
+['lR1u','lR2u','lRLu'].forEach(id => $(id).addEventListener('change', loaded));
+
+solve();
+design();
+loaded();
+</script>
+</body>
+</html>

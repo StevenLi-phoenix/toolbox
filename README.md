@@ -233,6 +233,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Voltage Divider Calculator](voltagedivider.html) | Solve `V_out = V_in · R2 / (R1 + R2)`, pick the closest E12 / E24 / E48 / E96 resistor pair for a target output, and check how a load resistance sags the output — quiescent current, power, and Thévenin equivalent included. |
+| [Video & Audio Bitrate Calculator](bitratecalc.html) | Lock any two of bitrate, file size, and duration to solve the third. Presets for YouTube 1080p / 4K, Twitch, Netflix HDR, Blu-ray, MP3, AAC, FLAC, plus a codec efficiency table (H.264 → H.265 → AV1) and transfer-time check on common upload pipes. |
+| [Wavelength ↔ Frequency Converter](wavefreq.html) | Convert between Hz / kHz / MHz / GHz / THz and m / mm / µm / nm / Å for EM waves (uses *c*) or sound in air / water / steel — shows period, wavenumber, photon energy in eV, the spectrum band (radio → γ-ray), and a quarter-wave dipole length for RF antennas. |
 | [Circuit Breaker Pattern Simulator](circuitbreaker.html) | Watch the **Closed → Open → Half-Open** state machine in action — tune failure threshold, recovery probes, and reset timeout, stream simulated requests, and copy production-ready config for Polly, Resilience4j, opossum, or gobreaker. |
 | [POSIX errno Reference](errno.html) | Searchable reference for 130+ POSIX / Linux / macOS / FreeBSD errno values — look up `EAGAIN`, `EACCES`, `EPIPE`, `ECONNRESET` by number, symbol, or message and see which platforms agree on the number and which don't. |
 | [Core Web Vitals Score Calculator](webvitals.html) | Score `LCP`, `INP`, `CLS` (plus `FCP`, `TTFB`, legacy `FID`) against Google's official Good / Needs Improvement / Poor thresholds — see a pass/fail per metric, an overall verdict for the URL, and a focused optimization checklist for whichever metric is failing. |
