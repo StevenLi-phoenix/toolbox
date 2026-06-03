@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaaS Metrics Calculator — MRR, ARR, LTV, CAC, Churn, Payback</title>
+<meta name="description" content="Compute the core SaaS unit economics — MRR, ARR, ARPU, gross/net churn, customer LTV, CAC, LTV:CAC ratio, payback period, and quick-ratio — from a handful of subscription numbers.">
+<meta name="keywords" content="saas metrics, mrr calculator, arr calculator, ltv cac, churn rate, payback period, unit economics, quick ratio, net revenue retention, saas finance">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/saasmetrics.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: .78rem; color: var(--muted); }
+  .field .hint { font-size: .72rem; color: var(--muted); font-style: italic; }
+  .field input {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .92rem;
+  }
+  .field .prefix { position: relative; }
+  .field .prefix span {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-family: var(--mono); font-size: .85rem; pointer-events: none;
+  }
+  .field .prefix input { padding-left: 24px; }
+  .field .suffix { position: relative; }
+  .field .suffix span {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-family: var(--mono); font-size: .85rem; pointer-events: none;
+  }
+  .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .metric {
+    padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .metric .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .metric .value { font-family: var(--mono); font-size: 1.25rem; font-weight: 600; color: var(--text); margin-top: 4px; }
+  .metric .sub { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+  .metric.good .value { color: var(--success, #16a34a); }
+  .metric.warn .value { color: var(--warning, #b45309); }
+  .metric.bad .value { color: var(--error, #dc2626); }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .preset { padding: 5px 10px; font-size: .76rem; border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .preset:hover { border-color: var(--accent, #2563eb); }
+  .explain { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .explain code { background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .82rem; }
+  .explain dt { font-weight: 600; margin-top: 8px; }
+  .explain dd { margin-left: 0; color: var(--muted); font-size: .82rem; }
+  .verdict {
+    margin-top: 12px; padding: 10px 14px; border-radius: var(--radius);
+    font-size: .88rem; line-height: 1.5; border: 1px solid var(--border);
+  }
+  .verdict.good { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .verdict.warn { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .verdict.bad { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+  @media (max-width: 768px) {
+    .grid-two, .input-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>SaaS Metrics Calculator</h1>
+<p class="subtitle">Plug in a handful of subscription numbers &mdash; customers, ARPU, churn, CAC, gross margin &mdash; and get the full unit-economics scorecard: MRR, ARR, customer LTV, payback period, LTV:CAC ratio, net revenue retention, and quick ratio with rule-of-thumb verdicts.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Inputs</h2>
+    <div class="preset-row">
+      <button class="preset" onclick="loadPreset('seed')">Early seed</button>
+      <button class="preset" onclick="loadPreset('healthy')">Healthy SaaS</button>
+      <button class="preset" onclick="loadPreset('enterprise')">Enterprise</button>
+      <button class="preset" onclick="loadPreset('struggling')">Struggling</button>
+    </div>
+    <div class="input-grid">
+      <div class="field">
+        <label for="customers">Paying customers</label>
+        <input id="customers" type="number" min="0" step="1" value="500" oninput="recalc()">
+      </div>
+      <div class="field">
+        <label for="arpu">ARPU (per customer / month)</label>
+        <div class="prefix"><span>$</span><input id="arpu" type="number" min="0" step="any" value="100" oninput="recalc()"></div>
+      </div>
+      <div class="field">
+        <label for="gross">Gross margin</label>
+        <div class="suffix"><input id="gross" type="number" min="0" max="100" step="any" value="80" oninput="recalc()"><span>%</span></div>
+        <span class="hint">Revenue minus cost-of-revenue (hosting, support, payment fees).</span>
+      </div>
+      <div class="field">
+        <label for="churn">Gross monthly churn</label>
+        <div class="suffix"><input id="churn" type="number" min="0" max="100" step="any" value="3" oninput="recalc()"><span>%</span></div>
+        <span class="hint">Logo + dollar churn (customers leaving / shrinking).</span>
+      </div>
+      <div class="field">
+        <label for="expansion">Monthly expansion</label>
+        <div class="suffix"><input id="expansion" type="number" min="0" max="100" step="any" value="1" oninput="recalc()"><span>%</span></div>
+        <span class="hint">Upsell, seat growth, plan upgrades (% of MRR).</span>
+      </div>
+      <div class="field">
+        <label for="newcust">New customers / month</label>
+        <input id="newcust" type="number" min="0" step="1" value="40" oninput="recalc()">
+      </div>
+      <div class="field">
+        <label for="cac">CAC (per new customer)</label>
+        <div class="prefix"><span>$</span><input id="cac" type="number" min="0" step="any" value="600" oninput="recalc()"></div>
+        <span class="hint">Fully-loaded sales + marketing / new logos.</span>
+      </div>
+      <div class="field">
+        <label for="discount">Discount rate (annual)</label>
+        <div class="suffix"><input id="discount" type="number" min="0" max="100" step="any" value="10" oninput="recalc()"><span>%</span></div>
+        <span class="hint">For discounted-LTV; use cost of capital or 10%.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Headline metrics</h2>
+    <div class="results" id="headline"></div>
+    <div id="verdict" class="verdict" style="display:none"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Unit economics</h2>
+  <div class="results" id="economics"></div>
+</div>
+
+<div class="card">
+  <h2>How these numbers are computed</h2>
+  <div class="explain">
+    <dl>
+      <dt>MRR</dt><dd><code>customers × ARPU</code>. ARR is simply <code>12 × MRR</code>.</dd>
+      <dt>Net revenue retention (NRR)</dt><dd><code>(1 − gross churn) + expansion</code> on a monthly basis, annualised by raising to the 12th power.</dd>
+      <dt>Average customer lifetime</dt><dd><code>1 / gross churn</code> months &mdash; the expected time before a paying customer cancels at the current churn rate.</dd>
+      <dt>LTV (simple)</dt><dd><code>ARPU × gross margin / gross churn</code>. Multiplies gross-profit per month by the expected lifetime in months.</dd>
+      <dt>LTV (discounted)</dt><dd>Same gross-profit stream but discounted at the chosen rate to account for the time value of money &mdash; usually 20–30% lower than the simple LTV.</dd>
+      <dt>Payback period</dt><dd><code>CAC / (ARPU × gross margin)</code> months. How long it takes a single new customer&apos;s gross profit to repay the CAC spent to acquire them.</dd>
+      <dt>LTV : CAC</dt><dd>Ratio of lifetime value to acquisition cost. Healthy SaaS sits at 3× or higher; below 1× the business loses money on every new customer.</dd>
+      <dt>Quick ratio</dt><dd><code>(new MRR + expansion MRR) / (churn MRR + contraction MRR)</code>. Bessemer&apos;s rough indicator: ≥4 means growth comfortably outruns leak.</dd>
+    </dl>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const PRESETS = {
+  seed:        { customers: 80,   arpu: 50,  gross: 70, churn: 5,   expansion: 0.5, newcust: 25,  cac: 250,  discount: 10 },
+  healthy:     { customers: 500,  arpu: 100, gross: 80, churn: 3,   expansion: 1,   newcust: 40,  cac: 600,  discount: 10 },
+  enterprise:  { customers: 60,   arpu: 2500, gross: 78, churn: 1,  expansion: 1.5, newcust: 3,   cac: 18000, discount: 10 },
+  struggling:  { customers: 250,  arpu: 35,  gross: 60, churn: 7,   expansion: 0.2, newcust: 12,  cac: 450,  discount: 10 },
+};
+
+function loadPreset(k) {
+  const p = PRESETS[k]; if (!p) return;
+  for (const id in p) $(id).value = p[id];
+  recalc();
+}
+
+function fmt$(n) {
+  if (!isFinite(n)) return '∞';
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (abs >= 1e3) return '$' + (n/1e3).toFixed(2) + 'K';
+  return '$' + n.toFixed(2);
+}
+function fmtPct(n) { return isFinite(n) ? (n * 100).toFixed(2) + '%' : '—'; }
+function fmtNum(n, d=2) { return isFinite(n) ? n.toFixed(d) : '—'; }
+function fmtMonths(n) {
+  if (!isFinite(n)) return '∞';
+  if (n < 1) return (n * 30).toFixed(0) + ' days';
+  if (n < 24) return n.toFixed(1) + ' months';
+  return (n/12).toFixed(1) + ' years';
+}
+
+function tile(label, value, sub, tone='') {
+  return `<div class="metric ${tone}"><div class="label">${label}</div><div class="value">${value}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
+}
+
+function recalc() {
+  const customers = +$('customers').value || 0;
+  const arpu      = +$('arpu').value || 0;
+  const grossPct  = (+$('gross').value || 0) / 100;
+  const churn     = (+$('churn').value || 0) / 100;
+  const expansion = (+$('expansion').value || 0) / 100;
+  const newcust   = +$('newcust').value || 0;
+  const cac       = +$('cac').value || 0;
+  const discAnn   = (+$('discount').value || 0) / 100;
+
+  const mrr = customers * arpu;
+  const arr = mrr * 12;
+  const newMrr = newcust * arpu;
+  const churnMrr = mrr * churn;
+  const expansionMrr = mrr * expansion;
+  const netNewMrr = newMrr + expansionMrr - churnMrr;
+  const nrrMonthly = 1 - churn + expansion;
+  const nrrAnnual = Math.pow(nrrMonthly, 12);
+  const grossMargin$ = arpu * grossPct;
+  const lifetimeMonths = churn > 0 ? 1 / churn : Infinity;
+  const ltvSimple = churn > 0 ? grossMargin$ / churn : Infinity;
+  const discMonthly = Math.pow(1 + discAnn, 1/12) - 1;
+  const ltvDisc = (churn + discMonthly) > 0 ? grossMargin$ / (churn + discMonthly) : Infinity;
+  const payback = grossMargin$ > 0 ? cac / grossMargin$ : Infinity;
+  const ltvCac = cac > 0 ? ltvSimple / cac : Infinity;
+  const quickRatio = churnMrr > 0 ? (newMrr + expansionMrr) / churnMrr : Infinity;
+  const growthM = mrr > 0 ? netNewMrr / mrr : 0;
+  const burnMultiple = netNewMrr > 0 ? (cac * newcust) / (netNewMrr * 12) : Infinity;
+
+  $('headline').innerHTML = [
+    tile('MRR', fmt$(mrr)),
+    tile('ARR', fmt$(arr)),
+    tile('Net new MRR', fmt$(netNewMrr), netNewMrr >= 0 ? 'growing' : 'shrinking', netNewMrr >= 0 ? 'good' : 'bad'),
+    tile('NRR (annual)', fmtPct(nrrAnnual), nrrAnnual >= 1 ? 'expansion offsets churn' : 'leaky bucket', nrrAnnual >= 1.1 ? 'good' : nrrAnnual >= 1 ? '' : 'bad'),
+    tile('Monthly growth', fmtPct(growthM), null, growthM >= 0.05 ? 'good' : growthM >= 0 ? 'warn' : 'bad'),
+    tile('Avg. lifetime', fmtMonths(lifetimeMonths)),
+  ].join('');
+
+  const ltvCacTone = ltvCac >= 3 ? 'good' : ltvCac >= 1 ? 'warn' : 'bad';
+  const paybackTone = payback <= 12 ? 'good' : payback <= 24 ? 'warn' : 'bad';
+  const qrTone = quickRatio >= 4 ? 'good' : quickRatio >= 1 ? 'warn' : 'bad';
+
+  $('economics').innerHTML = [
+    tile('LTV (simple)', fmt$(ltvSimple), 'gross margin / churn'),
+    tile('LTV (discounted)', fmt$(ltvDisc), discAnn*100 + '% annual'),
+    tile('CAC', fmt$(cac), 'per new customer'),
+    tile('LTV : CAC', fmtNum(ltvCac, 2) + '×', '3× is the rule of thumb', ltvCacTone),
+    tile('CAC payback', fmtMonths(payback), '< 12 months is healthy', paybackTone),
+    tile('Quick ratio', fmtNum(quickRatio, 2), 'Bessemer: ≥ 4 is great', qrTone),
+    tile('Gross profit / cust', fmt$(grossMargin$) + ' / mo', 'monthly contribution'),
+    tile('Burn multiple', isFinite(burnMultiple) ? fmtNum(burnMultiple, 2) + '×' : '∞', 'spend per $ of new ARR', burnMultiple <= 1 ? 'good' : burnMultiple <= 2 ? 'warn' : 'bad'),
+  ].join('');
+
+  const verdict = $('verdict');
+  const flags = [];
+  if (ltvCac < 1) flags.push(['bad', 'LTV : CAC below 1× — every new customer loses money over their lifetime. Drop CAC, lift ARPU, or fix churn before scaling spend.']);
+  else if (ltvCac < 3) flags.push(['warn', 'LTV : CAC under 3× — survivable, but most VCs want 3× before they fund growth aggressively.']);
+  if (payback > 24) flags.push(['bad', 'CAC payback > 24 months — capital efficiency is weak. Investors and lenders will balk.']);
+  else if (payback > 12) flags.push(['warn', 'CAC payback > 12 months — fine for enterprise, tight for SMB/PLG.']);
+  if (churn > 0.05) flags.push(['bad', 'Monthly churn > 5% — the funnel is a sieve. Annual retention is roughly ' + (Math.pow(1-churn,12)*100).toFixed(0) + '%.']);
+  else if (churn > 0.03) flags.push(['warn', 'Monthly churn 3–5% — common in SMB SaaS, but a meaningful drag on LTV.']);
+  if (nrrAnnual >= 1.2) flags.push(['good', 'NRR ≥ 120% — best-in-class. Expansion alone would grow ARR even with zero new logos.']);
+  else if (nrrAnnual >= 1) flags.push(['good', 'NRR ≥ 100% — expansion is offsetting churn, the holy grail for retention.']);
+  if (quickRatio >= 4) flags.push(['good', 'Quick ratio ≥ 4 — net new and expansion comfortably outrun churn.']);
+
+  if (flags.length === 0) {
+    verdict.style.display = 'none';
+  } else {
+    const worst = flags.some(f => f[0]==='bad') ? 'bad' : flags.some(f => f[0]==='warn') ? 'warn' : 'good';
+    verdict.className = 'verdict ' + worst;
+    verdict.innerHTML = flags.map(f => '• ' + f[1]).join('<br>');
+    verdict.style.display = '';
+  }
+}
+recalc();
+</script>
+</body>
+</html>

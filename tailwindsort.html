@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tailwind Class Sorter — Reorder Utility Classes to the Official Order</title>
+<meta name="description" content="Sort messy Tailwind utility class strings into the prettier-plugin-tailwindcss canonical order — layout first, then box model, typography, backgrounds, borders, effects. Dedupes, splits responsive variants, and rewrites whole class attributes inline.">
+<meta name="keywords" content="tailwind class sorter, prettier tailwind, reorder tailwind classes, tailwindcss formatter, class name sorter, tailwind utility order, deduplicate tailwind classes">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tailwindsort.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea {
+    width: 100%; min-height: 240px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono);
+    font-size: .82rem; box-sizing: border-box; resize: vertical; line-height: 1.55;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .controls label { display: inline-flex; align-items: center; gap: 6px; }
+  .stat-row { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; font-size: .82rem; color: var(--muted); }
+  .stat-row strong { color: var(--text); font-family: var(--mono); }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .preset { padding: 5px 10px; font-size: .76rem; border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .preset:hover { border-color: var(--accent, #2563eb); }
+  .copy-btn { padding: 6px 14px; font-size: .85rem; background: var(--accent, #2563eb); color: white; border: none; border-radius: 4px; cursor: pointer; }
+  .group-vis { margin-top: 10px; font-size: .78rem; color: var(--muted); line-height: 1.7; }
+  .group-vis .grp { display: inline-block; padding: 2px 8px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--border); margin: 2px 4px 2px 0; font-family: var(--mono); }
+  .group-vis .grp em { font-style: normal; color: var(--accent, #2563eb); }
+  .explain { font-size: .85rem; line-height: 1.6; }
+  .explain code { background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .8rem; }
+  .err { color: var(--error); font-size: .82rem; min-height: 1.4em; margin-top: 4px; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Tailwind Class Sorter</h1>
+<p class="subtitle">Reorder Tailwind utility classes into the canonical <a href="https://github.com/tailwindlabs/prettier-plugin-tailwindcss" target="_blank" rel="noopener">prettier-plugin-tailwindcss</a> order so diffs stay clean and class strings stay readable. Paste raw classes or whole HTML &mdash; the tool rewrites every <code>class="…"</code> in place, dedupes repeats, and groups responsive / state variants last.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Input</h2>
+    <div class="preset-row">
+      <button class="preset" onclick="loadPreset('messy')">Messy classes</button>
+      <button class="preset" onclick="loadPreset('html')">HTML snippet</button>
+      <button class="preset" onclick="loadPreset('jsx')">JSX className</button>
+      <button class="preset" onclick="loadPreset('duplicate')">With duplicates</button>
+      <button class="preset" onclick="loadPreset('variants')">Responsive variants</button>
+    </div>
+    <div class="controls">
+      <label><input type="checkbox" id="dedupe" checked onchange="run()"> Remove duplicate classes</label>
+      <label><input type="checkbox" id="rewriteHtml" checked onchange="run()"> Rewrite class/className attributes</label>
+      <label><input type="checkbox" id="separateVariants" onchange="run()"> Put variants on a new line</label>
+    </div>
+    <textarea id="input" placeholder="text-white p-4 flex bg-blue-500 rounded items-center" oninput="run()">text-white p-4 flex bg-blue-500 rounded items-center justify-center hover:bg-blue-600 md:p-6 shadow-lg font-semibold</textarea>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="card">
+    <h2>Sorted output</h2>
+    <textarea id="output" readonly></textarea>
+    <div class="stat-row">
+      <span><strong id="classCount">0</strong> classes</span>
+      <span><strong id="dupCount">0</strong> dupes removed</span>
+      <span><strong id="moveCount">0</strong> moved</span>
+      <span><strong id="charDelta">0</strong> chars saved</span>
+    </div>
+    <div style="margin-top:10px"><button class="copy-btn" onclick="copyOut()">Copy result</button></div>
+    <div class="group-vis" id="groupVis"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How the order is decided</h2>
+  <div class="explain">
+    <p>Each class is bucketed by its <strong>property prefix</strong> (everything before the first numeric / colour value). The buckets follow the order used by <code>prettier-plugin-tailwindcss</code>:</p>
+    <ol style="margin:8px 0 8px 18px;line-height:1.7">
+      <li><strong>Layout</strong> &mdash; <code>container</code>, <code>flex</code>, <code>grid</code>, <code>block</code>, <code>inline</code>, <code>hidden</code>, <code>columns</code>, <code>break</code>, positioning</li>
+      <li><strong>Flexbox &amp; Grid</strong> &mdash; <code>justify</code>, <code>items</code>, <code>self</code>, <code>place</code>, <code>order</code>, <code>gap</code>, <code>col</code>, <code>row</code></li>
+      <li><strong>Spacing</strong> &mdash; margin (<code>m</code>, <code>mt</code>, …) then padding (<code>p</code>, <code>pt</code>, …) then <code>space-</code></li>
+      <li><strong>Sizing</strong> &mdash; <code>w</code>, <code>h</code>, <code>min-w</code>, <code>max-w</code>, <code>min-h</code>, <code>max-h</code></li>
+      <li><strong>Typography</strong> &mdash; <code>font</code>, <code>text</code>, <code>leading</code>, <code>tracking</code>, <code>antialiased</code>, <code>uppercase</code>, <code>italic</code>, <code>underline</code></li>
+      <li><strong>Backgrounds</strong> &mdash; <code>bg</code>, <code>from</code>, <code>via</code>, <code>to</code></li>
+      <li><strong>Borders</strong> &mdash; <code>border</code>, <code>rounded</code>, <code>divide</code>, <code>ring</code>, <code>outline</code></li>
+      <li><strong>Effects &amp; Filters</strong> &mdash; <code>shadow</code>, <code>opacity</code>, <code>blur</code>, <code>brightness</code>, <code>backdrop-</code></li>
+      <li><strong>Transitions &amp; Transforms</strong> &mdash; <code>transition</code>, <code>duration</code>, <code>ease</code>, <code>animate</code>, <code>transform</code>, <code>scale</code>, <code>rotate</code></li>
+      <li><strong>Interactivity</strong> &mdash; <code>cursor</code>, <code>pointer-events</code>, <code>select</code>, <code>resize</code>, <code>scroll</code></li>
+      <li><strong>Accessibility / SVG</strong> &mdash; <code>sr-only</code>, <code>fill</code>, <code>stroke</code></li>
+    </ol>
+    <p>Variants (<code>hover:</code>, <code>focus:</code>, <code>md:</code>, <code>dark:</code>, <code>group-hover:</code>, etc.) are stripped to find the underlying utility, then the prefix order is appended afterwards: <em>responsive</em> (sm → 2xl) before <em>state</em> (hover, focus, active) before <em>dark</em> mode, so a class like <code>md:dark:hover:bg-blue-600</code> always lands together with other <code>bg-*</code> utilities but later than the plain <code>bg-blue-500</code>.</p>
+    <p>Arbitrary values (<code>w-[42px]</code>, <code>bg-[#fafafa]</code>) and custom prefixes are kept in the same bucket as their base utility.</p>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Canonical order — a coarse approximation of prettier-plugin-tailwindcss.
+// Each entry is a prefix; the index is the sort key.
+const ORDER = [
+  // Layout
+  'container','columns','break-after','break-before','break-inside',
+  'box-decoration','box','aspect','isolate','isolation','object',
+  'overflow','overscroll','position','static','fixed','absolute','relative','sticky',
+  'inset','start','end','top','right','bottom','left','visible','invisible','collapse',
+  'z',
+  // Display
+  'flex','inline-flex','grid','inline-grid','table','inline-table','block','inline-block','inline','hidden','contents','flow-root','list-item',
+  'float','clear',
+  // Flexbox / Grid
+  'basis','flex-row','flex-col','flex-wrap','flex-nowrap','flex-grow','flex-shrink','flex-1','flex-auto','flex-initial','flex-none',
+  'grow','shrink','order','grid-cols','grid-rows','col','row','grid-flow','auto-cols','auto-rows',
+  'gap','justify','content','items','self','place',
+  // Spacing
+  'm','mx','my','mt','mr','mb','ml','ms','me',
+  'p','px','py','pt','pr','pb','pl','ps','pe',
+  'space',
+  // Sizing
+  'w','min-w','max-w','h','min-h','max-h','size',
+  // Typography
+  'font','text-xs','text-sm','text-base','text-lg','text-xl','text-2xl','text-3xl','text-4xl','text-5xl','text-6xl','text',
+  'antialiased','subpixel','italic','not-italic','leading','tracking','line-clamp','list','placeholder',
+  'underline','overline','line-through','no-underline','decoration','uppercase','lowercase','capitalize','normal-case',
+  'truncate','whitespace','break-words','break-all','break-normal','break-keep','hyphens','indent','align','word','content',
+  // Background
+  'bg','from','via','to','gradient',
+  // Border
+  'rounded','border','divide','outline','outline-offset','ring','ring-offset',
+  // Effects
+  'shadow','drop-shadow','opacity','mix-blend','bg-blend',
+  'blur','brightness','contrast','grayscale','hue-rotate','invert','saturate','sepia','filter',
+  'backdrop',
+  // Tables
+  'border-collapse','border-spacing','table-auto','table-fixed','caption',
+  // Transitions
+  'transition','duration','ease','delay','animate',
+  // Transforms
+  'transform','origin','scale','rotate','translate','skew',
+  // Interactivity
+  'accent','appearance','cursor','caret','pointer-events','resize','scroll','snap','touch','user-select','select','will-change',
+  // SVG / a11y
+  'fill','stroke','sr-only','not-sr-only',
+];
+
+const ORDER_MAP = new Map(ORDER.map((k, i) => [k, i]));
+
+// Variant ordering — responsive first, then state, then dark.
+const RESPONSIVE = ['sm','md','lg','xl','2xl','3xl'];
+const STATES = ['hover','focus','focus-visible','focus-within','active','visited','target','first','last','odd','even','disabled','enabled','checked','required','valid','invalid','empty','open','closed','aria','data','peer','group','before','after','placeholder','file','marker','selection','first-letter','first-line','backdrop','motion-safe','motion-reduce','print','rtl','ltr','portrait','landscape','contrast-more','contrast-less','forced-colors'];
+
+function variantWeight(v) {
+  const r = RESPONSIVE.indexOf(v);
+  if (r >= 0) return 100 + r;
+  const s = STATES.findIndex(x => v === x || v.startsWith(x + '-') || v.startsWith(x + '[') || v.startsWith('group-' + x) || v.startsWith('peer-' + x));
+  if (s >= 0) return 200 + s;
+  if (v === 'dark') return 999;
+  return 500;
+}
+
+function splitClass(cls) {
+  const variants = [];
+  let core = cls;
+  while (true) {
+    const m = core.match(/^([a-z0-9_-]+|[a-z]+-\[[^\]]*\]|group|peer)(?:\/[a-z0-9_-]+)?:/);
+    if (!m) break;
+    variants.push(m[1]);
+    core = core.slice(m[0].length);
+  }
+  const important = core.startsWith('!');
+  if (important) core = core.slice(1);
+  let negative = false;
+  if (core.startsWith('-')) { negative = true; core = core.slice(1); }
+  return { variants, negative, important, core, raw: cls };
+}
+
+function corePrefix(core) {
+  // Strip arbitrary-value suffix: bg-[#fff] → bg
+  const stripped = core.replace(/\[[^\]]*\]$/, '');
+  const parts = stripped.split('-');
+  // Try longest matching prefix
+  for (let n = Math.min(parts.length, 4); n >= 1; n--) {
+    const key = parts.slice(0, n).join('-');
+    if (ORDER_MAP.has(key)) return { key, idx: ORDER_MAP.get(key) };
+  }
+  return { key: parts[0] || stripped, idx: ORDER.length + 1 };
+}
+
+function sortKey(c) {
+  const pfx = corePrefix(c.core);
+  const vWeight = c.variants.reduce((acc, v) => acc + variantWeight(v), 0);
+  // Variants always sort after non-variants of the same prefix.
+  return [pfx.idx, c.variants.length === 0 ? 0 : 1, vWeight, c.core, c.raw];
+}
+
+function compareKeys(a, b) {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] < b[i]) return -1;
+    if (a[i] > b[i]) return 1;
+  }
+  return 0;
+}
+
+function sortClasses(input) {
+  const dedupe = $('dedupe').checked;
+  const tokens = input.split(/\s+/).filter(Boolean);
+  const parsed = tokens.map(splitClass);
+  const seen = new Set();
+  const filtered = [];
+  let dupes = 0;
+  for (const p of parsed) {
+    if (dedupe && seen.has(p.raw)) { dupes++; continue; }
+    seen.add(p.raw);
+    filtered.push(p);
+  }
+  const originalOrder = filtered.map(p => p.raw);
+  const withKey = filtered.map(p => ({ p, k: sortKey(p) }));
+  withKey.sort((a, b) => compareKeys(a.k, b.k));
+  const sorted = withKey.map(x => x.p);
+  const sortedRaw = sorted.map(p => p.raw);
+  let moved = 0;
+  for (let i = 0; i < sortedRaw.length; i++) if (sortedRaw[i] !== originalOrder[i]) moved++;
+
+  const separateVariants = $('separateVariants').checked;
+  let outStr;
+  if (separateVariants) {
+    const plain = sorted.filter(p => p.variants.length === 0).map(p => p.raw);
+    const varied = sorted.filter(p => p.variants.length > 0).map(p => p.raw);
+    outStr = plain.join(' ') + (varied.length ? '\n  ' + varied.join(' ') : '');
+  } else {
+    outStr = sortedRaw.join(' ');
+  }
+
+  return { outStr, dupes, moved, count: sortedRaw.length, classes: sorted };
+}
+
+function run() {
+  const raw = $('input').value;
+  const rewriteHtml = $('rewriteHtml').checked;
+  const err = $('err'); err.textContent = '';
+
+  let outText = '', totalCount = 0, totalDupes = 0, totalMoved = 0;
+  let lastClasses = null;
+
+  if (rewriteHtml && /class(Name)?\s*=\s*["'`{]/.test(raw)) {
+    outText = raw.replace(/(class(?:Name)?\s*=\s*)(["'`])([\s\S]*?)\2/g, (m, attr, q, body) => {
+      const r = sortClasses(body);
+      totalCount += r.count; totalDupes += r.dupes; totalMoved += r.moved;
+      lastClasses = r.classes;
+      return attr + q + r.outStr + q;
+    });
+  } else {
+    const r = sortClasses(raw);
+    outText = r.outStr;
+    totalCount = r.count; totalDupes = r.dupes; totalMoved = r.moved;
+    lastClasses = r.classes;
+  }
+
+  $('output').value = outText;
+  $('classCount').textContent = totalCount;
+  $('dupCount').textContent = totalDupes;
+  $('moveCount').textContent = totalMoved;
+  const delta = raw.length - outText.length;
+  $('charDelta').textContent = (delta >= 0 ? '−' : '+') + Math.abs(delta);
+
+  renderGroups(lastClasses);
+}
+
+function renderGroups(classes) {
+  if (!classes || !classes.length) { $('groupVis').innerHTML = ''; return; }
+  const groups = new Map();
+  for (const c of classes) {
+    const pfx = corePrefix(c.core).key;
+    if (!groups.has(pfx)) groups.set(pfx, []);
+    groups.get(pfx).push(c.raw);
+  }
+  const ordered = [...groups.entries()].sort((a, b) => {
+    return (ORDER_MAP.get(a[0]) ?? 9999) - (ORDER_MAP.get(b[0]) ?? 9999);
+  });
+  const html = ordered.map(([pfx, items]) => `<span class="grp"><em>${pfx}</em>: ${items.length}</span>`).join('');
+  $('groupVis').innerHTML = '<strong style="color:var(--text)">Buckets:</strong> ' + html;
+}
+
+function copyOut() {
+  const t = $('output');
+  t.select(); t.setSelectionRange(0, t.value.length);
+  if (navigator.clipboard) navigator.clipboard.writeText(t.value).catch(()=>{});
+  else document.execCommand('copy');
+}
+
+const PRESETS = {
+  messy:     'text-white p-4 flex bg-blue-500 rounded items-center justify-center hover:bg-blue-600 md:p-6 shadow-lg font-semibold',
+  html:      '<button class="hover:bg-blue-700 px-4 py-2 bg-blue-600 rounded-md text-white font-medium shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">Submit</button>',
+  jsx:       '<div className="p-6 flex-col gap-4 flex w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl dark:bg-zinc-900">…</div>',
+  duplicate: 'p-4 flex p-4 items-center flex bg-red-500 text-white p-4 items-center',
+  variants:  'sm:p-4 md:p-6 lg:p-8 xl:p-10 hover:bg-blue-600 dark:bg-zinc-800 dark:text-white focus:ring-2 focus:ring-offset-2 bg-blue-500 text-white p-4 group-hover:scale-105',
+};
+function loadPreset(k) { $('input').value = PRESETS[k] || ''; run(); }
+
+run();
+</script>
+</body>
+</html>

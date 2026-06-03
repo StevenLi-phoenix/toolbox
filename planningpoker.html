@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planning Poker — Async Story Point Estimator</title>
+<meta name="description" content="Async planning poker for distributed teams — collect anonymous estimates per voter, reveal together, see median, mean, spread, and consensus gap, with Fibonacci, modified-Fibonacci, T-shirt, and power-of-two decks.">
+<meta name="keywords" content="planning poker, story points, scrum estimation, agile estimation, fibonacci estimation, async planning poker, sprint planning, consensus">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/planningpoker.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; font-size: .85rem; }
+  .controls select, .controls input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: .85rem; }
+  .controls label { display: inline-flex; align-items: center; gap: 6px; }
+  .deck { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .deck button {
+    min-width: 48px; padding: 10px 8px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .95rem; cursor: pointer;
+  }
+  .deck button:hover { border-color: var(--accent, #2563eb); }
+  .deck button.selected { background: var(--accent, #2563eb); color: white; border-color: var(--accent, #2563eb); }
+  .voter-row {
+    display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 8px;
+    align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border);
+  }
+  .voter-row:last-child { border-bottom: none; }
+  .voter-row input[type=text] {
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-size: .85rem;
+  }
+  .voter-row .vote {
+    font-family: var(--mono); font-size: .95rem; padding: 6px 10px;
+    border-radius: 4px; background: var(--surface2); border: 1px solid var(--border);
+    min-width: 44px; text-align: center;
+  }
+  .voter-row .vote.hidden { color: var(--muted); font-style: italic; letter-spacing: 2px; }
+  .voter-row button {
+    padding: 4px 8px; font-size: .75rem; background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+  }
+  .voter-row button:hover { color: var(--error, #dc2626); border-color: var(--error, #dc2626); }
+  .reveal-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .reveal-row button {
+    padding: 8px 16px; font-size: .88rem; font-weight: 600;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); cursor: pointer;
+  }
+  .reveal-row button.primary { background: var(--accent, #2563eb); color: white; border-color: var(--accent, #2563eb); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat {
+    padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .stat .label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-family: var(--mono); font-size: 1.15rem; font-weight: 600; margin-top: 2px; }
+  .histogram { display: flex; align-items: flex-end; gap: 6px; margin-top: 12px; min-height: 110px; }
+  .bar {
+    flex: 1; min-width: 24px; display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-end; gap: 4px;
+  }
+  .bar .col { width: 100%; background: var(--accent, #2563eb); border-radius: 4px 4px 0 0; min-height: 4px; transition: height .15s; }
+  .bar.consensus .col { background: var(--success, #16a34a); }
+  .bar .lbl { font-family: var(--mono); font-size: .78rem; color: var(--text); }
+  .bar .cnt { font-size: .68rem; color: var(--muted); }
+  .empty { color: var(--muted); font-size: .85rem; padding: 14px; text-align: center; }
+  .verdict {
+    margin-top: 12px; padding: 10px 14px; border-radius: var(--radius);
+    font-size: .88rem; line-height: 1.5; border: 1px solid var(--border);
+  }
+  .verdict.good { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .verdict.warn { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .verdict.bad  { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+  .stories { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .story-card {
+    padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-size: .82rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .story-card.active { border-color: var(--accent, #2563eb); background: var(--bg); }
+  .story-card .pts { font-family: var(--mono); color: var(--accent, #2563eb); }
+  .story-card .x { color: var(--muted); cursor: pointer; }
+  .story-card .x:hover { color: var(--error, #dc2626); }
+  .copy-out {
+    margin-top: 10px; padding: 10px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .78rem;
+    white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto;
+  }
+  @media (max-width: 768px) {
+    .grid-two { grid-template-columns: 1fr; }
+    .voter-row { grid-template-columns: 1fr 1fr auto; }
+    .voter-row .vote { grid-column: span 2; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Planning Poker</h1>
+<p class="subtitle">Async story-point estimator for distributed teams. Add voters, pick a deck, cast hidden votes, then reveal &mdash; you get the median, mean, spread, mode, and a consensus verdict in one shot. State persists locally so you can come back mid-meeting.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Story under estimation</h2>
+    <input id="storyTitle" type="text" placeholder="As a user I want to…" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:.92rem;box-sizing:border-box" oninput="saveState()">
+    <div class="controls">
+      <label>Deck
+        <select id="deckType" onchange="renderDeck()">
+          <option value="fib" selected>Fibonacci (1, 2, 3, 5, 8, 13, …)</option>
+          <option value="modfib">Modified Fibonacci (½, 1, 2, 3, 5, 8, …)</option>
+          <option value="tshirt">T-shirt (XS, S, M, L, XL, XXL)</option>
+          <option value="powers">Powers of two (1, 2, 4, 8, 16, 32)</option>
+          <option value="linear">Linear (1–10)</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="allowSpecial" checked onchange="renderDeck()"> include ?, ∞, ☕</label>
+    </div>
+    <div id="deck" class="deck"></div>
+    <p style="margin-top:10px;font-size:.78rem;color:var(--muted)">Pick a card to cast a vote for the <strong>current voter</strong> selected below.</p>
+  </div>
+
+  <div class="card">
+    <h2>Voters</h2>
+    <div class="controls">
+      <input id="newVoter" type="text" placeholder="Voter name" style="flex:1;min-width:140px" onkeydown="if(event.key==='Enter')addVoter()">
+      <button onclick="addVoter()" style="padding:6px 14px;background:var(--accent,#2563eb);color:white;border:none;border-radius:4px;cursor:pointer;font-size:.85rem">+ Add voter</button>
+      <button onclick="clearVotes()" style="padding:6px 12px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:.85rem">Clear votes</button>
+    </div>
+    <div id="voters"></div>
+    <div class="reveal-row">
+      <button class="primary" onclick="toggleReveal()" id="revealBtn">Reveal votes</button>
+      <button onclick="lockStory()" id="lockBtn">Lock estimate &amp; next story</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Results</h2>
+  <div id="results">
+    <div class="empty">Cast some votes and click <em>Reveal</em>.</div>
+  </div>
+  <div id="verdict" class="verdict" style="display:none"></div>
+  <div id="histogram" class="histogram" style="display:none"></div>
+</div>
+
+<div class="card">
+  <h2>Locked stories</h2>
+  <div id="stories" class="stories"><div class="empty">No stories locked yet.</div></div>
+  <div class="reveal-row" style="margin-top:14px">
+    <button onclick="copySummary()">Copy markdown summary</button>
+    <button onclick="resetAll()" style="color:var(--error,#dc2626);border-color:var(--error,#dc2626)">Reset everything</button>
+  </div>
+  <pre id="copyOut" class="copy-out" style="display:none"></pre>
+</div>
+
+<div class="card">
+  <h2>Tips</h2>
+  <ul style="font-size:.85rem;line-height:1.7;color:var(--text);padding-left:18px">
+    <li>Use the <strong>spread</strong> stat: anything wider than two deck steps means the team disagrees on scope &mdash; talk it out before locking.</li>
+    <li>The <code>?</code> card is for &ldquo;I genuinely don&apos;t know enough to size this&rdquo;. The <code>☕</code> card is for &ldquo;let&apos;s take a break&rdquo;. <code>∞</code> means &ldquo;too big &mdash; needs splitting&rdquo;.</li>
+    <li>Take the <strong>median</strong>, not the mean &mdash; a single optimistic 13 shouldn&apos;t drag the team&apos;s 5 up to 7.</li>
+    <li>Everything is stored locally in your browser &mdash; closing the tab won&apos;t lose your session.</li>
+  </ul>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const LS_KEY = 'planningpoker:v1';
+
+const DECKS = {
+  fib:    ['1','2','3','5','8','13','21','34','55'],
+  modfib: ['0','½','1','2','3','5','8','13','20','40','100'],
+  tshirt: ['XS','S','M','L','XL','XXL'],
+  powers: ['1','2','4','8','16','32','64'],
+  linear: ['1','2','3','4','5','6','7','8','9','10'],
+};
+
+const NUMERIC = {
+  '½': 0.5, 'XS': 1, 'S': 2, 'M': 3, 'L': 5, 'XL': 8, 'XXL': 13,
+  '?': null, '∞': null, '☕': null,
+};
+
+let state = load() || freshState();
+
+function freshState() {
+  return {
+    deckType: 'fib',
+    allowSpecial: true,
+    storyTitle: '',
+    voters: [
+      { id: id(), name: 'Alex', vote: null },
+      { id: id(), name: 'Sam',  vote: null },
+      { id: id(), name: 'Jordan', vote: null },
+    ],
+    activeVoter: null,
+    revealed: false,
+    locked: [],
+  };
+}
+
+function id() { return Math.random().toString(36).slice(2, 10); }
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)); } catch (e) { return null; }
+}
+function saveState() {
+  state.storyTitle = $('storyTitle').value;
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+function deckValues() {
+  const base = DECKS[state.deckType].slice();
+  if (state.allowSpecial) base.push('?', '∞', '☕');
+  return base;
+}
+
+function numeric(v) {
+  if (v == null) return null;
+  if (v in NUMERIC) return NUMERIC[v];
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+function renderDeck() {
+  state.deckType = $('deckType').value;
+  state.allowSpecial = $('allowSpecial').checked;
+  const d = $('deck'); d.innerHTML = '';
+  for (const v of deckValues()) {
+    const b = document.createElement('button');
+    b.textContent = v;
+    b.onclick = () => castVote(v);
+    d.appendChild(b);
+  }
+  saveState();
+  updateDeckHighlight();
+}
+
+function updateDeckHighlight() {
+  const active = state.voters.find(x => x.id === state.activeVoter);
+  const buttons = $('deck').querySelectorAll('button');
+  for (const b of buttons) {
+    b.classList.toggle('selected', active && active.vote === b.textContent);
+  }
+}
+
+function addVoter() {
+  const name = $('newVoter').value.trim();
+  if (!name) return;
+  state.voters.push({ id: id(), name, vote: null });
+  $('newVoter').value = '';
+  renderVoters(); saveState();
+}
+
+function removeVoter(vid) {
+  state.voters = state.voters.filter(v => v.id !== vid);
+  if (state.activeVoter === vid) state.activeVoter = null;
+  renderVoters(); render(); saveState();
+}
+
+function selectVoter(vid) {
+  state.activeVoter = vid;
+  renderVoters(); updateDeckHighlight(); saveState();
+}
+
+function castVote(v) {
+  if (!state.activeVoter && state.voters.length) state.activeVoter = state.voters[0].id;
+  const voter = state.voters.find(x => x.id === state.activeVoter);
+  if (!voter) return;
+  voter.vote = voter.vote === v ? null : v;
+  renderVoters(); updateDeckHighlight(); render(); saveState();
+}
+
+function clearVotes() {
+  state.voters.forEach(v => v.vote = null);
+  state.revealed = false;
+  $('revealBtn').textContent = 'Reveal votes';
+  renderVoters(); render(); saveState();
+}
+
+function toggleReveal() {
+  state.revealed = !state.revealed;
+  $('revealBtn').textContent = state.revealed ? 'Hide votes' : 'Reveal votes';
+  renderVoters(); render(); saveState();
+}
+
+function renderVoters() {
+  const c = $('voters'); c.innerHTML = '';
+  for (const v of state.voters) {
+    const row = document.createElement('div');
+    row.className = 'voter-row';
+    const isActive = state.activeVoter === v.id;
+    row.innerHTML = `
+      <input type="radio" name="active" ${isActive ? 'checked' : ''} onchange="selectVoter('${v.id}')">
+      <input type="text" value="${escapeHtml(v.name)}" oninput="renameVoter('${v.id}', this.value)">
+      <span class="vote ${(!state.revealed && v.vote) ? 'hidden' : ''}">${v.vote == null ? '—' : (state.revealed ? v.vote : '••')}</span>
+      <button onclick="removeVoter('${v.id}')">×</button>`;
+    c.appendChild(row);
+  }
+}
+
+function renameVoter(vid, name) {
+  const v = state.voters.find(x => x.id === vid);
+  if (v) { v.name = name; saveState(); }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function render() {
+  if (!state.revealed) {
+    $('results').innerHTML = '<div class="empty">Cast some votes and click <em>Reveal</em>.</div>';
+    $('verdict').style.display = 'none';
+    $('histogram').style.display = 'none';
+    return;
+  }
+  const votes = state.voters.map(v => v.vote).filter(v => v != null);
+  const nums = votes.map(numeric).filter(n => n != null);
+  if (votes.length === 0) {
+    $('results').innerHTML = '<div class="empty">No votes cast yet.</div>';
+    $('verdict').style.display = 'none';
+    $('histogram').style.display = 'none';
+    return;
+  }
+
+  const sorted = nums.slice().sort((a,b) => a-b);
+  const median = sorted.length === 0 ? null : sorted.length % 2 ? sorted[(sorted.length-1)/2] : (sorted[sorted.length/2 - 1] + sorted[sorted.length/2]) / 2;
+  const mean = nums.length === 0 ? null : nums.reduce((a,b)=>a+b,0) / nums.length;
+  const min = sorted[0], max = sorted[sorted.length - 1];
+  const spread = (min != null && max != null) ? max - min : null;
+  const counts = {};
+  for (const v of votes) counts[v] = (counts[v] || 0) + 1;
+  const sortedCounts = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+  const mode = sortedCounts[0] ? sortedCounts[0][0] : '—';
+  const modeFrac = sortedCounts[0] ? sortedCounts[0][1] / votes.length : 0;
+  const specials = votes.filter(v => numeric(v) == null);
+
+  const closestCard = pickClosestCard(median);
+
+  $('results').innerHTML = [
+    statTile('Votes cast', votes.length + ' / ' + state.voters.length),
+    statTile('Median', median == null ? '—' : fmtNum(median)),
+    statTile('Mean', mean == null ? '—' : fmtNum(mean)),
+    statTile('Mode', mode + (sortedCounts[0] && sortedCounts[0][1] > 1 ? ' (×' + sortedCounts[0][1] + ')' : '')),
+    statTile('Spread', spread == null ? '—' : (min + ' → ' + max)),
+    statTile('Specials', specials.length ? specials.join(' ') : '—'),
+    statTile('Suggested', closestCard),
+  ].join('');
+  $('results').innerHTML = '<div class="stats">' + $('results').innerHTML + '</div>';
+
+  renderHistogram(counts);
+  renderVerdict({ votes, nums, median, mean, modeFrac, spread, specials });
+}
+
+function statTile(label, value) {
+  return `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+
+function fmtNum(n) { return n.toFixed(2).replace(/\.00$/, ''); }
+
+function pickClosestCard(median) {
+  if (median == null) return '—';
+  const deck = DECKS[state.deckType].map(c => ({ label: c, n: numeric(c) })).filter(x => x.n != null);
+  if (deck.length === 0) return '—';
+  let best = deck[0], bestDist = Math.abs(deck[0].n - median);
+  for (const c of deck) {
+    const d = Math.abs(c.n - median);
+    if (d < bestDist || (d === bestDist && c.n > best.n)) { best = c; bestDist = d; }
+  }
+  return best.label;
+}
+
+function renderHistogram(counts) {
+  const order = deckValues();
+  const max = Math.max(...Object.values(counts));
+  const h = $('histogram'); h.innerHTML = '';
+  h.style.display = '';
+  for (const label of order) {
+    if (!counts[label]) continue;
+    const bar = document.createElement('div');
+    const consensus = counts[label] >= Math.ceil(state.voters.length * 0.6);
+    bar.className = 'bar' + (consensus ? ' consensus' : '');
+    const h$ = (counts[label] / max) * 90 + 'px';
+    bar.innerHTML = `<div class="col" style="height:${h$}"></div><div class="lbl">${label}</div><div class="cnt">${counts[label]}</div>`;
+    h.appendChild(bar);
+  }
+}
+
+function renderVerdict({ votes, nums, median, mean, modeFrac, spread, specials }) {
+  const v = $('verdict');
+  if (specials.includes('☕')) { v.className = 'verdict warn'; v.textContent = '☕ break requested — pause and resume later.'; v.style.display=''; return; }
+  if (specials.includes('∞')) { v.className = 'verdict bad'; v.textContent = '∞ vote present — at least one voter thinks this story is too big and should be split.'; v.style.display=''; return; }
+  if (specials.filter(s => s === '?').length >= Math.ceil(votes.length / 2)) {
+    v.className = 'verdict warn'; v.textContent = 'Half or more voters used ?, the story needs more clarification before estimation.'; v.style.display=''; return;
+  }
+  if (nums.length < 2) {
+    v.className = 'verdict warn'; v.textContent = 'Not enough numeric votes to gauge consensus.'; v.style.display=''; return;
+  }
+  if (modeFrac >= 0.8) { v.className = 'verdict good'; v.textContent = 'Strong consensus — ' + Math.round(modeFrac*100) + '% picked the same card. Lock it.'; }
+  else if (spread != null && median != null && spread <= Math.max(median * 0.5, 1)) { v.className = 'verdict good'; v.textContent = 'Tight cluster — votes are within one or two deck steps of each other.'; }
+  else if (spread != null && median != null && spread <= median) { v.className = 'verdict warn'; v.textContent = 'Moderate spread — quick discussion before re-voting recommended.'; }
+  else { v.className = 'verdict bad'; v.textContent = 'Wide spread — the team disagrees on scope. Have the lowest and highest voters explain their thinking, then re-vote.'; }
+  v.style.display = '';
+}
+
+function lockStory() {
+  if (!state.revealed) { alert('Reveal votes first.'); return; }
+  const nums = state.voters.map(v => numeric(v.vote)).filter(n => n != null);
+  if (nums.length === 0) { alert('No numeric votes to lock.'); return; }
+  const sorted = nums.slice().sort((a,b) => a-b);
+  const median = sorted.length % 2 ? sorted[(sorted.length-1)/2] : (sorted[sorted.length/2 - 1] + sorted[sorted.length/2]) / 2;
+  const suggested = pickClosestCard(median);
+  state.locked.push({
+    id: id(),
+    title: $('storyTitle').value || 'Untitled story',
+    points: suggested,
+    median,
+    votes: state.voters.map(v => ({ name: v.name, vote: v.vote })),
+    at: new Date().toISOString(),
+  });
+  state.voters.forEach(v => v.vote = null);
+  state.revealed = false;
+  $('storyTitle').value = '';
+  $('revealBtn').textContent = 'Reveal votes';
+  renderVoters(); render(); renderStories(); saveState();
+}
+
+function unlock(sid) {
+  state.locked = state.locked.filter(s => s.id !== sid);
+  renderStories(); saveState();
+}
+
+function renderStories() {
+  const c = $('stories');
+  if (state.locked.length === 0) { c.innerHTML = '<div class="empty">No stories locked yet.</div>'; return; }
+  c.innerHTML = '';
+  let total = 0;
+  for (const s of state.locked) {
+    const n = numeric(s.points); if (n != null) total += n;
+    const card = document.createElement('div');
+    card.className = 'story-card';
+    card.innerHTML = `<span class="pts">${s.points}</span><span>${escapeHtml(s.title)}</span><span class="x" onclick="unlock('${s.id}')">×</span>`;
+    c.appendChild(card);
+  }
+  const totalTile = document.createElement('div');
+  totalTile.className = 'story-card';
+  totalTile.style.background = 'var(--bg)';
+  totalTile.innerHTML = `<strong>Total: ${total}</strong>`;
+  c.appendChild(totalTile);
+}
+
+function copySummary() {
+  if (state.locked.length === 0) return;
+  let total = 0;
+  const lines = ['| Story | Points | Median | Votes |', '|---|---|---|---|'];
+  for (const s of state.locked) {
+    const n = numeric(s.points); if (n != null) total += n;
+    const votes = s.votes.map(v => `${v.name}: ${v.vote == null ? '—' : v.vote}`).join(', ');
+    lines.push(`| ${s.title.replace(/\|/g, '\\|')} | ${s.points} | ${s.median} | ${votes} |`);
+  }
+  lines.push('', `**Total: ${total} points across ${state.locked.length} stories**`);
+  const text = lines.join('\n');
+  $('copyOut').textContent = text;
+  $('copyOut').style.display = '';
+  if (navigator.clipboard) navigator.clipboard.writeText(text).catch(()=>{});
+}
+
+function resetAll() {
+  if (!confirm('Wipe all voters and locked stories?')) return;
+  state = freshState();
+  $('storyTitle').value = '';
+  $('copyOut').style.display = 'none';
+  renderDeck(); renderVoters(); render(); renderStories(); saveState();
+}
+
+// Init
+$('deckType').value = state.deckType;
+$('allowSpecial').checked = state.allowSpecial;
+$('storyTitle').value = state.storyTitle || '';
+if (!state.activeVoter && state.voters.length) state.activeVoter = state.voters[0].id;
+renderDeck(); renderVoters(); render(); renderStories();
+</script>
+</body>
+</html>

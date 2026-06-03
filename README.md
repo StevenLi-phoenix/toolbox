@@ -43,6 +43,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Tailwind Class Sorter](tailwindsort.html) | Reorder messy Tailwind utility classes into the canonical `prettier-plugin-tailwindcss` order — layout, spacing, typography, background, border, effects, then variants — with dedupe, character-count delta, and inline rewriting of every `class="…"` in an HTML / JSX snippet. |
 | [CSS Multi-Column Layout Builder](csscolumns.html) | Build magazine-style multi-column layouts with live preview — pick `column-count` or `column-width`, set `column-gap`, `column-rule`, `column-fill`, toggle `column-span: all` headings, and lock items together with `break-inside: avoid`. Copy-ready CSS plus a news-layout recipe that never strands an orphan heading. |
 | [CSS scrollbar-gutter Playground](scrollbargutter.html) | See exactly how `scrollbar-gutter: auto` vs `stable` vs `stable both-edges` changes layout at the moment the scrollbar appears — toggle content length to watch the shift (or not), pair with `scrollbar-width` & `overflow-y`, and copy the recipe that stops the page from jumping when a modal opens. |
 | [CSS @supports Builder](csssupports.html) | Compose CSS feature queries clause by clause — combine property tests with `and` / `or` / `not`, test `selector(:has())`, `font-tech()`, `font-format()`, see live whether your browser passes each clause via `CSS.supports()`, and copy a clean rule with presets for `:has`, subgrid, anchor positioning, view transitions, `color-mix`, OKLCH, and more. |
@@ -310,6 +311,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [SaaS Metrics Calculator](saasmetrics.html) | Plug in customers, ARPU, gross margin, churn, expansion, and CAC — get the full unit-economics scorecard: MRR, ARR, NRR, customer LTV (simple & discounted), CAC payback, LTV:CAC ratio, quick ratio, and burn multiple with rule-of-thumb verdicts. |
+| [Planning Poker](planningpoker.html) | Async story-point estimator for distributed teams — Fibonacci / modified-Fibonacci / T-shirt / power-of-two decks, hidden votes per voter, reveal-together flow, median & mode & spread, consensus verdict, and a locked-stories backlog with copy-ready Markdown summary. |
 | [5 Whys Root Cause Analyzer](fivewhys.html) | Drill from the symptom of an incident, bug, or process failure to the underlying root cause — guided why chain, corrective-action list, common pitfalls, and copy-ready Markdown for your postmortem. |
 | [Changelog Bullet Generator](changelog.html) | Turn commit notes into polished release notes. |
 | [Commit Message Generator](commitmsg.html) | Build Conventional Commit messages from context. |
