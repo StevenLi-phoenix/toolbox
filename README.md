@@ -128,6 +128,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Word Cloud Generator](wordcloud.html) | Build a word cloud from any text — adjustable stopwords, min length and frequency, rotation, color schemes, fonts, and a seeded spiral layout. Live frequency table on the side, export the cloud as SVG or PNG. |
 | [Line Ending Converter](lineending.html) | Convert text between CRLF (Windows), LF (Unix / macOS), and CR (classic Mac) — visualize hidden newline bytes, detect mixed endings, strip trailing whitespace, and download with the right encoding. |
 | [Slack mrkdwn Preview](slackpreview.html) | Render Slack-flavored *mrkdwn* exactly like a Slack thread — single-asterisk bold, underscore italics, tilde strikethrough, `<url\|label>` links, user / channel / subteam mentions, `:emoji:` shortcodes, and message-cap warnings. |
 | [Emoji ZWJ Sequence Builder](emojizwj.html) | Combine emoji with the Zero-Width Joiner (`U+200D`) — family combos, professions, gendered and skin-tone modifiers, with codepoints, UTF-8 bytes, and JS / HTML escapes. |
@@ -311,6 +312,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [RACI Matrix Builder](raci.html) | Build a RACI / RASCI responsibility matrix for tasks and stakeholders — assign Responsible, Accountable, Consulted, Informed (and optional Support), validate that every row has exactly one Accountable, flag overloaded owners, and export as Markdown, CSV, HTML, or JSON. |
+| [ADR Generator](adr.html) | Write Architecture Decision Records in MADR, Nygard, or full template format — capture context, decision drivers, options with pros & cons, the chosen path, positive and negative consequences, and references. Live Markdown preview and `NNNN-slug.md` download. |
 | [SaaS Metrics Calculator](saasmetrics.html) | Plug in customers, ARPU, gross margin, churn, expansion, and CAC — get the full unit-economics scorecard: MRR, ARR, NRR, customer LTV (simple & discounted), CAC payback, LTV:CAC ratio, quick ratio, and burn multiple with rule-of-thumb verdicts. |
 | [Planning Poker](planningpoker.html) | Async story-point estimator for distributed teams — Fibonacci / modified-Fibonacci / T-shirt / power-of-two decks, hidden votes per voter, reveal-together flow, median & mode & spread, consensus verdict, and a locked-stories backlog with copy-ready Markdown summary. |
 | [5 Whys Root Cause Analyzer](fivewhys.html) | Drill from the symptom of an incident, bug, or process failure to the underlying root cause — guided why chain, corrective-action list, common pitfalls, and copy-ready Markdown for your postmortem. |

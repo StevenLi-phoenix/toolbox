@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Word Cloud Generator — Free Online Tool</title>
+<meta name="description" content="Generate beautiful word clouds from any text — adjustable stopword filtering, min frequency, color schemes, font, rotation, and shape. Export as SVG or PNG.">
+<meta name="keywords" content="word cloud generator, tag cloud, text visualization, word frequency, svg word cloud, text analysis">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/wordcloud.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout { display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px; }
+  textarea {
+    width: 100%; min-height: 220px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .88rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .control { display: flex; flex-direction: column; gap: 4px; }
+  .control label {
+    font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+  }
+  .control input[type="number"], .control input[type="text"], .control select {
+    padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg);
+    color: var(--text); font-size: .85rem; box-sizing: border-box; width: 100%;
+  }
+  .control input[type="range"] { width: 100%; }
+  .range-row { display: flex; align-items: center; gap: 8px; font-size: .82rem; }
+  .range-row strong { font-family: var(--mono); color: var(--text); min-width: 36px; text-align: right; }
+  .checks { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: .82rem; }
+  .checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .cloud-box {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 8px; overflow: hidden;
+    aspect-ratio: 16/10; min-height: 380px; position: relative;
+  }
+  .cloud-box svg { width: 100%; height: 100%; display: block; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .toolbar button {
+    padding: 7px 14px; background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    cursor: pointer; font-size: .85rem;
+  }
+  .toolbar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .toolbar button:hover { background: var(--bg); }
+  .stats {
+    display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px;
+    font-size: .82rem; color: var(--muted);
+  }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+  .freq-table {
+    max-height: 280px; overflow-y: auto; margin-top: 10px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .freq-table table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  .freq-table th, .freq-table td {
+    padding: 5px 10px; text-align: left; border-bottom: 1px solid var(--border);
+  }
+  .freq-table th {
+    position: sticky; top: 0; background: var(--surface2);
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+  }
+  .freq-table td.count {
+    text-align: right; font-family: var(--mono); color: var(--muted);
+  }
+  .freq-table td.bar {
+    width: 40%; padding: 0 10px;
+  }
+  .bar-inner {
+    height: 8px; background: var(--accent); border-radius: 4px; min-width: 2px;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .controls { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Word Cloud Generator</h1>
+<p class="subtitle">Paste any text and generate a word cloud where the most frequent words appear largest. Tune stopword filtering, minimum frequency, color scheme, font, and rotation. Export the result as <strong>SVG</strong> (vector) or <strong>PNG</strong> (raster) — all generated in your browser using a deterministic spiral-placement layout.</p>
+
+<div class="layout">
+  <div>
+    <div class="card">
+      <h2>Input text</h2>
+      <textarea id="input" placeholder="Paste a paragraph, an article, a transcript, or any text…" spellcheck="false"></textarea>
+      <div class="toolbar">
+        <button onclick="loadSample('lincoln')">Gettysburg</button>
+        <button onclick="loadSample('frost')">R. Frost</button>
+        <button onclick="loadSample('lorem')">Lorem</button>
+        <button onclick="$('input').value=''; render()">Clear</button>
+      </div>
+
+      <div class="controls">
+        <div class="control">
+          <label for="maxWords">Max words</label>
+          <div class="range-row">
+            <input type="range" id="maxWords" min="10" max="200" value="80" oninput="updateLabel('maxWords'); render()">
+            <strong id="maxWordsVal">80</strong>
+          </div>
+        </div>
+        <div class="control">
+          <label for="minLen">Min length</label>
+          <div class="range-row">
+            <input type="range" id="minLen" min="1" max="8" value="3" oninput="updateLabel('minLen'); render()">
+            <strong id="minLenVal">3</strong>
+          </div>
+        </div>
+        <div class="control">
+          <label for="minFreq">Min freq</label>
+          <div class="range-row">
+            <input type="range" id="minFreq" min="1" max="10" value="2" oninput="updateLabel('minFreq'); render()">
+            <strong id="minFreqVal">2</strong>
+          </div>
+        </div>
+        <div class="control">
+          <label for="rotate">Rotation</label>
+          <select id="rotate" onchange="render()">
+            <option value="none">No rotation</option>
+            <option value="random" selected>Random ±60°</option>
+            <option value="vertical">Horizontal + vertical</option>
+            <option value="diagonal">Diagonal mix</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="scheme">Color scheme</label>
+          <select id="scheme" onchange="render()">
+            <option value="warm">Warm (red→yellow)</option>
+            <option value="cool" selected>Cool (blue→teal)</option>
+            <option value="rainbow">Rainbow</option>
+            <option value="mono">Monochrome</option>
+            <option value="contrast">High contrast</option>
+            <option value="pastel">Pastel</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="font">Font family</label>
+          <select id="font" onchange="render()">
+            <option value="ui-sans-serif, system-ui, -apple-system, Arial, sans-serif" selected>Sans-serif</option>
+            <option value="Georgia, 'Times New Roman', serif">Serif</option>
+            <option value="ui-monospace, 'SF Mono', Menlo, monospace">Monospace</option>
+            <option value="'Comic Sans MS', cursive">Comic</option>
+            <option value="Impact, 'Arial Black', sans-serif">Impact</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="seed">Seed (for layout)</label>
+          <input type="number" id="seed" value="42" oninput="render()">
+        </div>
+        <div class="control">
+          <label for="bg">Background</label>
+          <input type="text" id="bg" value="#0f1419" oninput="render()" placeholder="#fff or transparent">
+        </div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="stopwords" checked onchange="render()"> Remove English stopwords</label>
+        <label><input type="checkbox" id="lowercase" checked onchange="render()"> Lowercase</label>
+        <label><input type="checkbox" id="stripDigits" onchange="render()"> Strip pure numbers</label>
+      </div>
+      <div class="control" style="margin-top:10px;">
+        <label for="extraStop">Extra stopwords (comma-separated)</label>
+        <input type="text" id="extraStop" placeholder="e.g. www, http, said" oninput="render()">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Top words</h2>
+      <div id="freqTable" class="freq-table"></div>
+      <div class="stats">
+        <span>tokens: <strong id="statTokens">0</strong></span>
+        <span>unique: <strong id="statUnique">0</strong></span>
+        <span>cloud words: <strong id="statCloud">0</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Word cloud</h2>
+      <div class="cloud-box" id="cloudBox"></div>
+      <div class="toolbar">
+        <button onclick="render()" class="primary">↻ Regenerate layout</button>
+        <button onclick="downloadSvg()">Download SVG</button>
+        <button onclick="downloadPng()">Download PNG</button>
+        <button onclick="copySvg()">Copy SVG</button>
+        <span id="copyStatus" style="align-self:center;font-size:.82rem;color:var(--muted)"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About word clouds</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.7">
+    Word clouds (also called tag clouds) visualize text by drawing each word at a size proportional to its frequency, after stripping common <em>stopwords</em> like "the", "and", "of". They give a quick visual sense of what a document emphasizes, though they're famously imprecise — long words look bigger than short ones at the same count, and color often carries no meaning. They work best as a hook in a presentation or a quick first-pass scan of survey responses, retro notes, or customer feedback. The classic placement algorithm (Wordle's Archimedean spiral) tries to fit each word starting from the centre, spiralling outward until it finds a non-overlapping spot. This tool uses the same approach with deterministic seeding so the same input and seed always produce the same layout. For serious analysis, prefer the frequency table on the left — it's the same data without the visual distortion.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const STOPWORDS = new Set('a about above after again against all am an and any are as at be because been before being below between both but by could did do does doing down during each few for from further had has have having he her here hers herself him himself his how i if in into is it its itself just me more most my myself no nor not now of off on once only or other our ours ourselves out over own same she should so some such than that the their theirs them themselves then there these they this those through to too under until up very was we were what when where which while who whom why will with you your yours yourself yourselves would should can cannot could may might must shall doesn don isn aren wasn weren hasn haven hadn won wouldn shouldn couldn mustn needn shan didn it\'s i\'m i\'ve i\'ll he\'s she\'s we\'re they\'re you\'re that\'s'.split(/\s+/));
+
+const SAMPLES = {
+  lincoln: 'Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal. Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure. We are met on a great battle-field of that war. We have come to dedicate a portion of that field, as a final resting place for those who here gave their lives that that nation might live. It is altogether fitting and proper that we should do this. But, in a larger sense, we can not dedicate -- we can not consecrate -- we can not hallow -- this ground. The brave men, living and dead, who struggled here, have consecrated it, far above our poor power to add or detract. The world will little note, nor long remember what we say here, but it can never forget what they did here. It is for us the living, rather, to be dedicated here to the unfinished work which they who fought here have thus far so nobly advanced. It is rather for us to be here dedicated to the great task remaining before us -- that from these honored dead we take increased devotion to that cause for which they gave the last full measure of devotion -- that we here highly resolve that these dead shall not have died in vain -- that this nation, under God, shall have a new birth of freedom -- and that government of the people, by the people, for the people, shall not perish from the earth.',
+  frost: 'Whose woods these are I think I know. His house is in the village though; He will not see me stopping here To watch his woods fill up with snow. My little horse must think it queer To stop without a farmhouse near Between the woods and frozen lake The darkest evening of the year. He gives his harness bells a shake To ask if there is some mistake. The only other sound\'s the sweep Of easy wind and downy flake. The woods are lovely, dark and deep, But I have promises to keep, And miles to go before I sleep, And miles to go before I sleep.',
+  lorem: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.'
+};
+
+function loadSample(key) {
+  $('input').value = SAMPLES[key] || '';
+  render();
+}
+
+function updateLabel(id) { $(id + 'Val').textContent = $(id).value; }
+
+// Seeded PRNG (mulberry32)
+function mulberry32(seed) {
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function tokenize(text) {
+  const lower = $('lowercase').checked;
+  const stripD = $('stripDigits').checked;
+  const useStop = $('stopwords').checked;
+  const extra = new Set($('extraStop').value.split(/[,\s]+/).map(w => w.trim().toLowerCase()).filter(Boolean));
+  const minLen = +$('minLen').value;
+  const t = (lower ? text.toLowerCase() : text);
+  const tokens = t.match(/[\p{L}][\p{L}\p{N}'-]*/gu) || [];
+  return tokens.filter(w => {
+    const wl = w.toLowerCase();
+    if (w.length < minLen) return false;
+    if (stripD && /^\d+$/.test(w)) return false;
+    if (useStop && STOPWORDS.has(wl)) return false;
+    if (extra.has(wl)) return false;
+    return true;
+  });
+}
+
+function frequency(tokens) {
+  const map = new Map();
+  for (const t of tokens) map.set(t, (map.get(t) || 0) + 1);
+  return map;
+}
+
+function getColor(scheme, t, rng) {
+  // t in [0,1]
+  if (scheme === 'warm') {
+    const h = 0 + t * 60;
+    return `hsl(${h}, 80%, 55%)`;
+  }
+  if (scheme === 'cool') {
+    const h = 180 + t * 60;
+    return `hsl(${h}, 70%, 60%)`;
+  }
+  if (scheme === 'rainbow') {
+    return `hsl(${(t * 360) | 0}, 70%, 60%)`;
+  }
+  if (scheme === 'mono') {
+    const l = 40 + t * 45;
+    return `hsl(0, 0%, ${l}%)`;
+  }
+  if (scheme === 'pastel') {
+    return `hsl(${(rng() * 360) | 0}, 60%, 75%)`;
+  }
+  // contrast
+  const palette = ['#e63946','#f1c453','#2a9d8f','#264653','#e76f51','#06d6a0','#118ab2','#ef476f','#ffd166','#073b4c'];
+  return palette[(rng() * palette.length) | 0];
+}
+
+function getRotation(mode, rng) {
+  if (mode === 'none') return 0;
+  if (mode === 'vertical') return rng() < 0.3 ? 90 : 0;
+  if (mode === 'diagonal') {
+    const opts = [-45, 0, 0, 0, 45];
+    return opts[(rng() * opts.length) | 0];
+  }
+  // random
+  return (rng() - 0.5) * 120;
+}
+
+// Rect intersection
+function rectsOverlap(a, b) {
+  return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
+}
+
+function placeWords(words, w, h, rng) {
+  const placed = [];
+  const cx = w / 2, cy = h / 2;
+  const measure = document.createElement('canvas').getContext('2d');
+  const font = $('font').value;
+  const rotMode = $('rotate').value;
+
+  // Sort by count desc
+  words.sort((a, b) => b.count - a.count);
+  const maxCount = words[0]?.count || 1;
+  const minCount = words[words.length - 1]?.count || 1;
+  const scale = (c) => {
+    if (maxCount === minCount) return 36;
+    const t = (c - minCount) / (maxCount - minCount);
+    return Math.round(14 + t * 70);
+  };
+
+  for (let idx = 0; idx < words.length; idx++) {
+    const wObj = words[idx];
+    const fontSize = scale(wObj.count);
+    measure.font = `700 ${fontSize}px ${font}`;
+    const metrics = measure.measureText(wObj.word);
+    const tw = metrics.width;
+    const th = fontSize * 1.05;
+    const rot = getRotation(rotMode, rng);
+    // axis-aligned bounding box approximation for rotated
+    const rad = Math.abs(rot * Math.PI / 180);
+    const bw = Math.abs(tw * Math.cos(rad)) + Math.abs(th * Math.sin(rad));
+    const bh = Math.abs(tw * Math.sin(rad)) + Math.abs(th * Math.cos(rad));
+
+    // Spiral search
+    let placedRect = null;
+    const step = 4;
+    const maxR = Math.hypot(w, h);
+    let angle = 0;
+    let r = 0;
+    while (r < maxR) {
+      const x = cx + r * Math.cos(angle) - bw / 2;
+      const y = cy + r * Math.sin(angle) - bh / 2;
+      const rect = { x, y, w: bw, h: bh };
+      if (x >= 4 && y >= 4 && x + bw <= w - 4 && y + bh <= h - 4) {
+        let ok = true;
+        for (const p of placed) { if (rectsOverlap(rect, p.rect)) { ok = false; break; } }
+        if (ok) { placedRect = rect; break; }
+      }
+      angle += 0.18;
+      r = step * angle / (2 * Math.PI);
+    }
+    if (!placedRect) continue;
+    const color = getColor($('scheme').value, idx / Math.max(1, words.length - 1), rng);
+    placed.push({ ...wObj, fontSize, rot, color, rect: placedRect, tw, th });
+  }
+  return placed;
+}
+
+function buildSvg(placed, w, h) {
+  const bg = $('bg').value.trim() || 'transparent';
+  const font = $('font').value;
+  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" font-family="${escapeAttr(font)}">`];
+  if (bg !== 'transparent' && bg !== 'none') {
+    parts.push(`<rect width="100%" height="100%" fill="${escapeAttr(bg)}"/>`);
+  }
+  for (const p of placed) {
+    const cx = p.rect.x + p.rect.w / 2;
+    const cy = p.rect.y + p.rect.h / 2;
+    parts.push(`<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" font-size="${p.fontSize}" font-weight="700" fill="${p.color}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${p.rot.toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})">${escapeHtml(p.word)}</text>`);
+  }
+  parts.push('</svg>');
+  return parts.join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+function escapeAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/&/g, '&amp;'); }
+
+let currentSvg = '';
+let currentWidth = 800, currentHeight = 500;
+
+function render() {
+  const text = $('input').value;
+  const tokens = tokenize(text);
+  const freq = frequency(tokens);
+  const minFreq = +$('minFreq').value;
+  const max = +$('maxWords').value;
+  const arr = Array.from(freq.entries())
+    .map(([word, count]) => ({ word, count }))
+    .filter(o => o.count >= minFreq)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, max);
+
+  // Stats
+  $('statTokens').textContent = tokens.length;
+  $('statUnique').textContent = freq.size;
+  $('statCloud').textContent = arr.length;
+
+  // Frequency table
+  const top = arr.slice(0, 30);
+  const maxC = top[0]?.count || 1;
+  $('freqTable').innerHTML = top.length === 0
+    ? '<div style="padding:20px;text-align:center;color:var(--muted);font-size:.85rem">No words to show — try lowering the min frequency or pasting more text.</div>'
+    : '<table><thead><tr><th>Word</th><th class="bar"></th><th style="text-align:right">Count</th></tr></thead><tbody>'
+      + top.map(o => `<tr><td>${escapeHtml(o.word)}</td><td class="bar"><div class="bar-inner" style="width:${(o.count / maxC * 100).toFixed(1)}%"></div></td><td class="count">${o.count}</td></tr>`).join('')
+      + '</tbody></table>';
+
+  // Layout
+  const box = $('cloudBox');
+  const rect = box.getBoundingClientRect();
+  currentWidth = Math.max(400, Math.round(rect.width));
+  currentHeight = Math.max(280, Math.round(rect.height));
+  const rng = mulberry32(+$('seed').value || 1);
+  const placed = placeWords(arr.map(o => ({ ...o })), currentWidth, currentHeight, rng);
+  currentSvg = buildSvg(placed, currentWidth, currentHeight);
+  box.innerHTML = currentSvg;
+}
+
+function downloadSvg() {
+  if (!currentSvg) return;
+  const blob = new Blob([currentSvg], { type: 'image/svg+xml' });
+  triggerDownload(blob, 'wordcloud.svg');
+}
+
+function downloadPng() {
+  if (!currentSvg) return;
+  const img = new Image();
+  const blob = new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = currentWidth * 2;
+    canvas.height = currentHeight * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+    const bg = $('bg').value.trim();
+    if (bg && bg !== 'transparent' && bg !== 'none') {
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, currentWidth, currentHeight);
+    }
+    ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(b => triggerDownload(b, 'wordcloud.png'), 'image/png');
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); alert('PNG export failed.'); };
+  img.src = url;
+}
+
+function copySvg() {
+  if (!currentSvg) return;
+  navigator.clipboard.writeText(currentSvg).then(() => {
+    $('copyStatus').textContent = 'SVG copied!';
+    setTimeout(() => $('copyStatus').textContent = '', 2000);
+  });
+}
+
+function triggerDownload(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+window.addEventListener('resize', () => {
+  clearTimeout(window._wcTimer);
+  window._wcTimer = setTimeout(render, 200);
+});
+
+loadSample('lincoln');
+</script>
+</body>
+</html>
