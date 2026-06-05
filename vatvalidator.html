@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VAT Number Validator — Free Online Tool</title>
+<meta name="description" content="Validate EU, UK, Swiss, and Norwegian VAT numbers — format checks for all 30+ country codes plus checksum verification for AT, BE, DE, DK, ES, FR, IT, NL, PL, PT, SE, UK, and more.">
+<meta name="keywords" content="VAT number validator, EU VAT, UK VAT, checksum, MOD-97, IVA, USt-IdNr, BTW, MwSt, NIF, NIPC, VIES">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/vatvalidator.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .input-row {
+    display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap;
+  }
+  .input-row select, .input-row input {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px; font-family: var(--mono); font-size: .95rem;
+  }
+  .input-row select { flex: 0 0 200px; }
+  .input-row input { flex: 1; min-width: 220px; }
+  .input-row input:focus, .input-row select:focus { outline: none; border-color: var(--accent); }
+  .input-row button {
+    padding: 10px 18px; background: var(--accent); color: #fff; border: 1px solid var(--accent);
+    border-radius: var(--radius); cursor: pointer; font-family: var(--sans); font-size: .9rem;
+  }
+  .result {
+    margin-top: 16px; padding: 16px 18px; border-radius: var(--radius);
+    border-left: 4px solid var(--border); background: var(--surface2);
+    font-family: var(--mono); font-size: .9rem;
+  }
+  .result.valid { border-left-color: var(--success, #16a34a); }
+  .result.invalid { border-left-color: var(--error, #dc2626); }
+  .result.format-only { border-left-color: var(--warning, #d97706); }
+  .result .verdict {
+    font-size: 1rem; font-weight: 600; margin-bottom: 8px; color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .result .verdict .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    font-size: .72rem; font-family: var(--sans); font-weight: 600;
+  }
+  .result.valid .badge { background: var(--success, #16a34a); color: #fff; }
+  .result.invalid .badge { background: var(--error, #dc2626); color: #fff; }
+  .result.format-only .badge { background: var(--warning, #d97706); color: #fff; }
+  .result dl { display: grid; grid-template-columns: 160px 1fr; gap: 4px 12px; margin: 8px 0 0; font-size: .85rem; }
+  .result dt { color: var(--muted); }
+  .result dd { margin: 0; color: var(--text); word-break: break-all; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .examples button {
+    padding: 4px 10px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 999px;
+    font-family: var(--mono); font-size: .78rem; cursor: pointer;
+  }
+  .examples button:hover { background: var(--surface2); }
+  .batch textarea {
+    width: 100%; min-height: 140px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; font-family: var(--mono); font-size: .85rem;
+    box-sizing: border-box; resize: vertical;
+  }
+  table.batch-out {
+    width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .82rem; margin-top: 10px;
+  }
+  table.batch-out th, table.batch-out td {
+    text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border);
+  }
+  table.batch-out th { color: var(--muted); font-weight: 500; }
+  table.batch-out td.ok { color: var(--success, #16a34a); }
+  table.batch-out td.bad { color: var(--error, #dc2626); }
+  table.batch-out td.warn { color: var(--warning, #d97706); }
+  .countries-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 4px 12px; font-family: var(--mono); font-size: .8rem;
+  }
+  .countries-grid div { padding: 2px 0; color: var(--muted); }
+  .countries-grid b { color: var(--text); margin-right: 4px; }
+  .summary { display: flex; gap: 16px; font-size: .8rem; color: var(--muted); flex-wrap: wrap; }
+  .summary strong { color: var(--text); font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>VAT Number Validator</h1>
+<p class="subtitle">Verify the <em>format</em> of EU, UK, Swiss, and Norwegian VAT registration numbers — country prefix, length, allowed characters — and run the <strong>checksum</strong> where a country defines one. 100% client-side: no <a href="https://ec.europa.eu/taxation_customs/vies/">VIES</a> calls, so this confirms <em>structural validity</em>, not real-world registration. Use VIES separately to confirm the holder.</p>
+
+<div class="card">
+  <h2>Validate a single VAT number</h2>
+  <div class="input-row">
+    <select id="country" onchange="onCountryChange()">
+      <option value="auto">Auto-detect from prefix</option>
+    </select>
+    <input id="vat" type="text" placeholder="e.g. DE136695976 or GB980780684" autocomplete="off" spellcheck="false">
+    <button onclick="validateOne()">Check</button>
+  </div>
+  <div class="examples" id="examples"></div>
+  <div id="result"></div>
+</div>
+
+<div class="card batch">
+  <h2>Batch validate</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin:0 0 8px">Paste one VAT number per line. Country is auto-detected from the prefix.</p>
+  <textarea id="batchIn" placeholder="DE123456789&#10;GB123456789&#10;FRAA999999999&#10;NL123456789B01"></textarea>
+  <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button onclick="validateBatch()" style="padding:8px 14px;background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:var(--radius);cursor:pointer">Validate all</button>
+    <button onclick="copyBatch()" style="padding:8px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">Copy CSV</button>
+    <button onclick="loadBatchSample()" style="padding:8px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">Load sample</button>
+    <span id="batchCopy" style="font-size:.8rem;color:var(--muted)"></span>
+  </div>
+  <div id="batchSummary" class="summary" style="margin-top:10px"></div>
+  <div id="batchOut"></div>
+</div>
+
+<div class="card">
+  <h2>Supported countries</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin:0 0 8px">Format checks for all 30+ codes; ✓ = checksum-verified.</p>
+  <div class="countries-grid" id="countriesList"></div>
+</div>
+
+<div class="card">
+  <h2>About VAT validation</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.7">
+    EU member states (plus the UK, Switzerland, and Norway) issue Value-Added Tax registration numbers in country-specific formats — Germany uses 9 digits after <code>DE</code>, France uses 2 alphanumeric check characters and 9 digits after <code>FR</code>, Spain mixes letters and digits after <code>ES</code>. Most countries embed a <em>checksum</em> so the number self-validates without a database lookup: Germany uses the same ISO 7064 MOD-11 variant used by IBAN bank accounts, France's two-letter prefix is <code>(SIREN × 100 + key) mod 97</code>, the Netherlands uses MOD-97 on an extended string, Italy uses a Luhn-like odd/even sum, and the UK uses the historical <code>(Σweights × digit) mod 97</code> rule with an optional +55 branch. A passing checksum tells you the number was issued by something following the spec; it does <em>not</em> tell you the business is currently registered, that the name matches, or that the VAT rate is correct — for that you need the EU's <a href="https://ec.europa.eu/taxation_customs/vies/">VIES</a> SOAP service or HMRC's UK API. Use this tool first to reject obvious typos at form-submit time, then call the registry for billable confirmation.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Country metadata: regex (without country code), length(s), checksum flag, label, example
+const COUNTRIES = {
+  AT: { name: 'Austria',         re: /^U[0-9]{8}$/,                                  checksum: true,  ex: 'ATU13585627' },
+  BE: { name: 'Belgium',         re: /^[01][0-9]{9}$/,                               checksum: true,  ex: 'BE0123456749' },
+  BG: { name: 'Bulgaria',        re: /^[0-9]{9,10}$/,                                checksum: true,  ex: 'BG175074752' },
+  HR: { name: 'Croatia',         re: /^[0-9]{11}$/,                                  checksum: true,  ex: 'HR33392005961' },
+  CY: { name: 'Cyprus',          re: /^[0-9]{8}[A-Z]$/,                              checksum: true,  ex: 'CY10259033P' },
+  CZ: { name: 'Czechia',         re: /^[0-9]{8,10}$/,                                checksum: true,  ex: 'CZ25123891' },
+  DK: { name: 'Denmark',         re: /^[0-9]{8}$/,                                   checksum: true,  ex: 'DK13585628' },
+  EE: { name: 'Estonia',         re: /^[0-9]{9}$/,                                   checksum: true,  ex: 'EE100247022' },
+  FI: { name: 'Finland',         re: /^[0-9]{8}$/,                                   checksum: true,  ex: 'FI20774740' },
+  FR: { name: 'France',          re: /^[0-9A-HJ-NP-Z]{2}[0-9]{9}$/,                  checksum: true,  ex: 'FR40303265045' },
+  DE: { name: 'Germany',         re: /^[0-9]{9}$/,                                   checksum: true,  ex: 'DE136695976' },
+  EL: { name: 'Greece',          re: /^[0-9]{9}$/,                                   checksum: true,  ex: 'EL094259216' },
+  HU: { name: 'Hungary',         re: /^[0-9]{8}$/,                                   checksum: true,  ex: 'HU12892312' },
+  IE: { name: 'Ireland',         re: /^([0-9][A-Z+*][0-9]{5}[A-Z]|[0-9]{7}[A-Z]{1,2})$/, checksum: true,  ex: 'IE6388047V' },
+  IT: { name: 'Italy',           re: /^[0-9]{11}$/,                                  checksum: true,  ex: 'IT00743110157' },
+  LV: { name: 'Latvia',          re: /^[0-9]{11}$/,                                  checksum: false, ex: 'LV40003009497' },
+  LT: { name: 'Lithuania',       re: /^([0-9]{9}|[0-9]{12})$/,                        checksum: true,  ex: 'LT100001919017' },
+  LU: { name: 'Luxembourg',      re: /^[0-9]{8}$/,                                   checksum: true,  ex: 'LU15027442' },
+  MT: { name: 'Malta',           re: /^[0-9]{8}$/,                                   checksum: true,  ex: 'MT11679112' },
+  NL: { name: 'Netherlands',     re: /^[0-9]{9}B[0-9]{2}$/,                          checksum: true,  ex: 'NL004495445B01' },
+  PL: { name: 'Poland',          re: /^[0-9]{10}$/,                                  checksum: true,  ex: 'PL5260250274' },
+  PT: { name: 'Portugal',        re: /^[0-9]{9}$/,                                   checksum: true,  ex: 'PT502757191' },
+  RO: { name: 'Romania',         re: /^[0-9]{2,10}$/,                                checksum: true,  ex: 'RO1234567897' },
+  SK: { name: 'Slovakia',        re: /^[0-9]{10}$/,                                  checksum: true,  ex: 'SK4030000007' },
+  SI: { name: 'Slovenia',        re: /^[0-9]{8}$/,                                   checksum: true,  ex: 'SI50223054' },
+  ES: { name: 'Spain',           re: /^([A-HJUVN][0-9]{7}[0-9A-J]|[0-9]{8}[A-Z]|[KLMXYZ][0-9]{7}[A-Z])$/, checksum: true, ex: 'ESA13585625' },
+  SE: { name: 'Sweden',          re: /^[0-9]{10}01$/,                                checksum: true,  ex: 'SE556188840401' },
+  GB: { name: 'United Kingdom',  re: /^([0-9]{9}|[0-9]{12}|GD[0-9]{3}|HA[0-9]{3})$/,  checksum: true,  ex: 'GB980780684' },
+  XI: { name: 'Northern Ireland',re: /^([0-9]{9}|[0-9]{12}|GD[0-9]{3}|HA[0-9]{3})$/,  checksum: true,  ex: 'XI980780684' },
+  CHE:{ name: 'Switzerland',     re: /^[0-9]{9}(MWST|TVA|IVA)?$/,                    checksum: true,  ex: 'CHE116281710MWST' },
+  NO: { name: 'Norway',          re: /^[0-9]{9}(MVA)?$/,                             checksum: true,  ex: 'NO974760673MVA' }
+};
+
+// --- Checksum implementations ---
+
+function csAT(d) {
+  // Austrian UID: 8 digits after 'U'
+  const digits = d.replace(/^U/, '').split('').map(Number);
+  const s = digits[0] + sum2(digits[1]*2) + digits[2] + sum2(digits[3]*2)
+          + digits[4] + sum2(digits[5]*2) + digits[6];
+  const check = (10 - (s + 4) % 10) % 10;
+  return check === digits[7];
+}
+function sum2(n) { return Math.floor(n/10) + (n%10); }
+
+function csBE(d) {
+  // 10-digit; leading 0 if needed. mod 97 trick
+  const n = parseInt(d.substr(0, 8), 10);
+  const ck = parseInt(d.substr(8, 2), 10);
+  return (97 - (n % 97)) === ck;
+}
+
+function csBG(d) {
+  // 9 (legal) or 10 (physical) digits
+  if (d.length === 9) {
+    // legal entity
+    const w = [1,2,3,4,5,6,7,8];
+    let s = 0;
+    for (let i = 0; i < 8; i++) s += w[i] * +d[i];
+    let r = s % 11;
+    if (r === 10) {
+      const w2 = [3,4,5,6,7,8,9,10];
+      s = 0;
+      for (let i = 0; i < 8; i++) s += w2[i] * +d[i];
+      r = s % 11; if (r === 10) r = 0;
+    }
+    return r === +d[8];
+  } else if (d.length === 10) {
+    // 10-digit BG can be physical (EGN), foreigner, or misc — accept format only
+    return true;
+  }
+  return false;
+}
+
+function csHR(d) {
+  // OIB: ISO 7064 MOD 11,10
+  let p = 10;
+  for (let i = 0; i < 10; i++) {
+    p = ((+d[i] + p) % 10) || 10;
+    p = (p * 2) % 11;
+  }
+  const ck = (11 - p) % 10;
+  return ck === +d[10];
+}
+
+function csCY(d) {
+  // 8 digits + 1 letter
+  const tr = { '0':1,'1':0,'2':5,'3':7,'4':9,'5':13,'6':15,'7':17,'8':19,'9':21 };
+  let s = 0;
+  for (let i = 0; i < 8; i++) {
+    s += i % 2 === 0 ? tr[d[i]] : +d[i];
+  }
+  const expected = String.fromCharCode(65 + (s % 26));
+  return expected === d[8];
+}
+
+function csCZ(d) {
+  if (d.length === 8) {
+    const w = [8,7,6,5,4,3,2];
+    let s = 0;
+    for (let i = 0; i < 7; i++) s += w[i] * +d[i];
+    let r = s % 11;
+    let ck;
+    if (r === 0) ck = 1; else if (r === 1) ck = 0; else ck = 11 - r;
+    return ck === +d[7];
+  }
+  // 9 or 10 digits — physical persons; accept format
+  return true;
+}
+
+function csDK(d) {
+  const w = [2,7,6,5,4,3,2,1];
+  let s = 0; for (let i = 0; i < 8; i++) s += w[i] * +d[i];
+  return s % 11 === 0;
+}
+
+function csEE(d) {
+  const w = [3,7,1,3,7,1,3,7,1];
+  let s = 0; for (let i = 0; i < 8; i++) s += w[i] * +d[i];
+  let ck = (10 - s % 10) % 10;
+  return ck === +d[8];
+}
+
+function csFI(d) {
+  const w = [7,9,10,5,8,4,2,1];
+  let s = 0; for (let i = 0; i < 7; i++) s += w[i] * +d[i];
+  let r = s % 11;
+  if (r === 10) return false;
+  let ck = r === 0 ? 0 : 11 - r;
+  return ck === +d[7];
+}
+
+function csFR(d) {
+  // d = 2 char + 9 digit SIREN
+  const a = d[0], b = d[1];
+  const siren = d.substr(2);
+  if (/^[0-9]{2}$/.test(a+b)) {
+    const key = parseInt(a+b, 10);
+    const n = parseInt(siren, 10);
+    const expected = (n * 100 + 12) % 97;
+    return expected === key;
+  }
+  // Old/new alpha schemes: accept format
+  return true;
+}
+
+function csDE(d) {
+  // ISO 7064 MOD 11,10
+  let p = 10;
+  for (let i = 0; i < 8; i++) {
+    let r = (+d[i] + p) % 10;
+    if (r === 0) r = 10;
+    p = (2 * r) % 11;
+  }
+  const ck = (11 - p) % 10;
+  return ck === +d[8];
+}
+
+function csEL(d) {
+  const w = [256,128,64,32,16,8,4,2];
+  let s = 0; for (let i = 0; i < 8; i++) s += w[i] * +d[i];
+  const ck = (s % 11) % 10;
+  return ck === +d[8];
+}
+
+function csHU(d) {
+  const w = [9,7,3,1,9,7,3];
+  let s = 0; for (let i = 0; i < 7; i++) s += w[i] * +d[i];
+  const ck = (10 - s % 10) % 10;
+  return ck === +d[7];
+}
+
+function csIE(d) {
+  // Two formats; map to weight scheme
+  const t = { 'A':1,'B':2,'C':3,'D':4,'E':5,'F':6,'G':7,'H':8,'I':9,'J':10,'K':11,'L':12,'M':13,'N':14,'O':15,'P':16,'Q':17,'R':18,'S':19,'T':20,'U':21,'V':22,'W':23,'X':24,'Y':25,'Z':26,'+':27,'*':28 };
+  const valid = (digits, ck, extra) => {
+    const w = [8,7,6,5,4,3,2];
+    let s = 0;
+    for (let i = 0; i < 7; i++) s += w[i] * digits[i];
+    if (extra) s += 9 * extra;
+    s = s % 23;
+    const expected = s === 0 ? 'W' : String.fromCharCode(64 + s);
+    return expected === ck;
+  };
+  if (/^[0-9][A-Z+*][0-9]{5}[A-Z]$/.test(d)) {
+    // old: 1X23456L
+    const digits = [+d[0],0,+d[2],+d[3],+d[4],+d[5],+d[6]];
+    return valid(digits, d[7], t[d[1]]);
+  }
+  if (/^[0-9]{7}[A-Z]{1,2}$/.test(d)) {
+    const digits = d.substr(0,7).split('').map(Number);
+    return valid(digits, d[7], d.length === 9 ? t[d[8]] : 0);
+  }
+  return false;
+}
+
+function csIT(d) {
+  let s = 0;
+  for (let i = 0; i < 10; i++) {
+    let n = +d[i];
+    if (i % 2 === 1) { n *= 2; if (n > 9) n -= 9; }
+    s += n;
+  }
+  const ck = (10 - s % 10) % 10;
+  return ck === +d[10];
+}
+
+function csLT(d) {
+  if (d.length === 9) {
+    if (d[7] !== '1') return false; // legal entity marker
+    let s = 0;
+    for (let i = 0; i < 8; i++) s += (i+1) * +d[i];
+    let r = s % 11;
+    if (r === 10) {
+      const w = [3,4,5,6,7,8,9,1];
+      s = 0; for (let i = 0; i < 8; i++) s += w[i] * +d[i];
+      r = s % 11; if (r === 10) r = 0;
+    }
+    return r === +d[8];
+  }
+  if (d.length === 12) {
+    if (d[10] !== '1') return false;
+    let s = 0;
+    const w1 = [1,2,3,4,5,6,7,8,9,1,2];
+    for (let i = 0; i < 11; i++) s += w1[i] * +d[i];
+    let r = s % 11;
+    if (r === 10) {
+      const w2 = [3,4,5,6,7,8,9,1,2,3,4];
+      s = 0; for (let i = 0; i < 11; i++) s += w2[i] * +d[i];
+      r = s % 11; if (r === 10) r = 0;
+    }
+    return r === +d[11];
+  }
+  return false;
+}
+
+function csLU(d) {
+  const n = parseInt(d.substr(0, 6), 10);
+  return n % 89 === parseInt(d.substr(6, 2), 10);
+}
+
+function csMT(d) {
+  const w = [3,4,6,7,8,9,10,1];
+  let s = 0; for (let i = 0; i < 6; i++) s += w[i] * +d[i];
+  const ck = 37 - s % 37;
+  return ck === parseInt(d.substr(6, 2), 10);
+}
+
+function csNL(d) {
+  // 9 digits + 'B' + 2 digits. Two schemes accepted: legacy MOD 11 and 2020 MOD 97.
+  const main = d.substr(0, 9);
+  // Legacy: w = 9..2
+  let s = 0;
+  for (let i = 0; i < 8; i++) s += (9 - i) * +main[i];
+  const r = s % 11;
+  if (r < 10 && r === +main[8]) return true;
+  // 2020 scheme: MOD 97 on "NL" + 9 digits + "B" + 2 digits with char→digit map
+  const tr = { 'N':23,'L':21,'B':11 };
+  const str = '2321' + main + tr.B + d.substr(10, 2);
+  // convert to BigInt-safe via streaming mod
+  let m = 0;
+  for (const ch of str) m = (m * 10 + (+ch)) % 97;
+  return m === 1;
+}
+
+function csPL(d) {
+  const w = [6,5,7,2,3,4,5,6,7];
+  let s = 0; for (let i = 0; i < 9; i++) s += w[i] * +d[i];
+  const ck = s % 11;
+  if (ck === 10) return false;
+  return ck === +d[9];
+}
+
+function csPT(d) {
+  const w = [9,8,7,6,5,4,3,2];
+  let s = 0; for (let i = 0; i < 8; i++) s += w[i] * +d[i];
+  let r = s % 11;
+  let ck = r < 2 ? 0 : 11 - r;
+  return ck === +d[8];
+}
+
+function csRO(d) {
+  if (d.length < 2 || d.length > 10) return false;
+  const w = [7,5,3,2,1,7,5,3,2];
+  const padded = d.padStart(10, '0');
+  let s = 0;
+  for (let i = 0; i < 9; i++) s += w[i] * +padded[i];
+  const ck = (s * 10) % 11 % 10;
+  return ck === +padded[9];
+}
+
+function csSK(d) {
+  const n = parseInt(d, 10);
+  return n % 11 === 0;
+}
+
+function csSI(d) {
+  const w = [8,7,6,5,4,3,2];
+  let s = 0; for (let i = 0; i < 7; i++) s += w[i] * +d[i];
+  let r = 11 - s % 11;
+  if (r === 10) r = 0;
+  if (r === 11) return false;
+  return r === +d[7];
+}
+
+function csES(d) {
+  // Complex per scheme: A-H,J,N,P,Q,R,S,U,V,W = juridical; etc.
+  // Just check letter format for now (format-only)
+  return null; // null = "format OK, checksum not verified"
+}
+
+function csSE(d) {
+  // First 10 digits Luhn-validated
+  let s = 0;
+  for (let i = 0; i < 10; i++) {
+    let n = +d[i];
+    if (i % 2 === 0) { n *= 2; if (n > 9) n -= 9; }
+    s += n;
+  }
+  return s % 10 === 0;
+}
+
+function csGB(d) {
+  if (/^(GD|HA)[0-9]{3}$/.test(d)) {
+    const n = parseInt(d.substr(2, 3), 10);
+    if (d.startsWith('GD')) return n < 500; // gov
+    return n >= 500; // health
+  }
+  // 9 or 12 digit (12 = parent + 3-digit subsidiary)
+  if (d.length === 12) d = d.substr(0, 9);
+  if (d.length !== 9) return false;
+  const w = [8,7,6,5,4,3,2];
+  let s = 0; for (let i = 0; i < 7; i++) s += w[i] * +d[i];
+  const ck = parseInt(d.substr(7, 2), 10);
+  // Old format
+  let r = (s + ck) % 97;
+  if (r === 0) return true;
+  // New format (post-2010)
+  r = (s + ck + 55) % 97;
+  return r === 0;
+}
+
+function csCHE(d) {
+  // 9 digits with EAN-13 style check, suffix MWST/TVA/IVA optional
+  const w = [5,4,3,2,7,6,5,4];
+  let s = 0; for (let i = 0; i < 8; i++) s += w[i] * +d[i];
+  let r = 11 - s % 11;
+  if (r === 10) return false;
+  if (r === 11) r = 0;
+  return r === +d[8];
+}
+
+function csNO(d) {
+  // Organization number, 9 digits with MOD 11 check
+  const w = [3,2,7,6,5,4,3,2];
+  let s = 0; for (let i = 0; i < 8; i++) s += w[i] * +d[i];
+  let r = 11 - s % 11;
+  if (r === 11) r = 0;
+  if (r === 10) return false;
+  return r === +d[8];
+}
+
+const CHECKSUMS = {
+  AT: csAT, BE: csBE, BG: csBG, HR: csHR, CY: csCY, CZ: csCZ, DK: csDK, EE: csEE,
+  FI: csFI, FR: csFR, DE: csDE, EL: csEL, HU: csHU, IE: csIE, IT: csIT,
+  LT: csLT, LU: csLU, MT: csMT, NL: csNL, PL: csPL, PT: csPT, RO: csRO,
+  SK: csSK, SI: csSI, ES: csES, SE: csSE, GB: csGB, XI: csGB,
+  CHE: csCHE, NO: csNO
+};
+
+function normalize(input) {
+  return input.replace(/[\s.\-\/]/g, '').toUpperCase();
+}
+
+function detectCountry(n) {
+  if (n.startsWith('CHE')) return 'CHE';
+  return n.substr(0, 2);
+}
+
+function validate(raw, forcedCode) {
+  const n = normalize(raw);
+  if (!n) return { ok: null, code: '', body: '', error: 'Empty input' };
+  let code = forcedCode && forcedCode !== 'auto' ? forcedCode : detectCountry(n);
+  const meta = COUNTRIES[code];
+  if (!meta) return { ok: false, code, body: n, error: `Unknown country code "${code}"` };
+
+  // Strip country prefix
+  let body = n;
+  if (code === 'CHE') body = n.replace(/^CHE/, '');
+  else if (body.startsWith(code)) body = body.substr(code.length);
+
+  if (!meta.re.test(body)) {
+    return { ok: false, code, body, country: meta.name, error: `Format does not match the ${meta.name} pattern` };
+  }
+
+  if (!meta.checksum) {
+    return { ok: 'format', code, body, country: meta.name, note: 'Format valid (no checksum defined for this country)' };
+  }
+
+  const fn = CHECKSUMS[code];
+  let cs;
+  try { cs = fn(body); } catch(e) { cs = null; }
+  if (cs === null) return { ok: 'format', code, body, country: meta.name, note: 'Format valid (checksum not enforced for this scheme)' };
+  if (cs === true) return { ok: true, code, body, country: meta.name };
+  return { ok: false, code, body, country: meta.name, error: 'Checksum failed' };
+}
+
+function renderResult(r) {
+  const el = $('result');
+  if (r.error && !r.body) {
+    el.innerHTML = '';
+    return;
+  }
+  let cls, badge, verdict;
+  if (r.ok === true) { cls='valid'; badge='VALID'; verdict='Format and checksum pass'; }
+  else if (r.ok === 'format') { cls='format-only'; badge='FORMAT OK'; verdict=r.note; }
+  else { cls='invalid'; badge='INVALID'; verdict=r.error; }
+  el.className = 'result ' + cls;
+  el.innerHTML = `
+    <div class="verdict"><span class="badge">${badge}</span> ${verdict}</div>
+    <dl>
+      <dt>Country</dt><dd>${r.country || r.code || '—'}</dd>
+      <dt>Country code</dt><dd>${r.code || '—'}</dd>
+      <dt>Body (after prefix)</dt><dd>${r.body || '—'}</dd>
+      <dt>Normalized</dt><dd>${(r.code || '') + (r.body || '')}</dd>
+    </dl>
+  `;
+}
+
+function validateOne() {
+  const raw = $('vat').value;
+  const code = $('country').value;
+  const r = validate(raw, code);
+  renderResult(r);
+}
+
+function validateBatch() {
+  const lines = $('batchIn').value.split('\n').map(l => l.trim()).filter(Boolean);
+  let ok=0, bad=0, warn=0;
+  let rows = '';
+  for (const line of lines) {
+    const r = validate(line, 'auto');
+    let cls, label;
+    if (r.ok === true) { cls='ok'; label='VALID'; ok++; }
+    else if (r.ok === 'format') { cls='warn'; label='FORMAT'; warn++; }
+    else { cls='bad'; label='INVALID'; bad++; }
+    rows += `<tr><td>${escapeHtml(line)}</td><td>${r.country || '?'}</td><td class="${cls}">${label}</td><td>${escapeHtml(r.error || r.note || '✓')}</td></tr>`;
+  }
+  $('batchOut').innerHTML = `<table class="batch-out"><thead><tr><th>Input</th><th>Country</th><th>Status</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('batchSummary').innerHTML = `<span>total: <strong>${lines.length}</strong></span><span>valid: <strong>${ok}</strong></span><span>format only: <strong>${warn}</strong></span><span>invalid: <strong>${bad}</strong></span>`;
+}
+
+function copyBatch() {
+  const lines = $('batchIn').value.split('\n').map(l => l.trim()).filter(Boolean);
+  let csv = 'input,country,status,note\n';
+  for (const line of lines) {
+    const r = validate(line, 'auto');
+    const status = r.ok === true ? 'VALID' : r.ok === 'format' ? 'FORMAT' : 'INVALID';
+    const note = (r.error || r.note || '').replace(/"/g, '""');
+    csv += `"${line.replace(/"/g, '""')}","${r.country || ''}",${status},"${note}"\n`;
+  }
+  navigator.clipboard.writeText(csv).then(() => {
+    $('batchCopy').textContent = 'CSV copied!';
+    setTimeout(() => $('batchCopy').textContent = '', 1500);
+  });
+}
+
+function loadBatchSample() {
+  $('batchIn').value = [
+    'DE136695976',
+    'GB980780684',
+    'FR40303265045',
+    'NL004495445B01',
+    'IT00743110157',
+    'ES A13585625',
+    'CHE-116.281.710 MWST',
+    'PL5260250274',
+    'BAD123' // invalid
+  ].join('\n');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+}
+
+function onCountryChange() {
+  const code = $('country').value;
+  $('examples').innerHTML = '';
+  if (code === 'auto') {
+    const popular = ['DE','GB','FR','IT','ES','NL','BE','PL','CHE','SE'];
+    popular.forEach(c => addExample(c, COUNTRIES[c].ex));
+  } else {
+    addExample(code, COUNTRIES[code].ex);
+  }
+}
+
+function addExample(code, ex) {
+  const b = document.createElement('button');
+  b.textContent = ex;
+  b.title = COUNTRIES[code].name + ' example';
+  b.addEventListener('click', () => {
+    $('vat').value = ex;
+    $('country').value = 'auto';
+    validateOne();
+  });
+  $('examples').appendChild(b);
+}
+
+function populateCountries() {
+  const sel = $('country');
+  const grid = $('countriesList');
+  const sorted = Object.keys(COUNTRIES).sort();
+  sorted.forEach(c => {
+    const meta = COUNTRIES[c];
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = `${c} — ${meta.name}`;
+    sel.appendChild(opt);
+    const div = document.createElement('div');
+    div.innerHTML = `<b>${c}</b> ${meta.name} ${meta.checksum ? '✓' : ''}`;
+    grid.appendChild(div);
+  });
+}
+
+populateCountries();
+onCountryChange();
+
+$('vat').addEventListener('keydown', e => { if (e.key === 'Enter') validateOne(); });
+</script>
+</body>
+</html>

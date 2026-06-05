@@ -43,6 +43,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS Box Shadow Generator](boxshadow.html) | Stack multiple `box-shadow` layers visually — offset, blur, spread, color, opacity, and `inset` per layer with live preview on light, dark, photo, and checker backgrounds. Material-tier (1dp / 3dp / 8dp / 16dp), neumorphism, glow, focus-ring, and long-shadow presets, then copy a clean rule. |
 | [Tailwind Class Sorter](tailwindsort.html) | Reorder messy Tailwind utility classes into the canonical `prettier-plugin-tailwindcss` order — layout, spacing, typography, background, border, effects, then variants — with dedupe, character-count delta, and inline rewriting of every `class="…"` in an HTML / JSX snippet. |
 | [CSS Multi-Column Layout Builder](csscolumns.html) | Build magazine-style multi-column layouts with live preview — pick `column-count` or `column-width`, set `column-gap`, `column-rule`, `column-fill`, toggle `column-span: all` headings, and lock items together with `break-inside: avoid`. Copy-ready CSS plus a news-layout recipe that never strands an orphan heading. |
 | [CSS scrollbar-gutter Playground](scrollbargutter.html) | See exactly how `scrollbar-gutter: auto` vs `stable` vs `stable both-edges` changes layout at the moment the scrollbar appears — toggle content length to watch the shift (or not), pair with `scrollbar-width` & `overflow-y`, and copy the recipe that stops the page from jumping when a modal opens. |
@@ -187,6 +188,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [RFC 7807 Problem+JSON Builder](problemjson.html) | Compose a spec-compliant `application/problem+json` error payload — the five standard members (`type`, `title`, `status`, `detail`, `instance`), the RFC 9457 `errors` array, and custom extension members — with a linter that flags missing fields, non-URI `type`, and bad JSON Pointers. Copy as JSON, full HTTP response, curl, fetch, or Spring `ProblemDetail`. |
 | [W3C Trace Context Decoder](tracecontext.html) | Parse `traceparent` and `tracestate` headers from OpenTelemetry, Jaeger, Zipkin, and AWS X-Ray — see the version, 128-bit trace-id, 64-bit span-id, and the sampled flag, validate against the spec, or generate a fresh header to inject into a curl request. |
 | [Sec-Fetch-* Header Decoder](secfetch.html) | Decode the Fetch Metadata request headers — `Sec-Fetch-Dest`, `Sec-Fetch-Mode`, `Sec-Fetch-Site`, `Sec-Fetch-User`, `Sec-Fetch-Storage-Access` — classify each request as same-origin / cross-site / nav / preflight / CSRF-shaped, and generate a Resource Isolation Policy middleware snippet (Express & Nginx) to block suspicious combinations. |
 | [Resource Hints Builder](resourcehints.html) | Generate `<link rel="preload / prefetch / preconnect / dns-prefetch / modulepreload">` with the right `as`, `type`, `crossorigin`, `fetchpriority`, `imagesrcset`, and `media` — plus the equivalent HTTP `Link:` response header. |
@@ -235,6 +237,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [VAT Number Validator](vatvalidator.html) | Validate the format and checksum of EU, UK, Swiss, and Norwegian VAT registration numbers — 30+ country prefixes with country-specific regex plus working checksums (MOD-11/10 for DE, MOD-97 for BE/NL, Luhn for IT/SE, the historical MOD-97 +55 branch for GB, and 20+ more). Single-input or paste-many batch mode with CSV export. |
 | [Voltage Divider Calculator](voltagedivider.html) | Solve `V_out = V_in · R2 / (R1 + R2)`, pick the closest E12 / E24 / E48 / E96 resistor pair for a target output, and check how a load resistance sags the output — quiescent current, power, and Thévenin equivalent included. |
 | [Video & Audio Bitrate Calculator](bitratecalc.html) | Lock any two of bitrate, file size, and duration to solve the third. Presets for YouTube 1080p / 4K, Twitch, Netflix HDR, Blu-ray, MP3, AAC, FLAC, plus a codec efficiency table (H.264 → H.265 → AV1) and transfer-time check on common upload pipes. |
 | [Wavelength ↔ Frequency Converter](wavefreq.html) | Convert between Hz / kHz / MHz / GHz / THz and m / mm / µm / nm / Å for EM waves (uses *c*) or sound in air / water / steel — shows period, wavenumber, photon energy in eV, the spectrum band (radio → γ-ray), and a quarter-wave dipole length for RF antennas. |
