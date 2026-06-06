@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Set Similarity Calculator — Jaccard, Dice, Overlap, Tversky</title>
+<meta name="description" content="Compute set-similarity coefficients between two line-based sets — Jaccard, Sørensen–Dice, Overlap (Szymkiewicz–Simpson), Tversky, Cosine on multisets, and the simpler Hamming match ratio. Also reports |A|, |B|, |A∩B|, |A∪B|, and which elements are unique to each side.">
+<meta name="keywords" content="jaccard similarity, dice coefficient, overlap coefficient, tversky index, set similarity, fuzzy matching, deduplication, cosine similarity">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/setsimilarity.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  textarea {
+    width: 100%; min-height: 220px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .85rem; background: var(--bg);
+    color: var(--text); resize: vertical; box-sizing: border-box;
+  }
+  .opts { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; margin: 12px 0; font-size: .85rem; }
+  .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .opts input[type="number"], .opts select {
+    padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; background: var(--bg); color: var(--text);
+    width: 70px;
+  }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .metric {
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); display: flex; flex-direction: column; gap: 4px;
+  }
+  .metric .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .metric .value { font-family: var(--mono); font-size: 1.4rem; font-weight: 600; color: var(--text); }
+  .metric .bar { height: 6px; background: var(--surface2); border-radius: 99px; overflow: hidden; margin-top: 4px; }
+  .metric .bar > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width .25s; }
+  .metric .note { font-size: .72rem; color: var(--muted); font-family: var(--mono); }
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;
+    font-size: .82rem; font-family: var(--mono); margin-top: 12px;
+  }
+  .summary div { padding: 6px 10px; background: var(--surface2); border-radius: var(--radius); }
+  .summary b { color: var(--text); }
+  .summary span { color: var(--muted); }
+  .members {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 12px;
+  }
+  .members h3 { font-size: .82rem; color: var(--muted); margin: 0 0 6px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
+  .members pre {
+    margin: 0; padding: 8px 10px; max-height: 200px; overflow: auto;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg);
+    font-family: var(--mono); font-size: .8rem; white-space: pre; color: var(--text);
+  }
+  .members .empty { color: var(--muted); font-style: italic; padding: 8px 10px; }
+  .ref { font-size: .85rem; line-height: 1.65; color: var(--muted); }
+  .ref code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; color: var(--text); font-size: .82rem; }
+  .ref table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .ref th, .ref td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; font-size: .82rem; vertical-align: top; }
+  details summary { cursor: pointer; padding: 8px 0; font-size: .9rem; color: var(--text); font-weight: 600; }
+  .row-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .row-controls button {
+    padding: 6px 12px; font-size: .82rem; border: 1px solid var(--border);
+    background: var(--surface); border-radius: var(--radius); cursor: pointer; color: var(--text);
+  }
+  .row-controls button:hover { background: var(--surface2); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+    .members { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Set Similarity Calculator</h1>
+<p class="subtitle">Compare two line-based sets and compute the four classic similarity coefficients — <strong>Jaccard</strong>, <strong>Sørensen–Dice</strong>, <strong>Overlap (Szymkiewicz–Simpson)</strong>, and <strong>Tversky</strong> — plus <strong>cosine</strong> on the multiset (counted) representation. Useful for fuzzy duplicate detection, deciding whether two tag lists are "close enough," tuning thresholds for retrieval, and scoring how much one keyword list covers another.</p>
+
+<div class="card">
+  <div class="panels">
+    <div>
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:4px;">Set A — one element per line</label>
+      <textarea id="a" spellcheck="false" placeholder="apple&#10;banana&#10;cherry">apple
+banana
+cherry
+date
+elderberry</textarea>
+    </div>
+    <div>
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:4px;">Set B — one element per line</label>
+      <textarea id="b" spellcheck="false" placeholder="apple&#10;banana&#10;fig">apple
+cherry
+fig
+grape</textarea>
+    </div>
+  </div>
+
+  <div class="opts">
+    <label><input type="checkbox" id="trim" checked> Trim whitespace</label>
+    <label><input type="checkbox" id="casei"> Case-insensitive</label>
+    <label><input type="checkbox" id="dedupe" checked> Dedupe within each side (true set)</label>
+    <label>Tversky α <input type="number" id="alpha" value="0.5" min="0" max="1" step="0.1"></label>
+    <label>Tversky β <input type="number" id="beta" value="0.5" min="0" max="1" step="0.1"></label>
+  </div>
+
+  <div class="row-controls">
+    <button onclick="loadSample('fruit')">Sample · fruits</button>
+    <button onclick="loadSample('tags')">Sample · tag lists</button>
+    <button onclick="loadSample('queries')">Sample · search queries</button>
+    <button onclick="swap()">Swap A ↔ B</button>
+    <button onclick="clearAll()">Clear</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Similarity coefficients</h2>
+  <div class="metric-grid" id="metrics"></div>
+</div>
+
+<div class="card">
+  <h2>Set summary</h2>
+  <div class="summary" id="summary"></div>
+
+  <div class="members">
+    <div>
+      <h3>A ∩ B (in both)</h3>
+      <div id="inter"></div>
+    </div>
+    <div>
+      <h3>A \ B (A only)</h3>
+      <div id="aOnly"></div>
+    </div>
+    <div>
+      <h3>B \ A (B only)</h3>
+      <div id="bOnly"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Reference</h2>
+  <details open>
+    <summary>What each coefficient measures</summary>
+    <div class="ref">
+      <table>
+        <thead><tr><th>Coefficient</th><th>Formula</th><th>Range</th><th>Good for</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Jaccard</strong> <code>J(A,B)</code></td>
+            <td><code>|A∩B| / |A∪B|</code></td>
+            <td>0 → 1</td>
+            <td>General similarity — penalizes union growth. The default if you don't know which to pick.</td>
+          </tr>
+          <tr>
+            <td><strong>Sørensen–Dice</strong> <code>D(A,B)</code></td>
+            <td><code>2·|A∩B| / (|A| + |B|)</code></td>
+            <td>0 → 1</td>
+            <td>Like Jaccard but more generous with small intersections. <code>D = 2J / (1+J)</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>Overlap</strong> <code>O(A,B)</code></td>
+            <td><code>|A∩B| / min(|A|,|B|)</code></td>
+            <td>0 → 1</td>
+            <td>"How much of the smaller set is in the bigger one?" Reaches 1 when A ⊆ B or B ⊆ A.</td>
+          </tr>
+          <tr>
+            <td><strong>Tversky</strong> <code>T(A,B)</code></td>
+            <td><code>|A∩B| / (|A∩B| + α·|A\B| + β·|B\A|)</code></td>
+            <td>0 → 1</td>
+            <td>Asymmetric — weight false positives (β on B-only) vs false negatives (α on A-only) differently. α=β=½ ⇒ Dice; α=β=1 ⇒ Jaccard.</td>
+          </tr>
+          <tr>
+            <td><strong>Cosine</strong> (multiset)</td>
+            <td><code>Σ min(a,b) / √(|A|·|B|)</code></td>
+            <td>0 → 1</td>
+            <td>Treats inputs as bag-of-words. Useful when items repeat and frequency matters.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+  <details>
+    <summary>Choosing a threshold</summary>
+    <div class="ref">
+      <ul>
+        <li><strong>Dedupe / near-duplicate detection</strong> on short strings (titles, emails): Jaccard ≥ 0.7 or Dice ≥ 0.8 is a common starting point — tune on a held-out set.</li>
+        <li><strong>Retrieval / search</strong>: Overlap is forgiving when the query is shorter than the document — works well when one side is much smaller.</li>
+        <li><strong>Recommendation</strong> (e.g. tag-based item similarity): Jaccard handles long-tail tags well without being thrown off by one giant item.</li>
+        <li><strong>Asymmetric coverage</strong> ("how much of my keyword list does this doc cover?"): Tversky with α high, β low.</li>
+      </ul>
+    </div>
+  </details>
+  <details>
+    <summary>About the multiset modes</summary>
+    <div class="ref">
+      <p>When <strong>Dedupe within each side</strong> is on, the four classic set coefficients are computed on the de-duplicated sets — that's the textbook definition. Cosine still uses the original (with-duplicate) counts so frequency information isn't lost.</p>
+      <p>When dedupe is <em>off</em>, Jaccard and Dice are computed on multisets — intersection uses element-wise <code>min(count_A, count_B)</code>, union uses <code>max</code>. This matches how tools like MinHash on shingles behave.</p>
+    </div>
+  </details>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function parseSide(text) {
+  const trim = $('trim').checked;
+  const casei = $('casei').checked;
+  const dedupe = $('dedupe').checked;
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  for (let l of lines) {
+    if (trim) l = l.trim();
+    if (!l) continue;
+    if (casei) l = l.toLowerCase();
+    out.push(l);
+  }
+  // Always return an array (multiset). Dedupe is applied during set ops.
+  return { multi: out, isDedupe: dedupe };
+}
+
+function bag(arr) {
+  const m = new Map();
+  for (const x of arr) m.set(x, (m.get(x) || 0) + 1);
+  return m;
+}
+
+function setOf(arr) { return new Set(arr); }
+
+function setMath(a, b, dedupe) {
+  if (dedupe) {
+    const sa = setOf(a), sb = setOf(b);
+    const inter = [], aOnly = [], bOnly = [];
+    for (const x of sa) (sb.has(x) ? inter : aOnly).push(x);
+    for (const x of sb) if (!sa.has(x)) bOnly.push(x);
+    return {
+      sizeA: sa.size, sizeB: sb.size,
+      interSize: inter.length,
+      unionSize: sa.size + sb.size - inter.length,
+      aOnlySize: aOnly.length, bOnlySize: bOnly.length,
+      inter, aOnly, bOnly,
+    };
+  }
+  // multiset mode
+  const ba = bag(a), bb = bag(b);
+  let interSize = 0, unionSize = 0;
+  const keys = new Set([...ba.keys(), ...bb.keys()]);
+  for (const k of keys) {
+    const ca = ba.get(k) || 0, cb = bb.get(k) || 0;
+    interSize += Math.min(ca, cb);
+    unionSize += Math.max(ca, cb);
+  }
+  const inter = [], aOnly = [], bOnly = [];
+  for (const k of keys) {
+    const ca = ba.get(k) || 0, cb = bb.get(k) || 0;
+    if (ca > 0 && cb > 0) inter.push(ca === cb ? k : `${k} (×min ${Math.min(ca,cb)})`);
+    if (ca > 0 && cb === 0) aOnly.push(ca > 1 ? `${k} (×${ca})` : k);
+    if (cb > 0 && ca === 0) bOnly.push(cb > 1 ? `${k} (×${cb})` : k);
+  }
+  return {
+    sizeA: a.length, sizeB: b.length,
+    interSize, unionSize,
+    aOnlySize: a.length - interSize, bOnlySize: b.length - interSize,
+    inter, aOnly, bOnly,
+  };
+}
+
+function cosine(a, b) {
+  const ba = bag(a), bb = bag(b);
+  let dot = 0, sumA = 0, sumB = 0;
+  for (const v of ba.values()) sumA += v * v;
+  for (const v of bb.values()) sumB += v * v;
+  for (const [k, v] of ba) {
+    const w = bb.get(k);
+    if (w) dot += v * w;
+  }
+  const denom = Math.sqrt(sumA) * Math.sqrt(sumB);
+  if (denom === 0) return 0;
+  return dot / denom;
+}
+
+function pct(x) {
+  if (!isFinite(x)) return '—';
+  return (x * 100).toFixed(1) + '%';
+}
+
+function metricCard(label, value, note) {
+  const pctStr = isFinite(value) ? (value * 100).toFixed(1) + '%' : '—';
+  const w = isFinite(value) ? Math.max(0, Math.min(1, value)) * 100 : 0;
+  return `
+    <div class="metric">
+      <div class="label">${label}</div>
+      <div class="value">${isFinite(value) ? value.toFixed(4) : '—'}</div>
+      <div class="bar"><div style="width:${w}%"></div></div>
+      <div class="note">${pctStr}${note ? ' · ' + note : ''}</div>
+    </div>`;
+}
+
+function renderList(box, arr) {
+  if (!arr.length) {
+    box.innerHTML = '<div class="empty">(empty)</div>';
+    return;
+  }
+  const sorted = arr.slice().sort();
+  box.innerHTML = '<pre>' + sorted.map(escapeHtml).join('\n') + '</pre>';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function calc() {
+  const A = parseSide($('a').value);
+  const B = parseSide($('b').value);
+  const dedupe = A.isDedupe;
+  const a = A.multi, b = B.multi;
+
+  const m = setMath(a, b, dedupe);
+  const alpha = +$('alpha').value || 0;
+  const beta  = +$('beta').value  || 0;
+
+  const jaccard = m.unionSize ? m.interSize / m.unionSize : (m.sizeA + m.sizeB === 0 ? 1 : 0);
+  const dice    = (m.sizeA + m.sizeB) ? (2 * m.interSize) / (m.sizeA + m.sizeB) : (m.sizeA + m.sizeB === 0 ? 1 : 0);
+  const overlap = Math.min(m.sizeA, m.sizeB) ? m.interSize / Math.min(m.sizeA, m.sizeB) : (m.sizeA + m.sizeB === 0 ? 1 : 0);
+  const tDen    = m.interSize + alpha * m.aOnlySize + beta * m.bOnlySize;
+  const tversky = tDen ? m.interSize / tDen : (m.sizeA + m.sizeB === 0 ? 1 : 0);
+  const cos     = cosine(a, b);
+
+  $('metrics').innerHTML = [
+    metricCard('Jaccard J(A,B)', jaccard, '|A∩B| / |A∪B|'),
+    metricCard('Sørensen–Dice', dice, '2·|A∩B| / (|A|+|B|)'),
+    metricCard('Overlap', overlap, '|A∩B| / min(|A|,|B|)'),
+    metricCard('Tversky T(α,β)', tversky, `α=${alpha}, β=${beta}`),
+    metricCard('Cosine (multiset)', cos, 'bag-of-words'),
+    metricCard('Jaccard distance', isFinite(jaccard) ? 1 - jaccard : NaN, '1 − J(A,B)'),
+  ].join('');
+
+  $('summary').innerHTML = `
+    <div><span>|A|</span> <b>${m.sizeA}</b></div>
+    <div><span>|B|</span> <b>${m.sizeB}</b></div>
+    <div><span>|A∩B|</span> <b>${m.interSize}</b></div>
+    <div><span>|A∪B|</span> <b>${m.unionSize}</b></div>
+    <div><span>|A\\B|</span> <b>${m.aOnlySize}</b></div>
+    <div><span>|B\\A|</span> <b>${m.bOnlySize}</b></div>
+    <div><span>mode</span> <b>${dedupe ? 'set' : 'multiset'}</b></div>
+  `;
+
+  renderList($('inter'), m.inter);
+  renderList($('aOnly'), m.aOnly);
+  renderList($('bOnly'), m.bOnly);
+}
+
+const SAMPLES = {
+  fruit: {
+    a: 'apple\nbanana\ncherry\ndate\nelderberry',
+    b: 'apple\ncherry\nfig\ngrape',
+  },
+  tags: {
+    a: 'react\ntypescript\ntesting\ngraphql\nsql\ndocker\nnode',
+    b: 'react\nvue\ntesting\nrest\nsql\nkubernetes\nnode\npython',
+  },
+  queries: {
+    a: 'best python web framework\nflask vs django performance\nasync python tutorial\npython orm comparison',
+    b: 'flask vs django performance\nfastapi tutorial\npython orm comparison\nbest node web framework',
+  },
+};
+
+function loadSample(name) {
+  const s = SAMPLES[name]; if (!s) return;
+  $('a').value = s.a; $('b').value = s.b;
+  calc();
+}
+function swap() {
+  const a = $('a').value; $('a').value = $('b').value; $('b').value = a;
+  calc();
+}
+function clearAll() {
+  $('a').value = ''; $('b').value = ''; calc();
+}
+
+['a','b','trim','casei','dedupe','alpha','beta'].forEach(id => {
+  $(id).addEventListener('input', calc);
+  $(id).addEventListener('change', calc);
+});
+
+calc();
+</script>
+</body>
+</html>
