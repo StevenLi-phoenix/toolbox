@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMPTE Timecode Calculator — Free Online Tool</title>
+<meta name="description" content="Convert SMPTE timecode to frames, frames to timecode, and add or subtract timecodes at 23.976, 24, 25, 29.97 DF/NDF, 30, 50, 59.94, and 60 fps. Drop-frame compliant.">
+<meta name="keywords" content="SMPTE timecode, timecode calculator, drop frame, NDF, 29.97, video editing, frame count, frame conversion, broadcast timecode">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/smpte.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .field label { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; font-weight: 600; }
+  .tc-input {
+    width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: 1.2rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+    letter-spacing: .05em; text-align: center;
+  }
+  .frame-input { font-family: var(--mono); font-size: 1.05rem; }
+  select.rate {
+    width: 100%; padding: 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .95rem;
+  }
+  .grid3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+  .stat {
+    padding: 12px 14px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .stat .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-family: var(--mono); font-size: 1.05rem; color: var(--text); margin-top: 4px; word-break: break-all; }
+  .op-grid { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 10px; align-items: end; }
+  .op-grid .op { font-family: var(--mono); font-size: 1.4rem; text-align: center; padding-bottom: 10px; color: var(--muted); }
+  .err { color: var(--error); font-size: .82rem; margin-top: 6px; }
+  .ok { color: var(--success); font-size: .82rem; margin-top: 6px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .preset {
+    padding: 5px 10px; border-radius: 99px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: .78rem;
+    font-family: var(--mono); cursor: pointer;
+  }
+  .preset:hover { border-color: var(--accent); }
+  table.ref { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  table.ref th, table.ref td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  table.ref th { color: var(--muted); font-weight: 600; font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
+  table.ref td.mono { font-family: var(--mono); }
+  .df-badge {
+    display: inline-block; padding: 1px 7px; border-radius: 99px;
+    background: var(--accent); color: #fff; font-size: .7rem;
+    font-weight: 600; margin-left: 6px; vertical-align: middle;
+  }
+  @media (max-width: 768px) {
+    .row, .grid3 { grid-template-columns: 1fr; }
+    .op-grid { grid-template-columns: 1fr; }
+    .op-grid .op { padding: 4px 0; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>SMPTE Timecode Calculator</h1>
+<p class="subtitle">Convert between SMPTE timecode <code>HH:MM:SS:FF</code> and frame counts, add or subtract durations, and measure runtime between two timecodes — drop-frame and non-drop frame aware, from 23.976 up to 60 fps.</p>
+
+<div class="card">
+  <h2>🎬 Timecode &harr; Frames</h2>
+  <div class="row">
+    <div class="field">
+      <label for="tc1">Timecode</label>
+      <input id="tc1" class="tc-input" value="01:00:00:00" oninput="fromTC()" spellcheck="false">
+      <div id="tc1err"></div>
+    </div>
+    <div class="field">
+      <label for="frames1">Total Frames</label>
+      <input id="frames1" class="tc-input frame-input" value="86400" oninput="fromFrames()">
+      <div id="fr1err"></div>
+    </div>
+  </div>
+  <div class="field" style="margin-top:12px">
+    <label for="rate1">Frame rate</label>
+    <select id="rate1" class="rate" onchange="rerun(1)">
+      <option value="23.976">23.976 fps (24000/1001 — film, NTSC)</option>
+      <option value="24">24 fps (cinema)</option>
+      <option value="25">25 fps (PAL / EBU)</option>
+      <option value="29.97df">29.97 fps Drop-Frame (NTSC broadcast)</option>
+      <option value="29.97" selected>29.97 fps Non-Drop (NTSC video)</option>
+      <option value="30">30 fps</option>
+      <option value="50">50 fps (PAL HD)</option>
+      <option value="59.94df">59.94 fps Drop-Frame</option>
+      <option value="59.94">59.94 fps Non-Drop</option>
+      <option value="60">60 fps</option>
+    </select>
+  </div>
+  <div class="presets">
+    <button class="preset" onclick="setPreset(1,'00:00:00:00')">00:00:00:00</button>
+    <button class="preset" onclick="setPreset(1,'00:00:01:00')">1 sec</button>
+    <button class="preset" onclick="setPreset(1,'00:01:00:00')">1 min</button>
+    <button class="preset" onclick="setPreset(1,'00:10:00:00')">10 min</button>
+    <button class="preset" onclick="setPreset(1,'01:00:00:00')">1 hour</button>
+    <button class="preset" onclick="setPreset(1,'23:59:59:00')">end of day</button>
+  </div>
+  <div class="grid3" style="margin-top:14px">
+    <div class="stat"><div class="label">Real seconds</div><div class="value" id="seconds1">—</div></div>
+    <div class="stat"><div class="label">HH:MM:SS.mmm</div><div class="value" id="wall1">—</div></div>
+    <div class="stat"><div class="label">Drift vs wall clock</div><div class="value" id="drift1">—</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>➕ Add / Subtract Timecodes</h2>
+  <div class="op-grid">
+    <div class="field">
+      <label for="opA">A</label>
+      <input id="opA" class="tc-input" value="00:30:00:00" oninput="calcOp()" spellcheck="false">
+    </div>
+    <div class="op">
+      <select id="opSign" onchange="calcOp()" style="font-family:var(--mono);font-size:1.2rem;padding:8px 6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius)">
+        <option value="+">+</option>
+        <option value="-">−</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="opB">B</label>
+      <input id="opB" class="tc-input" value="00:15:30:12" oninput="calcOp()" spellcheck="false">
+    </div>
+    <div class="op">=</div>
+    <div class="field">
+      <label>Result</label>
+      <input id="opResult" class="tc-input" readonly style="background:var(--surface2)">
+    </div>
+  </div>
+  <div class="field" style="margin-top:12px">
+    <label for="rateOp">Frame rate (same for both operands)</label>
+    <select id="rateOp" class="rate" onchange="calcOp()">
+      <option value="23.976">23.976 fps</option>
+      <option value="24" selected>24 fps</option>
+      <option value="25">25 fps</option>
+      <option value="29.97df">29.97 fps Drop-Frame</option>
+      <option value="29.97">29.97 fps Non-Drop</option>
+      <option value="30">30 fps</option>
+      <option value="50">50 fps</option>
+      <option value="59.94df">59.94 fps Drop-Frame</option>
+      <option value="59.94">59.94 fps Non-Drop</option>
+      <option value="60">60 fps</option>
+    </select>
+  </div>
+  <div id="opNote" style="margin-top:8px;font-size:.85rem;color:var(--muted)"></div>
+</div>
+
+<div class="card">
+  <h2>📏 Duration Between Two Timecodes</h2>
+  <div class="row">
+    <div class="field">
+      <label for="durStart">In point</label>
+      <input id="durStart" class="tc-input" value="00:59:30:00" oninput="calcDur()" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="durEnd">Out point</label>
+      <input id="durEnd" class="tc-input" value="01:03:45:18" oninput="calcDur()" spellcheck="false">
+    </div>
+  </div>
+  <div class="field" style="margin-top:12px">
+    <label for="rateDur">Frame rate</label>
+    <select id="rateDur" class="rate" onchange="calcDur()">
+      <option value="23.976" selected>23.976 fps</option>
+      <option value="24">24 fps</option>
+      <option value="25">25 fps</option>
+      <option value="29.97df">29.97 fps Drop-Frame</option>
+      <option value="29.97">29.97 fps Non-Drop</option>
+      <option value="30">30 fps</option>
+      <option value="50">50 fps</option>
+      <option value="59.94df">59.94 fps Drop-Frame</option>
+      <option value="59.94">59.94 fps Non-Drop</option>
+      <option value="60">60 fps</option>
+    </select>
+  </div>
+  <div class="grid3" style="margin-top:14px">
+    <div class="stat"><div class="label">Duration (TC)</div><div class="value" id="durTC">—</div></div>
+    <div class="stat"><div class="label">Frames</div><div class="value" id="durFrames">—</div></div>
+    <div class="stat"><div class="label">Real seconds</div><div class="value" id="durSecs">—</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>📚 Why drop-frame?</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    NTSC video runs at exactly <strong>30000/1001 ≈ 29.97 fps</strong>, not 30 fps. After one hour of <em>non-drop</em> 30 fps counting, real time has advanced by <strong>3 seconds and 18 frames</strong> further than the timecode. <strong>Drop-frame</strong> compensates: at the start of every minute (except every 10th), it skips frame numbers <code>00</code> and <code>01</code> — 2 frame numbers × 9 minutes × 6 ten-minute blocks = 108 dropped numbers per hour, the offset needed to keep the timecode aligned with the wall clock. Only frame <em>numbers</em> are skipped — no video frames are actually dropped.
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6;margin-top:8px">
+    Drop-frame timecodes use a semicolon before the frame field: <code>01:00:00;00</code>. Non-drop uses the standard colon. This tool accepts either separator.
+  </p>
+  <h2 style="margin-top:18px">Common frame rates</h2>
+  <table class="ref">
+    <thead><tr><th>Rate</th><th>Exact</th><th>Used by</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">23.976</td><td class="mono">24000/1001</td><td>Film telecined to NTSC, streaming film</td></tr>
+      <tr><td class="mono">24</td><td class="mono">24</td><td>Theatrical cinema, Blu-ray film</td></tr>
+      <tr><td class="mono">25</td><td class="mono">25</td><td>PAL television (Europe, Australia)</td></tr>
+      <tr><td class="mono">29.97</td><td class="mono">30000/1001</td><td>NTSC video (US, Japan)<span class="df-badge">DF</span></td></tr>
+      <tr><td class="mono">30</td><td class="mono">30</td><td>Web video, some camera modes</td></tr>
+      <tr><td class="mono">50</td><td class="mono">50</td><td>PAL HD broadcast</td></tr>
+      <tr><td class="mono">59.94</td><td class="mono">60000/1001</td><td>ATSC HD broadcast (US)<span class="df-badge">DF</span></td></tr>
+      <tr><td class="mono">60</td><td class="mono">60</td><td>High-frame-rate web and gaming</td></tr>
+    </tbody>
+  </table>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Returns {fps, isDF, nominal} for a rate code.
+function rateInfo(code) {
+  switch (code) {
+    case '23.976': return { fps: 24000/1001, nominal: 24, isDF: false };
+    case '24':     return { fps: 24,           nominal: 24, isDF: false };
+    case '25':     return { fps: 25,           nominal: 25, isDF: false };
+    case '29.97':  return { fps: 30000/1001, nominal: 30, isDF: false };
+    case '29.97df':return { fps: 30000/1001, nominal: 30, isDF: true };
+    case '30':     return { fps: 30,           nominal: 30, isDF: false };
+    case '50':     return { fps: 50,           nominal: 50, isDF: false };
+    case '59.94':  return { fps: 60000/1001, nominal: 60, isDF: false };
+    case '59.94df':return { fps: 60000/1001, nominal: 60, isDF: true };
+    case '60':     return { fps: 60,           nominal: 60, isDF: false };
+  }
+}
+
+// Parses HH:MM:SS:FF (or with ;), returns {h,m,s,f} or null on failure.
+function parseTC(str) {
+  const m = String(str).trim().match(/^(\d{1,2})[:](\d{1,2})[:](\d{1,2})[:;](\d{1,3})$/);
+  if (!m) return null;
+  return { h:+m[1], m:+m[2], s:+m[3], f:+m[4], sep:str.includes(';') ? ';' : ':' };
+}
+
+function pad(n, w) { n = Math.abs(n); return String(n).padStart(w, '0'); }
+
+function formatTC(h, m, s, f, isDF) {
+  const sep = isDF ? ';' : ':';
+  return `${pad(h,2)}:${pad(m,2)}:${pad(s,2)}${sep}${pad(f,2)}`;
+}
+
+// Drop-frame conversion: David Heidelberger / Chris Pirazzi reference formulas.
+// drop = 2 numbers per minute for 29.97DF, 4 for 59.94DF (every minute except every 10th).
+function tcToFrames(tc, code) {
+  const { nominal, isDF } = rateInfo(code);
+  if (tc.f >= nominal) return { error: `Frame field must be 0..${nominal-1}` };
+  if (tc.s >= 60 || tc.m >= 60) return { error: 'Seconds/minutes must be 0..59' };
+  if (!isDF) {
+    return { frames: ((tc.h*3600) + tc.m*60 + tc.s) * nominal + tc.f };
+  }
+  const drop = nominal === 30 ? 2 : 4;
+  // Skipped frame numbers don't exist in valid timecode
+  if (tc.m % 10 !== 0 && tc.s === 0 && tc.f < drop) {
+    return { error: `Frame number ${pad(tc.f,2)} is skipped at ${pad(tc.m,2)}:00 in drop-frame` };
+  }
+  const totalMinutes = tc.h*60 + tc.m;
+  const droppedNumbers = drop * (totalMinutes - Math.floor(totalMinutes/10));
+  const naive = ((tc.h*3600) + tc.m*60 + tc.s) * nominal + tc.f;
+  return { frames: naive - droppedNumbers };
+}
+
+function framesToTC(frames, code) {
+  const { nominal, isDF } = rateInfo(code);
+  frames = Math.round(frames);
+  if (!isDF) {
+    let f = frames % nominal;
+    let totalSec = Math.floor(frames / nominal);
+    let s = totalSec % 60;
+    let totalMin = Math.floor(totalSec / 60);
+    let m = totalMin % 60;
+    let h = Math.floor(totalMin / 60);
+    return { h, m, s, f };
+  }
+  const drop = nominal === 30 ? 2 : 4;
+  const framesPer10Min = nominal*60*10 - drop*9;     // 17982 @30, 35964 @60
+  const framesPerMin   = nominal*60     - drop;        // 1798  @30, 3596  @60
+  const d = Math.floor(frames / framesPer10Min);
+  const m = frames % framesPer10Min;
+  let adj;
+  if (m > drop) {
+    adj = frames + drop*9*d + drop * Math.floor((m - drop) / framesPerMin);
+  } else {
+    adj = frames + drop*9*d;
+  }
+  const f = adj % nominal;
+  const s = Math.floor(adj / nominal) % 60;
+  const mm = Math.floor(adj / (nominal*60)) % 60;
+  const h = Math.floor(adj / (nominal*3600));
+  return { h, m: mm, s, f };
+}
+
+function fmtSeconds(secs) {
+  const sign = secs < 0 ? '-' : '';
+  secs = Math.abs(secs);
+  const h = Math.floor(secs/3600);
+  const m = Math.floor((secs%3600)/60);
+  const s = secs - h*3600 - m*60;
+  return `${sign}${pad(h,2)}:${pad(m,2)}:${s.toFixed(3).padStart(6,'0')}`;
+}
+
+let lastEdited = 'tc';
+
+function fromTC() {
+  lastEdited = 'tc';
+  const tc = parseTC($('tc1').value);
+  if (!tc) { $('tc1err').innerHTML = '<div class="err">Format must be HH:MM:SS:FF</div>'; return; }
+  $('tc1err').innerHTML = '';
+  const code = $('rate1').value;
+  const r = tcToFrames(tc, code);
+  if (r.error) { $('tc1err').innerHTML = `<div class="err">${r.error}</div>`; return; }
+  $('frames1').value = r.frames;
+  $('fr1err').innerHTML = '';
+  updateStats(r.frames, code);
+}
+
+function fromFrames() {
+  lastEdited = 'frames';
+  const n = Number($('frames1').value);
+  if (!Number.isFinite(n) || n < 0) { $('fr1err').innerHTML = '<div class="err">Enter a non-negative integer</div>'; return; }
+  $('fr1err').innerHTML = '';
+  const code = $('rate1').value;
+  const tc = framesToTC(n, code);
+  const { isDF } = rateInfo(code);
+  $('tc1').value = formatTC(tc.h, tc.m, tc.s, tc.f, isDF);
+  $('tc1err').innerHTML = '';
+  updateStats(n, code);
+}
+
+function updateStats(frames, code) {
+  const { fps, isDF, nominal } = rateInfo(code);
+  const realSecs = frames / fps;
+  $('seconds1').textContent = realSecs.toFixed(4);
+  $('wall1').textContent = fmtSeconds(realSecs);
+  if (isDF) {
+    $('drift1').textContent = 'drop-frame: stays aligned';
+  } else if (Math.abs(fps - nominal) < 0.001) {
+    $('drift1').textContent = '0 (integer rate)';
+  } else {
+    const tcSecs = frames / nominal;
+    const drift = realSecs - tcSecs;
+    const sign = drift >= 0 ? '+' : '';
+    $('drift1').textContent = `${sign}${drift.toFixed(3)} s`;
+  }
+}
+
+function rerun(which) {
+  if (which === 1) {
+    if (lastEdited === 'tc') fromTC(); else fromFrames();
+  }
+}
+
+function setPreset(which, tcStr) {
+  if (which === 1) { $('tc1').value = tcStr; fromTC(); }
+}
+
+function calcOp() {
+  const a = parseTC($('opA').value);
+  const b = parseTC($('opB').value);
+  const code = $('rateOp').value;
+  const note = $('opNote');
+  if (!a || !b) { $('opResult').value = ''; note.textContent = 'Both operands must be valid HH:MM:SS:FF.'; return; }
+  const fa = tcToFrames(a, code), fb = tcToFrames(b, code);
+  if (fa.error) { $('opResult').value = ''; note.textContent = 'A: ' + fa.error; return; }
+  if (fb.error) { $('opResult').value = ''; note.textContent = 'B: ' + fb.error; return; }
+  const sign = $('opSign').value;
+  let res = sign === '+' ? fa.frames + fb.frames : fa.frames - fb.frames;
+  if (res < 0) { $('opResult').value = '— (negative)'; note.textContent = 'Result is negative. Swap A and B.'; return; }
+  const tc = framesToTC(res, code);
+  const { isDF, fps } = rateInfo(code);
+  $('opResult').value = formatTC(tc.h, tc.m, tc.s, tc.f, isDF);
+  note.textContent = `Result = ${res} frames · ${fmtSeconds(res/fps)} wall clock.`;
+}
+
+function calcDur() {
+  const a = parseTC($('durStart').value);
+  const b = parseTC($('durEnd').value);
+  const code = $('rateDur').value;
+  if (!a || !b) { $('durTC').textContent = '—'; $('durFrames').textContent = '—'; $('durSecs').textContent = '—'; return; }
+  const fa = tcToFrames(a, code), fb = tcToFrames(b, code);
+  if (fa.error || fb.error) { $('durTC').textContent = '—'; $('durFrames').textContent = '—'; $('durSecs').textContent = '—'; return; }
+  const diff = fb.frames - fa.frames;
+  if (diff < 0) { $('durTC').textContent = 'out < in'; $('durFrames').textContent = String(diff); $('durSecs').textContent = '—'; return; }
+  const tc = framesToTC(diff, code);
+  const { isDF, fps } = rateInfo(code);
+  $('durTC').textContent = formatTC(tc.h, tc.m, tc.s, tc.f, isDF);
+  $('durFrames').textContent = String(diff);
+  $('durSecs').textContent = (diff/fps).toFixed(4) + ' s';
+}
+
+fromTC();
+calcOp();
+calcDur();
+</script>
+</body>
+</html>

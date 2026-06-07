@@ -313,6 +313,7 @@
 | [SQL Window Function Builder](sqlwindow.html) | Compose OVER (PARTITION BY ... ORDER BY ... ROWS BETWEEN ...) clauses for ROW_NUMBER, RANK, LAG, SUM and friends — generated SQL plus live result on sample data. |
 | [Bash Parameter Expansion Tester](bashparam.html) | Test ${var:-default}, ${var/pat/repl}, ${var##*/}, ${#var} and every other bash parameter expansion form on your variables — built-in cheatsheet, no shell needed. |
 | [Big O Complexity Comparator](bigo.html) | Compare O(1), O(log n), O(n), O(n log n), O(n²), O(2ⁿ), O(n!) at any input size — operations and runtime budgets on a log–log chart. |
+| [SMPTE Timecode Calculator](smpte.html) | Convert between SMPTE timecode `HH:MM:SS:FF` and frame counts at 23.976 / 24 / 25 / 29.97 DF + NDF / 30 / 50 / 59.94 / 60 fps — add or subtract timecodes, measure runtime between two points, and see wall-clock drift. |
 
 ## AI & PM Tools
 
@@ -395,6 +396,8 @@
 | [Task Prioritizer](taskprioritizer.html) | Score tasks by impact, effort, urgency, and risk. |
 | [WIP Limit Planner](wip.html) | Plan realistic work-in-progress limits. |
 | [Open Source License Chooser](license.html) | Compare MIT, Apache 2.0, GPL, BSD, MPL, ISC, Unlicense and more side-by-side, then generate a ready-to-use LICENSE file. |
+| [License Header Inserter](licenseheader.html) | Stamp source files with SPDX + copyright headers in the right comment syntax for 50+ languages. Preserves shebangs and BOMs, replaces existing top headers. |
+| [CODEOWNERS Generator & Tester](codeowners.html) | Build a GitHub CODEOWNERS file rule by rule, test which rule routes any file path, and lint for invalid owners, shadowed rules, and unrouted paths. |
 
 ---
 

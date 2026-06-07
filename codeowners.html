@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CODEOWNERS Generator & Tester — Free Online Tool</title>
+<meta name="description" content="Build a GitHub CODEOWNERS file visually with pattern + owner mapping, then test which rule matches any file path. Catches invalid usernames, bad globs, conflicting last-match wins, and unrouted paths.">
+<meta name="keywords" content="CODEOWNERS, github codeowners, gitlab codeowners, owners file, code review routing, codeowners generator, codeowners tester, codeowners syntax">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/codeowners.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .rules { display: grid; gap: 6px; }
+  .rule {
+    display: grid; grid-template-columns: 38px 1.4fr 2fr 110px 30px;
+    gap: 8px; align-items: center;
+  }
+  .rule .num {
+    text-align: center; font-family: var(--mono); font-size: .8rem;
+    color: var(--muted); background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 6px 0;
+  }
+  .rule input, .rule select {
+    padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono);
+    font-size: .85rem; width: 100%; box-sizing: border-box;
+  }
+  .rule .del {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    border-radius: var(--radius); cursor: pointer; height: 30px; font-size: 1rem;
+  }
+  .rule .del:hover { color: var(--error); border-color: var(--error); }
+  .rule input.bad { border-color: var(--error); }
+  .rule .colhead {
+    font-size: .72rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .04em; font-weight: 600;
+  }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .btn-row button {
+    padding: 7px 14px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .btn-row button:hover { border-color: var(--accent); }
+  .btn-row button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  pre.out {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px; margin: 0;
+    font-family: var(--mono); font-size: .85rem;
+    white-space: pre-wrap; max-height: 260px; overflow: auto;
+  }
+  .lint {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px; font-size: .85rem;
+  }
+  .lint .item { padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .lint .item:last-child { border: none; }
+  .lint .tag {
+    display: inline-block; padding: 1px 8px; border-radius: 99px;
+    font-size: .7rem; font-weight: 600; margin-right: 6px; vertical-align: middle;
+  }
+  .tag.error { background: var(--error); color: #fff; }
+  .tag.warn  { background: var(--warning); color: #000; }
+  .tag.info  { background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+  .test-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+  .test-result {
+    margin-top: 10px; padding: 10px 12px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-size: .9rem;
+  }
+  .test-result .match { font-family: var(--mono); color: var(--success); }
+  .test-result .nomatch { color: var(--warning); }
+  .test-result .ownerlist { font-family: var(--mono); color: var(--text); }
+  .test-result .rulenum { color: var(--muted); font-family: var(--mono); font-size: .82rem; }
+  .field label { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; font-weight: 600; }
+  .field input, .field textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .9rem; box-sizing: border-box;
+  }
+  .field textarea { font-size: .85rem; min-height: 100px; resize: vertical; }
+  .stat-row { display: flex; gap: 16px; font-size: .82rem; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
+  .stat-row strong { color: var(--text); font-family: var(--mono); }
+  @media (max-width: 768px) {
+    .rule { grid-template-columns: 30px 1fr 1fr 26px; }
+    .rule select { grid-column: 2 / 4; }
+    .test-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CODEOWNERS Generator & Tester</h1>
+<p class="subtitle">Build a GitHub-style <code>CODEOWNERS</code> file rule by rule, then probe any file path to see which rule (and which owners) GitHub would route a review to. Validates patterns, owner syntax, and the last-match-wins ordering trap.</p>
+
+<div class="card">
+  <h2>📋 Rules</h2>
+  <div id="rules" class="rules">
+    <div class="rule">
+      <div class="colhead">#</div>
+      <div class="colhead">Pattern</div>
+      <div class="colhead">Owners (space-separated)</div>
+      <div class="colhead">Section</div>
+      <div></div>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="primary" onclick="addRule()">+ Add rule</button>
+    <button onclick="loadExample()">Load example</button>
+    <button onclick="parseImport()">Import existing…</button>
+    <button onclick="clearAll()">Clear all</button>
+  </div>
+  <div id="importPanel" style="display:none;margin-top:12px">
+    <div class="field">
+      <label for="importText">Paste existing CODEOWNERS</label>
+      <textarea id="importText" placeholder="*       @org/maintainers&#10;*.go    @org/go-team&#10;/docs/  @org/docs"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="primary" onclick="doImport()">Parse and replace rules</button>
+      <button onclick="$('importPanel').style.display='none'">Cancel</button>
+    </div>
+  </div>
+  <div class="stat-row">
+    <span>rules: <strong id="cnt-rules">0</strong></span>
+    <span>unique owners: <strong id="cnt-owners">0</strong></span>
+    <span>sections: <strong id="cnt-sections">1</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>📄 Output</h2>
+  <pre id="output" class="out"></pre>
+  <div class="btn-row">
+    <button class="primary" onclick="copyOut()">Copy</button>
+    <button onclick="downloadFile()">Download CODEOWNERS</button>
+  </div>
+  <div id="copyMsg" style="font-size:.82rem;margin-top:6px"></div>
+</div>
+
+<div class="card">
+  <h2>✅ Lint</h2>
+  <div id="lint" class="lint"><div class="item"><span class="tag info">empty</span>Add a rule to start.</div></div>
+</div>
+
+<div class="card">
+  <h2>🎯 Test a file path</h2>
+  <div class="test-row">
+    <div class="field">
+      <label for="testPath">File path (relative to repo root)</label>
+      <input id="testPath" value="src/api/handlers/auth.go" oninput="runTest()">
+    </div>
+    <div class="field">
+      <label for="batchPaths">Or paste many paths, one per line</label>
+      <textarea id="batchPaths" oninput="runBatch()">src/api/handlers/auth.go
+docs/getting-started.md
+.github/workflows/ci.yml
+infra/terraform/prod.tf
+random/unowned.txt</textarea>
+    </div>
+  </div>
+  <div id="testResult" class="test-result"></div>
+  <pre id="batchResult" class="out" style="margin-top:10px;display:none"></pre>
+</div>
+
+<div class="card">
+  <h2>CODEOWNERS syntax cheat sheet</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    <strong>Last matching rule wins.</strong> GitHub walks the file top-to-bottom and the <em>last</em> non-overridden pattern that matches the changed file decides the owners. Earlier rules are silently shadowed when a later one matches the same path.
+  </p>
+  <ul style="font-size:.88rem;color:var(--muted);line-height:1.7;margin:8px 0 0 18px">
+    <li><code>*</code> — anything in this directory and below</li>
+    <li><code>*.js</code> — any <code>.js</code> file at any depth</li>
+    <li><code>/build/</code> — only the top-level <code>build/</code> directory</li>
+    <li><code>docs/*</code> — files directly inside <code>docs/</code> (no recursion)</li>
+    <li><code>apps/**/*.tsx</code> — any TSX file under <code>apps/</code> at any depth</li>
+    <li>Owners are <code>@username</code>, <code>@org/team</code>, or <code>user@example.com</code></li>
+    <li>Lines starting with <code>#</code> are comments</li>
+    <li><code>[Section Name]</code> = required reviewers; <code>^[Optional Section]</code> = optional</li>
+  </ul>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const rulesEl = $('rules');
+let nextId = 1;
+
+const OWNER_RE = /^(@[A-Za-z0-9][A-Za-z0-9-]{0,38}(\/[A-Za-z0-9][A-Za-z0-9._-]{0,38})?|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})$/;
+
+function makeRule(data = {}) {
+  const id = nextId++;
+  const row = document.createElement('div');
+  row.className = 'rule';
+  row.dataset.id = id;
+  row.innerHTML = `
+    <div class="num"></div>
+    <input type="text" class="pat" placeholder="*.go or /docs/" value="${escapeAttr(data.pattern || '')}">
+    <input type="text" class="own" placeholder="@org/team @user" value="${escapeAttr(data.owners || '')}">
+    <select class="sect">
+      <option value="">(none)</option>
+      <option value="Required">[Required]</option>
+      <option value="Optional">^[Optional]</option>
+      <option value="Backend">[Backend]</option>
+      <option value="Frontend">[Frontend]</option>
+      <option value="Docs">[Docs]</option>
+      <option value="Infra">[Infra]</option>
+    </select>
+    <button class="del" title="Remove">×</button>
+  `;
+  if (data.section) row.querySelector('.sect').value = data.section;
+  row.querySelector('.del').onclick = () => { row.remove(); update(); };
+  row.querySelector('.pat').oninput = update;
+  row.querySelector('.own').oninput = update;
+  row.querySelector('.sect').onchange = update;
+  rulesEl.appendChild(row);
+  update();
+  return row;
+}
+
+function escapeAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/&/g,'&amp;'); }
+
+function addRule() { makeRule(); }
+
+function clearAll() {
+  rulesEl.querySelectorAll('.rule[data-id]').forEach(r => r.remove());
+  update();
+}
+
+function loadExample() {
+  clearAll();
+  [
+    { pattern: '*',                       owners: '@org/maintainers' },
+    { pattern: '*.go',                    owners: '@org/go-team' },
+    { pattern: '*.{ts,tsx,js,jsx}',       owners: '@org/web' },
+    { pattern: '/docs/',                  owners: '@org/docs-team', section: 'Docs' },
+    { pattern: '/infra/**/*.tf',          owners: '@org/sre platform@example.com', section: 'Infra' },
+    { pattern: '/.github/workflows/',     owners: '@org/devex' },
+    { pattern: 'src/api/auth/**',         owners: '@org/security' },
+  ].forEach(r => makeRule(r));
+}
+
+function parseImport() {
+  $('importPanel').style.display = $('importPanel').style.display === 'none' ? 'block' : 'none';
+}
+
+function doImport() {
+  const text = $('importText').value;
+  clearAll();
+  let currentSect = '';
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/#.*$/, '').trim();
+    if (!line) continue;
+    const sm = line.match(/^\^?\[([^\]]+)\]/);
+    if (sm) { currentSect = sm[1]; continue; }
+    const parts = line.split(/\s+/);
+    const pattern = parts.shift();
+    const owners = parts.join(' ');
+    makeRule({ pattern, owners, section: currentSect });
+  }
+  $('importPanel').style.display = 'none';
+}
+
+function getRules() {
+  return [...rulesEl.querySelectorAll('.rule[data-id]')].map((r, i) => ({
+    el: r,
+    n: i + 1,
+    pattern: r.querySelector('.pat').value.trim(),
+    ownersRaw: r.querySelector('.own').value.trim(),
+    owners: r.querySelector('.own').value.trim().split(/\s+/).filter(Boolean),
+    section: r.querySelector('.sect').value,
+  }));
+}
+
+// Translate a CODEOWNERS-style glob into a regex (path-style).
+// Mirrors GitHub's behavior: '/foo' = anchored, 'foo' = anywhere,
+// trailing '/' = directory and below, '**' = any number of segments.
+function patternToRegex(pat) {
+  if (!pat) return null;
+  let anchored = pat.startsWith('/');
+  let dirOnly = pat.endsWith('/');
+  let body = pat.replace(/^\//, '').replace(/\/$/, '');
+  let re = '';
+  if (!anchored && !body.includes('/')) re = '(?:^|.*/)';
+  else re = '^';
+  let i = 0;
+  while (i < body.length) {
+    const c = body[i];
+    if (c === '*' && body[i+1] === '*') {
+      // ** = match any number of path segments (incl zero)
+      if (body[i+2] === '/') { re += '(?:.*/)?'; i += 3; }
+      else { re += '.*'; i += 2; }
+    } else if (c === '*') {
+      re += '[^/]*'; i++;
+    } else if (c === '?') {
+      re += '[^/]'; i++;
+    } else if (c === '{') {
+      // brace expansion: {a,b,c}
+      const close = body.indexOf('}', i);
+      if (close < 0) { re += '\\{'; i++; }
+      else {
+        const opts = body.slice(i+1, close).split(',').map(o => o.replace(/[.+^$()|[\]\\]/g, '\\$&').replace(/\*/g,'[^/]*'));
+        re += '(?:' + opts.join('|') + ')';
+        i = close + 1;
+      }
+    } else if (/[.+^$()|[\]\\]/.test(c)) {
+      re += '\\' + c; i++;
+    } else {
+      re += c; i++;
+    }
+  }
+  if (dirOnly) re += '(?:/.*)?$';
+  else re += '(?:/.*)?$'; // directories implied
+  // tighten if pattern had no trailing slash AND no wildcard ending: still allow exact match
+  return new RegExp(re);
+}
+
+function update() {
+  const rules = getRules();
+  rules.forEach(r => r.el.querySelector('.num').textContent = String(r.n));
+
+  // Validate
+  const issues = [];
+  const seenPatterns = new Map();
+  for (const r of rules) {
+    r.el.querySelector('.pat').classList.toggle('bad', !r.pattern);
+    if (!r.pattern) { issues.push({ kind:'error', msg:`Rule ${r.n}: missing pattern.` }); continue; }
+    if (/\s/.test(r.pattern)) issues.push({ kind:'error', msg:`Rule ${r.n}: pattern <code>${escapeHtml(r.pattern)}</code> contains whitespace. Escape with a backslash or quote-equivalent isn't supported by GitHub.` });
+    if (r.owners.length === 0) {
+      issues.push({ kind:'warn', msg:`Rule ${r.n}: pattern <code>${escapeHtml(r.pattern)}</code> has no owners — used to <em>unset</em> ownership for matching files.` });
+    }
+    for (const o of r.owners) {
+      if (!OWNER_RE.test(o)) {
+        issues.push({ kind:'error', msg:`Rule ${r.n}: owner <code>${escapeHtml(o)}</code> isn't a valid <code>@user</code>, <code>@org/team</code>, or email.` });
+      }
+    }
+    if (seenPatterns.has(r.pattern)) {
+      const prev = seenPatterns.get(r.pattern);
+      issues.push({ kind:'warn', msg:`Rule ${r.n} duplicates pattern from rule ${prev}. The later rule wins for matching paths.` });
+    }
+    seenPatterns.set(r.pattern, r.n);
+  }
+
+  // Detect shadowed rules: earlier rule whose pattern is a strict subset of a later one.
+  for (let i = 0; i < rules.length; i++) {
+    for (let j = i + 1; j < rules.length; j++) {
+      try {
+        const reLater = patternToRegex(rules[j].pattern);
+        // Heuristic: a non-anchored, broad pattern at the bottom is fine; we only flag if patterns are equal (already above).
+        if (rules[i].pattern === rules[j].pattern) continue;
+        // Synthesize a sample path from rules[i].pattern and see if rules[j] also matches it.
+        const sample = samplePath(rules[i].pattern);
+        if (sample && reLater && reLater.test(sample)) {
+          issues.push({ kind:'info', msg:`Rule ${rules[i].n} (<code>${escapeHtml(rules[i].pattern)}</code>) is shadowed by later rule ${rules[j].n} (<code>${escapeHtml(rules[j].pattern)}</code>) for paths like <code>${escapeHtml(sample)}</code>.` });
+        }
+      } catch (e) {}
+    }
+  }
+
+  // Render output
+  const out = [];
+  out.push('# CODEOWNERS — generated with toolbox.html');
+  out.push('# Last matching rule wins. Order matters.');
+  out.push('');
+  const bySect = new Map();
+  for (const r of rules) {
+    const key = r.section || '';
+    if (!bySect.has(key)) bySect.set(key, []);
+    bySect.get(key).push(r);
+  }
+  const sectionOrder = [...bySect.keys()];
+  // empty (no section) first
+  sectionOrder.sort((a,b) => (a === '' ? -1 : b === '' ? 1 : 0));
+  for (const sect of sectionOrder) {
+    if (sect) {
+      // Optional sections in GitHub use ^[Name]; we use the convention that "Optional" → ^[Optional]
+      out.push(sect === 'Optional' ? '^[Optional]' : `[${sect}]`);
+    }
+    for (const r of bySect.get(sect)) {
+      const owners = r.ownersRaw || '';
+      out.push(`${r.pattern}${owners ? '  ' + owners : ''}`);
+    }
+    out.push('');
+  }
+  $('output').textContent = out.join('\n').replace(/\n{3,}/g,'\n\n').trimEnd() + '\n';
+
+  // Lint render
+  if (rules.length === 0) {
+    $('lint').innerHTML = '<div class="item"><span class="tag info">empty</span>Add a rule to start.</div>';
+  } else if (issues.length === 0) {
+    $('lint').innerHTML = `<div class="item"><span class="tag info">ok</span>${rules.length} rule${rules.length===1?'':'s'} validate cleanly.</div>`;
+  } else {
+    $('lint').innerHTML = issues.map(i => `<div class="item"><span class="tag ${i.kind}">${i.kind}</span>${i.msg}</div>`).join('');
+  }
+
+  // Stats
+  $('cnt-rules').textContent = rules.length;
+  const ownersSet = new Set();
+  rules.forEach(r => r.owners.forEach(o => ownersSet.add(o)));
+  $('cnt-owners').textContent = ownersSet.size;
+  $('cnt-sections').textContent = bySect.size;
+
+  runTest();
+  runBatch();
+}
+
+function samplePath(pat) {
+  if (!pat) return null;
+  let s = pat.replace(/^\//, '');
+  s = s.replace(/\*\*\//g, 'sub/').replace(/\*\*/g, 'rest').replace(/\*/g, 'item').replace(/\?/g, 'x');
+  s = s.replace(/\{([^}]+)\}/g, (_, opts) => opts.split(',')[0]);
+  if (s.endsWith('/')) s += 'file.txt';
+  return s;
+}
+
+function matchPath(path, rules) {
+  const norm = path.replace(/^\/+/, '');
+  let winning = null;
+  rules.forEach(r => {
+    if (!r.pattern) return;
+    const re = patternToRegex(r.pattern);
+    if (re && re.test(norm)) winning = r;
+  });
+  return winning;
+}
+
+function escapeHtml(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);}
+
+function runTest() {
+  const rules = getRules();
+  const path = $('testPath').value.trim();
+  const box = $('testResult');
+  if (!path) { box.innerHTML = '<span class="nomatch">Enter a file path.</span>'; return; }
+  const win = matchPath(path, rules);
+  if (!win) {
+    box.innerHTML = `<span class="nomatch">No rule matches</span> <code>${escapeHtml(path)}</code> — these files would have <strong>no required reviewer</strong>.`;
+    return;
+  }
+  const ownersHtml = win.owners.length
+    ? `<span class="ownerlist">${win.owners.map(escapeHtml).join('  ')}</span>`
+    : `<em>none (ownership unset by rule)</em>`;
+  box.innerHTML = `<span class="match">✓ matches rule ${win.n}</span> <code>${escapeHtml(win.pattern)}</code> → ${ownersHtml}`;
+}
+
+function runBatch() {
+  const text = $('batchPaths').value;
+  const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+  if (lines.length === 0) { $('batchResult').style.display = 'none'; return; }
+  const rules = getRules();
+  const out = [];
+  let unowned = 0;
+  for (const p of lines) {
+    const w = matchPath(p, rules);
+    if (!w || w.owners.length === 0) { unowned++; out.push(`  (unowned)  ${p}`); }
+    else out.push(`  #${String(w.n).padStart(2)} ${w.owners.join(' ').padEnd(28)} ${p}`);
+  }
+  out.unshift(`# ${lines.length} path${lines.length===1?'':'s'}, ${unowned} unowned`);
+  $('batchResult').textContent = out.join('\n');
+  $('batchResult').style.display = 'block';
+}
+
+function copyOut() {
+  navigator.clipboard.writeText($('output').textContent).then(() => {
+    $('copyMsg').innerHTML = '<span style="color:var(--success)">Copied to clipboard.</span>';
+    setTimeout(() => $('copyMsg').textContent = '', 1800);
+  });
+}
+function downloadFile() {
+  const blob = new Blob([$('output').textContent], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'CODEOWNERS';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+loadExample();
+</script>
+</body>
+</html>
