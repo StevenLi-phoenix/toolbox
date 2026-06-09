@@ -43,6 +43,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS Border-Image Generator](borderimagegen.html) | Build the `border-image` shorthand with a live nine-slice preview — slice, width, outset, and per-axis repeat (stretch / repeat / round / space). Includes nine ready SVG patterns embedded as data URIs. |
 | [CSS linear() Easing Generator](linearease.html) | Build a CSS `linear()` timing function for spring, bounce, elastic, or stepped animations — adjust physics (stiffness, damping, mass, velocity), preview the curve and animation live, and copy a Chrome 113+ ready value with `@supports` fallback. |
 | [CSS ::marker Playground](cssmarker.html) | Style list bullets and numbers with the `::marker` pseudo-element — color, font-size, font-family, replace the bullet with a custom string, emoji, or a `counter()` expression like `'Step ' counter(list-item) '. '`. Pair with 25+ built-in `list-style-type` values (decimal-leading-zero, lower-roman, lower-greek, hiragana, hebrew, …) and copy ready CSS with the inheritable-only property guardrails baked in. |
 | [CSS Box Shadow Generator](boxshadow.html) | Stack multiple `box-shadow` layers visually — offset, blur, spread, color, opacity, and `inset` per layer with live preview on light, dark, photo, and checker backgrounds. Material-tier (1dp / 3dp / 8dp / 16dp), neumorphism, glow, focus-ring, and long-shadow presets, then copy a clean rule. |
@@ -240,6 +241,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [Iframe Sandbox Builder](iframesandbox.html) | Compose the `<iframe sandbox="…">` attribute token by token — each flag explained with its risk level, live preview in a real sandboxed iframe, and warnings for the `allow-scripts allow-same-origin` escape and other risky combos. |
+| [HTML Heading Outline](headingoutline.html) | Parse an HTML document into its `h1`–`h6` tree and audit for skipped levels, multiple `h1`s, empty headings, and headings inside `aria-hidden` regions. Exports the outline as Markdown or plain text. |
 | [Linear & Polynomial Regression](linreg.html) | Fit a straight line or polynomial (degree 2–10) to (x, y) data with OLS — R², adjusted R², residual SE, F-test, per-coefficient t-stats, and a scatter chart with the fitted curve and 95% confidence band. Built-in ln / log₁₀ / √ / 1/x transforms linearize exponential and power-law data. |
 | [HTML &lt;dialog&gt; Builder](dialogbuilder.html) | Generate a native HTML `<dialog>` with the right opener — `showModal()` for blocking modals with focus trap and `::backdrop`, or `show()` for non-modal panels. Wire a `method="dialog"` form so the submit button auto-closes and returns `returnValue`, customize ESC and outside-click behavior with the new `closedby` attribute, and animate entry with `@starting-style`. Live preview plus copy-ready HTML, CSS, and JS. |
 | [Set Similarity Calculator](setsimilarity.html) | Compute Jaccard, Sørensen–Dice, Overlap (Szymkiewicz–Simpson), Tversky T(α,β), and cosine similarity between two line-based sets — plus &#124;A&#124;, &#124;B&#124;, &#124;A∩B&#124;, &#124;A∪B&#124;, and the elements unique to each side. Toggle dedupe vs multiset mode, case-insensitive matching, and whitespace trimming. Useful for fuzzy duplicate detection, retrieval thresholds, and asymmetric tag-overlap scoring. |
