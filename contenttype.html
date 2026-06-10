@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP Content-Type Parser &amp; Builder — Free Online Tool</title>
+<meta name="description" content="Parse, validate, and build HTTP Content-Type / media-type strings — RFC 7231 type/subtype, suffix (+json / +xml), parameters (charset, boundary, profile), q-value sorting, and multipart boundary generator.">
+<meta name="keywords" content="content-type, media type, mime type, http header, multipart boundary, rfc 7231, rfc 6838, accept header, content negotiation, charset, http-and-apis">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/contenttype.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea, input.full {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .9rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+  }
+  textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
+  textarea:focus, input.full:focus { outline: none; border-color: var(--accent); }
+  label.head { display:block; font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; font-weight:600; }
+
+  .parse-results { margin-top: 12px; }
+  .parts {
+    display: grid; grid-template-columns: 130px 1fr; gap: 6px 14px;
+    font-size: .88rem; font-family: var(--mono);
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .parts .k { color: var(--muted); }
+  .parts .v { color: var(--text); word-break: break-all; }
+  .parts .v b { font-weight: 700; }
+
+  .params-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .85rem; }
+  .params-table th, .params-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  .params-table th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; font-family: var(--sans); font-weight: 600; }
+  .params-table tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 99px;
+    font-size: .72rem; font-family: var(--sans); margin-left: 6px;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  .badge.ok { color: var(--success); border-color: #c1e7ce; background: #f1faf5; }
+  .badge.warn { color: var(--warning); border-color: #f0d999; background: #fdf6e3; }
+  .badge.err { color: var(--error); border-color: #f4baba; background: #fff5f5; }
+
+  .builder-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .builder-row input { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; background: var(--bg); color: var(--text); box-sizing: border-box; width: 100%; }
+  .builder-row button.del { padding: 5px 10px; border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius); cursor: pointer; color: var(--muted); font-size: .78rem; }
+  .builder-row button.del:hover { color: var(--error); border-color: #f4baba; }
+
+  .btn-primary { padding: 7px 14px; border: 1px solid var(--text); background: var(--text); color: #fff; border-radius: var(--radius); cursor: pointer; font-size: .85rem; }
+  .btn { padding: 7px 14px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: var(--radius); cursor: pointer; font-size: .85rem; }
+  .btn:hover { background: var(--surface2); }
+
+  .built-out {
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2); font-family: var(--mono); font-size: .9rem;
+    word-break: break-all; line-height: 1.5;
+  }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .presets button {
+    padding: 4px 10px; font-size: .78rem; border: 1px solid var(--border);
+    background: var(--bg); border-radius: 99px; cursor: pointer; color: var(--text);
+    font-family: var(--mono);
+  }
+  .presets button:hover { background: var(--surface2); }
+
+  .err-msg { color: var(--error); font-size: .85rem; margin-top: 8px; }
+  .ok-msg { color: var(--success); font-size: .85rem; margin-top: 8px; }
+
+  details.cheat { margin-top: 14px; }
+  details.cheat summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+  details.cheat ul { padding-left: 18px; font-size: .85rem; line-height: 1.7; }
+  details.cheat code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
+
+  .multipart-block { margin-top: 14px; }
+  .boundary-out { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-family: var(--mono); font-size: .85rem; }
+
+  @media (max-width: 800px) {
+    .panels { grid-template-columns: 1fr; }
+    .parts { grid-template-columns: 110px 1fr; }
+    .builder-row { grid-template-columns: 1fr 1fr; }
+    .builder-row button.del { grid-column: span 2; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HTTP Content-Type Parser &amp; Builder</h1>
+<p class="subtitle">Take apart a <code>Content-Type</code> / media-type string into its <code>type</code>, <code>subtype</code>, <code>+suffix</code>, and parameters &mdash; or compose one from scratch. Validates the RFC&nbsp;7231 / RFC&nbsp;6838 grammar, surfaces the structured-syntax suffix family (<code>+json</code>, <code>+xml</code>, <code>+cbor</code>, &hellip;), normalizes <code>charset</code> casing, and generates safe <code>multipart/*</code> boundary tokens.</p>
+
+<div class="panels">
+  <div class="card" style="padding:16px">
+    <label class="head" for="raw">Parse</label>
+    <textarea id="raw" spellcheck="false">multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW; charset=utf-8</textarea>
+    <div class="presets">
+      <button onclick="preset(this)">application/json</button>
+      <button onclick="preset(this)">text/html; charset=UTF-8</button>
+      <button onclick="preset(this)">application/vnd.api+json; profile=&quot;https://jsonapi.org/format/1.1/&quot;</button>
+      <button onclick="preset(this)">multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW</button>
+      <button onclick="preset(this)">application/problem+json; charset=us-ascii</button>
+      <button onclick="preset(this)">image/svg+xml</button>
+      <button onclick="preset(this)">application/ld+json; profile=&quot;https://schema.org&quot;</button>
+      <button onclick="preset(this)">text/event-stream</button>
+    </div>
+    <div id="parseOut" class="parse-results"></div>
+  </div>
+
+  <div class="card" style="padding:16px">
+    <label class="head">Build</label>
+    <div class="builder-row" style="grid-template-columns: 1fr 1fr 60px">
+      <input id="bType" placeholder="type (e.g. application)" oninput="renderBuild()" value="application">
+      <input id="bSubtype" placeholder="subtype (e.g. vnd.acme.user)" oninput="renderBuild()" value="vnd.acme.user">
+      <input id="bSuffix" placeholder="+suffix" oninput="renderBuild()" value="json" style="width:100%">
+    </div>
+
+    <label class="head" style="margin-top:14px">Parameters</label>
+    <div id="builderParams"></div>
+    <button class="btn" type="button" onclick="addParam()" style="margin-top:4px">+ Add parameter</button>
+
+    <label class="head" style="margin-top:16px">Output</label>
+    <div class="built-out" id="builtOut"></div>
+    <button class="btn" type="button" onclick="copyBuilt()" style="margin-top:8px">Copy</button>
+    <span id="copyOk" class="ok-msg" style="display:none;margin-left:8px">Copied!</span>
+
+    <div class="multipart-block">
+      <label class="head">Generate a multipart boundary</label>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px">
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:6px">Style:
+          <select id="bStyle" onchange="genBoundary()" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem">
+            <option value="webkit">WebKit (----WebKitFormBoundary…)</option>
+            <option value="mozilla">Mozilla / FormData</option>
+            <option value="hyphen">Hyphenated UUID</option>
+            <option value="hex">Hex (32 chars)</option>
+            <option value="b64">Base64-url (24 chars)</option>
+          </select>
+        </label>
+        <button class="btn" type="button" onclick="genBoundary()">Regenerate</button>
+      </div>
+      <div class="boundary-out" id="boundaryOut"></div>
+      <p style="font-size:.78rem;color:var(--muted);margin-top:6px">Boundary tokens may be up to 70 chars from a safe ASCII subset (RFC&nbsp;2046). This tool only emits characters that never need quoting.</p>
+    </div>
+  </div>
+</div>
+
+<details class="cheat" open>
+  <summary>Grammar &amp; common pitfalls</summary>
+  <ul style="margin-top:8px">
+    <li><b>Shape:</b> <code>type "/" subtype *( ";" parameter )</code>. <code>type</code> and <code>subtype</code> are tokens (no spaces, no <code>(),/:;&lt;=&gt;?@[\]{}</code>). Parameters are <code>name=value</code>; values that contain tspecials must be wrapped in double quotes, with <code>\</code> escaping <code>"</code> and <code>\</code>.</li>
+    <li><b>Case:</b> <code>type</code>, <code>subtype</code>, and parameter <em>names</em> are ASCII case-insensitive (RFC&nbsp;7231 &sect;3.1.1). Parameter <em>values</em> are usually case-sensitive &mdash; <code>charset</code> being the famous exception (<code>UTF-8</code> and <code>utf-8</code> are equivalent).</li>
+    <li><b>Structured suffix:</b> <code>application/vnd.acme.thing+json</code> means &ldquo;parse the body as JSON, but the schema is vendor-specific.&rdquo; Registered families: <code>+json</code>, <code>+xml</code>, <code>+ber</code>, <code>+cbor</code>, <code>+der</code>, <code>+fastinfoset</code>, <code>+gzip</code>, <code>+json-seq</code>, <code>+jwt</code>, <code>+sqlite3</code>, <code>+tlv</code>, <code>+wbxml</code>, <code>+zip</code>, <code>+zstd</code>.</li>
+    <li><b>Trees:</b> the subtype namespace uses dotted prefixes &mdash; <code>vnd.*</code> (vendor), <code>prs.*</code> (personal), <code>x.*</code> (private / experimental, discouraged outside <code>x-</code>). Unprefixed subtypes belong to the standards tree.</li>
+    <li><b>Charset:</b> only meaningful for textual media. For <code>application/json</code>, RFC&nbsp;8259 forbids <code>charset</code> &mdash; JSON is always UTF-8; many tools quietly ignore it, but some validators flag the header.</li>
+    <li><b>Boundary:</b> required for any <code>multipart/*</code>. Must not appear anywhere inside the body, hence the long random tokens.</li>
+    <li><b>q-values:</b> appear in <code>Accept</code> negotiation, never in a response&apos;s <code>Content-Type</code>. If you see <code>;q=0.8</code> in a parsed Content-Type, it&apos;s probably misuse.</li>
+  </ul>
+</details>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const SUFFIX_FAMILY = ['json','xml','ber','cbor','der','fastinfoset','gzip','json-seq','jwt','sqlite3','tlv','wbxml','zip','zstd'];
+// RFC 7230 token: 1*tchar; tchar excludes: separators ( ) < > @ , ; : \ " / [ ] ? = { } SP HT
+const TOKEN_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+function isToken(s) { return TOKEN_RE.test(s); }
+
+function parse(input) {
+  const errors = [];
+  const warnings = [];
+  let s = (input || '').trim();
+  // Strip a leading "Content-Type:" if pasted in
+  s = s.replace(/^content-type\s*:\s*/i, '');
+  if (!s) {
+    return { ok: false, errors: ['Empty input'], warnings: [] };
+  }
+  // Split off type/subtype first
+  const semi = s.indexOf(';');
+  const head = (semi === -1 ? s : s.slice(0, semi)).trim();
+  const slash = head.indexOf('/');
+  if (slash === -1) {
+    return { ok: false, errors: ['Missing "/" between type and subtype'], warnings };
+  }
+  const type = head.slice(0, slash).trim().toLowerCase();
+  const subtypeFull = head.slice(slash+1).trim().toLowerCase();
+  if (!type || !isToken(type)) errors.push('Invalid type "' + type + '"');
+  if (!subtypeFull || !isToken(subtypeFull)) errors.push('Invalid subtype "' + subtypeFull + '"');
+
+  // Detect suffix
+  let subtype = subtypeFull;
+  let suffix = null;
+  const plus = subtypeFull.lastIndexOf('+');
+  if (plus > 0) {
+    suffix = subtypeFull.slice(plus + 1);
+    subtype = subtypeFull.slice(0, plus);
+    if (!isToken(suffix)) errors.push('Invalid suffix "+' + suffix + '"');
+  }
+
+  // Tree
+  let tree = 'standards';
+  if (subtype.startsWith('vnd.')) tree = 'vendor';
+  else if (subtype.startsWith('prs.')) tree = 'personal';
+  else if (subtype.startsWith('x.') || subtype.startsWith('x-')) tree = 'private';
+
+  // Parse parameters
+  const params = [];
+  if (semi !== -1) {
+    let i = semi + 1;
+    while (i < s.length) {
+      while (i < s.length && /[ \t;]/.test(s[i])) i++;
+      if (i >= s.length) break;
+      // name
+      let nameStart = i;
+      while (i < s.length && s[i] !== '=' && s[i] !== ';') i++;
+      const name = s.slice(nameStart, i).trim();
+      if (i >= s.length || s[i] !== '=') {
+        if (name) errors.push('Parameter "' + name + '" missing value');
+        break;
+      }
+      i++; // consume =
+      // skip optional ws
+      while (i < s.length && /[ \t]/.test(s[i])) i++;
+      let value = '';
+      if (s[i] === '"') {
+        // quoted-string
+        i++;
+        while (i < s.length) {
+          const c = s[i];
+          if (c === '\\' && i+1 < s.length) { value += s[i+1]; i += 2; continue; }
+          if (c === '"') { i++; break; }
+          value += c; i++;
+        }
+      } else {
+        let vStart = i;
+        while (i < s.length && s[i] !== ';') i++;
+        value = s.slice(vStart, i).trim();
+      }
+      if (!name) errors.push('Empty parameter name');
+      else if (!isToken(name)) errors.push('Parameter name "' + name + '" contains forbidden characters');
+      params.push({name: name.toLowerCase(), value, raw: value, originalName: name});
+    }
+  }
+
+  // Param validation
+  const seen = new Set();
+  for (const p of params) {
+    if (seen.has(p.name)) warnings.push('Duplicate parameter "' + p.name + '"');
+    seen.add(p.name);
+    if (p.name === 'charset') {
+      const v = p.value.toUpperCase();
+      const known = ['UTF-8','US-ASCII','ISO-8859-1','UTF-16','UTF-16LE','UTF-16BE','WINDOWS-1252','GBK','SHIFT_JIS','EUC-KR','BIG5'];
+      if (!known.includes(v)) warnings.push('Charset "' + p.value + '" is uncommon — confirm the encoding name.');
+      p.normalized = v;
+      if (type === 'application' && (subtype === 'json' || suffix === 'json')) {
+        warnings.push('charset on application/json is forbidden by RFC 8259 (JSON is always UTF-8).');
+      }
+    }
+    if (p.name === 'q') {
+      warnings.push('q= belongs in Accept headers — it should not appear in a response Content-Type.');
+    }
+    if (p.name === 'boundary') {
+      if (type !== 'multipart') warnings.push('boundary= is only meaningful on multipart/* types.');
+      if (p.value.length === 0 || p.value.length > 70) errors.push('boundary length is ' + p.value.length + ' (must be 1–70 chars)');
+      if (!/^[A-Za-z0-9'()+_,./:=?\- ]+$/.test(p.value)) errors.push('boundary contains characters outside the RFC 2046 bcharsnospace set.');
+      if (/\s$/.test(p.value)) errors.push('boundary must not end with whitespace.');
+    }
+  }
+
+  // Missing boundary check
+  if (type === 'multipart' && !seen.has('boundary')) {
+    errors.push('multipart/* requires a "boundary" parameter (RFC 2046).');
+  }
+
+  return { ok: errors.length === 0, errors, warnings, type, subtype, subtypeFull, suffix, params, tree };
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
+
+function renderParse() {
+  const out = $('parseOut');
+  const r = parse($('raw').value);
+  if (!r.ok && !r.type) {
+    out.innerHTML = '<div class="err-msg">' + r.errors.map(escapeHtml).join('<br>') + '</div>';
+    return;
+  }
+  let html = '<div class="parts">';
+  html += '<div class="k">type</div><div class="v"><b>' + escapeHtml(r.type) + '</b></div>';
+  html += '<div class="k">subtype</div><div class="v"><b>' + escapeHtml(r.subtype) + '</b>';
+  if (r.suffix) html += ' <span class="badge">+' + escapeHtml(r.suffix) + '</span>';
+  html += '</div>';
+  if (r.suffix) {
+    const known = SUFFIX_FAMILY.includes(r.suffix);
+    html += '<div class="k">suffix</div><div class="v">+' + escapeHtml(r.suffix);
+    html += known ? ' <span class="badge ok">registered family</span>' : ' <span class="badge warn">not a registered family</span>';
+    html += '</div>';
+  }
+  html += '<div class="k">tree</div><div class="v">' + r.tree;
+  if (r.tree === 'private') html += ' <span class="badge warn">x.* / x- is discouraged outside private use</span>';
+  html += '</div>';
+  html += '<div class="k">essence</div><div class="v">' + escapeHtml(r.type + '/' + r.subtypeFull) + '</div>';
+  html += '</div>';
+
+  if (r.params.length) {
+    html += '<table class="params-table"><thead><tr><th>name</th><th>value</th><th>note</th></tr></thead><tbody>';
+    for (const p of r.params) {
+      let note = '';
+      if (p.name === 'charset') note = 'normalized: ' + escapeHtml(p.normalized || '');
+      else if (p.name === 'boundary') note = 'length: ' + p.value.length + ' / 70';
+      else if (p.name === 'profile') note = 'URI list (space-separated)';
+      else if (p.name === 'q') note = 'misplaced — Accept only';
+      html += '<tr><td>' + escapeHtml(p.name) + '</td><td>' + escapeHtml(p.value) + '</td><td style="color:var(--muted)">' + note + '</td></tr>';
+    }
+    html += '</tbody></table>';
+  }
+
+  if (r.errors.length) html += '<div class="err-msg">' + r.errors.map(escapeHtml).join('<br>') + '</div>';
+  if (r.warnings.length) html += '<div style="margin-top:8px;color:var(--warning);font-size:.85rem">⚠ ' + r.warnings.map(escapeHtml).join('<br>⚠ ') + '</div>';
+  if (r.ok && !r.warnings.length) html += '<div class="ok-msg">✓ Valid Content-Type</div>';
+
+  // Suggested Accept usage
+  const canonical = canonicalForm(r);
+  html += '<div style="margin-top:14px"><label class="head">Canonical form</label><div class="built-out" style="margin-top:6px">' + escapeHtml(canonical) + '</div></div>';
+
+  out.innerHTML = html;
+}
+
+function canonicalForm(r) {
+  let out = r.type + '/' + r.subtypeFull;
+  for (const p of r.params) {
+    const val = needsQuoting(p.value) ? '"' + p.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"' : p.value;
+    out += '; ' + p.name + '=' + val;
+  }
+  return out;
+}
+
+function needsQuoting(v) {
+  // Quote if not a token or empty
+  return v === '' || !TOKEN_RE.test(v);
+}
+
+function preset(btn) {
+  $('raw').value = btn.textContent;
+  renderParse();
+}
+
+// --- Builder ---
+const BUILDER = {
+  params: [
+    {name: 'charset', value: 'utf-8'},
+    {name: 'boundary', value: ''}
+  ]
+};
+
+function renderBuilderParams() {
+  const wrap = $('builderParams');
+  wrap.innerHTML = '';
+  BUILDER.params.forEach((p, idx) => {
+    const row = document.createElement('div');
+    row.className = 'builder-row';
+    const nameInp = document.createElement('input');
+    nameInp.value = p.name;
+    nameInp.placeholder = 'name';
+    nameInp.oninput = () => { p.name = nameInp.value; renderBuild(); };
+
+    const valInp = document.createElement('input');
+    valInp.value = p.value;
+    valInp.placeholder = 'value';
+    valInp.oninput = () => { p.value = valInp.value; renderBuild(); };
+
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.type = 'button';
+    del.textContent = 'Remove';
+    del.onclick = () => { BUILDER.params.splice(idx,1); renderBuilderParams(); renderBuild(); };
+
+    row.appendChild(nameInp);
+    row.appendChild(valInp);
+    row.appendChild(del);
+    wrap.appendChild(row);
+  });
+}
+
+function addParam() {
+  BUILDER.params.push({name: '', value: ''});
+  renderBuilderParams();
+  renderBuild();
+}
+
+function renderBuild() {
+  const type = $('bType').value.trim().toLowerCase();
+  let subtype = $('bSubtype').value.trim().toLowerCase();
+  const suffix = $('bSuffix').value.trim().toLowerCase().replace(/^\+/, '');
+  if (suffix) subtype = subtype + '+' + suffix;
+  let out = (type || 'application') + '/' + (subtype || 'octet-stream');
+  for (const p of BUILDER.params) {
+    if (!p.name) continue;
+    const v = p.value || '';
+    out += '; ' + p.name + '=' + (needsQuoting(v) ? '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"' : v);
+  }
+  $('builtOut').textContent = out;
+}
+
+function copyBuilt() {
+  navigator.clipboard.writeText($('builtOut').textContent || '').then(() => {
+    const ok = $('copyOk');
+    ok.style.display = 'inline';
+    setTimeout(() => ok.style.display = 'none', 1200);
+  });
+}
+
+// --- Boundary generator ---
+function genBoundary() {
+  const style = $('bStyle').value;
+  let b;
+  if (style === 'webkit') {
+    const set = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let r = '';
+    for (let i = 0; i < 16; i++) r += set[Math.floor(Math.random()*set.length)];
+    b = '----WebKitFormBoundary' + r;
+  } else if (style === 'mozilla') {
+    let r = '';
+    for (let i = 0; i < 24; i++) r += Math.floor(Math.random()*10);
+    b = '-----------------------------' + r;
+  } else if (style === 'hyphen') {
+    b = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
+  } else if (style === 'hex') {
+    const arr = new Uint8Array(16);
+    crypto.getRandomValues(arr);
+    b = Array.from(arr).map(x => x.toString(16).padStart(2,'0')).join('');
+  } else if (style === 'b64') {
+    const arr = new Uint8Array(18);
+    crypto.getRandomValues(arr);
+    b = btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+  $('boundaryOut').textContent = b;
+  // Also drop it into the builder if multipart subtype
+  const idx = BUILDER.params.findIndex(p => p.name === 'boundary');
+  if (idx !== -1) {
+    BUILDER.params[idx].value = b;
+    renderBuilderParams();
+    renderBuild();
+  }
+}
+
+renderBuilderParams();
+renderBuild();
+genBoundary();
+renderParse();
+$('raw').addEventListener('input', renderParse);
+</script>
+</body>
+</html>

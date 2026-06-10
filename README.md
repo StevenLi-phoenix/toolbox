@@ -43,6 +43,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS text-box-trim Playground](textboxtrim.html) | Compare `text-box-trim` and `text-box-edge` values side by side — see exactly how trimming the half-leading down to cap-height & baseline finally centers text inside a button. Live preview, edge cheat sheet, and a copy-ready `text-box` shorthand with an `@supports` fallback. |
 | [CSS Border-Image Generator](borderimagegen.html) | Build the `border-image` shorthand with a live nine-slice preview — slice, width, outset, and per-axis repeat (stretch / repeat / round / space). Includes nine ready SVG patterns embedded as data URIs. |
 | [CSS linear() Easing Generator](linearease.html) | Build a CSS `linear()` timing function for spring, bounce, elastic, or stepped animations — adjust physics (stiffness, damping, mass, velocity), preview the curve and animation live, and copy a Chrome 113+ ready value with `@supports` fallback. |
 | [CSS ::marker Playground](cssmarker.html) | Style list bullets and numbers with the `::marker` pseudo-element — color, font-size, font-family, replace the bullet with a custom string, emoji, or a `counter()` expression like `'Step ' counter(list-item) '. '`. Pair with 25+ built-in `list-style-type` values (decimal-leading-zero, lower-roman, lower-greek, hiragana, hebrew, …) and copy ready CSS with the inheritable-only property guardrails baked in. |
@@ -132,6 +133,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [ICU MessageFormat Playground](icumessage.html) | Type an ICU MessageFormat string — `{count, plural, one {# item} other {# items}}`, `select`, `selectordinal`, currency, and date placeholders — set variables and watch the rendered output update side-by-side across English, Spanish, French, German, Polish, Arabic, Chinese, and more, powered by `Intl.PluralRules`. |
 | [Number → Words Converter](numwords.html) | Spell numbers in English — cardinal, ordinal, currency (cheque format), US short-scale or UK long-scale. Handles negatives, decimals, fractions, percentages, and arbitrarily large integers via BigInt. |
 | [Word Cloud Generator](wordcloud.html) | Build a word cloud from any text — adjustable stopwords, min length and frequency, rotation, color schemes, fonts, and a seeded spiral layout. Live frequency table on the side, export the cloud as SVG or PNG. |
 | [Line Ending Converter](lineending.html) | Convert text between CRLF (Windows), LF (Unix / macOS), and CR (classic Mac) — visualize hidden newline bytes, detect mixed endings, strip trailing whitespace, and download with the right encoding. |
@@ -192,6 +194,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Content-Type Parser & Builder](contenttype.html) | Split a media-type into `type`, `subtype`, structured-syntax suffix (`+json`, `+xml`, `+cbor`, …), and parameters per RFC 7231 / 6838 — flag charset on JSON, missing multipart boundary, misplaced `q=`, and identify the registration tree (standards / vendor / personal / private). Compose new headers with a parameter builder and generate WebKit / hex / base64 multipart boundaries. |
 | [RFC 7807 Problem+JSON Builder](problemjson.html) | Compose a spec-compliant `application/problem+json` error payload — the five standard members (`type`, `title`, `status`, `detail`, `instance`), the RFC 9457 `errors` array, and custom extension members — with a linter that flags missing fields, non-URI `type`, and bad JSON Pointers. Copy as JSON, full HTTP response, curl, fetch, or Spring `ProblemDetail`. |
 | [W3C Trace Context Decoder](tracecontext.html) | Parse `traceparent` and `tracestate` headers from OpenTelemetry, Jaeger, Zipkin, and AWS X-Ray — see the version, 128-bit trace-id, 64-bit span-id, and the sampled flag, validate against the spec, or generate a fresh header to inject into a curl request. |
 | [Sec-Fetch-* Header Decoder](secfetch.html) | Decode the Fetch Metadata request headers — `Sec-Fetch-Dest`, `Sec-Fetch-Mode`, `Sec-Fetch-Site`, `Sec-Fetch-User`, `Sec-Fetch-Storage-Access` — classify each request as same-origin / cross-site / nav / preflight / CSRF-shaped, and generate a Resource Isolation Policy middleware snippet (Express & Nginx) to block suspicious combinations. |
