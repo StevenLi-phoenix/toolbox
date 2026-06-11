@@ -244,6 +244,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Intl.ListFormat Playground](intllistformat.html) | Turn an array of strings into a localized list — "A, B, and C", "A, B o C", "A・B・C" — with live `conjunction` / `disjunction` / `unit` and `long` / `short` / `narrow` options, a `formatToParts` breakdown, and a 21-locale side-by-side. |
+| [TypeScript Utility Types Playground](tsutility.html) | Interactive reference for all 21 built-in TS utility types — `Partial`, `Pick`, `Omit`, `Record`, `ReturnType`, `Awaited`, `Uppercase` & friends. Pick a utility, paste your own type, and see the resolved shape plus a ready-to-paste snippet. |
+| [GitLab CI YAML Generator](gitlabci.html) | Build a `.gitlab-ci.yml` from a checklist — stages, default image, caches, services, `workflow:rules`, Docker-in-Docker, `parallel:matrix`, JUnit artifacts, and per-job `rules`. Presets for Node CI, Docker build & push, and GitLab Pages. |
 | [Iframe Sandbox Builder](iframesandbox.html) | Compose the `<iframe sandbox="…">` attribute token by token — each flag explained with its risk level, live preview in a real sandboxed iframe, and warnings for the `allow-scripts allow-same-origin` escape and other risky combos. |
 | [HTML Heading Outline](headingoutline.html) | Parse an HTML document into its `h1`–`h6` tree and audit for skipped levels, multiple `h1`s, empty headings, and headings inside `aria-hidden` regions. Exports the outline as Markdown or plain text. |
 | [Linear & Polynomial Regression](linreg.html) | Fit a straight line or polynomial (degree 2–10) to (x, y) data with OLS — R², adjusted R², residual SE, F-test, per-coefficient t-stats, and a scatter chart with the fitted curve and 95% confidence band. Built-in ln / log₁₀ / √ / 1/x transforms linearize exponential and power-law data. |
