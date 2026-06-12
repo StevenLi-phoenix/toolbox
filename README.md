@@ -38,11 +38,14 @@
 | [JSON → .env Converter](json2env.html) | Flatten nested JSON into `KEY=value` for `.env` files, `docker --env-file`, Kubernetes Secrets, or shell `export`. Configurable separator, prefix, casing, quoting, and array handling. |
 | [CSV → Markdown Table](csv2md.html) | Convert CSV / TSV to a GitHub-flavored Markdown table with auto column alignment by data type, pipe escaping, header detection, and `<br>` folding for multi-line cells. |
 | [TypeScript → Zod Schema](ts2zod.html) | Convert TypeScript `interface` and `type` declarations into Zod schemas — handles unions, intersections, tuples, literal types, optional / readonly props, nested objects, and built-in generics like `Record`, `Partial`, `Array`. |
+| [JSON5 ⇄ JSON Converter](json5.html) | Parse JSON5 — JSON with comments, trailing commas, unquoted keys, single quotes, hex literals, `NaN` / `Infinity`, and multi-line strings — and emit strict RFC 8259 JSON. Also pretty-prints strict JSON as ergonomic JSON5 with sort-keys and identifier-key options. |
 
 ## CSS & Styling
 
 | Tool | Description |
 |------|-------------|
+| [CSS :nth-child Tester](nthchild.html) | Type an `an+b` formula and watch matched children highlight in real time. Switch between `:nth-child`, `:nth-of-type`, `:nth-last-child`, and `:nth-last-of-type`; mix child types to see how *of-type* changes the count; try Selectors 4's `of S` filter syntax. |
+| [CSS grid-template-areas Visual Builder](gridareas.html) | Paint named areas on a grid and get the matching `grid-template-areas` rule with rows aligned column-by-column, dot placeholders for empty cells, and automatic validation that every area is rectangular (anything else is illegal CSS). Live preview with Holy Grail / Dashboard / App Shell presets. |
 | [CSS text-box-trim Playground](textboxtrim.html) | Compare `text-box-trim` and `text-box-edge` values side by side — see exactly how trimming the half-leading down to cap-height & baseline finally centers text inside a button. Live preview, edge cheat sheet, and a copy-ready `text-box` shorthand with an `@supports` fallback. |
 | [CSS Border-Image Generator](borderimagegen.html) | Build the `border-image` shorthand with a live nine-slice preview — slice, width, outset, and per-axis repeat (stretch / repeat / round / space). Includes nine ready SVG patterns embedded as data URIs. |
 | [CSS linear() Easing Generator](linearease.html) | Build a CSS `linear()` timing function for spring, bounce, elastic, or stepped animations — adjust physics (stiffness, damping, mass, velocity), preview the curve and animation live, and copy a Chrome 113+ ready value with `@supports` fallback. |

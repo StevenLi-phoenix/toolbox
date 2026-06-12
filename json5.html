@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON5 ⇄ JSON Converter — Free Online Tool</title>
+<meta name="description" content="Convert JSON5 (with comments, trailing commas, unquoted keys, single quotes, hex numbers, multi-line strings) to strict RFC 8259 JSON — and back. Inline error reporting and round-trip safe.">
+<meta name="keywords" content="json5, json5 to json, json5 parser, json5 converter, relaxed json, json with comments, trailing commas, unquoted keys, json5 validator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/json5.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  .pane { display:flex; flex-direction:column; gap:6px; }
+  .pane h3 { font-size:.8rem; font-weight:600; color:var(--muted); margin:0; text-transform:uppercase; letter-spacing:.04em; }
+  .pane textarea {
+    width:100%; box-sizing:border-box; min-height:340px;
+    padding:12px; border:1px solid var(--border); border-radius:var(--radius);
+    background:var(--bg); color:var(--text); font-family:var(--mono); font-size:.85rem;
+    line-height:1.5; resize:vertical;
+  }
+  .pane textarea:focus { outline:none; border-color:var(--accent); }
+  .controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0 14px; font-size:.85rem; }
+  .controls label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .controls select, .controls input[type="number"] {
+    padding:5px 8px; border:1px solid var(--border); border-radius:6px;
+    background:var(--bg); color:var(--text); font-family:var(--mono); font-size:.84rem;
+  }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .actions button {
+    padding:5px 10px; border:1px solid var(--border); border-radius:6px;
+    background:var(--bg); color:var(--text); cursor:pointer; font-size:.8rem;
+  }
+  .actions button:hover { border-color:var(--accent); color:var(--accent); }
+  .status { padding:8px 12px; border-radius:6px; font-size:.82rem; font-family:var(--mono); margin-top:8px; }
+  .status.ok { background:rgba(16,185,129,.08); color:var(--success); border:1px solid rgba(16,185,129,.25); }
+  .status.err { background:rgba(239,68,68,.08); color:var(--error); border:1px solid rgba(239,68,68,.25); }
+  .stats { display:flex; gap:14px; font-size:.78rem; color:var(--muted); margin-top:6px; }
+  .stats span b { color:var(--text); font-weight:600; font-family:var(--mono); }
+  .feat { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:12px; }
+  .feat .f { padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); font-size:.82rem; }
+  .feat .f b { display:block; margin-bottom:4px; color:var(--accent); font-family:var(--mono); font-size:.78rem; }
+  pre.ex { font-family:var(--mono); font-size:.78rem; background:var(--surface2); padding:10px 12px; border-radius:6px; overflow-x:auto; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON5 ⇄ JSON Converter</h1>
+<p class="subtitle">Parse <a href="https://json5.org" target="_blank" rel="noopener">JSON5</a> — JSON with comments, trailing commas, unquoted keys, single quotes, hex numbers, <code>NaN</code> / <code>Infinity</code>, and multi-line strings — and emit strict RFC&nbsp;8259 JSON. Or pretty-print strict JSON as ergonomic JSON5. 100% client-side, no network, no eval.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Direction
+      <select id="dir" onchange="run()">
+        <option value="5to">JSON5 → JSON</option>
+        <option value="to5">JSON → JSON5</option>
+      </select>
+    </label>
+    <label>Indent
+      <select id="indent" onchange="run()">
+        <option value="2" selected>2 spaces</option>
+        <option value="4">4 spaces</option>
+        <option value="tab">tab</option>
+        <option value="0">minified</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="sortkeys" onchange="run()"> Sort keys</label>
+    <label><input type="checkbox" id="dropcomments" onchange="run()" checked> Strip comments (5→JSON)</label>
+    <label><input type="checkbox" id="quoteok" onchange="run()"> Always quote keys (JSON→5)</label>
+  </div>
+  <div class="grid2">
+    <div class="pane">
+      <h3>Input <span id="inlbl" style="color:var(--accent)">JSON5</span></h3>
+      <textarea id="src" spellcheck="false" oninput="run()">// JSON5 — relaxed JSON with comments &amp; trailing commas
+{
+  /* multi-line
+     comment */
+  name: 'JSON5 Demo',
+  version: 1.0,
+  active: true,
+  hex: 0xC0FFEE,
+  leading: .5,
+  trailing: 5.,
+  infinity: Infinity,
+  nan: NaN,
+  multiline: "line one \
+line two",
+  tags: [
+    'json',
+    'json5',
+    'config', // trailing comma below is fine
+  ],
+  nested: {
+    'with-dash': 'ok',
+    unquoted: 'also ok',
+  },
+}</textarea>
+      <div class="stats"><span>Bytes: <b id="inB">0</b></span><span>Lines: <b id="inL">0</b></span></div>
+    </div>
+    <div class="pane">
+      <h3>Output <span id="outlbl" style="color:var(--accent)">JSON</span>
+        <button class="copy" style="float:right;font-size:.72rem;padding:2px 8px;border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:6px;cursor:pointer" onclick="copyOut()">Copy</button>
+      </h3>
+      <textarea id="out" spellcheck="false" readonly></textarea>
+      <div class="stats"><span>Bytes: <b id="outB">0</b></span><span>Lines: <b id="outL">0</b></span><span id="ratio">Δ —</span></div>
+    </div>
+  </div>
+  <div id="status" class="status ok">Ready.</div>
+  <div class="actions" style="margin-top:10px">
+    <button onclick="loadSample('config')">Sample: config</button>
+    <button onclick="loadSample('package')">Sample: package.json5</button>
+    <button onclick="loadSample('strict')">Sample: strict JSON</button>
+    <button onclick="swap()">Swap input ⇄ output</button>
+    <button onclick="$('src').value='';run()">Clear</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>What JSON5 adds on top of JSON</h2>
+  <div class="feat">
+    <div class="f"><b>Comments</b>Both <code>// line</code> and <code>/* block */</code> comments are allowed anywhere whitespace is.</div>
+    <div class="f"><b>Trailing commas</b>Objects and arrays may end with a trailing comma — no more diff churn when reordering fields.</div>
+    <div class="f"><b>Unquoted keys</b>Identifier-like keys (<code>foo</code>, <code>$bar</code>, <code>_baz123</code>) skip the quotes.</div>
+    <div class="f"><b>Single-quoted strings</b><code>'hello'</code> is equivalent to <code>"hello"</code>; the other quote no longer needs escaping inside.</div>
+    <div class="f"><b>Multi-line strings</b>End a line with a backslash to continue the string on the next line.</div>
+    <div class="f"><b>Numbers</b>Hex literals (<code>0xDEADBEEF</code>), leading/trailing decimal points (<code>.5</code>, <code>5.</code>), explicit <code>+</code> sign, and <code>NaN</code> / <code>±Infinity</code>.</div>
+  </div>
+  <p class="small" style="font-size:.82rem;color:var(--muted);margin-top:14px;line-height:1.6">
+    Strict JSON has no representation for <code>NaN</code> or <code>±Infinity</code>. When converting from JSON5 to JSON, those values become <code>null</code> and a warning is shown — that matches what <code>JSON.stringify</code> does for the same JavaScript values.
+  </p>
+</div>
+
+<div class="card">
+  <h2>JSON5 quick reference</h2>
+  <pre class="ex">{
+  // line comment
+  /* block comment */
+  unquotedKey: 'single quotes',
+  "quoted":   "double quotes",
+  hex:        0xCAFE,
+  decimal:    .5,
+  trailing:   5.,
+  positive:   +1,
+  infinity:   Infinity,
+  nan:        NaN,
+  multiline:  "first line \
+continued",
+  trailing_comma: [1, 2, 3,],
+}</pre>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLES = {
+  config: `// app config — JSON5
+{
+  app: {
+    name: 'toolbox',
+    port: 3000,
+    workers: 0x4,            // hex literal
+  },
+  features: [
+    'json5',
+    'comments',
+    'trailing-commas',  /* nice in version control */
+  ],
+  limits: {
+    timeoutMs: .5e3,
+    maxBytes:  +1048576,
+  },
+  /* TODO: tune in prod */
+}`,
+  package: `{
+  name: '@example/awesome',
+  version: '1.2.3',
+  description: 'a package whose manifest is JSON5',
+  main: './dist/index.js',
+  scripts: {
+    build: 'tsc',
+    test:  'vitest',
+    lint:  'eslint .',
+  },
+  dependencies: {
+    'lodash-es': '^4.17.0',
+    zod:         '^3.22.0',
+  },
+}`,
+  strict: `{
+  "name": "strict",
+  "items": [1, 2, 3],
+  "meta": {
+    "tags": ["a", "b"],
+    "count": 42
+  }
+}`
+};
+
+function loadSample(k) { $('src').value = SAMPLES[k]; run(); }
+
+/* ---------- JSON5 parser (hand-written, RFC-compliant subset) ---------- */
+function parseJSON5(text) {
+  let pos = 0, line = 1, col = 1;
+  const len = text.length;
+  let strippedComments = 0;
+
+  function peek(o=0) { return text[pos+o]; }
+  function next() {
+    const ch = text[pos++];
+    if (ch === '\n') { line++; col = 1; } else col++;
+    return ch;
+  }
+  function err(msg) {
+    const e = new Error(`${msg} at line ${line}, column ${col}`);
+    e.line = line; e.col = col; throw e;
+  }
+  function eof() { return pos >= len; }
+
+  function skipWS() {
+    while (!eof()) {
+      const ch = peek();
+      if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\v' || ch === '\f' || ch === ' ' || ch === '﻿') {
+        next();
+      } else if (ch === '/' && peek(1) === '/') {
+        strippedComments++;
+        while (!eof() && peek() !== '\n') next();
+      } else if (ch === '/' && peek(1) === '*') {
+        strippedComments++;
+        next(); next();
+        while (!eof() && !(peek() === '*' && peek(1) === '/')) next();
+        if (eof()) err('unterminated /* block comment */');
+        next(); next();
+      } else break;
+    }
+  }
+
+  function isIdentStart(ch) {
+    if (!ch) return false;
+    return /[A-Za-z_$]/.test(ch);
+  }
+  function isIdentPart(ch) {
+    if (!ch) return false;
+    return /[A-Za-z0-9_$]/.test(ch);
+  }
+
+  function parseValue() {
+    skipWS();
+    if (eof()) err('unexpected end of input');
+    const ch = peek();
+    if (ch === '{') return parseObject();
+    if (ch === '[') return parseArray();
+    if (ch === '"' || ch === "'") return parseString(ch);
+    if (ch === '-' || ch === '+' || ch === '.' || (ch >= '0' && ch <= '9') || ch === 'I' || ch === 'N') return parseNumberOrKeyword();
+    if (ch === 't' || ch === 'f' || ch === 'n') return parseKeyword();
+    err(`unexpected character ${JSON.stringify(ch)}`);
+  }
+
+  function parseObject() {
+    next(); // {
+    const obj = {};
+    skipWS();
+    if (peek() === '}') { next(); return obj; }
+    while (true) {
+      skipWS();
+      let key;
+      const ch = peek();
+      if (ch === '"' || ch === "'") key = parseString(ch);
+      else if (isIdentStart(ch)) {
+        let s = '';
+        while (!eof() && isIdentPart(peek())) s += next();
+        key = s;
+      } else err(`expected key, got ${JSON.stringify(ch)}`);
+      skipWS();
+      if (next() !== ':') err('expected ":" after key');
+      const val = parseValue();
+      obj[key] = val;
+      skipWS();
+      const nc = peek();
+      if (nc === ',') { next(); skipWS(); if (peek() === '}') { next(); return obj; } continue; }
+      if (nc === '}') { next(); return obj; }
+      err(`expected "," or "}" in object, got ${JSON.stringify(nc)}`);
+    }
+  }
+
+  function parseArray() {
+    next(); // [
+    const arr = [];
+    skipWS();
+    if (peek() === ']') { next(); return arr; }
+    while (true) {
+      arr.push(parseValue());
+      skipWS();
+      const nc = peek();
+      if (nc === ',') { next(); skipWS(); if (peek() === ']') { next(); return arr; } continue; }
+      if (nc === ']') { next(); return arr; }
+      err(`expected "," or "]" in array, got ${JSON.stringify(nc)}`);
+    }
+  }
+
+  function parseString(quote) {
+    next(); // opening quote
+    let s = '';
+    while (!eof()) {
+      const ch = next();
+      if (ch === quote) return s;
+      if (ch === '\\') {
+        if (eof()) err('unterminated string');
+        const esc = next();
+        switch (esc) {
+          case '"': s += '"'; break;
+          case "'": s += "'"; break;
+          case '\\': s += '\\'; break;
+          case '/': s += '/'; break;
+          case 'b': s += '\b'; break;
+          case 'f': s += '\f'; break;
+          case 'n': s += '\n'; break;
+          case 'r': s += '\r'; break;
+          case 't': s += '\t'; break;
+          case 'v': s += '\v'; break;
+          case '0': s += '\0'; break;
+          case '\n': /* line continuation */ break;
+          case '\r': if (peek() === '\n') next(); break;
+          case 'x': {
+            let hex = '';
+            for (let i=0;i<2;i++) { if (!/[0-9a-fA-F]/.test(peek())) err('bad \\x escape'); hex += next(); }
+            s += String.fromCharCode(parseInt(hex,16));
+            break;
+          }
+          case 'u': {
+            let hex = '';
+            for (let i=0;i<4;i++) { if (!/[0-9a-fA-F]/.test(peek())) err('bad \\u escape'); hex += next(); }
+            s += String.fromCharCode(parseInt(hex,16));
+            break;
+          }
+          default: s += esc;
+        }
+      } else if (ch === '\n' || ch === '\r') {
+        err('unescaped newline in string');
+      } else s += ch;
+    }
+    err('unterminated string');
+  }
+
+  function parseNumberOrKeyword() {
+    let start = pos;
+    let sign = 1;
+    if (peek() === '+') { next(); start = pos; }
+    else if (peek() === '-') { sign = -1; next(); start = pos; }
+    if (peek() === 'I' && text.substr(pos, 8) === 'Infinity') { pos += 8; col += 8; return sign * Infinity; }
+    if (peek() === 'N' && text.substr(pos, 3) === 'NaN') { pos += 3; col += 3; return NaN; }
+    if (peek() === '0' && (peek(1) === 'x' || peek(1) === 'X')) {
+      next(); next();
+      let hex = '';
+      while (!eof() && /[0-9a-fA-F]/.test(peek())) hex += next();
+      if (!hex) err('invalid hex literal');
+      return sign * parseInt(hex, 16);
+    }
+    let num = '';
+    while (!eof() && /[0-9]/.test(peek())) num += next();
+    if (peek() === '.') { num += next(); while (!eof() && /[0-9]/.test(peek())) num += next(); }
+    if (peek() === 'e' || peek() === 'E') {
+      num += next();
+      if (peek() === '+' || peek() === '-') num += next();
+      while (!eof() && /[0-9]/.test(peek())) num += next();
+    }
+    if (num === '' || num === '.') err('invalid number');
+    return sign * parseFloat(num);
+  }
+
+  function parseKeyword() {
+    if (text.substr(pos, 4) === 'true')  { pos += 4; col += 4; return true; }
+    if (text.substr(pos, 5) === 'false') { pos += 5; col += 5; return false; }
+    if (text.substr(pos, 4) === 'null')  { pos += 4; col += 4; return null; }
+    err('unknown keyword');
+  }
+
+  skipWS();
+  const val = parseValue();
+  skipWS();
+  if (!eof()) err('unexpected trailing content');
+  return { value: val, commentCount: strippedComments };
+}
+
+/* ---------- JSON5 stringifier ---------- */
+const IDENT_RX = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function stringifyJSON5(val, opt) {
+  const ind = opt.indent;
+  const sortKeys = opt.sortKeys;
+  const alwaysQuoteKey = opt.alwaysQuoteKey;
+  function go(v, depth) {
+    if (v === null) return 'null';
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    if (typeof v === 'number') {
+      if (Number.isNaN(v)) return 'NaN';
+      if (v === Infinity) return 'Infinity';
+      if (v === -Infinity) return '-Infinity';
+      return String(v);
+    }
+    if (typeof v === 'string') return jsString(v, "'");
+    if (Array.isArray(v)) {
+      if (v.length === 0) return '[]';
+      if (!ind) return '[' + v.map(x => go(x, depth+1)).join(',') + ']';
+      const pad = ind.repeat(depth+1);
+      const close = ind.repeat(depth);
+      return '[\n' + v.map(x => pad + go(x, depth+1)).join(',\n') + '\n' + close + ']';
+    }
+    if (typeof v === 'object') {
+      let keys = Object.keys(v);
+      if (sortKeys) keys = keys.slice().sort();
+      if (keys.length === 0) return '{}';
+      if (!ind) return '{' + keys.map(k => keyStr(k) + ':' + go(v[k], depth+1)).join(',') + '}';
+      const pad = ind.repeat(depth+1);
+      const close = ind.repeat(depth);
+      return '{\n' + keys.map(k => pad + keyStr(k) + ': ' + go(v[k], depth+1)).join(',\n') + '\n' + close + '}';
+    }
+    return 'null';
+  }
+  function keyStr(k) {
+    if (alwaysQuoteKey) return jsString(k, "'");
+    if (IDENT_RX.test(k)) return k;
+    return jsString(k, "'");
+  }
+  return go(val, 0);
+}
+function jsString(s, q) {
+  const other = q === "'" ? '"' : "'";
+  let out = q;
+  for (const ch of s) {
+    if (ch === q) out += '\\' + q;
+    else if (ch === '\\') out += '\\\\';
+    else if (ch === '\n') out += '\\n';
+    else if (ch === '\r') out += '\\r';
+    else if (ch === '\t') out += '\\t';
+    else if (ch === '\b') out += '\\b';
+    else if (ch === '\f') out += '\\f';
+    else if (ch.charCodeAt(0) < 0x20) out += '\\u' + ch.charCodeAt(0).toString(16).padStart(4,'0');
+    else out += ch;
+  }
+  return out + q;
+}
+
+/* ---------- replacer for NaN / Infinity → null ---------- */
+function jsonReplacer(_k, v) {
+  if (typeof v === 'number' && !isFinite(v)) return null;
+  return v;
+}
+
+function sortObject(v) {
+  if (Array.isArray(v)) return v.map(sortObject);
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const k of Object.keys(v).sort()) out[k] = sortObject(v[k]);
+    return out;
+  }
+  return v;
+}
+
+function getIndent() {
+  const i = $('indent').value;
+  if (i === '0') return '';
+  if (i === 'tab') return '\t';
+  return ' '.repeat(parseInt(i,10));
+}
+
+function setStatus(ok, msg) {
+  const el = $('status');
+  el.className = 'status ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+}
+
+function setBytes(idB, idL, txt) {
+  $(idB).textContent = new Blob([txt]).size.toLocaleString();
+  $(idL).textContent = txt ? txt.split('\n').length.toLocaleString() : '0';
+}
+
+function run() {
+  const dir = $('dir').value;
+  const src = $('src').value;
+  $('inlbl').textContent  = dir === '5to' ? 'JSON5' : 'JSON';
+  $('outlbl').textContent = dir === '5to' ? 'JSON'  : 'JSON5';
+  setBytes('inB','inL', src);
+
+  if (!src.trim()) { $('out').value = ''; setBytes('outB','outL',''); setStatus(true,'Ready.'); $('ratio').textContent='Δ —'; return; }
+
+  try {
+    let val, info = '';
+    if (dir === '5to') {
+      const r = parseJSON5(src);
+      val = r.value;
+      info = r.commentCount ? `Stripped ${r.commentCount} comment block${r.commentCount===1?'':'s'}. ` : '';
+    } else {
+      val = JSON.parse(src);
+    }
+    if ($('sortkeys').checked) val = sortObject(val);
+
+    let out;
+    let warn = '';
+    if (dir === '5to') {
+      const ind = getIndent();
+      // Check for NaN/Infinity → null warning
+      const hasNonFinite = (function check(v){ if (typeof v==='number' && !isFinite(v)) return true; if (Array.isArray(v)) return v.some(check); if (v && typeof v==='object') return Object.values(v).some(check); return false; })(val);
+      if (hasNonFinite) warn = 'Warning: NaN / ±Infinity converted to null (not representable in strict JSON). ';
+      out = JSON.stringify(val, jsonReplacer, ind);
+    } else {
+      out = stringifyJSON5(val, { indent: getIndent(), sortKeys: $('sortkeys').checked, alwaysQuoteKey: $('quoteok').checked });
+    }
+    $('out').value = out;
+    setBytes('outB','outL', out);
+    const inB = new Blob([src]).size;
+    const outB = new Blob([out]).size;
+    const delta = outB - inB;
+    $('ratio').textContent = `Δ ${delta>=0?'+':''}${delta.toLocaleString()} B`;
+    setStatus(true, info + warn + 'OK.');
+  } catch (e) {
+    $('out').value = '';
+    setBytes('outB','outL','');
+    $('ratio').textContent = 'Δ —';
+    setStatus(false, '✗ ' + e.message);
+  }
+}
+
+function swap() {
+  const a = $('src').value, b = $('out').value;
+  if (!b) return;
+  $('src').value = b;
+  $('dir').value = $('dir').value === '5to' ? 'to5' : '5to';
+  run();
+}
+
+function copyOut() {
+  const t = $('out').value;
+  if (!t) return;
+  navigator.clipboard.writeText(t).then(() => {
+    const btns = document.querySelectorAll('.copy');
+    btns.forEach(b => { const o = b.textContent; b.textContent = 'Copied!'; setTimeout(()=>b.textContent=o,900); });
+  });
+}
+
+run();
+</script>
+</body>
+</html>
