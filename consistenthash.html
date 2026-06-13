@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consistent Hash Ring Visualizer — Virtual Nodes &amp; Load Balance | DevToolbox</title>
+<meta name="description" content="Visualize a consistent hash ring — place nodes and keys onto a circle by SHA-1 hash, tune virtual-node replicas, see live load distribution, and measure churn when nodes join or leave.">
+<meta name="keywords" content="consistent hashing, hash ring, virtual nodes, vnodes, load balancing, dynamo, cassandra, partitioner, ring partitioning, key distribution">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="Consistent Hash Ring Visualizer">
+<meta property="og:description" content="Place nodes and keys on a hash ring, tune virtual-node replicas, and measure churn on node join/leave.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/consistenthash.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/consistenthash.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.layout { display: grid; grid-template-columns: 1fr 380px; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+.ring-wrap { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); padding: 12px; }
+canvas#ring { width: 100%; height: 460px; display: block; }
+.side { display: flex; flex-direction: column; gap: 12px; }
+.panel { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.panel h3 { margin: 0 0 10px; font-size: .9rem; color: var(--text); }
+.field { margin-bottom: 10px; }
+.field label { display: block; font-size: .78rem; font-weight: 600; margin-bottom: 5px; color: var(--text); }
+.field input, .field textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; box-sizing: border-box; }
+.field textarea { resize: vertical; min-height: 80px; }
+.field .hint { font-size: .7rem; color: var(--muted); margin-top: 3px; }
+.btn { padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-weight: 600; font-size: .82rem; cursor: pointer; font-family: var(--sans); }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.danger { background: var(--error); color: #fff; border-color: var(--error); }
+.btn.small { padding: 4px 8px; font-size: .76rem; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.nodes-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.node-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--surface2); border-radius: var(--radius); border-left: 4px solid var(--accent); }
+.node-row .name { flex: 1; font-family: var(--mono); font-size: .85rem; font-weight: 600; }
+.node-row .load { font-family: var(--mono); font-size: .75rem; color: var(--muted); }
+
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+.stat { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+.stat .label { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.stat .value { font-family: var(--mono); font-weight: 700; font-size: 1rem; color: var(--text); margin-top: 2px; }
+
+.lookup-result { font-family: var(--mono); font-size: .82rem; padding: 8px 10px; background: var(--surface2); border-radius: var(--radius); border-left: 4px solid var(--success); margin-top: 6px; }
+
+.histbar { display: grid; grid-template-columns: 80px 1fr 60px; gap: 8px; align-items: center; font-size: .78rem; margin-bottom: 4px; }
+.histbar .nm { font-family: var(--mono); font-weight: 600; }
+.histbar .bar { height: 14px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.histbar .fill { height: 100%; background: var(--accent); }
+.histbar .pct { font-family: var(--mono); color: var(--muted); text-align: right; }
+
+.formulas { padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-size: .82rem; line-height: 1.55; }
+.formulas h3 { margin: 0 0 8px; font-size: .9rem; }
+.formulas code { font-family: var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: .8rem; }
+.formulas ul { margin: 6px 0 0 18px; padding: 0; }
+.formulas li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<header>
+<h1>🟢 Consistent Hash Ring Visualizer</h1>
+<p class="subtitle">Place nodes and keys on a SHA-1 hash ring. Each key maps to the first node clockwise. Tune <strong>virtual nodes</strong> to balance load, then add or remove a node to see exactly which keys move — the rest stay put.</p>
+</header>
+
+<div class="layout">
+<div class="ring-wrap">
+<canvas id="ring"></canvas>
+</div>
+<div class="side">
+<div class="panel">
+<h3>🖧 Nodes</h3>
+<div class="field">
+<label for="newNode">Add Node</label>
+<div style="display:flex;gap:6px">
+<input type="text" id="newNode" placeholder="node-a" style="flex:1">
+<button class="btn primary" id="addNode">+</button>
+</div>
+<div class="hint">Each node hashes to V points on the ring.</div>
+</div>
+<div class="field">
+<label for="vnodes">Virtual Nodes per Real Node (V)</label>
+<input type="number" id="vnodes" value="32" min="1" max="500">
+<div class="hint">More vnodes ⇒ smoother key distribution.</div>
+</div>
+<div id="nodesList" class="nodes-list"></div>
+</div>
+
+<div class="panel">
+<h3>🔑 Keys</h3>
+<div class="field">
+<label for="keyCount">Random Keys</label>
+<div style="display:flex;gap:6px">
+<input type="number" id="keyCount" value="500" min="1" max="20000" style="flex:1">
+<button class="btn" id="genKeys">Generate</button>
+</div>
+<div class="hint">Synthetic <code>key-N</code> identifiers.</div>
+</div>
+<div class="field">
+<label for="keyList">Custom Keys (one per line)</label>
+<textarea id="keyList" placeholder="user:42&#10;cart:abc&#10;session:9z…"></textarea>
+<button class="btn small" id="useCustom" style="margin-top:6px">Use these keys</button>
+</div>
+<div class="field">
+<label for="lookupKey">Lookup Key</label>
+<div style="display:flex;gap:6px">
+<input type="text" id="lookupKey" placeholder="some-key" style="flex:1">
+<button class="btn primary" id="lookupBtn">→ Node</button>
+</div>
+<div class="lookup-result" id="lookupResult" style="display:none"></div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="card">
+<h2>📊 Load Distribution</h2>
+<div id="histo"></div>
+<div class="stats">
+<div class="stat"><div class="label">Total Keys</div><div class="value" id="sTotal">0</div></div>
+<div class="stat"><div class="label">Nodes</div><div class="value" id="sNodes">0</div></div>
+<div class="stat"><div class="label">Mean Load</div><div class="value" id="sMean">0</div></div>
+<div class="stat"><div class="label">Std Dev (%)</div><div class="value" id="sStd">0</div></div>
+<div class="stat"><div class="label">Min Load</div><div class="value" id="sMin">0</div></div>
+<div class="stat"><div class="label">Max Load</div><div class="value" id="sMax">0</div></div>
+</div>
+</div>
+
+<div class="card">
+<h2>🔄 Churn Simulator</h2>
+<p class="subtitle">When a node joins or leaves, only the keys that hash to its arc need to move. Run a what-if to see the exact percentage.</p>
+<div class="btn-row">
+<button class="btn" id="simAdd">+ Simulate Adding a Node</button>
+<button class="btn" id="simRemove">– Simulate Removing a Node</button>
+</div>
+<div id="churnResult" style="font-family:var(--mono);font-size:.85rem;margin-top:10px;padding:10px;background:var(--surface2);border-radius:var(--radius);display:none"></div>
+</div>
+
+<div class="formulas">
+<h3>Why Consistent Hashing?</h3>
+<p>With plain <code>hash(key) % N</code>, changing N rehashes almost every key. Consistent hashing places nodes and keys on the same circular hash space; each key is owned by the first node clockwise. Adding or removing a node only moves the keys in <em>that node's arc</em> — about <code>1/N</code> of all keys.</p>
+<ul>
+<li><strong>Expected churn on join/leave:</strong> <code>K / N</code> keys move (N = node count, K = key count).</li>
+<li><strong>Without vnodes</strong>, arc sizes follow a uniform-order-statistic distribution — the largest arc gets ~<code>(ln N)/N</code> of the ring, so heavy skew at small N.</li>
+<li><strong>With V vnodes per node</strong>, each node owns <code>V</code> arcs; the standard deviation of load drops by ~<code>1/√V</code>.</li>
+<li>Used by <strong>Amazon Dynamo</strong>, <strong>Apache Cassandra</strong>, <strong>Riak</strong>, <strong>Memcached client libraries</strong> (<code>libketama</code>), <strong>Akamai</strong>, and many sharded caches.</li>
+</ul>
+</div>
+
+<footer style="margin-top:32px; text-align:center; font-size:.82rem; color:var(--muted);">
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ----- SHA-1 (small, sync, for ring positions) -----
+async function sha1Hex(s) {
+  const buf = new TextEncoder().encode(s);
+  const h = await crypto.subtle.digest('SHA-1', buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// Use first 8 hex chars => 32-bit position on ring
+function pos32(hex) {
+  return parseInt(hex.slice(0, 8), 16) >>> 0;
+}
+const RING_MAX = 0x100000000; // 2^32
+
+// ----- State -----
+const state = {
+  nodes: [],        // [{name, color}]
+  vnodes: 32,
+  ring: [],         // [{pos, node}] sorted by pos
+  keys: [],         // [{key, pos, node}]
+};
+
+const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'];
+function colorFor(i) { return COLORS[i % COLORS.length]; }
+
+async function rebuildRing() {
+  state.vnodes = Math.max(1, +$('vnodes').value || 1);
+  const ring = [];
+  for (const n of state.nodes) {
+    for (let v = 0; v < state.vnodes; v++) {
+      const hex = await sha1Hex(n.name + '#' + v);
+      ring.push({ pos: pos32(hex), node: n.name });
+    }
+  }
+  ring.sort((a, b) => a.pos - b.pos);
+  state.ring = ring;
+  await reassignKeys();
+}
+
+function lookup(pos) {
+  if (state.ring.length === 0) return null;
+  // binary search for smallest entry with pos >= target
+  let lo = 0, hi = state.ring.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (state.ring[mid].pos < pos) lo = mid + 1; else hi = mid;
+  }
+  if (lo === state.ring.length) lo = 0;
+  return state.ring[lo].node;
+}
+
+async function reassignKeys() {
+  for (const k of state.keys) {
+    k.node = lookup(k.pos);
+  }
+  draw();
+  renderNodes();
+  renderHisto();
+}
+
+async function setKeysFromList(list) {
+  state.keys = [];
+  for (const k of list) {
+    const hex = await sha1Hex(k);
+    state.keys.push({ key: k, pos: pos32(hex), node: null });
+  }
+  await reassignKeys();
+}
+
+async function generateKeys(n) {
+  const arr = [];
+  for (let i = 1; i <= n; i++) arr.push('key-' + i);
+  await setKeysFromList(arr);
+}
+
+// ----- Render -----
+function draw() {
+  const cv = $('ring');
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = cv.clientWidth, cssH = 460;
+  cv.width = cssW * dpr; cv.height = cssH * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const cx = cssW / 2, cy = cssH / 2;
+  const rOuter = Math.min(cssW, cssH) / 2 - 30;
+  const rInner = rOuter - 26;
+  const rKey = rOuter + 16;
+
+  const css = getComputedStyle(document.body);
+  const border = css.getPropertyValue('--border') || '#ddd';
+  const muted = css.getPropertyValue('--muted') || '#888';
+  const text = css.getPropertyValue('--text') || '#111';
+
+  // outer ring
+  ctx.strokeStyle = border; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, rOuter, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, rInner, 0, Math.PI * 2); ctx.stroke();
+
+  // node color map
+  const colorMap = new Map();
+  state.nodes.forEach((n, i) => colorMap.set(n.name, colorFor(i)));
+
+  // arcs per vnode segment
+  if (state.ring.length > 0) {
+    for (let i = 0; i < state.ring.length; i++) {
+      const cur = state.ring[i];
+      const next = state.ring[(i + 1) % state.ring.length];
+      const a1 = (cur.pos / RING_MAX) * Math.PI * 2 - Math.PI / 2;
+      let a2 = (next.pos / RING_MAX) * Math.PI * 2 - Math.PI / 2;
+      if (a2 <= a1) a2 += Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, (rOuter + rInner) / 2, a1, a2);
+      ctx.lineWidth = rOuter - rInner;
+      ctx.strokeStyle = colorMap.get(next.node) + 'cc';
+      ctx.stroke();
+    }
+  }
+
+  // vnode tick marks
+  for (const r of state.ring) {
+    const a = (r.pos / RING_MAX) * Math.PI * 2 - Math.PI / 2;
+    const x1 = cx + Math.cos(a) * rInner;
+    const y1 = cy + Math.sin(a) * rInner;
+    const x2 = cx + Math.cos(a) * rOuter;
+    const y2 = cy + Math.sin(a) * rOuter;
+    ctx.strokeStyle = '#0008';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+
+  // node labels (one per real node, placed at first vnode)
+  const placed = new Set();
+  for (const r of state.ring) {
+    if (placed.has(r.node)) continue;
+    placed.add(r.node);
+    const a = (r.pos / RING_MAX) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(a) * (rOuter + 36);
+    const y = cy + Math.sin(a) * (rOuter + 36);
+    ctx.fillStyle = colorMap.get(r.node);
+    ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = text; ctx.font = 'bold 11px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tx = cx + Math.cos(a) * (rOuter + 58);
+    const ty = cy + Math.sin(a) * (rOuter + 58);
+    ctx.fillText(r.node, tx, ty);
+  }
+
+  // keys
+  const sample = state.keys.length > 800 ? state.keys.filter((_, i) => i % Math.ceil(state.keys.length / 800) === 0) : state.keys;
+  for (const k of sample) {
+    const a = (k.pos / RING_MAX) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(a) * rKey;
+    const y = cy + Math.sin(a) * rKey;
+    ctx.fillStyle = k.node ? colorMap.get(k.node) : muted;
+    ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // center stats
+  ctx.fillStyle = muted; ctx.font = '11px system-ui';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(state.nodes.length + ' nodes · ' + state.ring.length + ' vnodes', cx, cy - 8);
+  ctx.fillText(state.keys.length + ' keys', cx, cy + 8);
+}
+
+function renderNodes() {
+  const el = $('nodesList');
+  el.innerHTML = '';
+  const counts = {};
+  state.nodes.forEach(n => counts[n.name] = 0);
+  state.keys.forEach(k => { if (k.node) counts[k.node]++; });
+  state.nodes.forEach((n, i) => {
+    const row = document.createElement('div');
+    row.className = 'node-row';
+    row.style.borderLeftColor = colorFor(i);
+    row.innerHTML =
+      `<span class="name">${n.name}</span>` +
+      `<span class="load">${counts[n.name]} keys</span>` +
+      `<button class="btn small danger" data-name="${n.name}">×</button>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('button[data-name]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      state.nodes = state.nodes.filter(x => x.name !== btn.dataset.name);
+      await rebuildRing();
+    });
+  });
+  $('sNodes').textContent = state.nodes.length;
+  $('sTotal').textContent = state.keys.length;
+}
+
+function renderHisto() {
+  const el = $('histo');
+  el.innerHTML = '';
+  if (state.nodes.length === 0 || state.keys.length === 0) {
+    $('sMean').textContent = $('sStd').textContent = $('sMin').textContent = $('sMax').textContent = '—';
+    return;
+  }
+  const counts = {};
+  state.nodes.forEach(n => counts[n.name] = 0);
+  state.keys.forEach(k => { if (k.node) counts[k.node]++; });
+  const vals = state.nodes.map(n => counts[n.name]);
+  const total = vals.reduce((a, b) => a + b, 0) || 1;
+  const max = Math.max(...vals);
+  const mean = total / vals.length;
+  const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length;
+  const std = Math.sqrt(variance);
+  state.nodes.forEach((n, i) => {
+    const c = counts[n.name];
+    const pct = (c / total * 100).toFixed(1);
+    const fill = Math.max(2, (c / max) * 100);
+    const row = document.createElement('div');
+    row.className = 'histbar';
+    row.innerHTML =
+      `<div class="nm">${n.name}</div>` +
+      `<div class="bar"><div class="fill" style="width:${fill}%;background:${colorFor(i)}"></div></div>` +
+      `<div class="pct">${pct}% · ${c}</div>`;
+    el.appendChild(row);
+  });
+  $('sMean').textContent = mean.toFixed(1);
+  $('sStd').textContent = ((std / mean) * 100).toFixed(1) + '%';
+  $('sMin').textContent = Math.min(...vals);
+  $('sMax').textContent = Math.max(...vals);
+}
+
+// ----- Churn simulation -----
+async function simulateAdd() {
+  const name = 'sim-' + Math.random().toString(36).slice(2, 7);
+  // compute current node placement
+  const before = state.keys.map(k => k.node);
+  const savedRing = state.ring.slice();
+  // build trial ring with new node
+  const newPoints = [];
+  for (let v = 0; v < state.vnodes; v++) {
+    const hex = await sha1Hex(name + '#' + v);
+    newPoints.push({ pos: pos32(hex), node: name });
+  }
+  const merged = savedRing.concat(newPoints).sort((a, b) => a.pos - b.pos);
+  const after = state.keys.map(k => {
+    let lo = 0, hi = merged.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (merged[mid].pos < k.pos) lo = mid + 1; else hi = mid;
+    }
+    if (lo === merged.length) lo = 0;
+    return merged[lo].node;
+  });
+  let moved = 0, toNew = 0;
+  for (let i = 0; i < before.length; i++) {
+    if (before[i] !== after[i]) { moved++; if (after[i] === name) toNew++; }
+  }
+  const pct = ((moved / before.length) * 100).toFixed(2);
+  $('churnResult').style.display = 'block';
+  $('churnResult').innerHTML =
+    `<strong>Add ${name}</strong>: ${moved} of ${before.length} keys (${pct}%) would move. ` +
+    `Theoretical: ${(100 / (state.nodes.length + 1)).toFixed(2)}% should move (${toNew} actually land on the new node).`;
+}
+
+async function simulateRemove() {
+  if (state.nodes.length === 0) return;
+  const victim = state.nodes[Math.floor(Math.random() * state.nodes.length)].name;
+  const before = state.keys.map(k => k.node);
+  const trimmed = state.ring.filter(r => r.node !== victim);
+  if (trimmed.length === 0) {
+    $('churnResult').style.display = 'block';
+    $('churnResult').textContent = `Removing ${victim} would empty the ring — all keys would have nowhere to land.`;
+    return;
+  }
+  const after = state.keys.map(k => {
+    let lo = 0, hi = trimmed.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (trimmed[mid].pos < k.pos) lo = mid + 1; else hi = mid;
+    }
+    if (lo === trimmed.length) lo = 0;
+    return trimmed[lo].node;
+  });
+  let moved = 0;
+  for (let i = 0; i < before.length; i++) if (before[i] !== after[i]) moved++;
+  const pct = ((moved / before.length) * 100).toFixed(2);
+  $('churnResult').style.display = 'block';
+  $('churnResult').innerHTML =
+    `<strong>Remove ${victim}</strong>: ${moved} of ${before.length} keys (${pct}%) would move to other nodes. ` +
+    `Theoretical: ${(100 / state.nodes.length).toFixed(2)}% should move (all keys previously owned by ${victim}).`;
+}
+
+// ----- Wiring -----
+$('addNode').addEventListener('click', async () => {
+  const name = $('newNode').value.trim() || ('node-' + (state.nodes.length + 1));
+  if (state.nodes.find(n => n.name === name)) return;
+  state.nodes.push({ name });
+  $('newNode').value = '';
+  await rebuildRing();
+});
+$('vnodes').addEventListener('change', rebuildRing);
+$('genKeys').addEventListener('click', () => generateKeys(Math.max(1, +$('keyCount').value || 1)));
+$('useCustom').addEventListener('click', () => {
+  const lines = $('keyList').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (lines.length) setKeysFromList(lines);
+});
+$('lookupBtn').addEventListener('click', async () => {
+  const k = $('lookupKey').value.trim();
+  if (!k) return;
+  const hex = await sha1Hex(k);
+  const pos = pos32(hex);
+  const node = lookup(pos);
+  $('lookupResult').style.display = 'block';
+  $('lookupResult').textContent = `"${k}" → SHA-1:${hex.slice(0, 8)}… → pos 0x${pos.toString(16).padStart(8, '0')} → ${node || 'no nodes!'}`;
+});
+$('simAdd').addEventListener('click', simulateAdd);
+$('simRemove').addEventListener('click', simulateRemove);
+window.addEventListener('resize', draw);
+
+// Defaults
+(async () => {
+  state.nodes = [{ name: 'node-a' }, { name: 'node-b' }, { name: 'node-c' }];
+  await rebuildRing();
+  await generateKeys(500);
+})();
+</script>
+</body>
+</html>

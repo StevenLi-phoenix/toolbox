@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vector Clock &amp; Lamport Clock Visualizer | DevToolbox</title>
+<meta name="description" content="Build a distributed-systems time-space diagram — add events, send and receive messages between processes, and watch Lamport scalar clocks and vector clocks update with concurrent vs happens-before relationships highlighted.">
+<meta name="keywords" content="vector clock, lamport clock, distributed systems, happens before, causal ordering, time space diagram, partial order, concurrent events, distributed timestamps">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="Vector Clock &amp; Lamport Clock Visualizer">
+<meta property="og:description" content="Build a time-space diagram, send messages between processes, and inspect Lamport and vector timestamps live.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/vectorclock.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/vectorclock.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 16px; align-items: end; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: .72rem; font-weight: 600; color: var(--text); }
+.field input, .field select { padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .82rem; }
+.btn { padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-weight: 600; font-size: .82rem; cursor: pointer; font-family: var(--sans); }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.danger { background: var(--error); color: #fff; border-color: var(--error); }
+
+.diagram-wrap { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); padding: 8px; overflow-x: auto; margin-bottom: 16px; }
+canvas#diag { display: block; }
+
+.events-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.events-table th, .events-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+.events-table th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.events-table td.mono { font-family: var(--mono); font-size: .8rem; }
+.events-table tr:hover { background: var(--surface2); }
+.evkind { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: .7rem; font-weight: 600; }
+.evkind.local { background: var(--accent); color: #fff; }
+.evkind.send { background: var(--warning); color: #fff; }
+.evkind.recv { background: var(--success); color: #fff; }
+
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch; }
+@media (max-width: 700px) { .compare-grid { grid-template-columns: 1fr; } }
+.cmp-card { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+.cmp-card label { display: block; font-size: .72rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.cmp-card select { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; }
+.relation { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .95rem; text-align: center; background: var(--bg); margin-top: 12px; }
+.relation.hb { color: var(--success); border-color: var(--success); }
+.relation.conc { color: var(--warning); border-color: var(--warning); }
+.relation.same { color: var(--muted); }
+
+.processes { display: flex; flex-wrap: wrap; gap: 6px; }
+.proc-chip { padding: 4px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 99px; font-family: var(--mono); font-size: .8rem; display: inline-flex; gap: 6px; align-items: center; }
+.proc-chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.formulas { padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-size: .82rem; line-height: 1.55; }
+.formulas h3 { margin: 0 0 8px; font-size: .9rem; }
+.formulas code { font-family: var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: .8rem; }
+.formulas ul { margin: 6px 0 0 18px; padding: 0; }
+.formulas li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<header>
+<h1>⏱️ Vector Clock &amp; Lamport Clock Visualizer</h1>
+<p class="subtitle">Drop events on a time-space diagram and pass messages between processes. Each event gets a <strong>Lamport scalar</strong> and a <strong>vector clock</strong>. Compare any two events to see whether they're causally ordered (<em>a → b</em>) or concurrent (<em>a ∥ b</em>).</p>
+</header>
+
+<div class="card">
+<h2>🛠️ Build the Timeline</h2>
+<div class="controls">
+<div class="field">
+<label>Action</label>
+<select id="action">
+<option value="local">Local event</option>
+<option value="send">Send message</option>
+</select>
+</div>
+<div class="field">
+<label>On Process</label>
+<select id="fromProc"></select>
+</div>
+<div class="field" id="toWrap" style="display:none">
+<label>→ To Process</label>
+<select id="toProc"></select>
+</div>
+<button class="btn primary" id="addEvt">+ Add</button>
+<button class="btn" id="undoBtn">↶ Undo</button>
+<button class="btn danger" id="clearBtn">Clear</button>
+<button class="btn" id="sampleBtn">📋 Load Sample</button>
+<div class="field" style="margin-left:auto">
+<label>Processes</label>
+<div style="display:flex;gap:6px">
+<input type="text" id="newProc" placeholder="P4" style="width:60px">
+<button class="btn" id="addProc">+ Proc</button>
+</div>
+</div>
+</div>
+<div class="processes" id="procList" style="margin-bottom:10px"></div>
+
+<div class="diagram-wrap">
+<canvas id="diag" width="900" height="320"></canvas>
+</div>
+</div>
+
+<div class="card">
+<h2>🔍 Compare Two Events</h2>
+<div class="compare-grid">
+<div class="cmp-card">
+<label>Event A</label>
+<select id="evA"></select>
+<div class="mono" id="evAInfo" style="font-family:var(--mono);font-size:.8rem;margin-top:8px;color:var(--muted)"></div>
+</div>
+<div class="cmp-card">
+<label>Event B</label>
+<select id="evB"></select>
+<div class="mono" id="evBInfo" style="font-family:var(--mono);font-size:.8rem;margin-top:8px;color:var(--muted)"></div>
+</div>
+</div>
+<div class="relation" id="relation">Pick two events…</div>
+</div>
+
+<div class="card">
+<h2>📜 Event Log</h2>
+<table class="events-table">
+<thead><tr><th>#</th><th>Process</th><th>Kind</th><th>Lamport</th><th>Vector</th><th>Detail</th></tr></thead>
+<tbody id="evTbody"></tbody>
+</table>
+</div>
+
+<div class="formulas">
+<h3>Update Rules</h3>
+<p><strong>Lamport scalar clock</strong> — one integer per process.</p>
+<ul>
+<li>Local event on P<sub>i</sub>: <code>L<sub>i</sub> ← L<sub>i</sub> + 1</code></li>
+<li>Send from P<sub>i</sub>: increment, attach <code>L<sub>i</sub></code> to the message.</li>
+<li>Receive at P<sub>j</sub> with timestamp <em>t</em>: <code>L<sub>j</sub> ← max(L<sub>j</sub>, t) + 1</code></li>
+</ul>
+<p><strong>Vector clock</strong> — one integer per process in every timestamp.</p>
+<ul>
+<li>Local event on P<sub>i</sub>: <code>V<sub>i</sub>[i] += 1</code></li>
+<li>Send: increment own slot, attach the whole vector.</li>
+<li>Receive at P<sub>j</sub> with vector <em>V<sub>m</sub></em>: <code>∀k: V<sub>j</sub>[k] ← max(V<sub>j</sub>[k], V<sub>m</sub>[k])</code> then <code>V<sub>j</sub>[j] += 1</code></li>
+<li><strong>Happens-before:</strong> <code>a → b ⟺ V<sub>a</sub>[k] ≤ V<sub>b</sub>[k] ∀k and V<sub>a</sub> ≠ V<sub>b</sub></code>. Otherwise <code>a ∥ b</code> (concurrent).</li>
+<li>Lamport scalars give a <em>total order</em> consistent with causality but <strong>cannot</strong> detect concurrency. Vector clocks can.</li>
+</ul>
+</div>
+
+<footer style="margin-top:32px; text-align:center; font-size:.82rem; color:var(--muted);">
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+const state = {
+  procs: ['P1', 'P2', 'P3'],
+  events: [],   // {id, kind:'local'|'send'|'recv', proc, lam, vec:{}, partnerId?, msg?}
+  pending: []   // outstanding messages: {fromEvtId, to, lam, vec}
+};
+
+function procIdx(p) { return state.procs.indexOf(p); }
+function colorFor(p) { return COLORS[procIdx(p) % COLORS.length]; }
+
+function vecOf(p) {
+  // current clock = last event on p (or zeroes)
+  const evts = state.events.filter(e => e.proc === p);
+  if (evts.length === 0) return Object.fromEntries(state.procs.map(q => [q, 0]));
+  return { ...evts[evts.length - 1].vec };
+}
+function lamOf(p) {
+  const evts = state.events.filter(e => e.proc === p);
+  return evts.length ? evts[evts.length - 1].lam : 0;
+}
+
+function ensureVecKeys(v) {
+  for (const p of state.procs) if (!(p in v)) v[p] = 0;
+  return v;
+}
+
+function addLocal(p) {
+  const lam = lamOf(p) + 1;
+  const vec = ensureVecKeys(vecOf(p));
+  vec[p] = (vec[p] || 0) + 1;
+  state.events.push({ id: state.events.length, kind: 'local', proc: p, lam, vec });
+}
+
+function addSend(from, to) {
+  // send is itself an event on `from`
+  const lam = lamOf(from) + 1;
+  const vec = ensureVecKeys(vecOf(from));
+  vec[from] = (vec[from] || 0) + 1;
+  const sendEvt = { id: state.events.length, kind: 'send', proc: from, lam, vec, partnerProc: to, msg: { lam, vec: { ...vec } } };
+  state.events.push(sendEvt);
+  // immediately add receive on `to` (synchronous model — works fine for the visualization)
+  addRecv(to, sendEvt.id, sendEvt.msg);
+}
+
+function addRecv(p, fromId, msg) {
+  const prevLam = lamOf(p);
+  const lam = Math.max(prevLam, msg.lam) + 1;
+  const cur = ensureVecKeys(vecOf(p));
+  const merged = {};
+  for (const q of state.procs) merged[q] = Math.max(cur[q] || 0, msg.vec[q] || 0);
+  merged[p] = (merged[p] || 0) + 1;
+  state.events.push({ id: state.events.length, kind: 'recv', proc: p, lam, vec: merged, partnerId: fromId });
+}
+
+function renderProcs() {
+  const el = $('procList');
+  el.innerHTML = '';
+  state.procs.forEach((p, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'proc-chip';
+    chip.innerHTML = `<span class="dot" style="background:${colorFor(p)}"></span>${p} <button class="btn danger" style="padding:1px 6px;font-size:.7rem;margin-left:4px" data-rm="${p}">×</button>`;
+    el.appendChild(chip);
+  });
+  el.querySelectorAll('button[data-rm]').forEach(b => b.addEventListener('click', () => {
+    const p = b.dataset.rm;
+    if (state.procs.length <= 1) return;
+    // remove proc + its events
+    state.procs = state.procs.filter(x => x !== p);
+    // rebuild events from scratch by replaying the user actions still possible
+    state.events = state.events.filter(e => e.proc !== p && e.partnerProc !== p);
+    // re-validate vector keys (drop the removed proc from vectors)
+    state.events.forEach(e => { delete e.vec[p]; if (e.msg) delete e.msg.vec[p]; });
+    refresh();
+  }));
+  // proc selects
+  const fromSel = $('fromProc'), toSel = $('toProc');
+  fromSel.innerHTML = ''; toSel.innerHTML = '';
+  state.procs.forEach(p => {
+    fromSel.appendChild(new Option(p, p));
+    toSel.appendChild(new Option(p, p));
+  });
+}
+
+function refresh() {
+  renderProcs();
+  drawDiagram();
+  renderTable();
+  populateEventSelectors();
+  recompareEvents();
+}
+
+function renderTable() {
+  const tb = $('evTbody');
+  tb.innerHTML = '';
+  state.events.forEach(e => {
+    const tr = document.createElement('tr');
+    const vecStr = '[' + state.procs.map(p => e.vec[p] || 0).join(', ') + ']';
+    let detail = '';
+    if (e.kind === 'send') detail = `→ ${e.partnerProc} (msg L=${e.msg.lam}, V=[${state.procs.map(p => e.msg.vec[p] || 0).join(',')}])`;
+    if (e.kind === 'recv') {
+      const from = state.events[e.partnerId];
+      detail = from ? `← ${from.proc}'s event #${from.id}` : '';
+    }
+    tr.innerHTML =
+      `<td class="mono">${e.id}</td>` +
+      `<td><span class="mono" style="color:${colorFor(e.proc)};font-weight:700">${e.proc}</span></td>` +
+      `<td><span class="evkind ${e.kind}">${e.kind}</span></td>` +
+      `<td class="mono">${e.lam}</td>` +
+      `<td class="mono">${vecStr}</td>` +
+      `<td class="mono">${detail}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function drawDiagram() {
+  const cv = $('diag');
+  const dpr = window.devicePixelRatio || 1;
+  const targetW = Math.max(cv.parentElement.clientWidth - 16, 600);
+  const cssW = targetW, cssH = 60 + state.procs.length * 70;
+  cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
+  cv.width = cssW * dpr; cv.height = cssH * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const css = getComputedStyle(document.body);
+  const border = css.getPropertyValue('--border') || '#ddd';
+  const muted = css.getPropertyValue('--muted') || '#888';
+  const text = css.getPropertyValue('--text') || '#111';
+
+  const lanePad = 80, top = 30, bottom = 30, laneH = (cssH - top - bottom) / state.procs.length;
+
+  // lanes
+  state.procs.forEach((p, i) => {
+    const y = top + laneH * (i + 0.5);
+    ctx.strokeStyle = border; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(lanePad, y); ctx.lineTo(cssW - 20, y); ctx.stroke();
+    ctx.fillStyle = colorFor(p);
+    ctx.beginPath(); ctx.arc(lanePad - 16, y, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = text; ctx.font = 'bold 13px system-ui';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(p, lanePad - 30, y);
+  });
+
+  // positions per event: x by lamport scalar (gives a clean time-flow)
+  if (state.events.length === 0) return;
+  const maxLam = Math.max(...state.events.map(e => e.lam));
+  const usableW = cssW - lanePad - 40;
+  const xFor = lam => lanePad + 20 + (lam / Math.max(1, maxLam)) * usableW;
+  const yFor = p => top + laneH * (state.procs.indexOf(p) + 0.5);
+
+  // arrows for sends (draw first so dots sit on top)
+  state.events.forEach(e => {
+    if (e.kind === 'send') {
+      const recv = state.events.find(r => r.kind === 'recv' && r.partnerId === e.id);
+      if (!recv) return;
+      const x1 = xFor(e.lam), y1 = yFor(e.proc);
+      const x2 = xFor(recv.lam), y2 = yFor(recv.proc);
+      ctx.strokeStyle = muted; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      // arrowhead
+      const ang = Math.atan2(y2 - y1, x2 - x1);
+      ctx.fillStyle = muted;
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - 10 * Math.cos(ang - 0.35), y2 - 10 * Math.sin(ang - 0.35));
+      ctx.lineTo(x2 - 10 * Math.cos(ang + 0.35), y2 - 10 * Math.sin(ang + 0.35));
+      ctx.closePath(); ctx.fill();
+    }
+  });
+
+  // events
+  state.events.forEach(e => {
+    const x = xFor(e.lam), y = yFor(e.proc);
+    ctx.fillStyle = colorFor(e.proc);
+    if (e.kind === 'send') {
+      ctx.fillRect(x - 6, y - 6, 12, 12);
+    } else if (e.kind === 'recv') {
+      ctx.beginPath();
+      ctx.moveTo(x, y - 7); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 7); ctx.lineTo(x - 7, y);
+      ctx.closePath(); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
+    }
+    // label
+    ctx.fillStyle = text;
+    ctx.font = '10px ui-monospace, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    const vecStr = '[' + state.procs.map(p => e.vec[p] || 0).join(',') + ']';
+    ctx.fillText(vecStr, x, y - 10);
+    ctx.fillStyle = muted; ctx.textBaseline = 'top';
+    ctx.fillText('L=' + e.lam, x, y + 10);
+  });
+}
+
+function populateEventSelectors() {
+  const evA = $('evA'), evB = $('evB');
+  const prevA = evA.value, prevB = evB.value;
+  evA.innerHTML = ''; evB.innerHTML = '';
+  state.events.forEach(e => {
+    const label = `#${e.id} ${e.proc} ${e.kind} L=${e.lam}`;
+    evA.appendChild(new Option(label, e.id));
+    evB.appendChild(new Option(label, e.id));
+  });
+  if (prevA && state.events[prevA]) evA.value = prevA;
+  if (prevB && state.events[prevB]) evB.value = prevB; else if (state.events.length >= 2) evB.value = state.events[state.events.length - 1].id;
+}
+
+function compareVec(a, b) {
+  let leq = true, geq = true, eq = true;
+  for (const p of state.procs) {
+    const va = a[p] || 0, vb = b[p] || 0;
+    if (va > vb) leq = false;
+    if (va < vb) geq = false;
+    if (va !== vb) eq = false;
+  }
+  if (eq) return 'same';
+  if (leq) return 'before';
+  if (geq) return 'after';
+  return 'concurrent';
+}
+
+function recompareEvents() {
+  if (state.events.length < 2) { $('relation').className = 'relation'; $('relation').textContent = 'Add at least two events…'; $('evAInfo').textContent = ''; $('evBInfo').textContent = ''; return; }
+  const a = state.events[+$('evA').value];
+  const b = state.events[+$('evB').value];
+  if (!a || !b) return;
+  const rel = compareVec(a.vec, b.vec);
+  const r = $('relation');
+  const va = '[' + state.procs.map(p => a.vec[p] || 0).join(', ') + ']';
+  const vb = '[' + state.procs.map(p => b.vec[p] || 0).join(', ') + ']';
+  $('evAInfo').textContent = `${a.proc} · ${a.kind} · L=${a.lam} · V=${va}`;
+  $('evBInfo').textContent = `${b.proc} · ${b.kind} · L=${b.lam} · V=${vb}`;
+  let lamMsg = '';
+  if (a.lam < b.lam) lamMsg = `Lamport: ${a.lam} < ${b.lam} (consistent with A→B if causal)`;
+  else if (a.lam > b.lam) lamMsg = `Lamport: ${a.lam} > ${b.lam} (consistent with B→A if causal)`;
+  else lamMsg = `Lamport: ${a.lam} = ${b.lam} (tie — ambiguous)`;
+  if (rel === 'same') { r.className = 'relation same'; r.innerHTML = `A and B are the <strong>same</strong> event (V equal).<br><small>${lamMsg}</small>`; return; }
+  if (rel === 'before') { r.className = 'relation hb'; r.innerHTML = `<strong>A → B</strong> (A happens-before B).<br><small>${lamMsg}</small>`; return; }
+  if (rel === 'after') { r.className = 'relation hb'; r.innerHTML = `<strong>B → A</strong> (B happens-before A).<br><small>${lamMsg}</small>`; return; }
+  r.className = 'relation conc';
+  r.innerHTML = `<strong>A ∥ B</strong> (concurrent — neither happens-before the other).<br><small>${lamMsg} — vector clocks reveal the concurrency.</small>`;
+}
+
+$('action').addEventListener('change', () => {
+  $('toWrap').style.display = $('action').value === 'send' ? '' : 'none';
+});
+$('addEvt').addEventListener('click', () => {
+  const from = $('fromProc').value;
+  if ($('action').value === 'local') addLocal(from);
+  else {
+    const to = $('toProc').value;
+    if (to === from) return;
+    addSend(from, to);
+  }
+  refresh();
+});
+$('undoBtn').addEventListener('click', () => {
+  if (state.events.length === 0) return;
+  const last = state.events[state.events.length - 1];
+  if (last.kind === 'recv') {
+    // undoing recv also pops the corresponding send (it was inserted together)
+    state.events.pop();
+    if (state.events.length && state.events[state.events.length - 1].id === last.partnerId) state.events.pop();
+  } else {
+    state.events.pop();
+  }
+  refresh();
+});
+$('clearBtn').addEventListener('click', () => { state.events = []; refresh(); });
+$('addProc').addEventListener('click', () => {
+  const v = $('newProc').value.trim() || ('P' + (state.procs.length + 1));
+  if (!state.procs.includes(v)) state.procs.push(v);
+  $('newProc').value = '';
+  // extend existing event vectors with the new proc=0
+  state.events.forEach(e => { e.vec[v] = 0; if (e.msg) e.msg.vec[v] = 0; });
+  refresh();
+});
+$('sampleBtn').addEventListener('click', () => {
+  state.procs = ['P1', 'P2', 'P3'];
+  state.events = [];
+  addLocal('P1');
+  addLocal('P2');
+  addSend('P1', 'P3');
+  addLocal('P2');         // concurrent with the P3 send
+  addSend('P3', 'P2');
+  addLocal('P1');
+  addSend('P2', 'P1');
+  refresh();
+});
+$('evA').addEventListener('change', recompareEvents);
+$('evB').addEventListener('change', recompareEvents);
+window.addEventListener('resize', drawDiagram);
+
+// Init with sample
+$('sampleBtn').click();
+</script>
+</body>
+</html>

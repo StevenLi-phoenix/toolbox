@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reservoir Sampling Visualizer — Algorithm R &amp; L | DevToolbox</title>
+<meta name="description" content="Visualize reservoir sampling — Algorithm R and Algorithm L — pick k uniformly random items from a stream of unknown length, with live frequency stats and empirical vs theoretical uniformity tests.">
+<meta name="keywords" content="reservoir sampling, algorithm R, algorithm L, Vitter, stream sampling, random sample, online algorithm, uniform sampling">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="Reservoir Sampling Visualizer">
+<meta property="og:description" content="Watch Algorithm R and Algorithm L pick a uniform k-sample from a stream of unknown length.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/reservoir.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/reservoir.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 16px; }
+.field label { display: block; font-size: .78rem; font-weight: 600; margin-bottom: 5px; color: var(--text); }
+.field input, .field select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; box-sizing: border-box; }
+.field .hint { font-size: .72rem; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.btn { padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-weight: 600; font-size: .84rem; cursor: pointer; font-family: var(--sans); }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.primary:hover { opacity: .9; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.stage { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 800px) { .stage { grid-template-columns: 1fr; } }
+.panel { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.panel h3 { margin: 0 0 10px; font-size: .9rem; color: var(--text); }
+
+.stream { display: flex; flex-wrap: wrap; gap: 5px; font-family: var(--mono); font-size: .82rem; max-height: 200px; overflow-y: auto; padding: 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+.token { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); }
+.token.seen { background: var(--surface2); color: var(--muted); }
+.token.current { background: var(--accent); color: #fff; border-color: var(--accent); transform: scale(1.1); transition: transform .12s; }
+.token.kept { background: var(--success); color: #fff; border-color: var(--success); }
+
+.reservoir { display: flex; flex-wrap: wrap; gap: 6px; min-height: 50px; padding: 8px; background: var(--surface2); border: 1px dashed var(--border); border-radius: var(--radius); }
+.slot { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 36px; padding: 0 8px; border-radius: var(--radius); background: var(--bg); border: 1px solid var(--border); font-family: var(--mono); font-size: .85rem; font-weight: 600; }
+.slot.empty { color: var(--muted); border-style: dashed; }
+.slot.flash { animation: flash .35s ease-out; }
+@keyframes flash {
+  0% { background: var(--accent); color: #fff; transform: scale(1.18); }
+  100% { background: var(--bg); color: var(--text); transform: scale(1); }
+}
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.stat { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+.stat .label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.stat .value { font-family: var(--mono); font-weight: 700; font-size: 1.05rem; color: var(--text); }
+
+.log { font-family: var(--mono); font-size: .78rem; line-height: 1.5; max-height: 180px; overflow-y: auto; padding: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+.log .line { padding: 2px 0; }
+.log .line.kept { color: var(--success); }
+.log .line.skipped { color: var(--muted); }
+
+canvas { width: 100%; max-width: 100%; display: block; }
+
+.formulas { padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-size: .82rem; line-height: 1.6; }
+.formulas h3 { margin: 0 0 8px; font-size: .9rem; }
+.formulas code { font-family: var(--mono); background: var(--bg); padding: 1px 6px; border-radius: 4px; font-size: .82rem; }
+.formulas ul { margin: 6px 0 0 18px; padding: 0; }
+.formulas li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<header>
+<h1>🎰 Reservoir Sampling Visualizer</h1>
+<p class="subtitle">Watch <strong>Algorithm R</strong> (Vitter, 1985) and <strong>Algorithm L</strong> pick <em>k</em> uniformly random items from a stream of unknown length. Each item ends up in the reservoir with probability exactly <code>k/n</code> — verify it with a Monte Carlo run.</p>
+</header>
+
+<div class="card">
+<h2>⚙️ Setup</h2>
+<div class="controls">
+<div class="field">
+<label for="streamSize">Stream Size (n)</label>
+<input type="number" id="streamSize" value="50" min="1" max="100000">
+<div class="hint">Items flowing past, drawn one at a time.</div>
+</div>
+<div class="field">
+<label for="reservoirSize">Reservoir Size (k)</label>
+<input type="number" id="reservoirSize" value="5" min="1" max="100">
+<div class="hint">How many to keep. Must be ≤ n.</div>
+</div>
+<div class="field">
+<label for="algorithm">Algorithm</label>
+<select id="algorithm">
+<option value="R">Algorithm R (classic)</option>
+<option value="L">Algorithm L (geometric skip)</option>
+</select>
+<div class="hint">L skips ahead in O(k(1+log(n/k))) steps.</div>
+</div>
+<div class="field">
+<label for="speed">Step Delay (ms)</label>
+<input type="number" id="speed" value="120" min="0" max="2000" step="20">
+<div class="hint">0 = instant. Use 0 for big runs.</div>
+</div>
+<div class="field">
+<label for="seed">Seed (optional)</label>
+<input type="text" id="seed" placeholder="leave blank for random">
+<div class="hint">Mulberry32 PRNG for reproducible runs.</div>
+</div>
+</div>
+
+<div class="btn-row">
+<button class="btn primary" id="runBtn">▶ Run Once</button>
+<button class="btn" id="stepBtn">⏭ Step</button>
+<button class="btn" id="stopBtn" disabled>⏸ Stop</button>
+<button class="btn" id="resetBtn">↺ Reset</button>
+<button class="btn" id="mcBtn">📊 Monte Carlo ×10,000</button>
+</div>
+</div>
+
+<div class="stats">
+<div class="stat"><div class="label">i (Items Seen)</div><div class="value" id="sI">0</div></div>
+<div class="stat"><div class="label">In Reservoir</div><div class="value" id="sR">0 / 0</div></div>
+<div class="stat"><div class="label">Last Decision</div><div class="value" id="sD">—</div></div>
+<div class="stat"><div class="label">Accept Probability</div><div class="value" id="sP">—</div></div>
+<div class="stat"><div class="label">Replacements</div><div class="value" id="sX">0</div></div>
+</div>
+
+<div class="stage">
+<div class="panel">
+<h3>🌊 Stream</h3>
+<div class="stream" id="stream"></div>
+</div>
+<div class="panel">
+<h3>🏺 Reservoir</h3>
+<div class="reservoir" id="reservoir"></div>
+<h3 style="margin-top:14px">📜 Log</h3>
+<div class="log" id="log"></div>
+</div>
+</div>
+
+<div class="card">
+<h2>📈 Uniformity Test</h2>
+<p class="subtitle">After a Monte Carlo run, every item <em>j</em> ∈ [1, n] should appear in the reservoir <code>k/n</code> of the time. The bars below show empirical inclusion frequency per stream position. A flat line at <code>k/n</code> means the algorithm is unbiased.</p>
+<canvas id="histo" height="220"></canvas>
+<div id="histoStatus" style="font-family:var(--mono);font-size:.82rem;color:var(--muted);margin-top:6px;">Run a Monte Carlo to populate.</div>
+</div>
+
+<div class="formulas">
+<h3>How It Works</h3>
+<p><strong>Algorithm R</strong> — fill the reservoir with the first <em>k</em> items. For each subsequent item <em>i</em> (1-indexed, <em>i</em> &gt; <em>k</em>), pick an integer <em>j</em> ∈ [1, <em>i</em>] uniformly. If <em>j</em> ≤ <em>k</em>, replace slot <em>j</em>. This gives each item probability <em>k/n</em> of being in the final sample.</p>
+<p><strong>Algorithm L</strong> — instead of testing every item, draw a geometric "skip" count <code>floor(log(random()) / log(1-W))</code> where <em>W</em> starts at 1 and gets multiplied by <code>exp(log(random())/k)</code> after each replacement. Same uniformity guarantee, far fewer random draws on huge streams.</p>
+<ul>
+<li><code>P[item i in sample] = k/n</code> for all <em>i</em> ∈ [1, n]</li>
+<li>Total random draws: <strong>R</strong> ≈ n, <strong>L</strong> ≈ k(1 + ln(n/k))</li>
+<li>Memory: O(k). The stream length n need <em>not</em> be known in advance.</li>
+</ul>
+</div>
+
+<footer style="margin-top:32px; text-align:center; font-size:.82rem; color:var(--muted);">
+Built with ☕ by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let rng = Math.random;
+function mulberry32(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function setRng() {
+  const seed = $('seed').value.trim();
+  if (!seed) { rng = Math.random; return; }
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) { h = Math.imul(h ^ seed.charCodeAt(i), 16777619); }
+  rng = mulberry32(h);
+}
+
+let state = null;
+let timer = null;
+
+function newState() {
+  setRng();
+  const n = Math.max(1, Math.floor(+$('streamSize').value || 1));
+  const k = Math.max(1, Math.min(+$('reservoirSize').value || 1, n));
+  $('reservoirSize').value = k;
+  return {
+    n, k,
+    i: 0,
+    reservoir: new Array(k).fill(null),
+    replacements: 0,
+    algo: $('algorithm').value,
+    W: Math.exp(Math.log(rng()) / k),
+    nextL: k,
+    finished: false
+  };
+}
+
+function renderStream(s, current = -1) {
+  const el = $('stream');
+  el.innerHTML = '';
+  for (let i = 1; i <= s.n; i++) {
+    const t = document.createElement('span');
+    t.className = 'token';
+    if (i === current) t.classList.add('current');
+    else if (i <= s.i) {
+      t.classList.add('seen');
+      if (s.reservoir.includes(i)) t.classList.add('kept');
+    }
+    t.textContent = i;
+    el.appendChild(t);
+  }
+}
+
+function renderReservoir(s, flashIdx = -1) {
+  const el = $('reservoir');
+  el.innerHTML = '';
+  for (let j = 0; j < s.k; j++) {
+    const slot = document.createElement('span');
+    slot.className = 'slot';
+    const v = s.reservoir[j];
+    if (v == null) { slot.classList.add('empty'); slot.textContent = '∅'; }
+    else { slot.textContent = v; }
+    if (j === flashIdx) slot.classList.add('flash');
+    el.appendChild(slot);
+  }
+}
+
+function updateStats(s, decision, prob) {
+  $('sI').textContent = s.i + ' / ' + s.n;
+  $('sR').textContent = s.reservoir.filter(x => x != null).length + ' / ' + s.k;
+  $('sD').textContent = decision || '—';
+  $('sP').textContent = prob == null ? '—' : (prob >= 0.0001 ? (prob * 100).toFixed(2) + '%' : prob.toExponential(2));
+  $('sX').textContent = s.replacements;
+}
+
+function log(msg, cls = '') {
+  const el = $('log');
+  const line = document.createElement('div');
+  line.className = 'line ' + cls;
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function stepR(s) {
+  if (s.i >= s.n) { s.finished = true; return; }
+  s.i++;
+  const item = s.i;
+  let decision = '', prob = null, flash = -1;
+  if (s.i <= s.k) {
+    s.reservoir[s.i - 1] = item;
+    decision = 'fill slot ' + s.i;
+    prob = 1;
+    flash = s.i - 1;
+    log(`i=${s.i}: fill slot ${s.i - 1} ← ${item}`, 'kept');
+  } else {
+    const j = Math.floor(rng() * s.i); // 0..i-1
+    prob = s.k / s.i;
+    if (j < s.k) {
+      const old = s.reservoir[j];
+      s.reservoir[j] = item;
+      s.replacements++;
+      decision = `replace slot ${j} (j=${j})`;
+      flash = j;
+      log(`i=${s.i}: j=${j} < k=${s.k} → replace ${old} with ${item}`, 'kept');
+    } else {
+      decision = `discard (j=${j})`;
+      log(`i=${s.i}: j=${j} ≥ k=${s.k} → discard`, 'skipped');
+    }
+  }
+  renderStream(s, item);
+  renderReservoir(s, flash);
+  updateStats(s, decision, prob);
+  if (s.i >= s.n) s.finished = true;
+}
+
+function stepL(s) {
+  if (s.i >= s.n) { s.finished = true; return; }
+  if (s.i < s.k) {
+    s.i++;
+    s.reservoir[s.i - 1] = s.i;
+    log(`i=${s.i}: fill slot ${s.i - 1} ← ${s.i}`, 'kept');
+    renderStream(s, s.i);
+    renderReservoir(s, s.i - 1);
+    updateStats(s, 'fill slot ' + (s.i - 1), 1);
+    if (s.i >= s.n) s.finished = true;
+    return;
+  }
+  // After initial fill, advance to nextL
+  if (s.nextL === s.k) {
+    s.nextL = s.k + Math.floor(Math.log(rng()) / Math.log(1 - s.W)) + 1;
+  }
+  if (s.nextL > s.n) {
+    // skip past the end
+    log(`skip past end (would land at ${s.nextL})`, 'skipped');
+    s.i = s.n;
+    renderStream(s);
+    renderReservoir(s);
+    updateStats(s, 'finished', null);
+    s.finished = true;
+    return;
+  }
+  s.i = s.nextL;
+  const j = Math.floor(rng() * s.k);
+  const old = s.reservoir[j];
+  s.reservoir[j] = s.i;
+  s.replacements++;
+  log(`L: jump to i=${s.i}, replace slot ${j} (${old} → ${s.i})`, 'kept');
+  renderStream(s, s.i);
+  renderReservoir(s, j);
+  updateStats(s, `L: replace slot ${j}`, s.k / s.i);
+  // prepare next jump
+  s.W = s.W * Math.exp(Math.log(rng()) / s.k);
+  s.nextL = s.i + Math.floor(Math.log(rng()) / Math.log(1 - s.W)) + 1;
+  if (s.i >= s.n) s.finished = true;
+}
+
+function step() {
+  if (!state) state = newState();
+  if (state.finished) return;
+  if (state.algo === 'R') stepR(state); else stepL(state);
+}
+
+function startLoop() {
+  if (timer) return;
+  $('stopBtn').disabled = false;
+  $('runBtn').disabled = true;
+  const delay = Math.max(0, +$('speed').value || 0);
+  const tick = () => {
+    step();
+    if (state.finished) { stopLoop(); return; }
+    if (delay <= 0) { setTimeout(tick, 0); }
+    else timer = setTimeout(tick, delay);
+  };
+  if (delay <= 0) setTimeout(tick, 0); else timer = setTimeout(tick, delay);
+}
+
+function stopLoop() {
+  if (timer) { clearTimeout(timer); timer = null; }
+  $('stopBtn').disabled = true;
+  $('runBtn').disabled = false;
+}
+
+function reset() {
+  stopLoop();
+  state = newState();
+  $('log').innerHTML = '';
+  renderStream(state);
+  renderReservoir(state);
+  updateStats(state, '—', null);
+}
+
+function monteCarlo() {
+  const n = Math.max(1, Math.floor(+$('streamSize').value || 1));
+  const k = Math.max(1, Math.min(+$('reservoirSize').value || 1, n));
+  const algo = $('algorithm').value;
+  setRng();
+  const TRIALS = 10000;
+  const counts = new Array(n).fill(0);
+  for (let t = 0; t < TRIALS; t++) {
+    if (algo === 'R') {
+      const res = new Array(k).fill(0);
+      for (let i = 1; i <= n; i++) {
+        if (i <= k) res[i - 1] = i;
+        else {
+          const j = Math.floor(rng() * i);
+          if (j < k) res[j] = i;
+        }
+      }
+      for (const v of res) counts[v - 1]++;
+    } else {
+      const res = new Array(k);
+      for (let i = 0; i < k; i++) res[i] = i + 1;
+      let W = Math.exp(Math.log(rng()) / k);
+      let i = k;
+      while (true) {
+        i = i + Math.floor(Math.log(rng()) / Math.log(1 - W)) + 1;
+        if (i > n) break;
+        const j = Math.floor(rng() * k);
+        res[j] = i;
+        W = W * Math.exp(Math.log(rng()) / k);
+      }
+      for (const v of res) counts[v - 1]++;
+    }
+  }
+  drawHistogram(counts, TRIALS, n, k);
+}
+
+function drawHistogram(counts, trials, n, k) {
+  const cv = $('histo');
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = cv.clientWidth, cssH = 220;
+  cv.width = cssW * dpr; cv.height = cssH * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const padL = 56, padR = 16, padT = 12, padB = 32;
+  const w = cssW - padL - padR, h = cssH - padT - padB;
+  const css = getComputedStyle(document.body);
+  const text = css.getPropertyValue('--muted') || '#888';
+  const accent = css.getPropertyValue('--accent') || '#6366f1';
+  const success = css.getPropertyValue('--success') || '#10b981';
+  const grid = css.getPropertyValue('--border') || '#ddd';
+
+  const target = k / n;
+  const yMax = Math.max(target * 2, ...counts.map(c => c / trials));
+
+  ctx.strokeStyle = grid; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + h); ctx.lineTo(padL + w, padT + h);
+  ctx.stroke();
+
+  ctx.fillStyle = text; ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let g = 0; g <= 4; g++) {
+    const y = padT + (h * g / 4);
+    const v = yMax * (1 - g / 4);
+    ctx.fillText((v * 100).toFixed(1) + '%', padL - 6, y);
+    ctx.strokeStyle = grid; ctx.beginPath();
+    ctx.moveTo(padL, y); ctx.lineTo(padL + w, y); ctx.stroke();
+  }
+
+  // bars
+  const bw = w / n;
+  ctx.fillStyle = accent;
+  for (let i = 0; i < n; i++) {
+    const p = counts[i] / trials;
+    const bh = (p / yMax) * h;
+    ctx.fillRect(padL + i * bw + 0.5, padT + h - bh, Math.max(1, bw - 1), bh);
+  }
+
+  // target line
+  ctx.strokeStyle = success; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+  const ty = padT + h - (target / yMax) * h;
+  ctx.beginPath(); ctx.moveTo(padL, ty); ctx.lineTo(padL + w, ty); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = success;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  ctx.fillText('target k/n = ' + (target * 100).toFixed(2) + '%', padL + 4, ty - 2);
+
+  ctx.fillStyle = text;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let g = 0; g <= 5; g++) {
+    const xv = Math.round((n - 1) * g / 5) + 1;
+    const x = padL + bw * (xv - 1) + bw / 2;
+    ctx.fillText(xv, x, padT + h + 6);
+  }
+
+  // chi-squared goodness of fit
+  const expected = trials * target;
+  let chi2 = 0;
+  for (let i = 0; i < n; i++) {
+    const d = counts[i] - expected;
+    chi2 += (d * d) / expected;
+  }
+  const meanP = counts.reduce((a, b) => a + b, 0) / (trials * n);
+  $('histoStatus').textContent =
+    `Trials: ${trials.toLocaleString()} · χ² = ${chi2.toFixed(2)} (df = ${n - 1}) · ` +
+    `mean inclusion = ${(meanP * 100).toFixed(3)}% vs target ${(target * 100).toFixed(3)}%`;
+}
+
+$('runBtn').addEventListener('click', () => {
+  if (!state || state.finished) state = newState();
+  if (state.finished) reset();
+  $('log').innerHTML = '';
+  startLoop();
+});
+$('stepBtn').addEventListener('click', () => { stopLoop(); if (!state || state.finished) { reset(); } step(); });
+$('stopBtn').addEventListener('click', stopLoop);
+$('resetBtn').addEventListener('click', reset);
+$('mcBtn').addEventListener('click', monteCarlo);
+['streamSize', 'reservoirSize', 'algorithm', 'seed'].forEach(id => $(id).addEventListener('change', reset));
+
+reset();
+</script>
+</body>
+</html>
