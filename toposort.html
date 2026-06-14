@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Topological Sort Visualizer — Kahn's Algorithm — Free Online Tool</title>
+<meta name="description" content="Paste an edge list or Makefile-style dependency list and watch Kahn's algorithm produce a topological ordering step by step. Detects cycles, shows in-degrees, level / Coffman–Graham layering, and DOT export for Graphviz.">
+<meta name="keywords" content="topological sort, topo sort, kahn algorithm, dag, directed acyclic graph, build order, dependency resolution, cycle detection, graphviz dot">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/toposort.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; min-height: 220px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .85rem; background: var(--bg);
+    color: var(--text); resize: vertical; box-sizing: border-box;
+  }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; margin: 12px 0; font-size: .85rem; }
+  .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .opts select, .opts input {
+    padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; background: var(--bg); color: var(--text);
+  }
+  .status {
+    padding: 10px 14px; border-radius: var(--radius); font-family: var(--mono); font-size: .9rem;
+    background: var(--surface); border: 1px solid var(--border); margin-bottom: 12px;
+  }
+  .status.ok { border-color: var(--success); color: var(--success); }
+  .status.err { border-color: var(--error); color: var(--error); }
+  .order-list {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+  }
+  .order-list .node {
+    padding: 5px 11px; background: var(--accent); color: white;
+    border-radius: 99px; font-family: var(--mono); font-size: .85rem; font-weight: 600;
+  }
+  .levels {
+    display: flex; flex-direction: column; gap: 10px; margin-top: 8px;
+  }
+  .level {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 8px 12px; background: var(--surface2); border-radius: var(--radius);
+  }
+  .level .label {
+    font-family: var(--mono); font-size: .72rem; color: var(--muted);
+    min-width: 60px; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .level .node {
+    padding: 4px 10px; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); border-radius: 99px; font-family: var(--mono); font-size: .82rem;
+  }
+  .step-list {
+    font-family: var(--mono); font-size: .8rem; line-height: 1.7; color: var(--muted);
+    max-height: 280px; overflow: auto; padding: 8px 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .step-list b { color: var(--text); }
+  .step-list .picked { color: var(--success); }
+  .indeg-table {
+    width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .82rem;
+  }
+  .indeg-table th, .indeg-table td {
+    padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left;
+  }
+  .indeg-table th { color: var(--muted); font-weight: 500; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
+  .indeg-table .num { text-align: right; font-weight: 600; }
+  .indeg-table tr.zero td:first-child { color: var(--success); font-weight: 600; }
+  pre.dot {
+    background: var(--surface2); padding: 10px 12px; border-radius: var(--radius);
+    font-family: var(--mono); font-size: .8rem; overflow: auto; color: var(--text);
+    max-height: 220px;
+  }
+  .samples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .samples button {
+    padding: 5px 10px; font-size: .8rem; border: 1px solid var(--border);
+    background: var(--surface); border-radius: var(--radius); cursor: pointer; color: var(--text);
+  }
+  .samples button:hover { background: var(--surface2); }
+  .cycle-list {
+    padding: 8px 12px; background: var(--surface2); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .85rem; color: var(--error);
+  }
+  .meta {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;
+    margin-bottom: 12px;
+  }
+  .meta div {
+    padding: 8px 12px; background: var(--surface2); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; color: var(--muted);
+  }
+  .meta b { color: var(--text); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Topological Sort Visualizer</h1>
+<p class="subtitle">Paste an edge list — one <code>A &rarr; B</code>, <code>A B</code>, or <code>A: B C D</code> per line — and Kahn's algorithm produces a valid topological ordering, step by step. The visualizer also computes in-degrees, level layers (Coffman–Graham style), spots cycles with the offending node set, and emits a Graphviz <code>.dot</code> diagram you can drop into <code>dot -Tsvg</code>.</p>
+
+<div class="card">
+  <div class="samples">
+    <button onclick="sample('makefile')">Make targets</button>
+    <button onclick="sample('npm')">npm package graph</button>
+    <button onclick="sample('shoes')">Get dressed</button>
+    <button onclick="sample('cs')">CS prereqs</button>
+    <button onclick="sample('cycle')">Cycle (broken)</button>
+    <button onclick="sample('disconnected')">Two components</button>
+  </div>
+  <div class="panels">
+    <div>
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:4px;">Edges — <code>A B</code>, <code>A -&gt; B</code>, or <code>A: B C</code> (<code>A</code> depends on <code>B</code>…)</label>
+      <textarea id="edges" spellcheck="false" oninput="run()">build: compile link
+compile: parse typecheck
+parse: lex
+typecheck: parse
+link: compile
+lex:
+typecheck:</textarea>
+    </div>
+    <div>
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:4px;">Detected nodes &amp; in-degrees</label>
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px;max-height:240px;overflow:auto;background:var(--bg);">
+        <table class="indeg-table" id="indeg"></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="opts">
+    <label>Format:
+      <select id="format" onchange="run()">
+        <option value="auto" selected>Auto-detect</option>
+        <option value="arrow">A -&gt; B (A before B)</option>
+        <option value="colon">A: B C (A depends on B, C)</option>
+        <option value="pair">A B (A before B)</option>
+      </select>
+    </label>
+    <label>Tie-break:
+      <select id="tiebreak" onchange="run()">
+        <option value="alpha" selected>Alphabetical (deterministic)</option>
+        <option value="input">Order of first appearance</option>
+        <option value="reverse">Reverse alphabetical</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="caseinsens" onchange="run()"> Case-insensitive node names</label>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Result</h2>
+  <div id="status" class="status">…</div>
+
+  <div class="meta" id="meta"></div>
+
+  <div id="orderWrap">
+    <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:6px;">Topological order (Kahn / BFS)</label>
+    <div id="order" class="order-list"></div>
+  </div>
+
+  <div id="cycleWrap" style="display:none;margin-top:14px;">
+    <label style="font-size:.82rem;color:var(--error);display:block;margin-bottom:6px;">Cycle detected — these nodes have unresolvable in-degree &gt; 0</label>
+    <div id="cycleNodes" class="cycle-list"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Parallel-execution layers</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:0;">Each layer is a set of nodes whose dependencies are all in earlier layers — i.e. everything in a layer can run in parallel. Useful for job-runner schedulers, build pipelines, and ETL DAGs.</p>
+  <div id="levels" class="levels"></div>
+</div>
+
+<div class="card">
+  <h2>Step trace</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:0;">Kahn's algorithm picks any node with in-degree 0, emits it, and decrements the in-degree of its successors. We break ties with the rule above so the trace is reproducible.</p>
+  <div id="steps" class="step-list"></div>
+</div>
+
+<div class="card">
+  <h2>Graphviz DOT export</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:0;">Copy this into a <code>.dot</code> file and run <code>dot -Tsvg graph.dot -o graph.svg</code>. Edges in the topological order are coloured to make the flow easier to follow; cycle edges are highlighted.</p>
+  <pre class="dot" id="dot"></pre>
+</div>
+
+<div class="card">
+  <h2>About topological sort</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65;">
+    A topological sort of a directed graph is an ordering of nodes where every edge <code>u → v</code> places <code>u</code> before <code>v</code>. It only exists if the graph is a <strong>DAG</strong> (directed acyclic graph) — a cycle makes the order undefined.
+    <strong>Kahn's algorithm</strong> (1962) is the iterative version: collect every node with in-degree 0, emit them, remove their outgoing edges, repeat. The depth-first variant produces the order by post-order traversal in reverse. Both run in <code>O(V + E)</code>.
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65;">
+    Where you'll meet it: <strong>build systems</strong> (Make, Bazel, Nix), <strong>package managers</strong> (npm, Cargo), <strong>task schedulers</strong> (Airflow, Dagster, Tekton), <strong>course prerequisites</strong>, <strong>spreadsheet recalc</strong>, <strong>linker symbol resolution</strong>, and <strong>data-flow IRs</strong> in compilers. If a build complains about a "circular dependency," it ran a topological sort and gave up at the surviving nodes — the same ones this tool will highlight.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLES = {
+  makefile: `build: compile link
+compile: parse typecheck
+parse: lex
+typecheck: parse
+link: compile
+lex:
+typecheck:`,
+  npm: `app -> react
+app -> express
+app -> lodash
+react -> scheduler
+react -> react-dom
+react-dom -> scheduler
+express -> body-parser
+express -> debug
+body-parser -> debug`,
+  shoes: `shoes: socks pants
+pants: underwear
+shirt: undershirt
+jacket: shirt
+belt: pants
+watch:`,
+  cs: `algorithms: discrete-math data-structures
+data-structures: programming
+operating-systems: data-structures
+networks: operating-systems
+compilers: algorithms theory-of-computation
+theory-of-computation: discrete-math
+databases: algorithms
+ml: linear-algebra algorithms statistics`,
+  cycle: `a -> b
+b -> c
+c -> d
+d -> b
+e -> f`,
+  disconnected: `frontend -> api
+api -> db
+mobile -> api
+admin -> api
+docs:
+metrics: db`,
+};
+
+function sample(k) {
+  $('edges').value = SAMPLES[k];
+  run();
+}
+
+// Parse edges. Returns {nodes: Set, edges: [[from, to], ...]}
+function parse(text) {
+  const format = $('format').value;
+  const ci = $('caseinsens').checked;
+  const norm = s => ci ? s.toLowerCase() : s;
+
+  const lines = text.split(/\r?\n/);
+  const nodes = new Set();
+  const edges = [];
+  const firstSeen = new Map();
+
+  function addNode(n) {
+    if (!nodes.has(n)) {
+      nodes.add(n);
+      firstSeen.set(n, firstSeen.size);
+    }
+  }
+
+  // Auto-detect: look at line content
+  function detect(line) {
+    if (line.includes('->')) return 'arrow';
+    if (/:/.test(line)) return 'colon';
+    return 'pair';
+  }
+
+  for (let raw of lines) {
+    let line = raw.replace(/#.*$/, '').trim();
+    if (!line) continue;
+    const f = format === 'auto' ? detect(line) : format;
+
+    if (f === 'arrow') {
+      // A -> B    means A before B
+      const parts = line.split('->').map(s => s.trim()).filter(Boolean);
+      for (let i = 0; i < parts.length - 1; i++) {
+        const a = norm(parts[i]), b = norm(parts[i + 1]);
+        addNode(a); addNode(b);
+        edges.push([a, b]);
+      }
+      if (parts.length === 1) addNode(norm(parts[0]));
+    } else if (f === 'colon') {
+      // A: B C D  means A depends on B,C,D  (i.e. B,C,D before A)
+      const m = line.match(/^([^:]+):\s*(.*)$/);
+      if (!m) continue;
+      const head = norm(m[1].trim());
+      addNode(head);
+      const deps = m[2].split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+      for (const d of deps) {
+        const dn = norm(d);
+        addNode(dn);
+        edges.push([dn, head]); // d before head
+      }
+    } else {
+      // A B  means A before B
+      const parts = line.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+      for (const p of parts) addNode(norm(p));
+      for (let i = 0; i < parts.length - 1; i++) {
+        edges.push([norm(parts[i]), norm(parts[i + 1])]);
+      }
+    }
+  }
+
+  // Dedupe edges & self-loops
+  const seen = new Set();
+  const cleanEdges = [];
+  for (const [a, b] of edges) {
+    if (a === b) continue;
+    const k = a + '\0' + b;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    cleanEdges.push([a, b]);
+  }
+
+  return { nodes, edges: cleanEdges, firstSeen };
+}
+
+function buildAdj(nodes, edges) {
+  const adj = new Map(), indeg = new Map();
+  for (const n of nodes) { adj.set(n, []); indeg.set(n, 0); }
+  for (const [a, b] of edges) {
+    adj.get(a).push(b);
+    indeg.set(b, (indeg.get(b) || 0) + 1);
+  }
+  return { adj, indeg };
+}
+
+function compareFn(firstSeen) {
+  const m = $('tiebreak').value;
+  if (m === 'alpha') return (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  if (m === 'reverse') return (a, b) => a < b ? 1 : a > b ? -1 : 0;
+  return (a, b) => (firstSeen.get(a) ?? 0) - (firstSeen.get(b) ?? 0);
+}
+
+function kahn(nodes, edges, firstSeen) {
+  const { adj, indeg } = buildAdj(nodes, edges);
+  const cmp = compareFn(firstSeen);
+  const ready = [...nodes].filter(n => indeg.get(n) === 0);
+  ready.sort(cmp);
+  const order = [];
+  const steps = [];
+  const levels = [];
+
+  // For levels: do BFS by waves
+  let wave = ready.slice();
+  while (wave.length) {
+    levels.push(wave.slice().sort(cmp));
+    const nextSet = new Set();
+    // process this wave in tie-break order so the order list stays stable
+    const queue = wave.slice().sort(cmp);
+    while (queue.length) {
+      const n = queue.shift();
+      order.push(n);
+      const successors = [];
+      for (const m of adj.get(n)) {
+        indeg.set(m, indeg.get(m) - 1);
+        successors.push(m + '(' + indeg.get(m) + ')');
+        if (indeg.get(m) === 0) nextSet.add(m);
+      }
+      steps.push({ picked: n, successors });
+    }
+    wave = [...nextSet];
+  }
+
+  // Cycle detection: any node still has indeg > 0
+  const stuck = [...nodes].filter(n => indeg.get(n) > 0);
+
+  return { order, steps, levels, stuck, indegInitial: buildAdj(nodes, edges).indeg };
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+}
+function escDot(s) {
+  return '"' + String(s).replace(/[\\"]/g, '\\$&') + '"';
+}
+
+function render({ nodes, edges, firstSeen }) {
+  const r = kahn(nodes, edges, firstSeen);
+  const { order, steps, levels, stuck } = r;
+  const N = nodes.size, E = edges.length;
+  const ok = stuck.length === 0;
+
+  // Status
+  const st = $('status');
+  if (N === 0) {
+    st.className = 'status';
+    st.textContent = 'No nodes yet — paste an edge list to begin.';
+  } else if (ok) {
+    st.className = 'status ok';
+    st.textContent = `✓ Topologically sorted ${N} nodes across ${levels.length} parallel layer(s)`;
+  } else {
+    st.className = 'status err';
+    st.textContent = `✗ Cycle detected — ${stuck.length}/${N} nodes have unresolvable dependencies`;
+  }
+
+  // Meta
+  $('meta').innerHTML = `
+    <div>nodes <b>${N}</b></div>
+    <div>edges <b>${E}</b></div>
+    <div>roots (in=0) <b>${[...nodes].filter(n => buildAdj(nodes, edges).indeg.get(n) === 0).length}</b></div>
+    <div>leaves (out=0) <b>${[...nodes].filter(n => buildAdj(nodes, edges).adj.get(n).length === 0).length}</b></div>
+    <div>layers <b>${levels.length}</b></div>
+    <div>longest path ≥ <b>${levels.length}</b></div>
+  `;
+
+  // In-degree table
+  const { adj, indeg } = buildAdj(nodes, edges);
+  const cmp = compareFn(firstSeen);
+  const sortedNodes = [...nodes].sort(cmp);
+  $('indeg').innerHTML =
+    '<tr><th>Node</th><th class="num">in</th><th class="num">out</th><th>successors</th></tr>' +
+    sortedNodes.map(n => {
+      const inD = indeg.get(n), outD = adj.get(n).length;
+      const cls = inD === 0 ? ' class="zero"' : '';
+      return `<tr${cls}><td>${escapeHtml(n)}</td><td class="num">${inD}</td><td class="num">${outD}</td><td style="color:var(--muted);">${adj.get(n).map(escapeHtml).join(', ')}</td></tr>`;
+    }).join('');
+
+  // Order
+  $('orderWrap').style.display = (order.length || N === 0) ? '' : 'none';
+  $('order').innerHTML = order.map(n => `<span class="node">${escapeHtml(n)}</span>`).join('');
+
+  // Cycle
+  if (stuck.length) {
+    $('cycleWrap').style.display = '';
+    $('cycleNodes').innerHTML = stuck.map(escapeHtml).join(', ');
+  } else {
+    $('cycleWrap').style.display = 'none';
+  }
+
+  // Levels
+  $('levels').innerHTML = levels.map((lvl, i) =>
+    `<div class="level"><span class="label">L${i}</span>` +
+    lvl.map(n => `<span class="node">${escapeHtml(n)}</span>`).join('') +
+    `</div>`
+  ).join('');
+
+  // Steps
+  $('steps').innerHTML = steps.map((s, i) =>
+    `<div>step <b>${i+1}</b>: emit <span class="picked">${escapeHtml(s.picked)}</span>` +
+    (s.successors.length ? ` → decrement ${s.successors.map(escapeHtml).join(', ')}` : '') +
+    `</div>`
+  ).join('') || '<div style="color:var(--muted);">(no steps — graph is empty)</div>';
+
+  // DOT
+  const lines = ['digraph G {', '  rankdir=LR;', '  node [shape=box,style=rounded,fontname=Helvetica];'];
+  const stuckSet = new Set(stuck);
+  for (const n of sortedNodes) {
+    const attrs = [];
+    if (stuckSet.has(n)) attrs.push('color="#ff5555"', 'fontcolor="#ff5555"');
+    lines.push('  ' + escDot(n) + (attrs.length ? ' [' + attrs.join(',') + ']' : '') + ';');
+  }
+  for (const [a, b] of edges) {
+    const attrs = [];
+    if (stuckSet.has(a) && stuckSet.has(b)) attrs.push('color="#ff5555"');
+    lines.push('  ' + escDot(a) + ' -> ' + escDot(b) + (attrs.length ? ' [' + attrs.join(',') + ']' : '') + ';');
+  }
+  lines.push('}');
+  $('dot').textContent = lines.join('\n');
+}
+
+function run() {
+  const parsed = parse($('edges').value);
+  render(parsed);
+}
+
+run();
+</script>
+</body>
+</html>

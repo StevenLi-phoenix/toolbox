@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MurmurHash3 Calculator — Free Online Tool</title>
+<meta name="description" content="Compute MurmurHash3 non-cryptographic hashes — 32-bit, 128-bit (x86 and x64 variants) — of any string with a configurable seed. Shows hex, decimal, base36, and shard-bucket outputs.">
+<meta name="keywords" content="murmurhash, murmurhash3, mmh3, non-cryptographic hash, sharding hash, bloom filter hash, hash function, 32-bit hash, 128-bit hash">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/murmurhash.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea, input[type="text"], input[type="number"] {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .9rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  textarea { min-height: 120px; }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .row { display: grid; grid-template-columns: 1fr 180px 140px; gap: 12px; align-items: end; margin-bottom: 12px; }
+  .results {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;
+    margin-top: 12px;
+  }
+  .result {
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .result .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .result .value {
+    font-family: var(--mono); font-size: 1rem; margin-top: 4px;
+    word-break: break-all; color: var(--text);
+  }
+  .result .alt { font-family: var(--mono); font-size: .78rem; color: var(--muted); margin-top: 4px; }
+  .shard-row {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    margin-top: 14px; padding: 10px 14px; background: var(--surface2);
+    border-radius: var(--radius); font-size: .88rem;
+  }
+  .shard-row strong { color: var(--accent); font-family: var(--mono); font-size: 1.05rem; }
+  .copy-btn {
+    margin-left: 6px; font-size: .68rem; padding: 2px 6px;
+    border: 1px solid var(--border); background: var(--surface2);
+    border-radius: 3px; cursor: pointer; color: var(--muted);
+  }
+  .copy-btn:hover { color: var(--text); }
+  .ref { font-size: .88rem; line-height: 1.65; color: var(--muted); }
+  .ref code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; color: var(--text); font-size: .85rem; }
+  .ref table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .ref th, .ref td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; font-size: .82rem; vertical-align: top; }
+  details summary { cursor: pointer; padding: 6px 0; font-weight: 600; color: var(--text); }
+  .samples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .samples button {
+    padding: 4px 10px; font-size: .78rem; border: 1px solid var(--border);
+    background: var(--surface); border-radius: var(--radius); cursor: pointer; color: var(--text);
+  }
+  .samples button:hover { background: var(--surface2); }
+  @media (max-width: 768px) {
+    .row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>MurmurHash3 Calculator</h1>
+<p class="subtitle">Compute Austin Appleby's <strong>MurmurHash3</strong> — the fast non-cryptographic hash widely used for sharding, bloom filters, hash tables (Redis, Cassandra, Kafka), Guava's <code>Hashing.murmur3_*</code>, Python's <code>mmh3</code>, and JavaScript bundlers. Pick a variant (32-bit, 128-bit x86, 128-bit x64), tweak the seed, and see the hash in hex / decimal / base36 plus a shard bucket for any chosen modulus.</p>
+
+<div class="card">
+  <label class="head" for="input">Input string</label>
+  <textarea id="input" oninput="run()" spellcheck="false">hello world</textarea>
+  <div class="samples">
+    <button onclick="sample('hello world')">hello world</button>
+    <button onclick="sample('')">(empty)</button>
+    <button onclick="sample('The quick brown fox jumps over the lazy dog')">pangram</button>
+    <button onclick="sample('user:42:profile')">cache-key</button>
+    <button onclick="sample('aaaaaaaaaaaaaaaa')">16×a</button>
+    <button onclick="sampleBytes()">non-UTF8 bytes</button>
+  </div>
+
+  <div class="row" style="margin-top:14px;">
+    <div>
+      <label class="head">Encoding</label>
+      <select id="enc" onchange="run()" style="padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);width:100%;">
+        <option value="utf8" selected>UTF-8 (text)</option>
+        <option value="hex">Hex bytes</option>
+        <option value="latin1">Latin-1 (1 byte per char)</option>
+      </select>
+    </div>
+    <div>
+      <label class="head">Seed (u32)</label>
+      <input type="number" id="seed" value="0" min="0" max="4294967295" oninput="run()">
+    </div>
+    <div>
+      <label class="head">Shard buckets</label>
+      <input type="number" id="buckets" value="16" min="1" max="1000000" oninput="run()">
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>MurmurHash3_x86_32 (32-bit)</h2>
+  <div class="results">
+    <div class="result">
+      <div class="label">Hex (8 chars)</div>
+      <div class="value" id="m32hex">—</div>
+      <div class="alt" id="m32hex2"></div>
+    </div>
+    <div class="result">
+      <div class="label">Unsigned decimal</div>
+      <div class="value" id="m32udec">—</div>
+      <div class="alt" id="m32sdec"></div>
+    </div>
+    <div class="result">
+      <div class="label">Base36</div>
+      <div class="value" id="m32b36">—</div>
+      <div class="alt">also as base62 below</div>
+    </div>
+  </div>
+  <div class="shard-row">
+    Shard bucket (mod N) → <strong id="m32mod">—</strong>
+    <span style="color:var(--muted);">· consistent across runs &amp; languages with same seed</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>MurmurHash3_x86_128 (128-bit, x86 variant)</h2>
+  <div class="results">
+    <div class="result">
+      <div class="label">Hex (32 chars)</div>
+      <div class="value" id="m128x86">—</div>
+    </div>
+    <div class="result">
+      <div class="label">Four 32-bit words</div>
+      <div class="value" id="m128x86words" style="font-size:.85rem;">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>MurmurHash3_x64_128 (128-bit, x64 variant — most common)</h2>
+  <div class="results">
+    <div class="result">
+      <div class="label">Hex (32 chars)</div>
+      <div class="value" id="m128x64">—</div>
+    </div>
+    <div class="result">
+      <div class="label">Two 64-bit words</div>
+      <div class="value" id="m128x64words" style="font-size:.85rem;">—</div>
+    </div>
+    <div class="result">
+      <div class="label">Java-style signed longs</div>
+      <div class="value" id="m128x64signed" style="font-size:.85rem;">—</div>
+    </div>
+  </div>
+  <div class="shard-row">
+    This is the variant Guava / Cassandra / Spark use. <code>mmh3.hash128(s, seed)</code> in Python's mmh3 also returns this when <code>signed=False</code>.
+  </div>
+</div>
+
+<div class="card">
+  <h2>About MurmurHash3</h2>
+  <div class="ref">
+    <p>MurmurHash was created by <strong>Austin Appleby</strong> in 2008 (Murmur1) and refined to MurmurHash3 in 2011. It is a fast, simple, <em>non-cryptographic</em> hash with excellent distribution (no clusters, no detectable patterns on the SMHasher test suite) and is one of the most widely deployed hash families in distributed systems.</p>
+    <table>
+      <thead><tr><th>Variant</th><th>Output</th><th>Architecture sweet spot</th><th>Use cases</th></tr></thead>
+      <tbody>
+        <tr><td><code>x86_32</code></td><td>32 bits</td><td>Any</td><td>Hash tables, Bloom filters, cache key sharding, flag bits.</td></tr>
+        <tr><td><code>x86_128</code></td><td>128 bits</td><td>32-bit CPUs</td><td>Rare today — kept for parity with old C / Java code.</td></tr>
+        <tr><td><code>x64_128</code></td><td>128 bits</td><td>64-bit CPUs</td><td>Distributed IDs, Cassandra partitioner, Spark / Hadoop joins, deduplication.</td></tr>
+      </tbody>
+    </table>
+    <details style="margin-top:12px;"><summary>Why non-cryptographic?</summary>
+      <p>MurmurHash3 is <strong>not</strong> safe against adversaries. Collisions can be constructed by anyone who knows the seed (see HashDoS attacks from 2011-2012). Use it for distributing data evenly; use <strong>SHA-256</strong> / <strong>BLAKE3</strong> / <strong>SipHash</strong> when the input is attacker-controlled and a collision would be exploited.</p>
+    </details>
+    <details><summary>32-bit reference vectors (seed = 0)</summary>
+      <pre style="background:var(--surface2);padding:8px 10px;border-radius:var(--radius);font-size:.78rem;overflow:auto;">murmur3_x86_32("")                = 0x00000000
+murmur3_x86_32("hello")           = 0x248bfa47
+murmur3_x86_32("hello world")     = 0x5e928f0f</pre>
+      <p style="margin-top:8px;">These match Python's <code>mmh3.hash(s, 0, signed=False)</code> and Guava's <code>Hashing.murmur3_32_fixed().hashString(s, UTF_8).asInt()</code>. The 128-bit outputs match <code>mmh3.hash128(s, 0, signed=False)</code> and Cassandra's <code>Murmur3Partitioner</code>.</p>
+    </details>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---------- byte conversion ----------
+function getBytes() {
+  const text = $('input').value;
+  const enc = $('enc').value;
+  if (enc === 'utf8') {
+    return new TextEncoder().encode(text);
+  }
+  if (enc === 'latin1') {
+    const out = new Uint8Array(text.length);
+    for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) & 0xff;
+    return out;
+  }
+  // hex
+  const clean = text.replace(/[^0-9a-fA-F]/g, '');
+  if (clean.length % 2) return null;
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i*2, 2), 16);
+  return out;
+}
+
+// ---------- 32-bit math helpers ----------
+function mul32(a, b) {
+  // emulate (a*b) mod 2^32 with full precision
+  const aH = (a >>> 16) & 0xffff, aL = a & 0xffff;
+  const bH = (b >>> 16) & 0xffff, bL = b & 0xffff;
+  return ((aL * bL) + (((aH * bL + aL * bH) << 16) >>> 0)) >>> 0;
+}
+function rotl32(x, r) { return ((x << r) | (x >>> (32 - r))) >>> 0; }
+
+// ---------- MurmurHash3_x86_32 ----------
+function mm3_x86_32(bytes, seed) {
+  let h1 = seed >>> 0;
+  const c1 = 0xcc9e2d51, c2 = 0x1b873593;
+  const len = bytes.length;
+  const nblocks = Math.floor(len / 4);
+  for (let i = 0; i < nblocks; i++) {
+    const o = i * 4;
+    let k1 = (bytes[o]) | (bytes[o+1] << 8) | (bytes[o+2] << 16) | (bytes[o+3] << 24);
+    k1 = mul32(k1 >>> 0, c1);
+    k1 = rotl32(k1, 15);
+    k1 = mul32(k1, c2);
+    h1 ^= k1;
+    h1 = rotl32(h1 >>> 0, 13);
+    h1 = (mul32(h1, 5) + 0xe6546b64) >>> 0;
+  }
+  // tail
+  let k1 = 0;
+  const tail = nblocks * 4;
+  const rem = len & 3;
+  if (rem >= 3) k1 ^= bytes[tail + 2] << 16;
+  if (rem >= 2) k1 ^= bytes[tail + 1] << 8;
+  if (rem >= 1) {
+    k1 ^= bytes[tail];
+    k1 = mul32(k1 >>> 0, c1);
+    k1 = rotl32(k1, 15);
+    k1 = mul32(k1, c2);
+    h1 ^= k1;
+  }
+  h1 ^= len;
+  // fmix32
+  h1 ^= h1 >>> 16;
+  h1 = mul32(h1, 0x85ebca6b);
+  h1 ^= h1 >>> 13;
+  h1 = mul32(h1, 0xc2b2ae35);
+  h1 ^= h1 >>> 16;
+  return h1 >>> 0;
+}
+
+// ---------- MurmurHash3_x86_128 ----------
+function mm3_x86_128(bytes, seed) {
+  let h1 = seed >>> 0, h2 = seed >>> 0, h3 = seed >>> 0, h4 = seed >>> 0;
+  const c1 = 0x239b961b, c2 = 0xab0e9789, c3 = 0x38b34ae5, c4 = 0xa1e38b93;
+  const len = bytes.length;
+  const nblocks = Math.floor(len / 16);
+  for (let i = 0; i < nblocks; i++) {
+    const o = i * 16;
+    let k1 = (bytes[o])    | (bytes[o+1] << 8)  | (bytes[o+2] << 16)  | (bytes[o+3] << 24);
+    let k2 = (bytes[o+4])  | (bytes[o+5] << 8)  | (bytes[o+6] << 16)  | (bytes[o+7] << 24);
+    let k3 = (bytes[o+8])  | (bytes[o+9] << 8)  | (bytes[o+10] << 16) | (bytes[o+11] << 24);
+    let k4 = (bytes[o+12]) | (bytes[o+13] << 8) | (bytes[o+14] << 16) | (bytes[o+15] << 24);
+
+    k1 = mul32(k1 >>> 0, c1); k1 = rotl32(k1, 15); k1 = mul32(k1, c2); h1 ^= k1;
+    h1 = rotl32(h1 >>> 0, 19); h1 = (h1 + h2) >>> 0; h1 = (mul32(h1, 5) + 0x561ccd1b) >>> 0;
+
+    k2 = mul32(k2 >>> 0, c2); k2 = rotl32(k2, 16); k2 = mul32(k2, c3); h2 ^= k2;
+    h2 = rotl32(h2 >>> 0, 17); h2 = (h2 + h3) >>> 0; h2 = (mul32(h2, 5) + 0x0bcaa747) >>> 0;
+
+    k3 = mul32(k3 >>> 0, c3); k3 = rotl32(k3, 17); k3 = mul32(k3, c4); h3 ^= k3;
+    h3 = rotl32(h3 >>> 0, 15); h3 = (h3 + h4) >>> 0; h3 = (mul32(h3, 5) + 0x96cd1c35) >>> 0;
+
+    k4 = mul32(k4 >>> 0, c4); k4 = rotl32(k4, 18); k4 = mul32(k4, c1); h4 ^= k4;
+    h4 = rotl32(h4 >>> 0, 13); h4 = (h4 + h1) >>> 0; h4 = (mul32(h4, 5) + 0x32ac3b17) >>> 0;
+  }
+  // tail
+  const tail = nblocks * 16;
+  const rem = len & 15;
+  let k1 = 0, k2 = 0, k3 = 0, k4 = 0;
+  if (rem >= 15) k4 ^= bytes[tail + 14] << 16;
+  if (rem >= 14) k4 ^= bytes[tail + 13] << 8;
+  if (rem >= 13) { k4 ^= bytes[tail + 12]; k4 = mul32(k4 >>> 0, c4); k4 = rotl32(k4, 18); k4 = mul32(k4, c1); h4 ^= k4; }
+  if (rem >= 12) k3 ^= bytes[tail + 11] << 24;
+  if (rem >= 11) k3 ^= bytes[tail + 10] << 16;
+  if (rem >= 10) k3 ^= bytes[tail + 9] << 8;
+  if (rem >= 9)  { k3 ^= bytes[tail + 8]; k3 = mul32(k3 >>> 0, c3); k3 = rotl32(k3, 17); k3 = mul32(k3, c4); h3 ^= k3; }
+  if (rem >= 8)  k2 ^= bytes[tail + 7] << 24;
+  if (rem >= 7)  k2 ^= bytes[tail + 6] << 16;
+  if (rem >= 6)  k2 ^= bytes[tail + 5] << 8;
+  if (rem >= 5)  { k2 ^= bytes[tail + 4]; k2 = mul32(k2 >>> 0, c2); k2 = rotl32(k2, 16); k2 = mul32(k2, c3); h2 ^= k2; }
+  if (rem >= 4)  k1 ^= bytes[tail + 3] << 24;
+  if (rem >= 3)  k1 ^= bytes[tail + 2] << 16;
+  if (rem >= 2)  k1 ^= bytes[tail + 1] << 8;
+  if (rem >= 1)  { k1 ^= bytes[tail]; k1 = mul32(k1 >>> 0, c1); k1 = rotl32(k1, 15); k1 = mul32(k1, c2); h1 ^= k1; }
+
+  h1 ^= len; h2 ^= len; h3 ^= len; h4 ^= len;
+  h1 = (h1 + h2) >>> 0; h1 = (h1 + h3) >>> 0; h1 = (h1 + h4) >>> 0;
+  h2 = (h2 + h1) >>> 0;
+  h3 = (h3 + h1) >>> 0;
+  h4 = (h4 + h1) >>> 0;
+  h1 = fmix32(h1); h2 = fmix32(h2); h3 = fmix32(h3); h4 = fmix32(h4);
+  h1 = (h1 + h2) >>> 0; h1 = (h1 + h3) >>> 0; h1 = (h1 + h4) >>> 0;
+  h2 = (h2 + h1) >>> 0;
+  h3 = (h3 + h1) >>> 0;
+  h4 = (h4 + h1) >>> 0;
+  return [h1, h2, h3, h4];
+}
+
+function fmix32(h) {
+  h ^= h >>> 16;
+  h = mul32(h >>> 0, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = mul32(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+// ---------- 64-bit BigInt math ----------
+const MASK64 = (1n << 64n) - 1n;
+function u64(x) { return BigInt.asUintN(64, x); }
+function rotl64(x, r) { return u64((x << BigInt(r)) | (x >> BigInt(64 - r))); }
+function fmix64(k) {
+  k ^= k >> 33n;
+  k = u64(k * 0xff51afd7ed558ccdn);
+  k ^= k >> 33n;
+  k = u64(k * 0xc4ceb9fe1a85ec53n);
+  k ^= k >> 33n;
+  return k;
+}
+
+// ---------- MurmurHash3_x64_128 ----------
+function mm3_x64_128(bytes, seed) {
+  let h1 = BigInt(seed >>> 0), h2 = BigInt(seed >>> 0);
+  const c1 = 0x87c37b91114253d5n, c2 = 0x4cf5ad432745937fn;
+  const len = bytes.length;
+  const nblocks = Math.floor(len / 16);
+  for (let i = 0; i < nblocks; i++) {
+    const o = i * 16;
+    let k1 = 0n, k2 = 0n;
+    for (let j = 0; j < 8; j++) k1 |= BigInt(bytes[o + j]) << BigInt(j * 8);
+    for (let j = 0; j < 8; j++) k2 |= BigInt(bytes[o + 8 + j]) << BigInt(j * 8);
+
+    k1 = u64(k1 * c1); k1 = rotl64(k1, 31); k1 = u64(k1 * c2); h1 ^= k1;
+    h1 = rotl64(h1, 27); h1 = u64(h1 + h2); h1 = u64(h1 * 5n + 0x52dce729n);
+
+    k2 = u64(k2 * c2); k2 = rotl64(k2, 33); k2 = u64(k2 * c1); h2 ^= k2;
+    h2 = rotl64(h2, 31); h2 = u64(h2 + h1); h2 = u64(h2 * 5n + 0x38495ab5n);
+  }
+  // tail
+  const tail = nblocks * 16;
+  const rem = len & 15;
+  let k1 = 0n, k2 = 0n;
+  if (rem >= 15) k2 ^= BigInt(bytes[tail + 14]) << 48n;
+  if (rem >= 14) k2 ^= BigInt(bytes[tail + 13]) << 40n;
+  if (rem >= 13) k2 ^= BigInt(bytes[tail + 12]) << 32n;
+  if (rem >= 12) k2 ^= BigInt(bytes[tail + 11]) << 24n;
+  if (rem >= 11) k2 ^= BigInt(bytes[tail + 10]) << 16n;
+  if (rem >= 10) k2 ^= BigInt(bytes[tail + 9])  << 8n;
+  if (rem >= 9)  { k2 ^= BigInt(bytes[tail + 8]); k2 = u64(k2 * c2); k2 = rotl64(k2, 33); k2 = u64(k2 * c1); h2 ^= k2; }
+  if (rem >= 8)  k1 ^= BigInt(bytes[tail + 7]) << 56n;
+  if (rem >= 7)  k1 ^= BigInt(bytes[tail + 6]) << 48n;
+  if (rem >= 6)  k1 ^= BigInt(bytes[tail + 5]) << 40n;
+  if (rem >= 5)  k1 ^= BigInt(bytes[tail + 4]) << 32n;
+  if (rem >= 4)  k1 ^= BigInt(bytes[tail + 3]) << 24n;
+  if (rem >= 3)  k1 ^= BigInt(bytes[tail + 2]) << 16n;
+  if (rem >= 2)  k1 ^= BigInt(bytes[tail + 1]) << 8n;
+  if (rem >= 1)  { k1 ^= BigInt(bytes[tail]); k1 = u64(k1 * c1); k1 = rotl64(k1, 31); k1 = u64(k1 * c2); h1 ^= k1; }
+
+  h1 ^= BigInt(len); h2 ^= BigInt(len);
+  h1 = u64(h1 + h2); h2 = u64(h2 + h1);
+  h1 = fmix64(h1); h2 = fmix64(h2);
+  h1 = u64(h1 + h2); h2 = u64(h2 + h1);
+  return [h1, h2];
+}
+
+// ---------- formatting ----------
+function hex32(n) { return n.toString(16).padStart(8, '0'); }
+function hex64(b) { return b.toString(16).padStart(16, '0'); }
+function signed32(n) { return n >= 0x80000000 ? n - 0x100000000 : n; }
+function signed64(b) { return b >= (1n << 63n) ? b - (1n << 64n) : b; }
+function base62(n) {
+  const A = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  if (n === 0) return '0';
+  let out = '';
+  while (n > 0) { out = A[n % 62] + out; n = Math.floor(n / 62); }
+  return out;
+}
+
+function run() {
+  const bytes = getBytes();
+  if (!bytes) {
+    $('m32hex').textContent = '(invalid hex input)';
+    return;
+  }
+  const seed = (+$('seed').value || 0) >>> 0;
+  const buckets = Math.max(1, +$('buckets').value || 1);
+
+  // 32-bit
+  const h32 = mm3_x86_32(bytes, seed);
+  $('m32hex').innerHTML = '0x' + hex32(h32) + copyBtn('0x' + hex32(h32));
+  $('m32hex2').textContent = 'big-endian bytes ' + hex32(h32).match(/.{2}/g).join(' ');
+  $('m32udec').textContent = h32.toString();
+  $('m32sdec').textContent = 'signed: ' + signed32(h32);
+  $('m32b36').textContent = h32.toString(36) + '  ·  base62: ' + base62(h32);
+  $('m32mod').textContent = (h32 % buckets) + ' / ' + buckets;
+
+  // 128-bit x86
+  const [a, b, c, d] = mm3_x86_128(bytes, seed);
+  $('m128x86').innerHTML = '0x' + hex32(a) + hex32(b) + hex32(c) + hex32(d) + copyBtn('0x' + hex32(a) + hex32(b) + hex32(c) + hex32(d));
+  $('m128x86words').textContent = `h1=0x${hex32(a)} h2=0x${hex32(b)} h3=0x${hex32(c)} h4=0x${hex32(d)}`;
+
+  // 128-bit x64
+  const [w1, w2] = mm3_x64_128(bytes, seed);
+  $('m128x64').innerHTML = '0x' + hex64(w1) + hex64(w2) + copyBtn('0x' + hex64(w1) + hex64(w2));
+  $('m128x64words').textContent = `h1=0x${hex64(w1)} h2=0x${hex64(w2)}`;
+  $('m128x64signed').textContent = `h1=${signed64(w1)} h2=${signed64(w2)}`;
+}
+
+function copyBtn(text) {
+  const id = 'cb_' + Math.random().toString(36).slice(2, 8);
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', e => {
+      e.stopPropagation();
+      navigator.clipboard && navigator.clipboard.writeText(text);
+      el.textContent = '✓';
+      setTimeout(() => el.textContent = 'copy', 900);
+    });
+  }, 0);
+  return ` <button id="${id}" class="copy-btn">copy</button>`;
+}
+
+function sample(text) {
+  $('enc').value = 'utf8';
+  $('input').value = text;
+  run();
+}
+function sampleBytes() {
+  $('enc').value = 'hex';
+  $('input').value = 'deadbeef cafebabe 00112233 44556677';
+  run();
+}
+
+run();
+</script>
+</body>
+</html>

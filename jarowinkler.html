@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jaro-Winkler Similarity Calculator — Free Online Tool</title>
+<meta name="description" content="Compute Jaro and Jaro-Winkler string similarity scores with adjustable prefix length and scaling factor. Also reports Jaro distance, Sørensen–Dice on bigrams, Levenshtein, and a side-by-side character match map.">
+<meta name="keywords" content="jaro winkler, jaro distance, string similarity, fuzzy match, record linkage, deduplication, edit distance, name matching">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jarowinkler.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  input.str {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: 1rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; margin: 14px 0; font-size: .85rem; }
+  .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .opts input[type="number"] {
+    padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; background: var(--bg); color: var(--text);
+    width: 70px;
+  }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .metric {
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .metric .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .metric .value { font-family: var(--mono); font-size: 1.4rem; font-weight: 600; color: var(--text); margin-top: 4px; }
+  .metric .bar { height: 6px; background: var(--surface2); border-radius: 99px; overflow: hidden; margin-top: 6px; }
+  .metric .bar > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width .25s; }
+  .metric .note { font-size: .72rem; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
+  .verdict {
+    margin-top: 12px; padding: 10px 14px; border-radius: var(--radius);
+    font-size: .9rem; background: var(--surface); border-left: 4px solid var(--accent);
+  }
+  .verdict.match { border-color: var(--success); color: var(--text); }
+  .verdict.weak { border-color: var(--warning); color: var(--text); }
+  .verdict.no { border-color: var(--error); color: var(--text); }
+  .charmap {
+    display: grid; grid-template-columns: 1fr; gap: 10px;
+    font-family: var(--mono); font-size: 1.1rem; margin-top: 8px;
+  }
+  .charmap .row { padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; white-space: nowrap; }
+  .ch { display: inline-block; padding: 4px 6px; margin: 2px; border-radius: 4px; background: var(--surface2); color: var(--muted); }
+  .ch.match { background: var(--success); color: white; }
+  .ch.prefix { background: var(--accent); color: white; }
+  .ch.transpose { background: var(--warning); color: black; outline: 2px dashed var(--error); }
+  .samples { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+  .samples button {
+    padding: 5px 10px; font-size: .8rem; border: 1px solid var(--border);
+    background: var(--surface); border-radius: var(--radius); cursor: pointer; color: var(--text);
+  }
+  .samples button:hover { background: var(--surface2); }
+  .breakdown {
+    font-family: var(--mono); font-size: .85rem; line-height: 1.8;
+    padding: 10px 14px; background: var(--surface2); border-radius: var(--radius); color: var(--text);
+  }
+  .breakdown b { color: var(--accent); }
+  .ref { font-size: .88rem; line-height: 1.65; color: var(--muted); }
+  .ref code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; color: var(--text); font-size: .85rem; }
+  .ref table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .ref th, .ref td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; font-size: .82rem; vertical-align: top; }
+  details summary { cursor: pointer; padding: 8px 0; font-weight: 600; color: var(--text); }
+  @media (max-width: 768px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Jaro-Winkler Similarity Calculator</h1>
+<p class="subtitle">Compute Matthew Jaro's <strong>Jaro similarity</strong> (1989) and William Winkler's <strong>Jaro-Winkler</strong> refinement (1990) — the string-matching metrics designed for short proper nouns, typo correction, and record linkage. The Winkler tweak gives extra credit for sharing a common prefix (up to 4 chars), which is why it dominates name-matching in census and address-cleaning systems.</p>
+
+<div class="card">
+  <div class="panels">
+    <div>
+      <label class="head" for="s1">String 1</label>
+      <input id="s1" class="str" oninput="run()" value="MARTHA" spellcheck="false">
+    </div>
+    <div>
+      <label class="head" for="s2">String 2</label>
+      <input id="s2" class="str" oninput="run()" value="MARHTA" spellcheck="false">
+    </div>
+  </div>
+
+  <div class="opts">
+    <label><input type="checkbox" id="ci" onchange="run()"> Case-insensitive</label>
+    <label><input type="checkbox" id="trim" checked onchange="run()"> Trim whitespace</label>
+    <label>Winkler scaling factor <em>p</em> <input type="number" id="p" value="0.1" min="0" max="0.25" step="0.01" oninput="run()"></label>
+    <label>Max prefix length ℓ <input type="number" id="L" value="4" min="0" max="10" step="1" oninput="run()"></label>
+    <label>Boost threshold <input type="number" id="threshold" value="0.7" min="0" max="1" step="0.05" oninput="run()"></label>
+  </div>
+
+  <div class="samples">
+    <button onclick="sample('MARTHA','MARHTA')">MARTHA · MARHTA (canonical)</button>
+    <button onclick="sample('DWAYNE','DUANE')">DWAYNE · DUANE</button>
+    <button onclick="sample('DIXON','DICKSONX')">DIXON · DICKSONX</button>
+    <button onclick="sample('Jonathan','Johnathon')">Jonathan · Johnathon</button>
+    <button onclick="sample('Elizabeth Smith','Liz Smith')">Elizabeth Smith · Liz Smith</button>
+    <button onclick="sample('localhost:8080','127.0.0.1:8080')">localhost:8080 · 127.0.0.1:8080</button>
+    <button onclick="sample('abc','xyz')">abc · xyz (no match)</button>
+    <button onclick="sample('hello','hello')">identical</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Similarity scores</h2>
+  <div class="metric-grid" id="metrics"></div>
+  <div id="verdict" class="verdict"></div>
+</div>
+
+<div class="card">
+  <h2>How Jaro got there</h2>
+  <div id="breakdown" class="breakdown">…</div>
+</div>
+
+<div class="card">
+  <h2>Character match map</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:0;">
+    Jaro counts a character as <em>matching</em> if the same character appears in the other string within a window of
+    <code>⌊max(|s₁|,|s₂|)/2⌋ − 1</code> positions. Matches kept in the same order are good; matches that change order count as half a "transposition."
+    Below: <span class="ch prefix">prefix-bonus</span> chars share a position-0 alignment, <span class="ch match">matched</span> chars are in-window, <span class="ch transpose">transposed</span> chars are out of order, grey is unmatched.
+  </p>
+  <div class="charmap" id="charmap"></div>
+</div>
+
+<div class="card">
+  <h2>About these metrics</h2>
+  <div class="ref">
+    <details open><summary>The Jaro formula</summary>
+      <p>For strings <code>s₁</code>, <code>s₂</code> with <code>m</code> matches and <code>t</code> transpositions (each pair-out-of-order counts as one transposition):</p>
+      <pre style="background:var(--surface2);padding:10px 12px;border-radius:var(--radius);font-size:.85rem;color:var(--text);">jaro = ⅓ · ( m/|s₁|  +  m/|s₂|  +  (m − t/2)/m )    if m > 0
+     = 0                                                if m = 0</pre>
+      <p>The match window is <code>⌊max(|s₁|,|s₂|)/2⌋ − 1</code>. Inside that window, a character in <code>s₁</code> can match the same character in <code>s₂</code> only once.</p>
+    </details>
+    <details><summary>The Winkler boost</summary>
+      <p>Winkler observed that human-entered names get the start of the surname right far more often than the end. The Winkler variant adds a bonus proportional to the length of the common prefix (up to <code>ℓ</code> chars, conventionally 4):</p>
+      <pre style="background:var(--surface2);padding:10px 12px;border-radius:var(--radius);font-size:.85rem;color:var(--text);">jaro_winkler = jaro + ℓ_common · p · (1 − jaro)</pre>
+      <p>where <code>p</code> is the scaling factor (≤ 0.25 to keep the score in [0, 1]; the conventional value is <code>p = 0.1</code>). Some implementations only apply the boost if <code>jaro ≥ threshold</code> (often 0.7) — toggle the threshold above.</p>
+    </details>
+    <details><summary>When to use Jaro-Winkler vs the alternatives</summary>
+      <table>
+        <thead><tr><th>Metric</th><th>Best for</th><th>Watch out for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Jaro</strong></td><td>Symmetric short-string similarity (≤ ~10 chars).</td><td>Ignores order beyond a small window; long strings drift toward 1.</td></tr>
+          <tr><td><strong>Jaro-Winkler</strong></td><td>Person names, surnames, business names. Heavily used in U.S. Census record linkage.</td><td>Same-prefix typos are scored more leniently than same-suffix typos.</td></tr>
+          <tr><td><strong>Levenshtein</strong></td><td>Free-text typo correction, autocorrect, DNA. Counts insert/delete/sub operations.</td><td>Score grows with length — normalise by max length.</td></tr>
+          <tr><td><strong>Damerau-Levenshtein</strong></td><td>Like Levenshtein but counts a swap as one op — better for human typing.</td><td>Slightly slower.</td></tr>
+          <tr><td><strong>Dice on bigrams</strong></td><td>Document-length fuzzy match, code clone detection.</td><td>Less sensitive to character order than Jaro.</td></tr>
+        </tbody>
+      </table>
+    </details>
+    <details><summary>Reference scores (case-sensitive, <code>p = 0.1</code>, <code>ℓ = 4</code>)</summary>
+      <pre style="background:var(--surface2);padding:10px 12px;border-radius:var(--radius);font-size:.85rem;color:var(--text);">jaro("MARTHA", "MARHTA")   = 0.9444…  ;  winkler = 0.9611…
+jaro("DWAYNE", "DUANE")    = 0.8222…  ;  winkler = 0.8400…
+jaro("DIXON",  "DICKSONX") = 0.7666…  ;  winkler = 0.8133…</pre>
+    </details>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+}
+
+// Returns { jaro, m, t, s1matchFlags, s2matchFlags, window }
+function jaroDetail(s1, s2) {
+  const len1 = s1.length, len2 = s2.length;
+  if (len1 === 0 && len2 === 0) return { jaro: 1, m: 0, t: 0, s1f: [], s2f: [], window: 0 };
+  if (len1 === 0 || len2 === 0) return { jaro: 0, m: 0, t: 0, s1f: new Array(len1).fill(false), s2f: new Array(len2).fill(false), window: 0 };
+
+  const window = Math.max(0, Math.floor(Math.max(len1, len2) / 2) - 1);
+  const s1f = new Array(len1).fill(false);
+  const s2f = new Array(len2).fill(false);
+
+  let m = 0;
+  for (let i = 0; i < len1; i++) {
+    const lo = Math.max(0, i - window);
+    const hi = Math.min(len2 - 1, i + window);
+    for (let j = lo; j <= hi; j++) {
+      if (s2f[j]) continue;
+      if (s1[i] !== s2[j]) continue;
+      s1f[i] = true; s2f[j] = true;
+      m++;
+      break;
+    }
+  }
+  if (m === 0) return { jaro: 0, m: 0, t: 0, s1f, s2f, window };
+
+  // count transpositions
+  let k = 0, t = 0;
+  for (let i = 0; i < len1; i++) {
+    if (!s1f[i]) continue;
+    while (!s2f[k]) k++;
+    if (s1[i] !== s2[k]) t++;
+    k++;
+  }
+  t = t / 2;
+
+  const jaro = (m / len1 + m / len2 + (m - t) / m) / 3;
+  return { jaro, m, t, s1f, s2f, window };
+}
+
+function commonPrefix(a, b, maxL) {
+  const lim = Math.min(maxL, a.length, b.length);
+  let n = 0;
+  for (let i = 0; i < lim; i++) {
+    if (a[i] === b[i]) n++; else break;
+  }
+  return n;
+}
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    const cur = new Array(n + 1);
+    cur[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function bigramDice(a, b) {
+  if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+  const grams = s => {
+    const m = new Map();
+    for (let i = 0; i < s.length - 1; i++) {
+      const g = s.substr(i, 2);
+      m.set(g, (m.get(g) || 0) + 1);
+    }
+    return m;
+  };
+  const A = grams(a), B = grams(b);
+  let inter = 0;
+  for (const [k, v] of A) inter += Math.min(v, B.get(k) || 0);
+  const total = (a.length - 1) + (b.length - 1);
+  return total ? (2 * inter) / total : 0;
+}
+
+function pct(x) { return (x * 100).toFixed(2) + '%'; }
+function fmt(x) { return x.toFixed(4); }
+
+function metricCard(label, value, note) {
+  const w = Math.max(0, Math.min(1, value)) * 100;
+  return `<div class="metric">
+    <div class="label">${label}</div>
+    <div class="value">${fmt(value)}</div>
+    <div class="bar"><div style="width:${w}%"></div></div>
+    <div class="note">${pct(value)}${note ? ' · ' + note : ''}</div>
+  </div>`;
+}
+
+function run() {
+  let s1 = $('s1').value;
+  let s2 = $('s2').value;
+  if ($('trim').checked) { s1 = s1.trim(); s2 = s2.trim(); }
+  if ($('ci').checked) { s1 = s1.toLowerCase(); s2 = s2.toLowerCase(); }
+  const p = Math.max(0, Math.min(0.25, +$('p').value || 0));
+  const L = Math.max(0, +$('L').value | 0);
+  const threshold = Math.max(0, Math.min(1, +$('threshold').value || 0));
+
+  const d = jaroDetail(s1, s2);
+  const cp = commonPrefix(s1, s2, L);
+  const useBoost = d.jaro >= threshold;
+  const jw = useBoost ? d.jaro + cp * p * (1 - d.jaro) : d.jaro;
+  const dice = bigramDice(s1, s2);
+  const lev = levenshtein(s1, s2);
+  const maxLen = Math.max(s1.length, s2.length) || 1;
+  const levNorm = 1 - (lev / maxLen);
+
+  $('metrics').innerHTML = [
+    metricCard('Jaro similarity', d.jaro, `${d.m} matches, ${d.t} transp.`),
+    metricCard('Jaro-Winkler', jw, useBoost ? `+${cp} prefix · p=${p}` : `boost skipped (jaro < ${threshold})`),
+    metricCard('Jaro distance', 1 - d.jaro, '1 − jaro'),
+    metricCard('Jaro-Winkler distance', 1 - jw, '1 − jw'),
+    metricCard('Dice on bigrams', dice, 'order-insensitive backup'),
+    metricCard('Normalized Levenshtein', Math.max(0, levNorm), `edit distance = ${lev}`),
+  ].join('');
+
+  // Verdict
+  const v = $('verdict');
+  if (s1.length === 0 && s2.length === 0) {
+    v.className = 'verdict match'; v.innerHTML = 'Both strings empty &mdash; treated as identical.';
+  } else if (s1 === s2) {
+    v.className = 'verdict match'; v.innerHTML = `<strong>Identical</strong> after normalisation. JW = 1.0`;
+  } else if (jw >= 0.95) {
+    v.className = 'verdict match'; v.innerHTML = `<strong>Very likely the same.</strong> Above 0.95 is typical for "auto-merge" in record-linkage pipelines.`;
+  } else if (jw >= 0.85) {
+    v.className = 'verdict match'; v.innerHTML = `<strong>Strong match.</strong> 0.85–0.95 usually clears manual review for census/address data.`;
+  } else if (jw >= 0.7) {
+    v.className = 'verdict weak'; v.innerHTML = `<strong>Possible match.</strong> Below 0.85 is the grey zone — combine with another signal (DOB, ZIP).`;
+  } else {
+    v.className = 'verdict no'; v.innerHTML = `<strong>Probably different.</strong> Below 0.7 most pipelines treat as a non-match.`;
+  }
+
+  // Breakdown
+  const denomTerm1 = s1.length ? (d.m / s1.length) : 0;
+  const denomTerm2 = s2.length ? (d.m / s2.length) : 0;
+  const transTerm = d.m ? ((d.m - d.t) / d.m) : 0;
+  $('breakdown').innerHTML = `
+    |s₁| = <b>${s1.length}</b>, |s₂| = <b>${s2.length}</b><br>
+    match window = ⌊max(${s1.length},${s2.length})/2⌋ − 1 = <b>${d.window}</b><br>
+    matches m = <b>${d.m}</b>, transpositions t = <b>${d.t}</b><br>
+    Jaro = ⅓·(${fmt(denomTerm1)} + ${fmt(denomTerm2)} + ${fmt(transTerm)}) = <b>${fmt(d.jaro)}</b><br>
+    common prefix (cap ℓ=${L}) = <b>${cp}</b><br>
+    ${useBoost
+      ? `JW = ${fmt(d.jaro)} + ${cp} · ${p} · (1 − ${fmt(d.jaro)}) = <b>${fmt(jw)}</b>`
+      : `JW = Jaro (boost skipped because ${fmt(d.jaro)} &lt; ${threshold})`
+    }
+  `;
+
+  // Char map
+  function renderRow(s, flags, otherS, otherFlags) {
+    const cells = [];
+    for (let i = 0; i < s.length; i++) {
+      let cls = '';
+      if (i < cp) cls = 'prefix';
+      else if (flags[i]) {
+        // determine if it's a transposition
+        // find the matched index in the other string
+        let kIdx = -1, count = -1;
+        // count matched positions on this side up to i
+        let target = -1;
+        for (let j = 0, c = 0; j <= i; j++) if (flags[j]) { c++; if (j === i) target = c; }
+        let c = 0;
+        for (let j = 0; j < otherS.length; j++) {
+          if (otherFlags[j]) { c++; if (c === target) { kIdx = j; break; } }
+        }
+        if (kIdx >= 0 && otherS[kIdx] !== s[i]) cls = 'transpose';
+        else cls = 'match';
+      }
+      const ch = s[i] === ' ' ? '␣' : s[i];
+      cells.push(`<span class="ch ${cls}" title="index ${i}">${escapeHtml(ch)}</span>`);
+    }
+    return '<div class="row">' + cells.join('') + '</div>';
+  }
+  $('charmap').innerHTML =
+    renderRow(s1, d.s1f, s2, d.s2f) +
+    renderRow(s2, d.s2f, s1, d.s1f);
+}
+
+function sample(a, b) {
+  $('s1').value = a; $('s2').value = b;
+  run();
+}
+
+run();
+</script>
+</body>
+</html>

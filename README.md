@@ -136,6 +136,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Jaro-Winkler Similarity Calculator](jarowinkler.html) | Compute Jaro and Jaro-Winkler scores between two strings with adjustable prefix length and scaling factor — plus Jaro distance, Sørensen-Dice on bigrams, and normalized Levenshtein — with a character match map that highlights prefix, matched, and transposed letters. |
 | [ICU MessageFormat Playground](icumessage.html) | Type an ICU MessageFormat string — `{count, plural, one {# item} other {# items}}`, `select`, `selectordinal`, currency, and date placeholders — set variables and watch the rendered output update side-by-side across English, Spanish, French, German, Polish, Arabic, Chinese, and more, powered by `Intl.PluralRules`. |
 | [Number → Words Converter](numwords.html) | Spell numbers in English — cardinal, ordinal, currency (cheque format), US short-scale or UK long-scale. Handles negatives, decimals, fractions, percentages, and arbitrarily large integers via BigInt. |
 | [Word Cloud Generator](wordcloud.html) | Build a word cloud from any text — adjustable stopwords, min length and frequency, rotation, color schemes, fonts, and a seeded spiral layout. Live frequency table on the side, export the cloud as SVG or PNG. |
@@ -167,6 +168,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [MurmurHash3 Calculator](murmurhash.html) | Hash any string with Austin Appleby's MurmurHash3 — 32-bit and 128-bit (x86 and x64) variants, configurable seed, hex / decimal / base36 outputs, shard-bucket modulus, and reference vectors that match Python's `mmh3`, Guava, and Cassandra. |
 | [Substitution Cipher Solver](subcipher.html) | Crack a monoalphabetic substitution cipher (cryptogram) by hand or let a hill-climbing solver guess the key from English letter and bigram frequencies. Interactive A→? mapping with lockable cells, live frequency table vs ETAOIN ranking, and one-click ROT13 / classic-cryptogram presets. |
 | [WebAuthn / Passkey Decoder](webauthn.html) | Decode WebAuthn registration and authentication responses — `clientDataJSON`, CBOR `attestationObject`, `authenticatorData` flags, AAGUID lookup, credential ID, and the COSE-encoded public key (EC2/RSA/OKP). |
 | [JWE Decoder & Inspector](jwe.html) | Inspect JSON Web Encryption tokens (RFC 7516) — split the five compact segments, decode the protected header, surface key-management (`alg`) and content-encryption (`enc`) algorithms, and validate IV/tag lengths. |
@@ -247,6 +249,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Topological Sort Visualizer](toposort.html) | Paste an edge list — `A -> B`, `A B`, or `A: B C` (Makefile-style) — and watch Kahn's algorithm produce a topological ordering step by step, with in-degree table, parallel-execution layers, cycle detection that pinpoints the offending nodes, and Graphviz `.dot` export. |
 | [Intl.ListFormat Playground](intllistformat.html) | Turn an array of strings into a localized list — "A, B, and C", "A, B o C", "A・B・C" — with live `conjunction` / `disjunction` / `unit` and `long` / `short` / `narrow` options, a `formatToParts` breakdown, and a 21-locale side-by-side. |
 | [TypeScript Utility Types Playground](tsutility.html) | Interactive reference for all 21 built-in TS utility types — `Partial`, `Pick`, `Omit`, `Record`, `ReturnType`, `Awaited`, `Uppercase` & friends. Pick a utility, paste your own type, and see the resolved shape plus a ready-to-paste snippet. |
 | [GitLab CI YAML Generator](gitlabci.html) | Build a `.gitlab-ci.yml` from a checklist — stages, default image, caches, services, `workflow:rules`, Docker-in-Docker, `parallel:matrix`, JUnit artifacts, and per-job `rules`. Presets for Node CI, Docker build & push, and GitLab Pages. |
