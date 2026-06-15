@@ -249,6 +249,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Caddyfile Builder](caddyfile.html) | Compose a Caddy v2 `Caddyfile` by clicking instead of memorising directives — site blocks can mix `reverse_proxy`, `file_server`, redirects, custom headers, gzip / zstd encoding, basic auth, request logging, and TLS overrides. Automatic HTTPS is on by default for real hostnames. |
+| [GitHub Actions Matrix Expander](ghmatrix.html) | Paste a `strategy.matrix` block and see every job the runner will spawn. Handles cartesian product, `include` entries that either extend an existing combination or append a brand-new job, and `exclude` filters — the same order and semantics the real GHA runner uses. |
+| [PAC File Builder & Tester](pac.html) | Build a Proxy Auto-Config `FindProxyForURL` with a rule editor — match by host suffix, exact host, IP range, scheme, glob, or substring, then route to `DIRECT`, `PROXY`, `SOCKS5`, or `HTTPS`. Live single-URL and batch test runners use the same evaluation order browsers do. |
 | [Topological Sort Visualizer](toposort.html) | Paste an edge list — `A -> B`, `A B`, or `A: B C` (Makefile-style) — and watch Kahn's algorithm produce a topological ordering step by step, with in-degree table, parallel-execution layers, cycle detection that pinpoints the offending nodes, and Graphviz `.dot` export. |
 | [Intl.ListFormat Playground](intllistformat.html) | Turn an array of strings into a localized list — "A, B, and C", "A, B o C", "A・B・C" — with live `conjunction` / `disjunction` / `unit` and `long` / `short` / `narrow` options, a `formatToParts` breakdown, and a 21-locale side-by-side. |
 | [TypeScript Utility Types Playground](tsutility.html) | Interactive reference for all 21 built-in TS utility types — `Partial`, `Pick`, `Omit`, `Record`, `ReturnType`, `Awaited`, `Uppercase` & friends. Pick a utility, paste your own type, and see the resolved shape plus a ready-to-paste snippet. |

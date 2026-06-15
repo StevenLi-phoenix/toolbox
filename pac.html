@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PAC File Builder &amp; Tester — Free Online Tool</title>
+<meta name="description" content="Build a Proxy Auto-Config (PAC) file with a rule editor — match by host suffix, exact host, IP range, scheme, or substring, then route to DIRECT, PROXY, SOCKS, or HTTPS. Live FindProxyForURL test runner included.">
+<meta name="keywords" content="pac file, proxy auto config, findproxyforurl, dnsresolve, shexpmatch, isinnet, pac generator, pac tester, browser proxy">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pac.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .rules { display: flex; flex-direction: column; gap: 8px; }
+  .rule {
+    display: grid; gap: 8px;
+    grid-template-columns: 110px 1fr 1fr auto;
+    align-items: center;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface2); padding: 8px 10px;
+  }
+  .rule select, .rule input {
+    padding: 6px 9px; border: 1px solid var(--border); border-radius: 5px;
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .85rem;
+    width: 100%; box-sizing: border-box;
+  }
+  .rule button.del { padding: 4px 10px; }
+  .rule .target-wrap { display: flex; gap: 4px; }
+  .rule .target-wrap select { width: 110px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+  .fallback-row {
+    display: grid; gap: 8px;
+    grid-template-columns: 110px 1fr 1fr;
+    align-items: center; margin-top: 10px;
+    padding: 8px 10px;
+    border: 1px dashed var(--border); border-radius: 6px;
+  }
+  .fallback-row label { font-size: .8rem; color: var(--muted); }
+  pre.out {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; font-family: var(--mono); font-size: .82rem;
+    white-space: pre-wrap; word-break: break-word; overflow-x: auto;
+    max-height: 460px; overflow-y: auto;
+    margin: 0;
+  }
+  .test-row {
+    display: grid; gap: 8px;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .test-row input {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .9rem;
+  }
+  .test-result {
+    padding: 8px 12px; border-radius: 6px;
+    font-family: var(--mono); font-size: .85rem;
+    margin-top: 6px;
+  }
+  .test-result.ok { background: rgba(16,185,129,.08); color: var(--success); border: 1px solid rgba(16,185,129,.25); }
+  .test-result.err { background: rgba(239,68,68,.08); color: var(--error); border: 1px solid rgba(239,68,68,.25); }
+  .test-result .rule-hit {
+    display: block; font-size: .78rem; color: var(--muted); margin-top: 4px;
+  }
+  .test-batch textarea {
+    width: 100%; min-height: 80px; padding: 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .85rem;
+    box-sizing: border-box; resize: vertical;
+  }
+  table.batch {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--mono); font-size: .82rem;
+    margin-top: 8px;
+  }
+  table.batch th, table.batch td {
+    padding: 6px 9px; border-bottom: 1px solid var(--border);
+    text-align: left; vertical-align: top;
+  }
+  table.batch th {
+    color: var(--muted); font-weight: 500;
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+    font-family: var(--sans);
+  }
+  .helper-line { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+  @media (max-width: 700px) {
+    .rule { grid-template-columns: 1fr; }
+    .fallback-row { grid-template-columns: 1fr; }
+    .test-row { grid-template-columns: 1fr; }
+    .rule .target-wrap { flex-direction: column; }
+    .rule .target-wrap select { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>PAC File Builder</h1>
+<p class="subtitle">Compose a <a href="https://en.wikipedia.org/wiki/Proxy_auto-config" target="_blank" rel="noopener">Proxy Auto-Config</a> file the same way browsers expect: a <code>FindProxyForURL(url, host)</code> function that walks down a list of rules and returns <code>DIRECT</code>, <code>PROXY host:port</code>, <code>SOCKS5 host:port</code>, or <code>HTTPS host:port</code>. Each rule below maps a match (host suffix, exact host, IP range, scheme, or substring) to a target string. Below the editor you can run the generated function against test URLs to confirm routing &mdash; the same evaluation order the browser uses.</p>
+
+<div class="card">
+  <h2>Rules</h2>
+  <div class="toolbar">
+    <button class="btn-primary" onclick="addRule()">+ Add rule</button>
+    <button onclick="loadPreset('local')">Local + corp</button>
+    <button onclick="loadPreset('split')">Split tunnel</button>
+    <button onclick="loadPreset('block')">Block list</button>
+    <button onclick="clearAll()">Clear</button>
+  </div>
+  <div id="rules" class="rules"></div>
+
+  <div class="fallback-row">
+    <label>Default</label>
+    <div class="target-wrap">
+      <select id="defType" onchange="render()">
+        <option value="DIRECT">DIRECT</option>
+        <option value="PROXY">PROXY</option>
+        <option value="SOCKS5">SOCKS5</option>
+        <option value="SOCKS">SOCKS4</option>
+        <option value="HTTPS">HTTPS</option>
+      </select>
+      <input type="text" id="defHost" placeholder="host:port" oninput="render()" style="padding:6px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem;">
+    </div>
+    <div class="helper-line">Used when no rule matched.</div>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+    <h2 style="margin:0">Generated <code>proxy.pac</code></h2>
+    <div class="toolbar" style="margin:0;">
+      <button class="btn-primary" onclick="copyPac()">Copy</button>
+      <button onclick="downloadPac()">Download</button>
+    </div>
+  </div>
+  <pre id="out" class="out"></pre>
+  <div class="helper-line">Serve as <code>application/x-ns-proxy-autoconfig</code>. Most browsers cache aggressively — bump the filename or path to force a refetch.</div>
+</div>
+
+<div class="card">
+  <h2>Test single URL</h2>
+  <div class="test-row">
+    <input type="text" id="testUrl" placeholder="https://intranet.corp.local/" value="https://www.example.com/" oninput="testOne()">
+    <button class="btn-primary" onclick="testOne()">Resolve</button>
+  </div>
+  <div id="testResult"></div>
+</div>
+
+<div class="card test-batch">
+  <h2>Batch test</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px;">One URL per line. The matched rule index and the returned proxy string are shown for each.</p>
+  <textarea id="batchInput" spellcheck="false" oninput="testBatch()">https://www.example.com/
+https://intranet.corp.local/dashboard
+http://localhost:3000/health
+https://192.168.1.50/admin
+ftp://files.example.com/</textarea>
+  <div id="batchResult"></div>
+</div>
+
+<div class="card">
+  <h2>Match types &amp; targets</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
+    <thead>
+      <tr style="color:var(--muted);text-align:left;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;">
+        <th style="padding:6px 8px;border-bottom:1px solid var(--border);">Match</th>
+        <th style="padding:6px 8px;border-bottom:1px solid var(--border);">What it checks</th>
+        <th style="padding:6px 8px;border-bottom:1px solid var(--border);">Built on</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">host suffix</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);">Hostname ends with the pattern (<code>.example.com</code> matches <code>www.example.com</code> and bare <code>example.com</code>).</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">dnsDomainIs</td></tr>
+      <tr><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">exact host</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);">Hostname equals the pattern.</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">host ==</td></tr>
+      <tr><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">glob</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);">Shell glob with <code>*</code> on the URL (e.g. <code>http://*/admin/*</code>).</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">shExpMatch</td></tr>
+      <tr><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">in net</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);">Resolved IP falls in a CIDR (<code>10.0.0.0/8</code>).</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">isInNet + dnsResolve</td></tr>
+      <tr><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">plain host</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);">Hostname has no dots (intranet single-label names).</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">isPlainHostName</td></tr>
+      <tr><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">scheme is</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);">URL scheme equals (<code>http</code>, <code>https</code>, <code>ftp</code>).</td><td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);">url.startsWith</td></tr>
+      <tr><td style="padding:6px 8px;font-family:var(--mono);">url contains</td><td style="padding:6px 8px;">Substring is anywhere in the URL.</td><td style="padding:6px 8px;font-family:var(--mono);">url.indexOf</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;margin-top:10px;">
+    Targets follow the PAC return-string grammar: <code>DIRECT</code>, <code>PROXY host:port</code>, <code>SOCKS host:port</code>, <code>SOCKS5 host:port</code>, or <code>HTTPS host:port</code> (Chromium / Firefox). You can chain fallbacks with a semicolon &mdash; browsers try the next entry if the first fails (e.g. <code>PROXY a:8080; PROXY b:8080; DIRECT</code>). This builder writes the chosen target as-is, so multi-entry chains work too.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let rules = [];
+let seq = 0;
+
+const MATCH_TYPES = [
+  { id: 'suffix',   label: 'host suffix',  hint: '.example.com' },
+  { id: 'exact',    label: 'exact host',   hint: 'login.corp.local' },
+  { id: 'glob',     label: 'glob (url)',   hint: 'http://*/secure/*' },
+  { id: 'innet',    label: 'in net',       hint: '10.0.0.0/8' },
+  { id: 'plain',    label: 'plain host',   hint: '(no value)' },
+  { id: 'scheme',   label: 'scheme is',    hint: 'ftp' },
+  { id: 'contains', label: 'url contains', hint: '/admin/' },
+];
+
+const TARGET_TYPES = ['DIRECT', 'PROXY', 'SOCKS5', 'SOCKS', 'HTTPS'];
+
+function addRule(initial) {
+  rules.push(Object.assign({
+    id: ++seq,
+    match: 'suffix',
+    pattern: '.example.com',
+    targetType: 'DIRECT',
+    targetHost: '',
+  }, initial || {}));
+  draw(); render();
+}
+
+function rmRule(id) {
+  rules = rules.filter(r => r.id !== id);
+  draw(); render();
+}
+
+function setRule(id, key, val) {
+  const r = rules.find(x => x.id === id);
+  r[key] = val;
+  render();
+}
+
+function setRuleAndRedraw(id, key, val) {
+  const r = rules.find(x => x.id === id);
+  r[key] = val;
+  draw(); render();
+}
+
+function moveRule(id, dir) {
+  const i = rules.findIndex(r => r.id === id);
+  const j = i + dir;
+  if (j < 0 || j >= rules.length) return;
+  const tmp = rules[i]; rules[i] = rules[j]; rules[j] = tmp;
+  draw(); render();
+}
+
+function clearAll() {
+  rules = []; draw(); render();
+}
+
+function loadPreset(kind) {
+  rules = [];
+  if (kind === 'local') {
+    addRule({ match: 'plain',  pattern: '',                  targetType: 'DIRECT' });
+    addRule({ match: 'suffix', pattern: '.corp.local',       targetType: 'DIRECT' });
+    addRule({ match: 'innet',  pattern: '10.0.0.0/8',        targetType: 'DIRECT' });
+    addRule({ match: 'innet',  pattern: '192.168.0.0/16',    targetType: 'DIRECT' });
+    addRule({ match: 'innet',  pattern: '127.0.0.0/8',       targetType: 'DIRECT' });
+    $('defType').value = 'PROXY';
+    $('defHost').value = 'corp-proxy.example.com:8080';
+  } else if (kind === 'split') {
+    addRule({ match: 'suffix', pattern: '.internal.example.com', targetType: 'PROXY', targetHost: 'internal-proxy:8080' });
+    addRule({ match: 'suffix', pattern: '.dev.example.com',      targetType: 'PROXY', targetHost: 'internal-proxy:8080' });
+    addRule({ match: 'innet',  pattern: '10.0.0.0/8',            targetType: 'PROXY', targetHost: 'internal-proxy:8080' });
+    $('defType').value = 'DIRECT';
+    $('defHost').value = '';
+  } else if (kind === 'block') {
+    addRule({ match: 'suffix', pattern: '.ads.example.com',  targetType: 'PROXY', targetHost: '127.0.0.1:1' });
+    addRule({ match: 'suffix', pattern: '.tracker.com',      targetType: 'PROXY', targetHost: '127.0.0.1:1' });
+    addRule({ match: 'contains', pattern: '/ad-click/',      targetType: 'PROXY', targetHost: '127.0.0.1:1' });
+    $('defType').value = 'DIRECT';
+    $('defHost').value = '';
+  }
+  draw(); render();
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function draw() {
+  const root = $('rules');
+  root.innerHTML = '';
+  if (rules.length === 0) {
+    root.innerHTML = '<div class="helper-line" style="text-align:center;padding:14px;">No rules yet — add one above, or load a preset.</div>';
+    return;
+  }
+  for (const r of rules) {
+    const m = MATCH_TYPES.find(x => x.id === r.match);
+    const needsHost = r.targetType !== 'DIRECT';
+    const div = document.createElement('div');
+    div.className = 'rule';
+    div.innerHTML = `
+      <select onchange="setRuleAndRedraw(${r.id}, 'match', this.value)">
+        ${MATCH_TYPES.map(t => `<option value="${t.id}" ${r.match===t.id?'selected':''}>${t.label}</option>`).join('')}
+      </select>
+      <input type="text" placeholder="${esc(m.hint)}" value="${esc(r.pattern)}" oninput="setRule(${r.id}, 'pattern', this.value)" ${r.match==='plain'?'disabled':''}>
+      <div class="target-wrap">
+        <select onchange="setRuleAndRedraw(${r.id}, 'targetType', this.value)">
+          ${TARGET_TYPES.map(t => `<option value="${t}" ${r.targetType===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+        <input type="text" placeholder="host:port" value="${esc(r.targetHost)}" oninput="setRule(${r.id}, 'targetHost', this.value)" ${needsHost?'':'disabled'}>
+      </div>
+      <div style="display:flex;gap:4px;">
+        <button title="Move up" onclick="moveRule(${r.id}, -1)">↑</button>
+        <button title="Move down" onclick="moveRule(${r.id}, 1)">↓</button>
+        <button class="del btn-danger" onclick="rmRule(${r.id})">×</button>
+      </div>
+    `;
+    root.appendChild(div);
+  }
+}
+
+function targetStr(t) {
+  return t.targetType === 'DIRECT' ? 'DIRECT' : `${t.targetType} ${t.targetHost || 'host:port'}`;
+}
+
+function quoteJs(s) {
+  return '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
+function buildPac() {
+  const lines = [];
+  lines.push('// Generated by PAC File Builder');
+  lines.push('// https://stevenli-phoenix.github.io/toolbox/pac.html');
+  lines.push('');
+  lines.push('function FindProxyForURL(url, host) {');
+  lines.push('  host = host.toLowerCase();');
+  for (const r of rules) {
+    let cond = '';
+    switch (r.match) {
+      case 'suffix': {
+        const p = (r.pattern || '').replace(/^\./, '');
+        cond = `dnsDomainIs(host, ${quoteJs('.' + p)}) || host === ${quoteJs(p)}`;
+        break;
+      }
+      case 'exact':
+        cond = `host === ${quoteJs(r.pattern || '')}`;
+        break;
+      case 'glob':
+        cond = `shExpMatch(url, ${quoteJs(r.pattern || '')})`;
+        break;
+      case 'innet': {
+        const [net, bits] = (r.pattern || '0.0.0.0/0').split('/');
+        const mask = cidrToMask(parseInt(bits, 10) || 32);
+        cond = `isInNet(dnsResolve(host) || "0.0.0.0", ${quoteJs(net)}, ${quoteJs(mask)})`;
+        break;
+      }
+      case 'plain':
+        cond = 'isPlainHostName(host)';
+        break;
+      case 'scheme':
+        cond = `url.substring(0, ${(r.pattern||'').length + 3}) === ${quoteJs((r.pattern || '') + '://')}`;
+        break;
+      case 'contains':
+        cond = `url.indexOf(${quoteJs(r.pattern || '')}) !== -1`;
+        break;
+    }
+    lines.push(`  if (${cond}) return ${quoteJs(targetStr(r))};`);
+  }
+  const defType = $('defType').value;
+  const defHost = $('defHost').value.trim();
+  const def = defType === 'DIRECT' ? 'DIRECT' : `${defType} ${defHost || 'host:port'}`;
+  lines.push(`  return ${quoteJs(def)};`);
+  lines.push('}');
+  return lines.join('\n');
+}
+
+function cidrToMask(bits) {
+  if (bits <= 0) return '0.0.0.0';
+  if (bits >= 32) return '255.255.255.255';
+  const m = 0xffffffff << (32 - bits);
+  return [(m >>> 24) & 255, (m >>> 16) & 255, (m >>> 8) & 255, m & 255].join('.');
+}
+
+function render() {
+  $('out').textContent = buildPac();
+  testOne();
+  testBatch();
+}
+
+function copyPac() { navigator.clipboard.writeText($('out').textContent); }
+function downloadPac() {
+  const blob = new Blob([$('out').textContent], { type: 'application/x-ns-proxy-autoconfig' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'proxy.pac'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* Local evaluation of the rule list. We don't call the generated source,
+   we re-run the rules against the parsed URL — avoids eval and matches the spec. */
+function parseUrl(u) {
+  try {
+    const x = new URL(u);
+    return {
+      url: u,
+      host: x.hostname.toLowerCase(),
+      scheme: x.protocol.replace(/:$/, ''),
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function fakeDnsResolve(host) {
+  // The browser would do a real DNS lookup. We approximate: if host is a
+  // dotted-quad return it, else null and isInNet returns false.
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return host;
+  return null;
+}
+
+function ipToNum(ip) {
+  const p = ip.split('.').map(Number);
+  if (p.length !== 4 || p.some(n => !(n >= 0 && n <= 255))) return null;
+  return ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0;
+}
+
+function inNet(ip, net, bits) {
+  const a = ipToNum(ip), b = ipToNum(net);
+  if (a === null || b === null) return false;
+  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+  return (a & mask) === (b & mask);
+}
+
+function evalRules(p) {
+  for (let i = 0; i < rules.length; i++) {
+    const r = rules[i];
+    if (matchRule(r, p)) return { rule: r, index: i, target: targetStr(r) };
+  }
+  const defType = $('defType').value;
+  const defHost = $('defHost').value.trim();
+  const def = defType === 'DIRECT' ? 'DIRECT' : `${defType} ${defHost || 'host:port'}`;
+  return { rule: null, index: -1, target: def };
+}
+
+function matchRule(r, p) {
+  const host = p.host;
+  switch (r.match) {
+    case 'suffix': {
+      const pat = (r.pattern || '').replace(/^\./, '');
+      return host === pat || host.endsWith('.' + pat);
+    }
+    case 'exact':
+      return host === (r.pattern || '');
+    case 'glob': {
+      const re = globToRegex(r.pattern || '');
+      return re.test(p.url);
+    }
+    case 'innet': {
+      const [net, bitsRaw] = (r.pattern || '0.0.0.0/0').split('/');
+      const bits = parseInt(bitsRaw, 10);
+      const resolved = fakeDnsResolve(host);
+      if (!resolved) return false;
+      return inNet(resolved, net, isNaN(bits) ? 32 : bits);
+    }
+    case 'plain':
+      return host.indexOf('.') === -1;
+    case 'scheme':
+      return p.scheme === (r.pattern || '').toLowerCase();
+    case 'contains':
+      return p.url.indexOf(r.pattern || '') !== -1;
+  }
+  return false;
+}
+
+function globToRegex(g) {
+  const esc = g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+  return new RegExp('^' + esc + '$');
+}
+
+function testOne() {
+  const box = $('testResult');
+  const v = $('testUrl').value.trim();
+  if (!v) { box.innerHTML = ''; return; }
+  const p = parseUrl(v);
+  if (!p) {
+    box.innerHTML = '<div class="test-result err">Could not parse URL.</div>';
+    return;
+  }
+  const result = evalRules(p);
+  const hit = result.index === -1
+    ? '<span class="rule-hit">fell through to default</span>'
+    : `<span class="rule-hit">matched rule #${result.index + 1} — ${MATCH_TYPES.find(t=>t.id===result.rule.match).label}: <code>${escHtml(result.rule.pattern)}</code></span>`;
+  box.innerHTML = `<div class="test-result ${result.index === -1 ? 'err' : 'ok'}"><strong>${escHtml(result.target)}</strong>${hit}</div>`;
+}
+
+function testBatch() {
+  const txt = $('batchInput').value;
+  const lines = txt.split(/\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) { $('batchResult').innerHTML = ''; return; }
+  const rows = lines.map(l => {
+    const p = parseUrl(l);
+    if (!p) return `<tr><td>${escHtml(l)}</td><td colspan="2"><span style="color:var(--error)">parse error</span></td></tr>`;
+    const r = evalRules(p);
+    const rule = r.index === -1 ? '<span style="color:var(--muted)">default</span>' : `#${r.index + 1}`;
+    return `<tr><td>${escHtml(l)}</td><td>${rule}</td><td><strong>${escHtml(r.target)}</strong></td></tr>`;
+  }).join('');
+  $('batchResult').innerHTML = `<table class="batch">
+    <thead><tr><th>URL</th><th>Rule</th><th>Returns</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+loadPreset('local');
+</script>
+</body>
+</html>

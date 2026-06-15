@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub Actions Matrix Expander — Free Online Tool</title>
+<meta name="description" content="Paste a GitHub Actions strategy.matrix block and see exactly which jobs will be spawned. Handles cartesian product, include (extra entries plus key extension), and exclude — the same order and semantics the real runner uses.">
+<meta name="keywords" content="github actions matrix, strategy matrix, matrix include, matrix exclude, github workflow jobs, ci matrix expander, gha matrix preview">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ghmatrix.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .split { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; align-items: start; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+  textarea.code {
+    width: 100%; min-height: 320px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .85rem;
+    box-sizing: border-box; resize: vertical;
+    line-height: 1.5;
+  }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .summary {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    font-size: .82rem; color: var(--muted); margin: 8px 0;
+  }
+  .summary b { color: var(--text); font-family: var(--mono); }
+  table.jobs {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--mono); font-size: .82rem;
+  }
+  table.jobs th, table.jobs td {
+    padding: 7px 9px; border-bottom: 1px solid var(--border);
+    text-align: left; vertical-align: top; white-space: nowrap;
+  }
+  table.jobs th {
+    color: var(--muted); font-weight: 500;
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+    position: sticky; top: 0; background: var(--surface);
+    font-family: var(--sans);
+  }
+  table.jobs tr.included td { background: rgba(99,102,241,.06); }
+  table.jobs td.idx {
+    color: var(--muted); width: 32px; text-align: right;
+    padding-right: 12px;
+  }
+  table.jobs .tag {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    font-size: .68rem; background: var(--surface2);
+    color: var(--muted); margin-left: 4px;
+  }
+  table.jobs tr.included .tag { background: var(--accent); color: #fff; }
+  .table-wrap {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); max-height: 520px; overflow: auto;
+  }
+  .status {
+    padding: 10px 12px; border-radius: var(--radius);
+    font-family: var(--mono); font-size: .84rem; margin-bottom: 10px;
+  }
+  .status.ok { background: rgba(16,185,129,.08); color: var(--success); border: 1px solid rgba(16,185,129,.25); }
+  .status.err { background: rgba(239,68,68,.08); color: var(--error); border: 1px solid rgba(239,68,68,.25); }
+  .status.warn { background: rgba(245,158,11,.08); color: var(--warning); border: 1px solid rgba(245,158,11,.25); }
+  pre.json {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px;
+    font-family: var(--mono); font-size: .8rem;
+    white-space: pre; overflow: auto;
+    max-height: 280px; margin: 0;
+  }
+  .examples { display: flex; gap: 6px; flex-wrap: wrap; }
+  .examples button { font-size: .78rem; padding: 4px 10px; }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; }
+  .legend .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-family: var(--mono); }
+  .legend .tag.base { background: var(--surface2); }
+  .legend .tag.inc { background: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>GitHub Actions Matrix Expander</h1>
+<p class="subtitle">Paste a <code>strategy.matrix</code> block and see every job the runner will spawn. <code>include</code> entries either extend an existing combination (by overlaying keys that don't increase the cross-product) or append a brand-new job, exactly the way <a href="https://docs.github.com/actions/using-jobs/using-a-matrix-for-your-jobs" target="_blank" rel="noopener">GitHub's matrix algorithm</a> handles it. <code>exclude</code> filters out combinations whose keys are all matched.</p>
+
+<div class="card">
+  <div class="toolbar">
+    <strong style="font-size:.85rem;color:var(--muted);align-self:center;">Examples:</strong>
+    <div class="examples">
+      <button onclick="loadExample('simple')">Simple 2D</button>
+      <button onclick="loadExample('include')">include only</button>
+      <button onclick="loadExample('exclude')">os/node + exclude</button>
+      <button onclick="loadExample('mixed')">include + exclude</button>
+      <button onclick="loadExample('extend')">extend existing</button>
+    </div>
+  </div>
+
+  <div class="split">
+    <div>
+      <label for="src" style="display:block;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Matrix YAML</label>
+      <textarea id="src" class="code" spellcheck="false" oninput="run()"></textarea>
+      <div class="legend">
+        Paste the contents of <code>strategy.matrix</code> only (the keys inside, not <code>strategy:</code> or <code>matrix:</code>). Both YAML and JSON work.
+      </div>
+    </div>
+    <div>
+      <label style="display:block;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Result</label>
+      <div id="status"></div>
+      <div class="summary" id="summary"></div>
+      <div class="table-wrap" id="tableWrap"></div>
+      <div class="legend" style="margin-top:8px;">
+        <span class="tag base">base</span> = from the cartesian product &nbsp;·&nbsp;
+        <span class="tag inc">+include</span> = added or extended by <code>include</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>JSON output</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px;">The same job list as raw JSON — handy when piping to <code>jq</code> or comparing against the <code>jobs.&lt;id&gt;.strategy.matrix.include</code> output of the GitHub API.</p>
+  <pre class="json" id="json">[]</pre>
+  <div class="toolbar" style="margin-top:10px;">
+    <button class="btn-primary" onclick="copyJson()">Copy JSON</button>
+    <button onclick="downloadJson()">Download .json</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How matrix expansion works</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6;">
+    GitHub builds the matrix in three steps. First, every key whose value is a list contributes to a <strong>cartesian product</strong>; keys with scalar values are pinned across all combinations. Second, each <code>include</code> entry is tested against the existing jobs &mdash; if all keys it shares with the job <em>and</em> the keys it shares with the base matrix already match (and it doesn't introduce a new value for an existing matrix key), it extends that job by overlaying its extra keys. Entries that can't extend any base job become standalone new jobs at the end. Third, every <code>exclude</code> entry removes any base job whose keys all match. A job extended by an <code>include</code> can't be excluded; standalone <code>include</code> jobs can't be excluded either.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* Tiny YAML parser — enough for matrix syntax: scalars, mappings, sequences,
+   flow [a, b], flow {k: v}. Not a full YAML implementation. */
+function parseYaml(text) {
+  text = text.replace(/\r\n?/g, '\n');
+  const lines = text.split('\n');
+  const tokens = [];
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const noComment = raw.replace(/\s+#.*$/, '');
+    if (!noComment.trim()) continue;
+    const m = noComment.match(/^(\s*)(.*)$/);
+    const indent = m[1].replace(/\t/g, '  ').length;
+    tokens.push({ indent, text: m[2].trimEnd(), line: i + 1 });
+  }
+  let i = 0;
+
+  function parseBlock(parentIndent) {
+    if (i >= tokens.length) return null;
+    const first = tokens[i];
+    if (first.indent <= parentIndent) return null;
+    if (first.text.startsWith('- ') || first.text === '-') return parseList(first.indent);
+    return parseMap(first.indent);
+  }
+
+  function parseMap(indent) {
+    const obj = {};
+    while (i < tokens.length) {
+      const t = tokens[i];
+      if (t.indent < indent) break;
+      if (t.indent > indent) throw new Error('Line ' + t.line + ': unexpected indent');
+      const m = t.text.match(/^([A-Za-z_][A-Za-z0-9_\-]*)\s*:\s*(.*)$/);
+      if (!m) throw new Error('Line ' + t.line + ': expected "key: value" but got "' + t.text + '"');
+      const key = m[1];
+      const rest = m[2];
+      i++;
+      if (rest === '') {
+        obj[key] = parseBlock(indent);
+        if (obj[key] === null) obj[key] = null;
+      } else {
+        obj[key] = parseScalar(rest);
+      }
+    }
+    return obj;
+  }
+
+  function parseList(indent) {
+    const arr = [];
+    while (i < tokens.length) {
+      const t = tokens[i];
+      if (t.indent < indent) break;
+      if (t.indent > indent) throw new Error('Line ' + t.line + ': unexpected indent in list');
+      if (!t.text.startsWith('-')) break;
+      const rest = t.text === '-' ? '' : t.text.slice(2);
+      i++;
+      if (rest === '') {
+        arr.push(parseBlock(indent));
+      } else if (/^[A-Za-z_][A-Za-z0-9_\-]*\s*:/.test(rest)) {
+        // inline mapping: "- key: value" — treat as 1-key map at indent+2,
+        // then keep absorbing more keys at indent+2.
+        const m = rest.match(/^([A-Za-z_][A-Za-z0-9_\-]*)\s*:\s*(.*)$/);
+        const obj = {};
+        obj[m[1]] = m[2] === '' ? parseBlock(indent + 2) : parseScalar(m[2]);
+        // The remaining keys at indent+2 belong to this same map entry.
+        while (i < tokens.length && tokens[i].indent === indent + 2) {
+          const t2 = tokens[i];
+          const m2 = t2.text.match(/^([A-Za-z_][A-Za-z0-9_\-]*)\s*:\s*(.*)$/);
+          if (!m2) break;
+          i++;
+          obj[m2[1]] = m2[2] === '' ? parseBlock(indent + 2) : parseScalar(m2[2]);
+        }
+        arr.push(obj);
+      } else {
+        arr.push(parseScalar(rest));
+      }
+    }
+    return arr;
+  }
+
+  function parseScalar(s) {
+    s = s.trim();
+    if (s === '') return null;
+    if (s === 'null' || s === '~') return null;
+    if (s === 'true') return true;
+    if (s === 'false') return false;
+    if (s.startsWith('"') && s.endsWith('"')) return s.slice(1, -1).replace(/\\"/g, '"');
+    if (s.startsWith("'") && s.endsWith("'")) return s.slice(1, -1).replace(/''/g, "'");
+    if (s.startsWith('[')) return parseFlowSeq(s);
+    if (s.startsWith('{')) return parseFlowMap(s);
+    if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+    if (/^-?\d+\.\d+$/.test(s)) return parseFloat(s);
+    return s;
+  }
+
+  function parseFlowSeq(s) {
+    const inner = s.replace(/^\[\s*/, '').replace(/\s*\]$/, '');
+    if (!inner.trim()) return [];
+    const parts = splitFlow(inner);
+    return parts.map(parseScalar);
+  }
+
+  function parseFlowMap(s) {
+    const inner = s.replace(/^\{\s*/, '').replace(/\s*\}$/, '');
+    if (!inner.trim()) return {};
+    const parts = splitFlow(inner);
+    const obj = {};
+    for (const p of parts) {
+      const m = p.match(/^([^:]+):\s*(.*)$/);
+      if (!m) continue;
+      obj[m[1].trim()] = parseScalar(m[2]);
+    }
+    return obj;
+  }
+
+  function splitFlow(s) {
+    const out = [];
+    let depth = 0, cur = '', quote = null;
+    for (const ch of s) {
+      if (quote) {
+        cur += ch;
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'") {
+        quote = ch; cur += ch;
+      } else if (ch === '[' || ch === '{') {
+        depth++; cur += ch;
+      } else if (ch === ']' || ch === '}') {
+        depth--; cur += ch;
+      } else if (ch === ',' && depth === 0) {
+        out.push(cur.trim()); cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+
+  if (tokens.length === 0) return {};
+  const minIndent = Math.min(...tokens.map(t => t.indent));
+  // Normalize: if everything is indented, treat that as top level.
+  const baseIndent = minIndent - 1 < 0 ? -1 : minIndent - 1;
+  const result = parseBlock(baseIndent);
+  return result;
+}
+
+function expand(matrix) {
+  if (!matrix || typeof matrix !== 'object' || Array.isArray(matrix)) {
+    throw new Error('Matrix must be a mapping at the top level.');
+  }
+  const include = Array.isArray(matrix.include) ? matrix.include : (matrix.include ? [matrix.include] : []);
+  const exclude = Array.isArray(matrix.exclude) ? matrix.exclude : (matrix.exclude ? [matrix.exclude] : []);
+  const baseKeys = Object.keys(matrix).filter(k => k !== 'include' && k !== 'exclude');
+  // Cartesian product
+  const baseValues = {};
+  for (const k of baseKeys) {
+    const v = matrix[k];
+    baseValues[k] = Array.isArray(v) ? v : [v];
+  }
+  let combos = [{}];
+  for (const k of baseKeys) {
+    const next = [];
+    for (const c of combos) {
+      for (const v of baseValues[k]) {
+        next.push(Object.assign({}, c, { [k]: v }));
+      }
+    }
+    combos = next;
+  }
+  // Apply exclude — remove any base combo whose listed keys all match
+  for (const ex of exclude) {
+    if (!ex || typeof ex !== 'object') continue;
+    combos = combos.filter(c => !matchesAll(c, ex));
+  }
+  combos = combos.map(c => ({ values: c, included: false, extendedBy: [] }));
+
+  // Apply include — GitHub's specific rule:
+  // for each include entry, find existing base jobs it can extend (no new value
+  // for any base matrix key, and the keys it shares with the matrix all match).
+  // If it can extend at least one, extend each match by overlaying extra keys.
+  // Otherwise, append as a brand-new job.
+  for (const inc of include) {
+    if (!inc || typeof inc !== 'object') continue;
+    const incKeys = Object.keys(inc);
+    const sharedWithBase = incKeys.filter(k => baseKeys.includes(k));
+    const extraKeys = incKeys.filter(k => !baseKeys.includes(k));
+    let canOverlay = true;
+    // It must not introduce a new value for any base matrix key.
+    for (const k of sharedWithBase) {
+      const allowed = baseValues[k] || [];
+      if (!allowed.some(v => deepEq(v, inc[k]))) {
+        canOverlay = false;
+        break;
+      }
+    }
+    let matchedAny = false;
+    if (canOverlay) {
+      for (const job of combos) {
+        if (job.standalone) continue;
+        // Match every shared-with-base key
+        if (sharedWithBase.every(k => deepEq(job.values[k], inc[k]))) {
+          // Add the include's non-base keys to this combo. GitHub allows
+          // overwriting keys added by an earlier include — only the original
+          // matrix (cartesian) values are protected.
+          for (const k of extraKeys) {
+            job.values[k] = inc[k];
+            if (!job.extendedBy.includes(k)) job.extendedBy.push(k);
+          }
+          job.included = true;
+          matchedAny = true;
+        }
+      }
+    }
+    if (!matchedAny) {
+      combos.push({ values: Object.assign({}, inc), included: true, extendedBy: [], standalone: true });
+    }
+  }
+
+  return { combos, baseKeys };
+}
+
+function deepEq(a, b) {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return String(a) === String(b);
+  if (a && b && typeof a === 'object') {
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    const ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    return ka.every(k => deepEq(a[k], b[k]));
+  }
+  return false;
+}
+
+function matchesAll(job, filter) {
+  for (const k of Object.keys(filter)) {
+    if (!(k in job)) return false;
+    if (!deepEq(job[k], filter[k])) return false;
+  }
+  return true;
+}
+
+function fmtVal(v) {
+  if (v === null) return 'null';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+function run() {
+  const src = $('src').value;
+  const status = $('status');
+  const sum = $('summary');
+  const wrap = $('tableWrap');
+  const jsonBox = $('json');
+  status.className = '';
+  status.textContent = '';
+  if (!src.trim()) {
+    sum.innerHTML = '';
+    wrap.innerHTML = '';
+    jsonBox.textContent = '[]';
+    return;
+  }
+  let matrix;
+  try {
+    if (src.trim().startsWith('{') || src.trim().startsWith('[')) {
+      matrix = JSON.parse(src);
+    } else {
+      matrix = parseYaml(src);
+    }
+  } catch (e) {
+    status.className = 'status err';
+    status.textContent = 'Parse error: ' + e.message;
+    sum.innerHTML = '';
+    wrap.innerHTML = '';
+    jsonBox.textContent = '[]';
+    return;
+  }
+  let result;
+  try {
+    result = expand(matrix);
+  } catch (e) {
+    status.className = 'status err';
+    status.textContent = 'Expansion error: ' + e.message;
+    sum.innerHTML = '';
+    wrap.innerHTML = '';
+    jsonBox.textContent = '[]';
+    return;
+  }
+  const { combos, baseKeys } = result;
+  const total = combos.length;
+  const includedJobs = combos.filter(c => c.included).length;
+  const newJobs = combos.filter(c => c.standalone).length;
+  if (total > 256) {
+    status.className = 'status warn';
+    status.textContent = total + ' jobs — GitHub caps a single workflow at 256 matrix jobs.';
+  } else if (total === 0) {
+    status.className = 'status warn';
+    status.textContent = 'Matrix produced 0 jobs (everything was excluded?).';
+  } else {
+    status.className = 'status ok';
+    status.textContent = total + ' job' + (total === 1 ? '' : 's') + ' will be created.';
+  }
+  sum.innerHTML = `<span>total jobs <b>${total}</b></span>
+    <span>extended by include <b>${includedJobs - newJobs}</b></span>
+    <span>standalone include jobs <b>${newJobs}</b></span>
+    <span>base keys <b>${baseKeys.length}</b></span>`;
+
+  // Build column set: base keys plus any extra keys introduced via include
+  const allKeys = new Set(baseKeys);
+  for (const c of combos) for (const k of Object.keys(c.values)) allKeys.add(k);
+  const cols = [...allKeys];
+
+  const rows = combos.map((c, i) => {
+    const tds = cols.map(k => {
+      if (!(k in c.values)) return '<td><span style="color:var(--muted)">—</span></td>';
+      const isExtra = c.extendedBy.includes(k);
+      const tag = isExtra ? ' <span class="tag">+inc</span>' : '';
+      return '<td>' + escHtml(fmtVal(c.values[k])) + tag + '</td>';
+    }).join('');
+    return `<tr class="${c.included ? 'included' : ''}"><td class="idx">${i+1}</td>${tds}</tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<table class="jobs">
+    <thead><tr><th>#</th>${cols.map(k => '<th>' + escHtml(k) + '</th>').join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  const exportArr = combos.map(c => c.values);
+  jsonBox.textContent = JSON.stringify(exportArr, null, 2);
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function copyJson() {
+  navigator.clipboard.writeText($('json').textContent);
+}
+
+function downloadJson() {
+  const blob = new Blob([$('json').textContent], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'matrix-jobs.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+const examples = {
+  simple: `os: [ubuntu-latest, windows-latest, macos-latest]
+node: [18, 20, 22]`,
+  include: `include:
+  - os: ubuntu-latest
+    node: 20
+    coverage: true
+  - os: ubuntu-latest
+    node: 22
+    coverage: false`,
+  exclude: `os: [ubuntu-latest, windows-latest, macos-latest]
+node: [18, 20, 22]
+exclude:
+  - os: windows-latest
+    node: 18
+  - os: macos-latest
+    node: 18`,
+  mixed: `os: [ubuntu-latest, windows-latest]
+node: [18, 20]
+include:
+  - os: ubuntu-latest
+    node: 22
+  - os: ubuntu-latest
+    node: 20
+    experimental: true
+exclude:
+  - os: windows-latest
+    node: 18`,
+  extend: `fruit: [apple, pear]
+animal: [cat, dog]
+include:
+  - color: green
+  - color: pink
+    animal: cat
+  - fruit: apple
+    shape: circle
+  - fruit: banana
+    shape: long
+    animal: bird`,
+};
+
+function loadExample(k) {
+  $('src').value = examples[k];
+  run();
+}
+
+loadExample('exclude');
+</script>
+</body>
+</html>
