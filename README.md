@@ -338,6 +338,8 @@
 | [Bash Parameter Expansion Tester](bashparam.html) | Test ${var:-default}, ${var/pat/repl}, ${var##*/}, ${#var} and every other bash parameter expansion form on your variables — built-in cheatsheet, no shell needed. |
 | [Big O Complexity Comparator](bigo.html) | Compare O(1), O(log n), O(n), O(n log n), O(n²), O(2ⁿ), O(n!) at any input size — operations and runtime budgets on a log–log chart. |
 | [SMPTE Timecode Calculator](smpte.html) | Convert between SMPTE timecode `HH:MM:SS:FF` and frame counts at 23.976 / 24 / 25 / 29.97 DF + NDF / 30 / 50 / 59.94 / 60 fps — add or subtract timecodes, measure runtime between two points, and see wall-clock drift. |
+| [EAN / UPC / GTIN Check Digit Calculator](ean13.html) | Generate or verify the check digit for EAN-13, EAN-8, UPC-A, UPC-E, and GTIN-14 barcodes — step-by-step mod-10 weighted sum, schematic bar preview, and bulk validation of mixed-format codes pasted one per line. |
+| [Scientific & Engineering Notation Converter](scinotation.html) | Convert any number between standard decimal, scientific (1.23×10⁶), engineering (multiples of 3), SI prefix (k, M, μ, n, …), and E-notation — arbitrary precision via string arithmetic so values like `0.1 + 0.2` stay exact, with sig-fig control and bulk conversion. |
 
 ## AI & PM Tools
 
@@ -385,6 +387,7 @@
 | [Card Deck Shuffler & Dealer](cards.html) | Shuffle a 52-card deck (or 54 with jokers) using a seeded Fisher-Yates shuffle, then deal hands of any size. |
 | [Moon Phase Calculator](moonphase.html) | Compute moon phase, illumination percentage, and the next full/new moon for any date — with a lunar calendar grid and SVG phase preview. |
 | [Date Difference Calculator](datediff.html) | Calculate the precise duration between two dates — calendar breakdown (years/months/days), totals in every unit, and weekday vs weekend counts. |
+| [Tally Counter](tally.html) | Multiple labelled tally counters with per-counter step size, keyboard shortcuts (`1`–`9`, Shift to decrement, `Ctrl+Z` undo), history, autosave, and CSV / Markdown / JSON export — for bug bashes, code review nits, inventory, or habit counts. |
 
 ## Git & Workflow
 

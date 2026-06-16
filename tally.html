@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tally Counter — Multi-Counter with Keyboard Shortcuts — Free Online Tool</title>
+<meta name="description" content="A free, browser-based tally counter with multiple named counters, per-counter step size, keyboard shortcuts, autosave, history with undo, and CSV/Markdown export. Useful for bug bashes, code reviews, code-coverage counting, inventory, and habit tracking.">
+<meta name="keywords" content="tally counter, multi counter, click counter, bug bash counter, keyboard counter, code review tally, inventory counter">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tally.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .counter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .counter {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    display: grid;
+    gap: 8px;
+    background: var(--surface);
+    position: relative;
+  }
+  .counter.active {
+    border-color: var(--text);
+    box-shadow: 0 0 0 2px rgba(0,0,0,.08);
+  }
+  .counter .name {
+    width: 100%; padding: 4px 8px; font-size: .95rem;
+    border: 1px solid transparent; background: transparent; color: var(--text);
+    font-family: var(--sans); font-weight: 600; border-radius: 4px;
+  }
+  .counter .name:focus { border-color: var(--border); background: var(--bg); outline: none; }
+  .counter .value {
+    font-size: 2.4rem; font-weight: 700; font-family: var(--mono);
+    text-align: center; line-height: 1; margin: 4px 0;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+  .counter .controls { display: flex; gap: 6px; }
+  .counter .controls button {
+    flex: 1; padding: 8px 0; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--surface);
+    color: var(--text); cursor: pointer; font-size: 1rem;
+    font-family: var(--mono); font-weight: 600;
+  }
+  .counter .controls button.plus { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .counter .controls button.plus:hover { background: var(--accent-hover); }
+  .counter .controls button:hover { background: var(--surface2); }
+  .counter .controls button.plus:hover { background: var(--accent-hover); color: var(--bg); }
+  .counter .meta {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: .72rem; color: var(--muted); font-family: var(--mono);
+  }
+  .counter .meta input.step {
+    width: 50px; padding: 2px 6px; font-size: .72rem; font-family: var(--mono);
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); text-align: right;
+  }
+  .counter .kbd {
+    position: absolute; top: 6px; right: 8px;
+    font-family: var(--mono); font-size: .7rem; color: var(--muted);
+    padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface2);
+  }
+  .counter .del-btn {
+    position: absolute; top: 6px; left: 8px;
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 1.2rem; line-height: 1; padding: 0 4px;
+  }
+  .counter .del-btn:hover { color: var(--error); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .toolbar button {
+    padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .88rem;
+  }
+  .toolbar button:hover { background: var(--surface2); }
+  .toolbar button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .toolbar button.primary:hover { background: var(--accent-hover); }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: .85rem; color: var(--muted); }
+  .stats strong { color: var(--text); font-family: var(--mono); font-size: 1rem; }
+  .history-list {
+    max-height: 240px; overflow: auto; font-family: var(--mono); font-size: .82rem;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px;
+  }
+  .history-row { padding: 3px 0; border-bottom: 1px dashed var(--border); display: flex; justify-content: space-between; gap: 12px; }
+  .history-row:last-child { border-bottom: 0; }
+  .history-row .ts { color: var(--muted); }
+  .export-out {
+    margin-top: 10px; padding: 10px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; white-space: pre-wrap;
+    max-height: 220px; overflow: auto;
+  }
+  .shortcuts { display: grid; grid-template-columns: 100px 1fr; gap: 6px 14px; font-size: .85rem; }
+  .shortcuts code {
+    font-family: var(--mono); padding: 2px 6px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 4px; font-size: .8rem;
+  }
+  .shortcuts span { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Tally Counter</h1>
+<p class="subtitle">A no-fuss counter with multiple labelled tallies, per-counter step, keyboard shortcuts, history with undo, and autosave to <code>localStorage</code>. Handy during a bug bash to track severity buckets, during code review to count nits vs. blockers, or any time you need to count things without context-switching.</p>
+
+<div class="card">
+  <div class="toolbar">
+    <button class="primary" onclick="addCounter()">+ Add counter</button>
+    <button onclick="resetAll()">Reset all to 0</button>
+    <button onclick="undo()">Undo (Ctrl+Z)</button>
+    <button onclick="clearAll()">Remove all</button>
+    <button onclick="exportData('csv')">Export CSV</button>
+    <button onclick="exportData('md')">Export Markdown</button>
+    <button onclick="exportData('json')">Export JSON</button>
+  </div>
+  <div class="stats">
+    <span><strong id="statTotal">0</strong> total clicks</span>
+    <span><strong id="statSum">0</strong> sum</span>
+    <span><strong id="statCounters">0</strong> counters</span>
+    <span><strong id="statSession" class="mono">00:00</strong> session</span>
+  </div>
+  <div class="counter-grid" id="counterGrid"></div>
+</div>
+
+<div class="card">
+  <h2>Keyboard Shortcuts</h2>
+  <div class="shortcuts">
+    <code>1</code>-<code>9</code><span>Increment counter at that position</span>
+    <code>Shift</code>+<code>1</code>-<code>9</code><span>Decrement counter at that position</span>
+    <code>+</code> / <code>=</code><span>Increment the focused / active counter</span>
+    <code>-</code><span>Decrement the focused / active counter</span>
+    <code>Ctrl</code>+<code>Z</code><span>Undo the last increment/decrement</span>
+    <code>R</code><span>Reset all counters to 0</span>
+    <code>N</code><span>Add a new counter</span>
+    <code>Tab</code><span>Move active counter forward / back (with Shift)</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>History</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-top:0">Every change is logged with a timestamp. Capped at the last 200 events.</p>
+  <div class="history-list" id="historyList"></div>
+</div>
+
+<div class="card">
+  <h2>Export Output</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-top:0">Whatever you most recently exported lands here for easy copying.</p>
+  <div class="export-out" id="exportOut">(nothing exported yet)</div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const STORAGE_KEY = 'toolbox-tally-v1';
+const HIST_CAP = 200;
+
+const defaultCounters = [
+  { id: cid(), name: 'Bugs', value: 0, step: 1 },
+  { id: cid(), name: 'Notes', value: 0, step: 1 },
+  { id: cid(), name: 'Done', value: 0, step: 1 }
+];
+
+let state = load() || { counters: structuredClone(defaultCounters), history: [], activeId: defaultCounters[0].id, sessionStart: Date.now() };
+if (!state.sessionStart) state.sessionStart = Date.now();
+if (!state.activeId && state.counters[0]) state.activeId = state.counters[0].id;
+
+function cid() { return 'c' + Math.random().toString(36).slice(2, 9); }
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) { /* quota or private mode — ignore */ }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed.counters) return null;
+    return parsed;
+  } catch (e) { return null; }
+}
+
+function pushHistory(entry) {
+  state.history.unshift({ ts: Date.now(), ...entry });
+  if (state.history.length > HIST_CAP) state.history.length = HIST_CAP;
+}
+
+function addCounter() {
+  const c = { id: cid(), name: 'Counter ' + (state.counters.length + 1), value: 0, step: 1 };
+  state.counters.push(c);
+  state.activeId = c.id;
+  pushHistory({ kind: 'add', id: c.id, name: c.name });
+  save(); render();
+}
+
+function removeCounter(id) {
+  const c = state.counters.find(x => x.id === id);
+  if (!c) return;
+  state.counters = state.counters.filter(x => x.id !== id);
+  if (state.activeId === id && state.counters[0]) state.activeId = state.counters[0].id;
+  pushHistory({ kind: 'remove', name: c.name, value: c.value });
+  save(); render();
+}
+
+function adjust(id, delta) {
+  const c = state.counters.find(x => x.id === id);
+  if (!c) return;
+  c.value += delta;
+  state.activeId = id;
+  pushHistory({ kind: 'adjust', id: c.id, name: c.name, delta, value: c.value });
+  save(); render();
+}
+
+function rename(id, name) {
+  const c = state.counters.find(x => x.id === id);
+  if (!c) return;
+  c.name = name;
+  save();
+}
+
+function setStep(id, step) {
+  const c = state.counters.find(x => x.id === id);
+  if (!c) return;
+  c.step = Math.max(1, parseInt(step, 10) || 1);
+  save();
+}
+
+function resetAll() {
+  if (!confirm('Reset all counter values to 0?')) return;
+  for (const c of state.counters) c.value = 0;
+  pushHistory({ kind: 'reset' });
+  save(); render();
+}
+
+function clearAll() {
+  if (!confirm('Remove every counter and history? This cannot be undone.')) return;
+  state = { counters: [], history: [], activeId: null, sessionStart: Date.now() };
+  save(); render();
+}
+
+function undo() {
+  // Undo the most recent adjust event (other kinds are not undone)
+  const idx = state.history.findIndex(h => h.kind === 'adjust');
+  if (idx < 0) return;
+  const ev = state.history[idx];
+  const c = state.counters.find(x => x.id === ev.id);
+  if (c) {
+    c.value -= ev.delta;
+  }
+  state.history.splice(idx, 1);
+  save(); render();
+}
+
+function exportData(fmt) {
+  let out = '';
+  if (fmt === 'csv') {
+    out = 'name,value,step\n' + state.counters.map(c =>
+      `"${(c.name || '').replace(/"/g, '""')}",${c.value},${c.step}`).join('\n');
+  } else if (fmt === 'md') {
+    out = '| Counter | Value | Step |\n|---|---|---|\n' + state.counters.map(c =>
+      `| ${(c.name || '').replace(/\|/g, '\\|')} | ${c.value} | ${c.step} |`).join('\n');
+    const sum = state.counters.reduce((a,c) => a + c.value, 0);
+    out += `\n| **Total** | **${sum}** | |`;
+  } else if (fmt === 'json') {
+    out = JSON.stringify(state.counters.map(({ id, ...rest }) => rest), null, 2);
+  }
+  $('exportOut').textContent = out;
+  navigator.clipboard?.writeText(out);
+}
+
+function render() {
+  const grid = $('counterGrid');
+  grid.innerHTML = '';
+  state.counters.forEach((c, idx) => {
+    const div = document.createElement('div');
+    div.className = 'counter' + (c.id === state.activeId ? ' active' : '');
+    div.innerHTML = `
+      <button class="del-btn" title="Remove counter" data-action="delete">×</button>
+      ${idx < 9 ? `<div class="kbd">${idx + 1}</div>` : ''}
+      <input class="name" value="${escapeAttr(c.name || '')}" placeholder="Counter name">
+      <div class="value">${c.value.toLocaleString()}</div>
+      <div class="controls">
+        <button data-action="dec">−</button>
+        <button class="plus" data-action="inc">+ ${c.step}</button>
+      </div>
+      <div class="meta">
+        <span>step</span>
+        <input class="step" type="number" min="1" value="${c.step}">
+      </div>`;
+    div.addEventListener('click', e => {
+      if (e.target.matches('.name, .step')) { state.activeId = c.id; return; }
+      const a = e.target.dataset.action;
+      if (a === 'inc') adjust(c.id, c.step);
+      else if (a === 'dec') adjust(c.id, -c.step);
+      else if (a === 'delete') removeCounter(c.id);
+      else { state.activeId = c.id; render(); }
+    });
+    div.querySelector('.name').addEventListener('change', e => rename(c.id, e.target.value));
+    div.querySelector('.step').addEventListener('change', e => { setStep(c.id, e.target.value); render(); });
+    grid.appendChild(div);
+  });
+
+  const sum = state.counters.reduce((a,c) => a + c.value, 0);
+  const totalClicks = state.history.filter(h => h.kind === 'adjust').length;
+  $('statTotal').textContent = totalClicks;
+  $('statSum').textContent = sum.toLocaleString();
+  $('statCounters').textContent = state.counters.length;
+
+  const hist = $('historyList');
+  hist.innerHTML = '';
+  if (!state.history.length) {
+    hist.innerHTML = '<div style="color:var(--muted);text-align:center;padding:8px">No activity yet</div>';
+  } else {
+    for (const h of state.history) {
+      const row = document.createElement('div');
+      row.className = 'history-row';
+      const ts = new Date(h.ts).toLocaleTimeString();
+      let what;
+      if (h.kind === 'add') what = `+ added "${h.name}"`;
+      else if (h.kind === 'remove') what = `× removed "${h.name}" (was ${h.value})`;
+      else if (h.kind === 'reset') what = `↺ reset all`;
+      else if (h.kind === 'adjust') what = `${h.delta > 0 ? '+' : ''}${h.delta}  "${h.name}" → ${h.value}`;
+      else what = h.kind;
+      row.innerHTML = `<span>${escapeHtml(what)}</span><span class="ts">${ts}</span>`;
+      hist.appendChild(row);
+    }
+  }
+  save();
+}
+
+function tickSession() {
+  const secs = Math.floor((Date.now() - state.sessionStart) / 1000);
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  $('statSession').textContent = (h ? String(h).padStart(2, '0') + ':' : '') +
+    String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, textarea')) return;
+  const k = e.key;
+  if (k >= '1' && k <= '9') {
+    e.preventDefault();
+    const idx = +k - 1;
+    const c = state.counters[idx];
+    if (c) adjust(c.id, e.shiftKey ? -c.step : c.step);
+    return;
+  }
+  if (k === '+' || k === '=') {
+    e.preventDefault();
+    const c = state.counters.find(x => x.id === state.activeId) || state.counters[0];
+    if (c) adjust(c.id, c.step);
+    return;
+  }
+  if (k === '-' || k === '_') {
+    e.preventDefault();
+    const c = state.counters.find(x => x.id === state.activeId) || state.counters[0];
+    if (c) adjust(c.id, -c.step);
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) {
+    e.preventDefault();
+    undo();
+    return;
+  }
+  if (k === 'r' || k === 'R') {
+    e.preventDefault(); resetAll(); return;
+  }
+  if (k === 'n' || k === 'N') {
+    e.preventDefault(); addCounter(); return;
+  }
+  if (k === 'Tab') {
+    if (!state.counters.length) return;
+    e.preventDefault();
+    const i = state.counters.findIndex(x => x.id === state.activeId);
+    const next = e.shiftKey ? (i - 1 + state.counters.length) % state.counters.length
+                            : (i + 1) % state.counters.length;
+    state.activeId = state.counters[next].id;
+    render();
+  }
+});
+
+setInterval(tickSession, 1000);
+tickSession();
+render();
+</script>
+</body>
+</html>
