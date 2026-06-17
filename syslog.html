@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Syslog Message Parser &amp; Builder — RFC 3164 / RFC 5424 — Free Online Tool</title>
+<meta name="description" content="Parse and build syslog messages in RFC 5424 and RFC 3164 (BSD) formats — decode PRI into facility and severity, split structured data, and assemble new lines with a single click.">
+<meta name="keywords" content="syslog parser, syslog builder, RFC 5424, RFC 3164, BSD syslog, PRI facility severity, structured data, rsyslog, syslog-ng">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/syslog.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .92rem;
+    background: var(--bg); color: var(--text); box-sizing: border-box;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+  .field-row { margin-bottom: 12px; }
+  .pri-box {
+    padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-top: 12px; font-family: var(--mono); font-size: .88rem;
+  }
+  .pri-box .row { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; }
+  .pri-box strong { color: var(--text); }
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: .72rem; font-weight: 600; margin-right: 6px;
+  }
+  .sev-0, .sev-1, .sev-2, .sev-3 { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .sev-4 { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .sev-5 { background: #e0f2fe; color: #075985; border: 1px solid #7dd3fc; }
+  .sev-6, .sev-7 { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+  .out {
+    margin-top: 12px; padding: 12px 14px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .88rem; white-space: pre-wrap; word-break: break-all;
+  }
+  table.fields { width: 100%; border-collapse: collapse; margin-top: 12px; font-family: var(--mono); font-size: .85rem; }
+  table.fields th { text-align: left; padding: 6px 10px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+  table.fields td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.fields td.k { color: var(--muted); width: 32%; }
+  .err { color: var(--error, #b91c1c); font-size: .85rem; margin-top: 8px; }
+  .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .preset-row button {
+    padding: 5px 10px; border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); border-radius: var(--radius); font-size: .78rem; cursor: pointer;
+    font-family: var(--mono);
+  }
+  .preset-row button:hover { background: var(--surface2); }
+  .copy-btn {
+    padding: 5px 10px; border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); border-radius: var(--radius); font-size: .78rem; cursor: pointer;
+    margin-top: 8px;
+  }
+  .copy-btn:hover { background: var(--surface2); }
+  @media (max-width: 700px) {
+    .grid2, .grid3, .grid4 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Syslog Message Parser &amp; Builder</h1>
+<p class="subtitle">Decode and compose syslog messages in RFC&nbsp;5424 and RFC&nbsp;3164 (BSD) formats &mdash; split the PRI value into facility and severity, parse structured-data elements, and assemble new lines field by field.</p>
+
+<div class="card">
+  <h2>Parse a Syslog Line</h2>
+  <div class="preset-row">
+    <button onclick="loadSample('rfc5424')">RFC 5424 sample</button>
+    <button onclick="loadSample('rfc5424sd')">RFC 5424 + SD</button>
+    <button onclick="loadSample('rfc3164')">RFC 3164 (BSD)</button>
+    <button onclick="loadSample('cisco')">Cisco-style</button>
+  </div>
+  <div class="field-row" style="margin-top:10px">
+    <label for="parseIn">Raw syslog message</label>
+    <textarea id="parseIn" oninput="doParse()" autocomplete="off"></textarea>
+  </div>
+  <div id="parseErr" class="err" style="display:none"></div>
+  <div id="parseOut"></div>
+</div>
+
+<div class="card">
+  <h2>Build a Syslog Message</h2>
+  <div class="field-row">
+    <label for="bFormat">Format</label>
+    <select id="bFormat" onchange="doBuild()">
+      <option value="5424">RFC 5424 (modern)</option>
+      <option value="3164">RFC 3164 (BSD legacy)</option>
+    </select>
+  </div>
+  <div class="grid2">
+    <div>
+      <label for="bFacility">Facility</label>
+      <select id="bFacility" onchange="doBuild()"></select>
+    </div>
+    <div>
+      <label for="bSeverity">Severity</label>
+      <select id="bSeverity" onchange="doBuild()"></select>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:12px">
+    <div>
+      <label for="bHost">Hostname</label>
+      <input id="bHost" type="text" value="app-01" oninput="doBuild()">
+    </div>
+    <div>
+      <label for="bApp">App-Name / Tag</label>
+      <input id="bApp" type="text" value="nginx" oninput="doBuild()">
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:12px">
+    <div>
+      <label for="bProc">PROCID / PID (5424 only)</label>
+      <input id="bProc" type="text" value="1234" oninput="doBuild()">
+    </div>
+    <div>
+      <label for="bMsgId">MSGID (5424 only)</label>
+      <input id="bMsgId" type="text" value="ID47" oninput="doBuild()">
+    </div>
+  </div>
+  <div class="field-row" style="margin-top:12px">
+    <label for="bSd">Structured Data (5424 only, e.g. <code>[exampleSDID@32473 iut="3" eventSource="App"]</code>)</label>
+    <input id="bSd" type="text" value='[origin x-enterpriseId="32473"]' oninput="doBuild()">
+  </div>
+  <div class="field-row">
+    <label for="bMsg">MSG</label>
+    <input id="bMsg" type="text" value="Server restarted successfully" oninput="doBuild()">
+  </div>
+  <div class="field-row">
+    <label for="bTs">Timestamp (leave blank for <em>now</em>)</label>
+    <input id="bTs" type="text" value="" placeholder="2026-06-17T14:32:00Z" oninput="doBuild()">
+  </div>
+  <div id="buildOut" class="out"></div>
+  <button class="copy-btn" onclick="copyBuilt()">Copy</button>
+  <div id="buildPri" class="pri-box" style="margin-top:14px"></div>
+</div>
+
+<div class="card">
+  <h2>PRI &harr; Facility/Severity</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:0">
+    PRI = facility &times; 8 + severity (range 0&ndash;191). Enter any of the three to see the other two.
+  </p>
+  <div class="grid3">
+    <div>
+      <label for="cPri">PRI</label>
+      <input id="cPri" type="number" min="0" max="191" value="30" oninput="fromPri()">
+    </div>
+    <div>
+      <label for="cFac">Facility</label>
+      <select id="cFac" onchange="fromFacSev()"></select>
+    </div>
+    <div>
+      <label for="cSev">Severity</label>
+      <select id="cSev" onchange="fromFacSev()"></select>
+    </div>
+  </div>
+  <div id="calcOut" class="pri-box"></div>
+</div>
+
+<div class="card">
+  <h2>Facility &amp; Severity Reference</h2>
+  <div class="grid2">
+    <div>
+      <h3 style="font-size:.95rem;margin-bottom:6px">Facilities (0&ndash;23)</h3>
+      <table class="fields" id="facTable"></table>
+    </div>
+    <div>
+      <h3 style="font-size:.95rem;margin-bottom:6px">Severities (0&ndash;7)</h3>
+      <table class="fields" id="sevTable"></table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About Syslog</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    <strong>RFC&nbsp;5424</strong> is the modern syslog protocol, with a strict wire format: <code>&lt;PRI&gt;VERSION SP TIMESTAMP SP HOSTNAME SP APP-NAME SP PROCID SP MSGID SP STRUCTURED-DATA SP MSG</code>. Missing values use the NILVALUE <code>-</code>. Structured data elements are bracketed: <code>[SD-ID@PEN k="v" k2="v2"]</code>.<br><br>
+    <strong>RFC&nbsp;3164</strong> is the legacy BSD format, widely emitted by routers, switches, and older Unix daemons: <code>&lt;PRI&gt;TIMESTAMP SP HOSTNAME SP TAG[PID]: MSG</code>. The timestamp uses <code>MMM dd HH:MM:SS</code> with no year and no timezone.<br><br>
+    The PRI value packs two fields: <code>facility = PRI &gt;&gt; 3</code> and <code>severity = PRI &amp; 0x07</code>. Severity 0 (emerg) is the most urgent, 7 (debug) the least.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const FACILITIES = [
+  ['kern', 'kernel messages'],
+  ['user', 'user-level messages'],
+  ['mail', 'mail system'],
+  ['daemon', 'system daemons'],
+  ['auth', 'security / authorization'],
+  ['syslog', 'messages from syslogd itself'],
+  ['lpr', 'line printer subsystem'],
+  ['news', 'network news subsystem'],
+  ['uucp', 'UUCP subsystem'],
+  ['cron', 'clock daemon'],
+  ['authpriv', 'security / authorization (private)'],
+  ['ftp', 'FTP daemon'],
+  ['ntp', 'NTP subsystem'],
+  ['audit', 'log audit'],
+  ['alert', 'log alert'],
+  ['clock', 'clock daemon (alt)'],
+  ['local0', 'local use 0'],
+  ['local1', 'local use 1'],
+  ['local2', 'local use 2'],
+  ['local3', 'local use 3'],
+  ['local4', 'local use 4'],
+  ['local5', 'local use 5'],
+  ['local6', 'local use 6'],
+  ['local7', 'local use 7']
+];
+
+const SEVERITIES = [
+  ['emerg', 'system unusable'],
+  ['alert', 'action must be taken immediately'],
+  ['crit', 'critical conditions'],
+  ['err', 'error conditions'],
+  ['warning', 'warning conditions'],
+  ['notice', 'normal but significant'],
+  ['info', 'informational messages'],
+  ['debug', 'debug-level messages']
+];
+
+const SAMPLES = {
+  rfc5424: '<34>1 2023-10-11T22:14:15.003Z mymachine.example.com su - ID47 - BOM\'su root\' failed for lonvick on /dev/pts/8',
+  rfc5424sd: '<165>1 2023-10-11T22:14:15.003Z mymachine.example.com evntslog 1234 ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"][examplePriority@32473 class="high"] An application event log entry...',
+  rfc3164: '<13>Oct 11 22:14:15 mymachine sshd[1234]: Accepted password for lonvick from 10.0.0.1 port 22',
+  cisco: '<189>26: Oct 11 22:14:15.123: %SYS-5-CONFIG_I: Configured from console by admin on vty0 (10.0.0.5)'
+};
+
+function loadSample(k) {
+  $('parseIn').value = SAMPLES[k];
+  doParse();
+}
+
+function populateSelect(sel, list, valFn) {
+  sel.innerHTML = '';
+  list.forEach((row, i) => {
+    const o = document.createElement('option');
+    o.value = i;
+    o.textContent = i + ' (' + row[0] + ') — ' + row[1];
+    sel.appendChild(o);
+  });
+}
+
+function buildFacSevTables() {
+  const ft = $('facTable');
+  ft.innerHTML = '<tr><th>Code</th><th>Keyword</th><th>Description</th></tr>';
+  FACILITIES.forEach((f, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td class="k">' + i + '</td><td><strong>' + f[0] + '</strong></td><td>' + f[1] + '</td>';
+    ft.appendChild(tr);
+  });
+  const st = $('sevTable');
+  st.innerHTML = '<tr><th>Code</th><th>Keyword</th><th>Description</th></tr>';
+  SEVERITIES.forEach((s, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td class="k">' + i + '</td><td><span class="tag sev-' + i + '">' + s[0] + '</span></td><td>' + s[1] + '</td>';
+    st.appendChild(tr);
+  });
+}
+
+function pad(n, w) { return String(n).padStart(w, '0'); }
+
+function nowRfc5424() {
+  const d = new Date();
+  return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1, 2) + '-' + pad(d.getUTCDate(), 2) +
+    'T' + pad(d.getUTCHours(), 2) + ':' + pad(d.getUTCMinutes(), 2) + ':' + pad(d.getUTCSeconds(), 2) +
+    '.' + pad(d.getUTCMilliseconds(), 3) + 'Z';
+}
+
+function nowBsd() {
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const d = new Date();
+  const day = pad(d.getDate(), 2).replace(/^0/, ' ');
+  return MONTHS[d.getMonth()] + ' ' + day + ' ' + pad(d.getHours(), 2) + ':' + pad(d.getMinutes(), 2) + ':' + pad(d.getSeconds(), 2);
+}
+
+function nilOr(v) { return v && v.trim() ? v.trim() : '-'; }
+
+function doBuild() {
+  const fmt = $('bFormat').value;
+  const fac = parseInt($('bFacility').value);
+  const sev = parseInt($('bSeverity').value);
+  const pri = fac * 8 + sev;
+  let line;
+  if (fmt === '5424') {
+    const ts = $('bTs').value.trim() || nowRfc5424();
+    const host = nilOr($('bHost').value);
+    const app = nilOr($('bApp').value);
+    const proc = nilOr($('bProc').value);
+    const msgid = nilOr($('bMsgId').value);
+    const sd = $('bSd').value.trim() || '-';
+    const msg = $('bMsg').value;
+    line = '<' + pri + '>1 ' + ts + ' ' + host + ' ' + app + ' ' + proc + ' ' + msgid + ' ' + sd + ' ' + msg;
+  } else {
+    const ts = $('bTs').value.trim() || nowBsd();
+    const host = $('bHost').value.trim() || 'host';
+    const app = $('bApp').value.trim() || 'tag';
+    const proc = $('bProc').value.trim();
+    const tag = app + (proc ? '[' + proc + ']' : '');
+    const msg = $('bMsg').value;
+    line = '<' + pri + '>' + ts + ' ' + host + ' ' + tag + ': ' + msg;
+  }
+  $('buildOut').textContent = line;
+  const sevName = SEVERITIES[sev][0];
+  $('buildPri').innerHTML = '<div><strong>PRI value:</strong> ' + pri + '</div>' +
+    '<div class="row"><span>Facility: <strong>' + fac + ' ' + FACILITIES[fac][0] + '</strong></span>' +
+    '<span>Severity: <span class="tag sev-' + sev + '">' + sevName + '</span></span>' +
+    '<span>Length: <strong>' + line.length + '</strong> bytes</span></div>';
+}
+
+function copyBuilt() {
+  navigator.clipboard.writeText($('buildOut').textContent);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function renderFields(rows) {
+  let h = '<table class="fields">';
+  for (const [k, v] of rows) {
+    h += '<tr><td class="k">' + escapeHtml(k) + '</td><td>' + (v == null ? '<em>—</em>' : escapeHtml(v)) + '</td></tr>';
+  }
+  h += '</table>';
+  return h;
+}
+
+function parseStructuredData(s) {
+  const elems = [];
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] !== '[') { i++; continue; }
+    let depth = 1, j = i + 1;
+    let inStr = false;
+    while (j < s.length && depth > 0) {
+      const c = s[j];
+      if (inStr) {
+        if (c === '\\') { j += 2; continue; }
+        if (c === '"') inStr = false;
+      } else {
+        if (c === '"') inStr = true;
+        else if (c === '[') depth++;
+        else if (c === ']') depth--;
+      }
+      j++;
+    }
+    const inner = s.slice(i + 1, j - 1);
+    const m = inner.match(/^([^\s\]]+)\s*(.*)$/);
+    const sdid = m ? m[1] : inner;
+    const rest = m ? m[2] : '';
+    const params = {};
+    const re = /([A-Za-z0-9._-]+)="((?:[^"\\]|\\.)*)"/g;
+    let pm;
+    while ((pm = re.exec(rest)) !== null) {
+      params[pm[1]] = pm[2].replace(/\\(.)/g, '$1');
+    }
+    elems.push({ sdid, params });
+    i = j;
+  }
+  return elems;
+}
+
+function parseMessage(raw) {
+  raw = raw.replace(/\r?\n$/, '');
+  const m = raw.match(/^<(\d{1,3})>(.*)$/);
+  if (!m) throw new Error('Missing or malformed PRI &lt;…&gt; at start.');
+  const pri = parseInt(m[1]);
+  if (pri > 191) throw new Error('PRI value ' + pri + ' is out of range (0–191).');
+  const rest = m[2];
+  const facility = pri >> 3;
+  const severity = pri & 7;
+
+  const v5 = rest.match(/^(\d{1,2})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)$/);
+  if (v5) {
+    const [, ver, ts, host, app, proc, msgid, tail] = v5;
+    let sd = '-', msg = '';
+    if (tail.startsWith('-')) {
+      sd = '-';
+      msg = tail.slice(1).trimStart();
+    } else if (tail.startsWith('[')) {
+      let depth = 0, j = 0, inStr = false;
+      while (j < tail.length) {
+        const c = tail[j];
+        if (inStr) {
+          if (c === '\\') { j += 2; continue; }
+          if (c === '"') inStr = false;
+        } else {
+          if (c === '"') inStr = true;
+          else if (c === '[') depth++;
+          else if (c === ']') {
+            depth--;
+            if (depth === 0 && (j + 1 >= tail.length || tail[j + 1] !== '[')) { j++; break; }
+          }
+        }
+        j++;
+      }
+      sd = tail.slice(0, j);
+      msg = tail.slice(j).trimStart();
+    } else {
+      msg = tail;
+    }
+    const sdElems = sd === '-' ? [] : parseStructuredData(sd);
+    return {
+      format: 'RFC 5424',
+      pri, facility, severity,
+      version: ver, timestamp: ts, hostname: host,
+      appName: app, procId: proc, msgId: msgid,
+      structuredData: sd, sdElements: sdElems, msg
+    };
+  }
+
+  const v3 = rest.match(/^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)\s+(.*)$/);
+  if (v3) {
+    const [, ts, host, tail] = v3;
+    const tm = tail.match(/^([^\s:\[]+)(?:\[([^\]]+)\])?\s*:\s*(.*)$/);
+    if (tm) {
+      return {
+        format: 'RFC 3164 (BSD)',
+        pri, facility, severity,
+        timestamp: ts, hostname: host,
+        tag: tm[1], procId: tm[2] || null, msg: tm[3]
+      };
+    }
+    return {
+      format: 'RFC 3164 (BSD)',
+      pri, facility, severity,
+      timestamp: ts, hostname: host, msg: tail
+    };
+  }
+
+  return {
+    format: 'Unknown / non-standard',
+    pri, facility, severity, msg: rest
+  };
+}
+
+function doParse() {
+  const raw = $('parseIn').value;
+  if (!raw.trim()) {
+    $('parseOut').innerHTML = '';
+    $('parseErr').style.display = 'none';
+    return;
+  }
+  try {
+    const p = parseMessage(raw);
+    $('parseErr').style.display = 'none';
+    const facName = FACILITIES[p.facility] ? FACILITIES[p.facility][0] : '?';
+    const sevName = SEVERITIES[p.severity] ? SEVERITIES[p.severity][0] : '?';
+    let summary = '<div class="pri-box"><div><strong>Format:</strong> ' + p.format + '</div>' +
+      '<div class="row"><span>PRI: <strong>' + p.pri + '</strong></span>' +
+      '<span>Facility: <strong>' + p.facility + ' ' + facName + '</strong></span>' +
+      '<span>Severity: <span class="tag sev-' + p.severity + '">' + sevName + '</span></span></div></div>';
+    const rows = [];
+    if (p.version) rows.push(['VERSION', p.version]);
+    if (p.timestamp) rows.push(['TIMESTAMP', p.timestamp]);
+    if (p.hostname) rows.push(['HOSTNAME', p.hostname]);
+    if (p.appName) rows.push(['APP-NAME', p.appName]);
+    if (p.tag) rows.push(['TAG', p.tag]);
+    if (p.procId) rows.push(['PROCID / PID', p.procId]);
+    if (p.msgId) rows.push(['MSGID', p.msgId]);
+    if (p.structuredData) rows.push(['STRUCTURED-DATA', p.structuredData]);
+    rows.push(['MSG', p.msg]);
+    summary += renderFields(rows);
+    if (p.sdElements && p.sdElements.length) {
+      summary += '<h3 style="font-size:.95rem;margin:14px 0 6px">Structured Data Elements</h3>';
+      for (const e of p.sdElements) {
+        const pairs = Object.entries(e.params);
+        summary += '<div class="pri-box"><div><strong>SD-ID:</strong> ' + escapeHtml(e.sdid) + '</div>';
+        if (pairs.length) {
+          summary += '<table class="fields" style="margin-top:8px">';
+          for (const [k, v] of pairs) {
+            summary += '<tr><td class="k">' + escapeHtml(k) + '</td><td>' + escapeHtml(v) + '</td></tr>';
+          }
+          summary += '</table>';
+        }
+        summary += '</div>';
+      }
+    }
+    $('parseOut').innerHTML = summary;
+  } catch (e) {
+    $('parseErr').textContent = e.message;
+    $('parseErr').style.display = '';
+    $('parseOut').innerHTML = '';
+  }
+}
+
+function fromPri() {
+  const pri = Math.max(0, Math.min(191, parseInt($('cPri').value) || 0));
+  const fac = pri >> 3;
+  const sev = pri & 7;
+  $('cFac').value = fac;
+  $('cSev').value = sev;
+  renderCalc(pri, fac, sev);
+}
+
+function fromFacSev() {
+  const fac = parseInt($('cFac').value);
+  const sev = parseInt($('cSev').value);
+  const pri = fac * 8 + sev;
+  $('cPri').value = pri;
+  renderCalc(pri, fac, sev);
+}
+
+function renderCalc(pri, fac, sev) {
+  const facName = FACILITIES[fac][0];
+  const sevName = SEVERITIES[sev][0];
+  $('calcOut').innerHTML = '<div><code>&lt;' + pri + '&gt;</code> = facility <strong>' + fac + ' (' + facName +
+    ')</strong> &times; 8 + severity <strong>' + sev + ' (' + sevName + ')</strong></div>' +
+    '<div class="row"><span>Binary: <strong>' + pri.toString(2).padStart(8, '0') + '</strong></span>' +
+    '<span>Hex: <strong>0x' + pri.toString(16).padStart(2, '0').toUpperCase() + '</strong></span></div>';
+}
+
+populateSelect($('bFacility'), FACILITIES);
+populateSelect($('bSeverity'), SEVERITIES);
+populateSelect($('cFac'), FACILITIES);
+populateSelect($('cSev'), SEVERITIES);
+$('bFacility').value = 3; $('bSeverity').value = 6;
+$('cFac').value = 3; $('cSev').value = 6;
+buildFacSevTables();
+doBuild();
+fromFacSev();
+loadSample('rfc5424');
+</script>
+</body>
+</html>

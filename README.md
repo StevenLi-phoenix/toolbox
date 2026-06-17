@@ -249,6 +249,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Syslog Message Parser & Builder](syslog.html) | Parse and build syslog messages in RFC&nbsp;5424 and RFC&nbsp;3164 (BSD) formats — split the PRI value into facility and severity, walk structured-data elements (`[SD-ID@PEN k="v"]`), and compose new lines field by field with NILVALUE handling and a live binary/hex view of the PRI. |
+| [Music Chord Builder](chordbuilder.html) | Pick a root and quality (major, minor, dim, aug, sus, 7, m7, maj7, m7♭5, dim7, 9, 11, 13, add9, …) and read off the chord's notes, semitone intervals, MIDI numbers, Hz frequencies, every inversion, plus a piano visualization and Web Audio chord / arpeggio playback. |
+| [Slippy Map Tile Calculator](maptile.html) | Convert WGS-84 lat/lon ↔ XYZ slippy-map tiles at any zoom — see the tile's NW/SE bounds, pixel offset within the tile, ground resolution in m/px, TMS-flipped Y, Bing quadkey, and copy-ready URL templates for OSM, CartoDB, Stamen, Esri, Bing, and Google Maps. |
 | [Caddyfile Builder](caddyfile.html) | Compose a Caddy v2 `Caddyfile` by clicking instead of memorising directives — site blocks can mix `reverse_proxy`, `file_server`, redirects, custom headers, gzip / zstd encoding, basic auth, request logging, and TLS overrides. Automatic HTTPS is on by default for real hostnames. |
 | [GitHub Actions Matrix Expander](ghmatrix.html) | Paste a `strategy.matrix` block and see every job the runner will spawn. Handles cartesian product, `include` entries that either extend an existing combination or append a brand-new job, and `exclude` filters — the same order and semantics the real GHA runner uses. |
 | [PAC File Builder & Tester](pac.html) | Build a Proxy Auto-Config `FindProxyForURL` with a rule editor — match by host suffix, exact host, IP range, scheme, glob, or substring, then route to `DIRECT`, `PROXY`, `SOCKS5`, or `HTTPS`. Live single-URL and batch test runners use the same evaluation order browsers do. |
