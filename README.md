@@ -249,6 +249,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Julian Date Converter](juliandate.html) | Convert calendar date ⇄ Julian Date (JD), Modified JD, Reduced JD, Truncated JD, Dublin JD, J2000 days, ANSI Date, and Unix epoch — handles proleptic vs. historical Julian/Gregorian, with day-of-year, day-of-week, and JDN integer view. |
+| [Trigonometry Calculator](trigcalc.html) | Evaluate sin/cos/tan, csc/sec/cot, asin/acos/atan, atan2(y, x), and the hyperbolic family for any angle. Live unit-circle diagram, degrees/radians toggle, exact-value table, and identity cheat sheet. |
+| [Temperature Converter](tempconvert.html) | Convert across eight scales at once — Celsius, Fahrenheit, Kelvin, Rankine, Réaumur, Newton, Delisle, and Rømer — with reference-point presets (absolute zero → sun surface) and an absolute-zero violation warning. |
 | [Syslog Message Parser & Builder](syslog.html) | Parse and build syslog messages in RFC&nbsp;5424 and RFC&nbsp;3164 (BSD) formats — split the PRI value into facility and severity, walk structured-data elements (`[SD-ID@PEN k="v"]`), and compose new lines field by field with NILVALUE handling and a live binary/hex view of the PRI. |
 | [Music Chord Builder](chordbuilder.html) | Pick a root and quality (major, minor, dim, aug, sus, 7, m7, maj7, m7♭5, dim7, 9, 11, 13, add9, …) and read off the chord's notes, semitone intervals, MIDI numbers, Hz frequencies, every inversion, plus a piano visualization and Web Audio chord / arpeggio playback. |
 | [Slippy Map Tile Calculator](maptile.html) | Convert WGS-84 lat/lon ↔ XYZ slippy-map tiles at any zoom — see the tile's NW/SE bounds, pixel offset within the tile, ground resolution in m/px, TMS-flipped Y, Bing quadkey, and copy-ready URL templates for OSM, CartoDB, Stamen, Esri, Bing, and Google Maps. |

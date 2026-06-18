@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Julian Date Converter — JD, MJD, TJD, RJD, Day-of-Year</title>
+<meta name="description" content="Convert between calendar date and Julian Date (JD), Modified Julian Date (MJD), Reduced JD, Truncated JD, ANSI day, Dublin JD, and J2000 epoch days. Used in astronomy, satellite ephemerides, and many legacy mainframe systems.">
+<meta name="keywords" content="julian date, modified julian date, MJD, JDN, J2000, dublin JD, gregorian, astronomy, day of year">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/juliandate.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .row { grid-template-columns: 1fr; } }
+  .field { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .field label { display: block; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; padding: 9px 11px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg); color: var(--text);
+    box-sizing: border-box;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; align-items: center; font-size: .85rem; }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); }
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 14px; }
+  .result { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+  .result .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-family: var(--mono); }
+  .result .v { font-family: var(--mono); font-size: 1rem; font-weight: 600; margin-top: 4px; word-break: break-all; }
+  .result .note { font-size: .72rem; color: var(--muted); margin-top: 4px; font-family: var(--sans); }
+  .err { color: var(--error); font-size: .85rem; margin-top: 10px; min-height: 1.2em; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .presets button {
+    padding: 4px 10px; font-size: .75rem;
+    border: 1px solid var(--border); border-radius: 99px;
+    background: var(--surface); color: var(--muted); cursor: pointer; font-family: var(--mono);
+  }
+  .presets button:hover { background: var(--surface2); color: var(--text); }
+  .reverse-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 768px) { .reverse-grid { grid-template-columns: 1fr; } }
+  .epoch-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .epoch-table th, .epoch-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; font-family: var(--mono); }
+  .epoch-table th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .epoch-table td.label { font-family: var(--sans); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Julian Date Converter</h1>
+<p class="subtitle">Convert any moment to and from the Julian Date family &mdash; the day-numbering system astronomers, satellite operators, and mainframe shops have used since 1583. The integer part is the Julian Day Number; the fractional part is the time of day measured from noon UT. Modified JD (MJD) subtracts 2&#x202F;400&#x202F;000.5 to give a smaller number whose integer roll-over is midnight.</p>
+
+<div class="card">
+  <h2>Calendar → Julian Date</h2>
+  <div class="row">
+    <div class="field">
+      <label for="dt">Date and time</label>
+      <input id="dt" type="datetime-local" step="1">
+    </div>
+    <div class="field">
+      <label>Time zone</label>
+      <div class="controls" style="margin-top:0;">
+        <label><input type="radio" name="tz" value="utc" checked onchange="forward()"> UTC</label>
+        <label><input type="radio" name="tz" value="local" onchange="forward()"> Local (<span id="tzname"></span>)</label>
+      </div>
+      <div class="controls">
+        <label><input type="checkbox" id="proleptic" onchange="forward()"> Treat dates before 1582-10-15 as proleptic Gregorian (vs. Julian calendar)</label>
+      </div>
+    </div>
+  </div>
+  <div class="presets">
+    <span style="font-size:.75rem;color:var(--muted);align-self:center;font-family:var(--sans);">Quick:</span>
+    <button onclick="quick('now')">now</button>
+    <button onclick="quick('j2000')">J2000.0 epoch</button>
+    <button onclick="quick('unix')">Unix epoch</button>
+    <button onclick="quick('mjd')">MJD epoch (1858)</button>
+    <button onclick="quick('y2k')">2000-01-01 00:00</button>
+  </div>
+  <div class="err" id="err1"></div>
+  <div class="results" id="fwd"></div>
+</div>
+
+<div class="card">
+  <h2>Julian Date → Calendar</h2>
+  <div class="reverse-grid">
+    <div class="field">
+      <label for="jdIn">Variant</label>
+      <select id="jdIn" onchange="reverse()">
+        <option value="jd">Julian Date (JD)</option>
+        <option value="mjd">Modified Julian Date (MJD)</option>
+        <option value="rjd">Reduced JD (RJD)</option>
+        <option value="tjd">Truncated JD (TJD)</option>
+        <option value="djd">Dublin JD (DJD)</option>
+        <option value="j2000">J2000 days</option>
+        <option value="ansi">ANSI Date (days since 1601-01-01)</option>
+        <option value="jdn">Julian Day Number (integer)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="jdVal">Value</label>
+      <input id="jdVal" type="number" step="any" inputmode="decimal" value="2451545.0">
+    </div>
+  </div>
+  <div class="err" id="err2"></div>
+  <div class="results" id="rev"></div>
+</div>
+
+<div class="card">
+  <h2>Variant reference</h2>
+  <table class="epoch-table">
+    <thead><tr><th>Variant</th><th>Offset from JD</th><th>Epoch (JD = 0 or 0.0 there)</th><th>Where you see it</th></tr></thead>
+    <tbody>
+      <tr><td class="label">Julian Date (JD)</td><td>0</td><td>−4713-01-01 12:00 UT (Julian cal.)</td><td>Astronomy ephemerides</td></tr>
+      <tr><td class="label">Modified JD (MJD)</td><td>JD − 2400000.5</td><td>1858-11-17 00:00 UT</td><td>IERS, GPS, satellite telemetry</td></tr>
+      <tr><td class="label">Reduced JD (RJD)</td><td>JD − 2400000</td><td>1858-11-16 12:00 UT</td><td>Older astronomy literature</td></tr>
+      <tr><td class="label">Truncated JD (TJD)</td><td>JD − 2440000.5</td><td>1968-05-24 00:00 UT</td><td>NASA, code that needs 4-digit JD</td></tr>
+      <tr><td class="label">Dublin JD (DJD)</td><td>JD − 2415020</td><td>1899-12-31 12:00 UT</td><td>IAU, older almanacs</td></tr>
+      <tr><td class="label">J2000 days</td><td>JD − 2451545.0</td><td>2000-01-01 12:00 UT</td><td>Modern astrodynamics, SGP4</td></tr>
+      <tr><td class="label">ANSI Date</td><td>JDN − 2305814</td><td>1601-01-01 00:00 (proleptic Greg.)</td><td>COBOL, mainframes, Windows</td></tr>
+      <tr><td class="label">Unix time / 86400</td><td>JD − 2440587.5</td><td>1970-01-01 00:00 UT</td><td>POSIX</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Notes</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65;">
+    The classic <b>Julian Date</b> starts a new day at <b>noon Universal Time</b> &mdash; that's why JD 0 begins at noon on 1 January 4713 BC in the proleptic Julian calendar. MJD shifts the start to midnight by subtracting 2&#x202F;400&#x202F;000.5, which is what made it the practical choice for engineering. Conversion uses Fliegel & Van Flandern's 1968 integer algorithm.
+    Before <b>1582-10-15</b> the Gregorian reform hadn't happened yet, so dates differ from the proleptic extension. Tick the proleptic Gregorian box if you want to treat early dates as if Pope Gregory's calendar had always been in effect &mdash; most astronomy software does. Note this tool does <b>not</b> apply leap seconds: it treats UT as a uniform scale equal to UTC for practical purposes.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const UNIX_JD = 2440587.5;
+const MJD_OFFSET = 2400000.5;
+const RJD_OFFSET = 2400000;
+const TJD_OFFSET = 2440000.5;
+const DJD_OFFSET = 2415020;
+const J2000_JD   = 2451545.0;
+const ANSI_EPOCH_JD = 2305813.5;  // JD for 1601-01-01 00:00 UT
+
+function pad(n, w=2) { return String(n).padStart(w, '0'); }
+
+function isoUtc(d) {
+  return d.getUTCFullYear() + '-' + pad(d.getUTCMonth()+1) + '-' + pad(d.getUTCDate()) +
+    'T' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds()) + 'Z';
+}
+
+function setNow() {
+  const d = new Date();
+  const iso = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+    'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  $('dt').value = iso;
+}
+
+function getTz() {
+  return document.querySelector('input[name="tz"]:checked').value;
+}
+
+// Convert a calendar Y/M/D h:m:s (UT) to JD.
+// proleptic: if true, treat ALL dates as Gregorian calendar; if false, dates < 1582-10-15 use Julian calendar.
+function ymd2jd(Y, M, D, h, m, s, proleptic) {
+  // is this date Gregorian?
+  let gregorian;
+  if (proleptic) gregorian = true;
+  else {
+    if (Y > 1582) gregorian = true;
+    else if (Y < 1582) gregorian = false;
+    else if (M > 10) gregorian = true;
+    else if (M < 10) gregorian = false;
+    else gregorian = D >= 15;
+  }
+  let a = Math.floor((14 - M) / 12);
+  let y = Y + 4800 - a;
+  let mo = M + 12 * a - 3;
+  let JDN;
+  if (gregorian) {
+    JDN = D + Math.floor((153 * mo + 2) / 5) + 365 * y +
+          Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
+  } else {
+    JDN = D + Math.floor((153 * mo + 2) / 5) + 365 * y +
+          Math.floor(y / 4) - 32083;
+  }
+  const dayFrac = (h - 12) / 24 + m / 1440 + s / 86400;
+  return JDN + dayFrac;
+}
+
+// Convert JD to calendar Y/M/D h:m:s (UT).
+function jd2ymd(jd, proleptic) {
+  const J = jd + 0.5;
+  const Z = Math.floor(J);
+  const F = J - Z;
+  let A;
+  if (proleptic || Z >= 2299161) {
+    const alpha = Math.floor((Z - 1867216.25) / 36524.25);
+    A = Z + 1 + alpha - Math.floor(alpha / 4);
+  } else {
+    A = Z;
+  }
+  const B = A + 1524;
+  const C = Math.floor((B - 122.1) / 365.25);
+  const D = Math.floor(365.25 * C);
+  const E = Math.floor((B - D) / 30.6001);
+  const day = B - D - Math.floor(30.6001 * E) + F;
+  const month = E < 14 ? E - 1 : E - 13;
+  const year = month > 2 ? C - 4716 : C - 4715;
+  const dayInt = Math.floor(day);
+  let secs = (day - dayInt) * 86400;
+  secs = Math.round(secs * 1000) / 1000;
+  let h = Math.floor(secs / 3600); secs -= h * 3600;
+  let m = Math.floor(secs / 60); secs -= m * 60;
+  let s = secs;
+  // handle rounding overflow
+  let dD = dayInt;
+  if (s >= 60 - 1e-6) { s = 0; m++; }
+  if (m >= 60) { m = 0; h++; }
+  if (h >= 24) { h = 0; dD++; }
+  return { year, month, day: dD, h, m, s };
+}
+
+function dayOfYear(Y, M, D, proleptic) {
+  const startJD = ymd2jd(Y, 1, 1, 12, 0, 0, proleptic);
+  const curJD = ymd2jd(Y, M, D, 12, 0, 0, proleptic);
+  return Math.round(curJD - startJD) + 1;
+}
+
+function dayOfWeek(jdn) {
+  // Monday = 0, ... Sunday = 6 (ISO)
+  const d = ((Math.floor(jdn + 0.5)) % 7 + 7) % 7;
+  // JDN 0 was Monday → adjust: JD 0.5 = JDN 0 = 4713-01-02 Julian Mon
+  // Actually JDN mod 7 gives: 0→Mon, 1→Tue, ...
+  const names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  return names[d];
+}
+
+function tile(k, v, note) {
+  return `<div class="result"><div class="k">${k}</div><div class="v">${v}</div>${note ? `<div class="note">${note}</div>` : ''}</div>`;
+}
+
+function fmtJd(v, digits=6) {
+  const s = Number(v).toFixed(digits);
+  return s;
+}
+
+function forward() {
+  $('err1').textContent = '';
+  const raw = $('dt').value;
+  if (!raw) { $('fwd').innerHTML = '<div style="color:var(--muted);font-size:.85rem;">Pick a date and time.</div>'; return; }
+  const tz = getTz();
+  const proleptic = $('proleptic').checked;
+  let Y, M, D, h, m, s;
+  // raw is YYYY-MM-DDTHH:mm or with seconds
+  const re = /^(-?\d+)-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}(?:\.\d+)?))?$/;
+  const mr = raw.match(re);
+  if (!mr) { $('err1').textContent = 'Invalid date.'; return; }
+  Y = parseInt(mr[1], 10); M = parseInt(mr[2], 10); D = parseInt(mr[3], 10);
+  h = parseInt(mr[4], 10); m = parseInt(mr[5], 10); s = mr[6] ? parseFloat(mr[6]) : 0;
+
+  if (tz === 'local') {
+    // shift to UTC
+    const d = new Date(Y, M-1, D, h, m, Math.floor(s), (s%1)*1000);
+    Y = d.getUTCFullYear(); M = d.getUTCMonth()+1; D = d.getUTCDate();
+    h = d.getUTCHours(); m = d.getUTCMinutes();
+    s = d.getUTCSeconds() + d.getUTCMilliseconds()/1000;
+  }
+
+  const jd = ymd2jd(Y, M, D, h, m, s, proleptic);
+  const jdn = Math.floor(jd + 0.5);
+  const mjd = jd - MJD_OFFSET;
+  const rjd = jd - RJD_OFFSET;
+  const tjd = jd - TJD_OFFSET;
+  const djd = jd - DJD_OFFSET;
+  const j2k = jd - J2000_JD;
+  const ansi = Math.floor(jd - ANSI_EPOCH_JD);
+  const unix = (jd - UNIX_JD) * 86400;
+  const doy = dayOfYear(Y, M, D, proleptic);
+  const dow = dayOfWeek(jdn);
+
+  $('fwd').innerHTML = [
+    tile('Julian Date (JD)', fmtJd(jd, 6), 'noon-based, fractional'),
+    tile('Modified JD (MJD)', fmtJd(mjd, 6), 'midnight-based'),
+    tile('Reduced JD (RJD)', fmtJd(rjd, 6)),
+    tile('Truncated JD (TJD)', fmtJd(tjd, 6)),
+    tile('Dublin JD (DJD)', fmtJd(djd, 6)),
+    tile('J2000 days', fmtJd(j2k, 8)),
+    tile('JD Number (JDN)', String(jdn), 'integer'),
+    tile('ANSI Date', String(ansi), 'days since 1601-01-01'),
+    tile('Unix epoch (s)', s_round(unix, 3)),
+    tile('Day of year', String(doy) + ' / ' + (isLeap(Y, proleptic) ? 366 : 365)),
+    tile('Day of week', dow),
+    tile('UTC ISO', pad(Y, 4) + '-' + pad(M) + '-' + pad(D) + 'T' + pad(h) + ':' + pad(m) + ':' + pad(Math.floor(s)) + 'Z'),
+  ].join('');
+}
+
+function s_round(v, d) {
+  const s = Number(v).toFixed(d);
+  return s.replace(/\.?0+$/, '');
+}
+
+function isLeap(Y, proleptic) {
+  if (proleptic || Y > 1582) return (Y % 4 === 0 && Y % 100 !== 0) || (Y % 400 === 0);
+  return Y % 4 === 0;
+}
+
+function reverse() {
+  $('err2').textContent = '';
+  const variant = $('jdIn').value;
+  const v = parseFloat($('jdVal').value);
+  if (!isFinite(v)) { $('rev').innerHTML = '<div style="color:var(--muted);font-size:.85rem;">Enter a number.</div>'; return; }
+  let jd;
+  switch (variant) {
+    case 'jd':  jd = v; break;
+    case 'mjd': jd = v + MJD_OFFSET; break;
+    case 'rjd': jd = v + RJD_OFFSET; break;
+    case 'tjd': jd = v + TJD_OFFSET; break;
+    case 'djd': jd = v + DJD_OFFSET; break;
+    case 'j2000': jd = v + J2000_JD; break;
+    case 'ansi': jd = v + ANSI_EPOCH_JD; break;
+    case 'jdn': jd = v - 0.5; break;
+  }
+  const proleptic = $('proleptic').checked;
+  const c = jd2ymd(jd, proleptic);
+  const yearStr = c.year < 0 ? '-' + pad(-c.year, 4) : pad(c.year, 4);
+  const iso = yearStr + '-' + pad(c.month) + '-' + pad(c.day) + 'T' +
+    pad(c.h) + ':' + pad(c.m) + ':' + pad(Math.floor(c.s)) + 'Z';
+  const jdn = Math.floor(jd + 0.5);
+  const unix = (jd - UNIX_JD) * 86400;
+
+  $('rev').innerHTML = [
+    tile('Calendar (UTC)', iso),
+    tile('Julian Date (JD)', fmtJd(jd, 6)),
+    tile('Modified JD', fmtJd(jd - MJD_OFFSET, 6)),
+    tile('Day of week', dayOfWeek(jdn)),
+    tile('Unix epoch (s)', s_round(unix, 3)),
+    tile('Equivalent JS Date', isoOrBlank(unix)),
+  ].join('');
+}
+
+function isoOrBlank(unix) {
+  const ms = unix * 1000;
+  if (!isFinite(ms) || ms < -8.64e15 || ms > 8.64e15) return '(out of Date range)';
+  return new Date(ms).toISOString();
+}
+
+function quick(name) {
+  if (name === 'now') {
+    setNow();
+    document.querySelector('input[name="tz"][value="local"]').checked = true;
+  } else if (name === 'j2000') {
+    $('dt').value = '2000-01-01T12:00:00';
+    document.querySelector('input[name="tz"][value="utc"]').checked = true;
+  } else if (name === 'unix') {
+    $('dt').value = '1970-01-01T00:00:00';
+    document.querySelector('input[name="tz"][value="utc"]').checked = true;
+  } else if (name === 'mjd') {
+    $('dt').value = '1858-11-17T00:00:00';
+    document.querySelector('input[name="tz"][value="utc"]').checked = true;
+  } else if (name === 'y2k') {
+    $('dt').value = '2000-01-01T00:00:00';
+    document.querySelector('input[name="tz"][value="utc"]').checked = true;
+  }
+  forward();
+}
+
+try {
+  $('tzname').textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
+} catch (e) { $('tzname').textContent = 'local'; }
+
+['dt'].forEach(id => $(id).addEventListener('input', forward));
+['jdVal'].forEach(id => $(id).addEventListener('input', reverse));
+
+setNow();
+forward();
+reverse();
+</script>
+</body>
+</html>
