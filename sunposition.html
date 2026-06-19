@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sun Position &amp; Solar Times Calculator — Free Online Tool</title>
+<meta name="description" content="Compute the sun's altitude, azimuth, sunrise, sunset, solar noon, golden hour, and civil / nautical / astronomical twilight for any latitude, longitude, date, and time — 100% client-side using NOAA's solar position algorithm.">
+<meta name="keywords" content="sun position, solar calculator, sunrise, sunset, solar noon, golden hour, blue hour, civil twilight, nautical twilight, astronomical twilight, azimuth, altitude, declination, NOAA SPA, photography golden hour">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sunposition.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 768px) { .row, .row3 { grid-template-columns: 1fr; } }
+  .field { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .field label { display: block; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; padding: 9px 11px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg); color: var(--text);
+    box-sizing: border-box;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .presets button {
+    padding: 4px 10px; font-size: .75rem;
+    border: 1px solid var(--border); border-radius: 99px;
+    background: var(--surface); color: var(--muted); cursor: pointer; font-family: var(--mono);
+  }
+  .presets button:hover { background: var(--surface2); color: var(--text); }
+  .grid-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 14px; }
+  .tile { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+  .tile .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-family: var(--mono); }
+  .tile .v { font-family: var(--mono); font-size: 1rem; font-weight: 600; margin-top: 4px; word-break: break-word; }
+  .tile .note { font-size: .72rem; color: var(--muted); margin-top: 4px; }
+  .events-table { width: 100%; border-collapse: collapse; font-size: .88rem; margin-top: 6px; }
+  .events-table th, .events-table td {
+    padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; font-family: var(--mono);
+  }
+  .events-table th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .events-table td.label { font-family: var(--sans); color: var(--text); }
+  .events-table td.swatch { width: 18px; padding-right: 0; }
+  .sw {
+    display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); vertical-align: middle;
+  }
+  .err { color: var(--error); font-size: .85rem; margin-top: 10px; min-height: 1.2em; }
+  .sky-svg { width: 100%; max-width: 520px; margin: 14px auto 0; display: block; }
+  .arc-svg  { width: 100%; max-width: 720px; margin: 14px auto 0; display: block; }
+  .phases-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); margin-top: 10px; font-family: var(--mono); font-size: .7rem; color: #fff; }
+  .phases-bar > div { display: flex; align-items: center; justify-content: center; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; font-size: .78rem; color: var(--muted); font-family: var(--sans); }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Sun Position &amp; Solar Times</h1>
+<p class="subtitle">Compute the sun's <b>altitude</b> and <b>azimuth</b> for any place and instant, plus the day's sunrise, sunset, solar noon, golden &amp; blue hours, and civil / nautical / astronomical twilight times. Uses NOAA's solar position algorithm &mdash; accurate to about one arc-minute for the next few centuries. Calculations run in your browser; nothing is sent anywhere.</p>
+
+<div class="card">
+  <h2>Location &amp; time</h2>
+  <div class="row3">
+    <div class="field">
+      <label for="lat">Latitude (°, +N / &minus;S)</label>
+      <input id="lat" type="number" step="any" value="40.7128" inputmode="decimal">
+    </div>
+    <div class="field">
+      <label for="lon">Longitude (°, +E / &minus;W)</label>
+      <input id="lon" type="number" step="any" value="-74.0060" inputmode="decimal">
+    </div>
+    <div class="field">
+      <label for="tzOff">UTC offset (hours)</label>
+      <input id="tzOff" type="number" step="0.25" value="-5" inputmode="decimal">
+    </div>
+  </div>
+  <div class="row">
+    <div class="field">
+      <label for="dt">Date &amp; time (local at chosen offset)</label>
+      <input id="dt" type="datetime-local" step="60">
+    </div>
+    <div class="field">
+      <label for="elev">Elevation (m, optional)</label>
+      <input id="elev" type="number" step="any" value="0" inputmode="decimal">
+    </div>
+  </div>
+  <div class="presets">
+    <span style="font-size:.75rem;color:var(--muted);align-self:center;font-family:var(--sans);">Quick locations:</span>
+    <button onclick="preset(40.7128,-74.0060,-5,'New York')">New York</button>
+    <button onclick="preset(51.5074,-0.1278,0,'London')">London</button>
+    <button onclick="preset(35.6762,139.6503,9,'Tokyo')">Tokyo</button>
+    <button onclick="preset(-33.8688,151.2093,11,'Sydney')">Sydney</button>
+    <button onclick="preset(64.1466,-21.9426,0,'Reykjavik')">Reykjavik</button>
+    <button onclick="preset(0,0,0,'Null Island')">0,0</button>
+    <button onclick="useGeolocation()">📍 my location</button>
+    <button onclick="setNow()">🕒 now</button>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<div class="card">
+  <h2>Sun position at the chosen instant</h2>
+  <div class="grid-tiles" id="instant"></div>
+  <svg class="sky-svg" id="sky" viewBox="0 0 520 280" aria-label="Sky dome with sun position"></svg>
+  <div class="legend">
+    <span><span class="sw" style="background:#fbbf24"></span> sun</span>
+    <span><span class="sw" style="background:#1e293b"></span> horizon</span>
+    <span style="color:var(--muted);">azimuth measured clockwise from due north; altitude from horizon</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Solar events for this date</h2>
+  <table class="events-table" id="events">
+    <thead><tr><th></th><th>Event</th><th>Local time</th><th>UTC</th><th>Sun altitude</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="phases-bar" id="phases"></div>
+  <div class="legend" id="phasesLegend"></div>
+  <svg class="arc-svg" id="arc" viewBox="0 0 720 280" aria-label="Sun altitude across the day"></svg>
+</div>
+
+<div class="card">
+  <h2>Notes</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65;">
+    <b>Azimuth</b> is the compass bearing of the sun &mdash; 0° due north, 90° east, 180° south, 270° west. <b>Altitude</b> (or elevation) is the angle above the local horizon; negative means the sun is below it.
+    The horizon dip for elevation is small but non-zero, e.g. about 0.06° at sea level for atmospheric refraction (≈34 arc-minutes is used here, matching the USNO definition of sunrise). At high latitudes inside the polar circles, some events have no time on certain dates &mdash; "&mdash;" means the sun never crosses that altitude that day.
+    <b>Golden hour</b> is when the sun is between &minus;4° and +6°, producing warm, soft light photographers love. <b>Blue hour</b> is when the sun is between &minus;6° and &minus;4°, the brief deep-blue interval before sunrise and after sunset.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const DEG = Math.PI / 180;
+const RAD = 180 / Math.PI;
+
+function pad(n, w=2) { return String(Math.floor(n)).padStart(w, '0'); }
+
+function setNow() {
+  const off = parseFloat($('tzOff').value) || 0;
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const local = new Date(utc + off * 3600000);
+  $('dt').value = local.getUTCFullYear() + '-' + pad(local.getUTCMonth()+1) + '-' + pad(local.getUTCDate())
+    + 'T' + pad(local.getUTCHours()) + ':' + pad(local.getUTCMinutes());
+  compute();
+}
+
+function preset(lat, lon, off, label) {
+  $('lat').value = lat; $('lon').value = lon; $('tzOff').value = off;
+  setNow();
+}
+
+function useGeolocation() {
+  if (!navigator.geolocation) { $('err').textContent = 'Geolocation not supported in this browser.'; return; }
+  navigator.geolocation.getCurrentPosition(p => {
+    $('lat').value = p.coords.latitude.toFixed(4);
+    $('lon').value = p.coords.longitude.toFixed(4);
+    $('tzOff').value = -new Date().getTimezoneOffset() / 60;
+    setNow();
+  }, e => { $('err').textContent = 'Geolocation failed: ' + e.message; });
+}
+
+// Parse the datetime-local input as a wall-clock at the user's chosen UTC offset.
+// Returns a JS Date representing the same instant in absolute time.
+function parseInputInstant() {
+  const raw = $('dt').value;
+  const off = parseFloat($('tzOff').value) || 0;
+  const m = raw.match(/^(\d+)-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const Y = +m[1], M = +m[2], D = +m[3], h = +m[4], mi = +m[5];
+  // construct UTC instant: subtract the offset
+  const utcMs = Date.UTC(Y, M-1, D, h, mi) - off * 3600000;
+  return new Date(utcMs);
+}
+
+// --- Solar position math (NOAA SPA, simplified). All angles in degrees unless noted. ---
+
+function julianDate(d) {
+  return d.getTime() / 86400000 + 2440587.5;
+}
+
+function julianCenturies(jd) {
+  return (jd - 2451545.0) / 36525.0;
+}
+
+function solarPosition(date, lat, lon) {
+  const jd = julianDate(date);
+  const T = julianCenturies(jd);
+  // Geometric mean longitude (°)
+  let L0 = 280.46646 + T * (36000.76983 + T * 0.0003032);
+  L0 = ((L0 % 360) + 360) % 360;
+  // Mean anomaly (°)
+  const M = 357.52911 + T * (35999.05029 - 0.0001537 * T);
+  // Eccentricity
+  const e = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);
+  // Equation of center
+  const Mr = M * DEG;
+  const C = Math.sin(Mr) * (1.914602 - T * (0.004817 + 0.000014 * T))
+          + Math.sin(2 * Mr) * (0.019993 - 0.000101 * T)
+          + Math.sin(3 * Mr) * 0.000289;
+  // True longitude (°)
+  const trueLon = L0 + C;
+  // Apparent longitude (°)
+  const Omega = 125.04 - 1934.136 * T;
+  const lambda = trueLon - 0.00569 - 0.00478 * Math.sin(Omega * DEG);
+  // Mean obliquity of ecliptic
+  const seconds = 21.448 - T * (46.8150 + T * (0.00059 - T * 0.001813));
+  const e0 = 23 + (26 + seconds / 60) / 60;
+  // Corrected obliquity
+  const eps = e0 + 0.00256 * Math.cos(Omega * DEG);
+  // Right ascension (°)
+  const ra = Math.atan2(Math.cos(eps * DEG) * Math.sin(lambda * DEG), Math.cos(lambda * DEG)) * RAD;
+  // Declination (°)
+  const dec = Math.asin(Math.sin(eps * DEG) * Math.sin(lambda * DEG)) * RAD;
+  // Equation of time (minutes)
+  const y = Math.tan(eps / 2 * DEG); const y2 = y * y;
+  const eot = 4 * RAD * (
+    y2 * Math.sin(2 * L0 * DEG)
+    - 2 * e * Math.sin(M * DEG)
+    + 4 * e * y2 * Math.sin(M * DEG) * Math.cos(2 * L0 * DEG)
+    - 0.5 * y2 * y2 * Math.sin(4 * L0 * DEG)
+    - 1.25 * e * e * Math.sin(2 * M * DEG)
+  );
+  // True solar time (minutes from local midnight UTC)
+  const utcMin = (date.getUTCHours() * 60 + date.getUTCMinutes() + date.getUTCSeconds() / 60);
+  const tst = (utcMin + eot + 4 * lon) % 1440;
+  // Hour angle (°)
+  let ha = tst / 4 - 180;
+  if (ha < -180) ha += 360;
+  // Altitude (°)
+  const latR = lat * DEG, decR = dec * DEG, haR = ha * DEG;
+  const sinAlt = Math.sin(latR) * Math.sin(decR) + Math.cos(latR) * Math.cos(decR) * Math.cos(haR);
+  const alt = Math.asin(Math.max(-1, Math.min(1, sinAlt))) * RAD;
+  // Atmospheric refraction (Sæmundsson 1986)
+  let refr = 0;
+  if (alt > -0.575) {
+    const te = alt + 10.3 / (alt + 5.11);
+    refr = 1.02 / Math.tan(te * DEG) / 60;
+  } else {
+    refr = -20.774 / Math.tan(alt * DEG) / 3600;
+  }
+  const altRefr = alt + refr;
+  // Azimuth (°, 0 = N, clockwise)
+  const cosAz = (Math.sin(decR) - Math.sin(alt * DEG) * Math.sin(latR)) / (Math.cos(alt * DEG) * Math.cos(latR));
+  let az = Math.acos(Math.max(-1, Math.min(1, cosAz))) * RAD;
+  if (ha > 0) az = 360 - az;
+  return { jd, T, L0, M, e, ra, dec, eot, tst, ha, alt, altRefr, az, lambda, eps };
+}
+
+// Time (in minutes since UTC midnight of the local date) at which the sun reaches angle `targetAlt`.
+// rising=true → morning crossing; false → evening. Returns null if it never crosses.
+function timeAtAltitude(localDateUtcMid, lat, lon, targetAlt, rising) {
+  // Use formula: cos(H) = (sin(alt) - sin(lat)*sin(dec)) / (cos(lat)*cos(dec)).
+  // Approximate using solar position at local noon to get dec / eot.
+  const noon = new Date(localDateUtcMid.getTime() + 12 * 3600000);
+  const sp = solarPosition(noon, lat, lon);
+  const decR = sp.dec * DEG, latR = lat * DEG;
+  const cosH = (Math.sin(targetAlt * DEG) - Math.sin(latR) * Math.sin(decR)) / (Math.cos(latR) * Math.cos(decR));
+  if (cosH > 1 || cosH < -1) return null;
+  const Hdeg = Math.acos(cosH) * RAD;
+  // Solar noon (UTC minutes) = 720 - 4*lon - eot
+  const solarNoonMin = 720 - 4 * lon - sp.eot;
+  let minutes;
+  if (rising) minutes = solarNoonMin - 4 * Hdeg;
+  else        minutes = solarNoonMin + 4 * Hdeg;
+  return minutes;
+}
+
+function solarNoonMinutes(localDateUtcMid, lon) {
+  const noon = new Date(localDateUtcMid.getTime() + 12 * 3600000);
+  const sp = solarPosition(noon, 0, lon);
+  return 720 - 4 * lon - sp.eot;
+}
+
+function fmtMinUTC(mins) {
+  if (mins == null || !isFinite(mins)) return '—';
+  // Wrap to [0, 1440)
+  let m = ((mins % 1440) + 1440) % 1440;
+  return pad(m / 60) + ':' + pad(m % 60);
+}
+
+function fmtMinLocal(mins, off) {
+  if (mins == null || !isFinite(mins)) return '—';
+  let m = mins + off * 60;
+  m = ((m % 1440) + 1440) % 1440;
+  return pad(m / 60) + ':' + pad(m % 60);
+}
+
+function fmtDeg(v, d=2) {
+  if (!isFinite(v)) return '—';
+  return v.toFixed(d) + '°';
+}
+
+function cardinal(az) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(((az % 360) / 22.5)) % 16];
+}
+
+function compute() {
+  $('err').textContent = '';
+  const lat = parseFloat($('lat').value);
+  const lon = parseFloat($('lon').value);
+  const off = parseFloat($('tzOff').value) || 0;
+  if (!isFinite(lat) || lat < -90 || lat > 90) { $('err').textContent = 'Latitude must be between −90 and 90.'; return; }
+  if (!isFinite(lon) || lon < -180 || lon > 180) { $('err').textContent = 'Longitude must be between −180 and 180.'; return; }
+  const inst = parseInputInstant();
+  if (!inst) { $('err').textContent = 'Pick a valid date and time.'; return; }
+
+  const sp = solarPosition(inst, lat, lon);
+  const dayOfWeek = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][inst.getUTCDay()];
+  $('instant').innerHTML = [
+    tile('Altitude', fmtDeg(sp.altRefr, 3), sp.altRefr > 0 ? 'above horizon' : 'below horizon'),
+    tile('Azimuth', fmtDeg(sp.az, 2), cardinal(sp.az) + ' (from N, CW)'),
+    tile('Declination', fmtDeg(sp.dec, 3)),
+    tile('Right Ascension', fmtDeg(sp.ra, 3)),
+    tile('Equation of time', sp.eot.toFixed(2) + ' min'),
+    tile('Hour angle', fmtDeg(sp.ha, 2)),
+    tile('Julian Date', sp.jd.toFixed(5)),
+    tile('Day of week', dayOfWeek + ' (UTC)')
+  ].join('');
+
+  drawSky(sp.az, sp.altRefr);
+
+  // Local date midnight, as a UTC instant equal to `local 00:00 at this offset`.
+  const localY = inst.getUTCFullYear(), localM = inst.getUTCMonth(), localD = inst.getUTCDate();
+  const wallY = (() => {
+    const m = $('dt').value.match(/^(\d+)-(\d{2})-(\d{2})/); return m ? { Y:+m[1], M:+m[2]-1, D:+m[3] } : null;
+  })();
+  if (!wallY) return;
+  // Local midnight in UTC ms:
+  const localMidUtcMs = Date.UTC(wallY.Y, wallY.M, wallY.D) - off * 3600000;
+  const localMidUtc = new Date(localMidUtcMs);
+
+  const events = [
+    { key: 'astroDawn',  label: 'Astronomical dawn',  alt: -18, rise: true,  color: '#0f172a' },
+    { key: 'nautDawn',   label: 'Nautical dawn',      alt: -12, rise: true,  color: '#1e293b' },
+    { key: 'civilDawn',  label: 'Civil dawn',          alt: -6,  rise: true,  color: '#334155' },
+    { key: 'blueMorn',   label: 'Blue hour start',     alt: -6,  rise: true,  color: '#1d4ed8' },
+    { key: 'goldStart',  label: 'Golden hour start',   alt: -4,  rise: true,  color: '#a16207' },
+    { key: 'sunrise',    label: 'Sunrise',             alt: -0.833, rise: true, color: '#f59e0b' },
+    { key: 'goldEnd',    label: 'Golden hour end',     alt: 6,   rise: true,  color: '#fbbf24' },
+    { key: 'noon',       label: 'Solar noon',          alt: null, rise: null, color: '#fde68a' },
+    { key: 'goldStartE', label: 'Golden hour start (PM)', alt: 6, rise: false, color: '#fbbf24' },
+    { key: 'sunset',     label: 'Sunset',              alt: -0.833, rise: false, color: '#f59e0b' },
+    { key: 'goldEndE',   label: 'Golden hour end (PM)',alt: -4,  rise: false, color: '#a16207' },
+    { key: 'blueEve',    label: 'Blue hour end',       alt: -6,  rise: false, color: '#1d4ed8' },
+    { key: 'civilDusk',  label: 'Civil dusk',          alt: -6,  rise: false, color: '#334155' },
+    { key: 'nautDusk',   label: 'Nautical dusk',       alt: -12, rise: false, color: '#1e293b' },
+    { key: 'astroDusk',  label: 'Astronomical dusk',   alt: -18, rise: false, color: '#0f172a' },
+  ];
+  const tbody = $('events').querySelector('tbody');
+  tbody.innerHTML = '';
+  const times = {};
+  for (const ev of events) {
+    let mins;
+    if (ev.key === 'noon') {
+      mins = solarNoonMinutes(localMidUtc, lon);
+    } else {
+      mins = timeAtAltitude(localMidUtc, lat, lon, ev.alt, ev.rise);
+    }
+    times[ev.key] = mins;
+    const tr = document.createElement('tr');
+    let altText = '—';
+    if (mins != null && isFinite(mins)) {
+      const eventDate = new Date(localMidUtcMs + mins * 60000);
+      const sp2 = solarPosition(eventDate, lat, lon);
+      altText = fmtDeg(sp2.altRefr, 2);
+    }
+    tr.innerHTML = `<td class="swatch"><span class="sw" style="background:${ev.color}"></span></td>` +
+      `<td class="label">${ev.label}</td>` +
+      `<td>${fmtMinLocal(mins, off)}</td>` +
+      `<td>${fmtMinUTC(mins)}</td>` +
+      `<td>${altText}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  drawPhases(times);
+  drawArc(localMidUtcMs, lat, lon, off);
+}
+
+function tile(k, v, note) {
+  return `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>${note ? `<div class="note">${note}</div>` : ''}</div>`;
+}
+
+function drawSky(az, alt) {
+  // Half-dome view facing south (or just compass projection): use polar coords with N at top.
+  const W = 520, H = 280;
+  const cx = W / 2, cy = H - 20, R = Math.min(W/2 - 20, H - 40);
+  let svg = `<rect x="0" y="0" width="${W}" height="${H}" fill="var(--surface2)"/>`;
+  // Sky-dome gradient
+  svg += `<defs><linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+    <stop offset="0%" stop-color="#1e3a8a"/>
+    <stop offset="60%" stop-color="#60a5fa"/>
+    <stop offset="100%" stop-color="#bae6fd"/>
+  </linearGradient></defs>`;
+  svg += `<path d="M ${cx-R} ${cy} A ${R} ${R} 0 0 1 ${cx+R} ${cy} Z" fill="url(#sky)" opacity="0.6"/>`;
+  // Horizon line
+  svg += `<line x1="${cx-R}" y1="${cy}" x2="${cx+R}" y2="${cy}" stroke="#1e293b" stroke-width="2"/>`;
+  // Altitude rings (30°, 60°)
+  for (const a of [30, 60]) {
+    const r = R * (1 - a/90);
+    svg += `<path d="M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}" fill="none" stroke="var(--border)" stroke-dasharray="3 4"/>`;
+    svg += `<text x="${cx-r-4}" y="${cy-2}" font-size="9" fill="var(--muted)" text-anchor="end">${a}°</text>`;
+  }
+  // Compass marks (E left because we're looking south; user-friendly we'll do N up… but we're in a half dome — use a simple azimuth-angle along the arc).
+  // We'll draw the horizon as straight, with W on the left, E on the right (mirror so going clockwise from N matches the visual).
+  // Mark compass on the horizon
+  const markers = [{a:0,n:'N'},{a:90,n:'E'},{a:180,n:'S'},{a:270,n:'W'}];
+  for (const m of markers) {
+    // Skip if not visible (we can only show one hemisphere on a half-dome). Use horizontal projection:
+    // x offset along horizon = sin(az - 180) * R... we'll center facing south (az=180 in middle).
+    const off = ((m.a - 180 + 540) % 360) - 180; // -180..180
+    if (Math.abs(off) <= 90) {
+      const x = cx + (off / 90) * R;
+      svg += `<text x="${x}" y="${cy + 14}" font-size="11" fill="var(--text)" text-anchor="middle">${m.n}</text>`;
+      svg += `<line x1="${x}" y1="${cy}" x2="${x}" y2="${cy + 4}" stroke="var(--text)" stroke-width="1"/>`;
+    }
+  }
+  // Sun position: project (az, alt) onto half-dome
+  const off2 = ((az - 180 + 540) % 360) - 180;
+  if (alt > -10 && Math.abs(off2) <= 90) {
+    const r = R * (1 - Math.max(0, alt)/90);
+    const x = cx + (off2/90) * r;
+    const y = cy - r * Math.sin(Math.max(0, alt) * DEG) - Math.max(0, Math.abs(off2)/90 * 0); // simple
+    // Simpler: just compute (x,y) using polar
+    const altC = Math.max(0, alt);
+    const radius = R * Math.cos(altC * DEG);
+    const sx = cx + (off2/90) * radius;
+    const sy = cy - R * Math.sin(altC * DEG);
+    svg += `<circle cx="${sx}" cy="${sy}" r="12" fill="#fbbf24" stroke="#f59e0b" stroke-width="2"/>`;
+    svg += `<line x1="${sx}" y1="${cy}" x2="${sx}" y2="${sy}" stroke="#f59e0b" stroke-dasharray="2 3"/>`;
+  } else {
+    svg += `<text x="${cx}" y="${cy/2}" text-anchor="middle" fill="var(--muted)" font-size="12">Sun is below or outside the south-facing dome</text>`;
+  }
+  svg += `<text x="${cx}" y="20" text-anchor="middle" fill="var(--muted)" font-size="11">South-facing half-dome · north hidden</text>`;
+  $('sky').innerHTML = svg;
+}
+
+function drawPhases(t) {
+  // Build a 24h colored bar splitting day into nighttime/astro/naut/civil/golden/day/etc.
+  // We'll segment by thresholds; mins is local-UTC offset minutes from local midnight.
+  const off = parseFloat($('tzOff').value) || 0;
+  const seg = []; // {start, end, color, name}
+  const W = 1440;
+  // Order events along the day
+  function ev(key) {
+    if (t[key] == null) return null;
+    let m = t[key] + off * 60;
+    return ((m % W) + W) % W;
+  }
+  const pts = [
+    ['astroDawn',  '#0c111e', 'Night'],
+    ['nautDawn',   '#162033', 'Astro twilight'],
+    ['civilDawn',  '#28344b', 'Nautical twilight'],
+    ['sunrise',    '#7e7b9c', 'Civil twilight'],
+    ['goldEnd',    '#f59e0b', 'Golden hour'],
+    ['goldStartE', '#facc15', 'Day'],
+    ['sunset',     '#f59e0b', 'Golden hour'],
+    ['civilDusk',  '#7e7b9c', 'Civil twilight'],
+    ['nautDusk',   '#28344b', 'Nautical twilight'],
+    ['astroDusk',  '#162033', 'Astro twilight'],
+    [null,         '#0c111e', 'Night']
+  ];
+  let bar = '';
+  let prev = 0;
+  const labels = [];
+  for (const [key, color, name] of pts) {
+    const end = key ? ev(key) : W;
+    if (end == null) continue;
+    if (end > prev) {
+      const w = (end - prev) / W * 100;
+      bar += `<div style="width:${w}%;background:${color};">${w > 5 ? name : ''}</div>`;
+      labels.push({color, name});
+      prev = end;
+    }
+  }
+  if (prev < W) {
+    const w = (W - prev) / W * 100;
+    bar += `<div style="width:${w}%;background:#0c111e;">${w>5?'Night':''}</div>`;
+  }
+  $('phases').innerHTML = bar;
+
+  // De-duplicate legend
+  const seen = new Set();
+  let leg = '';
+  for (const l of labels) {
+    if (seen.has(l.name)) continue;
+    seen.add(l.name);
+    leg += `<span><span class="sw" style="background:${l.color}"></span>${l.name}</span>`;
+  }
+  $('phasesLegend').innerHTML = leg;
+}
+
+function drawArc(localMidUtcMs, lat, lon, off) {
+  const W = 720, H = 280;
+  const PADL = 40, PADR = 20, PADT = 20, PADB = 30;
+  let path = '';
+  let pts = [];
+  for (let m = 0; m <= 1440; m += 15) {
+    const d = new Date(localMidUtcMs + m * 60000);
+    const sp = solarPosition(d, lat, lon);
+    pts.push({m, alt: sp.altRefr});
+  }
+  const maxAlt = Math.max(...pts.map(p => p.alt));
+  const minAlt = Math.min(...pts.map(p => p.alt));
+  const top = Math.max(90, Math.ceil(maxAlt / 10) * 10);
+  const bot = Math.min(-90, Math.floor(minAlt / 10) * 10);
+  function x(m) { return PADL + (m / 1440) * (W - PADL - PADR); }
+  function y(a) { return PADT + (1 - (a - bot) / (top - bot)) * (H - PADT - PADB); }
+  let svg = `<rect x="0" y="0" width="${W}" height="${H}" fill="var(--surface2)"/>`;
+  // Horizon line
+  const yh = y(0);
+  svg += `<rect x="${PADL}" y="${PADT}" width="${W-PADL-PADR}" height="${yh-PADT}" fill="#bae6fd" opacity="0.3"/>`;
+  svg += `<rect x="${PADL}" y="${yh}" width="${W-PADL-PADR}" height="${H-PADB-yh}" fill="#0f172a" opacity="0.25"/>`;
+  svg += `<line x1="${PADL}" y1="${yh}" x2="${W-PADR}" y2="${yh}" stroke="var(--text)" stroke-width="1"/>`;
+  // Curve
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    path += (i === 0 ? 'M' : 'L') + ' ' + x(p.m).toFixed(2) + ' ' + y(p.alt).toFixed(2) + ' ';
+  }
+  svg += `<path d="${path}" fill="none" stroke="#f59e0b" stroke-width="2"/>`;
+  // Hour gridlines
+  for (let h = 0; h <= 24; h += 3) {
+    const xx = x(h * 60);
+    svg += `<line x1="${xx}" y1="${PADT}" x2="${xx}" y2="${H-PADB}" stroke="var(--border)" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${xx}" y="${H-PADB+14}" text-anchor="middle" font-size="10" fill="var(--muted)">${pad(h)}:00</text>`;
+  }
+  // Altitude gridlines
+  for (let a = bot; a <= top; a += 30) {
+    const yy = y(a);
+    svg += `<line x1="${PADL}" y1="${yy}" x2="${W-PADR}" y2="${yy}" stroke="var(--border)" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${PADL-4}" y="${yy+3}" text-anchor="end" font-size="10" fill="var(--muted)">${a}°</text>`;
+  }
+  // Current time marker
+  const inst = parseInputInstant();
+  if (inst) {
+    const m = (inst.getTime() - localMidUtcMs) / 60000;
+    if (m >= 0 && m <= 1440) {
+      const xx = x(m);
+      const sp = solarPosition(inst, lat, lon);
+      svg += `<line x1="${xx}" y1="${PADT}" x2="${xx}" y2="${H-PADB}" stroke="#dc2626" stroke-width="1.5"/>`;
+      svg += `<circle cx="${xx}" cy="${y(sp.altRefr)}" r="5" fill="#dc2626" stroke="#fff" stroke-width="2"/>`;
+    }
+  }
+  svg += `<text x="${(W-PADR+PADL)/2}" y="14" text-anchor="middle" font-size="11" fill="var(--muted)">Sun altitude across the day (local time, ${off >= 0 ? '+' : ''}${off}h UTC)</text>`;
+  $('arc').innerHTML = svg;
+}
+
+['lat','lon','tzOff','dt','elev'].forEach(id => $(id).addEventListener('input', compute));
+
+setNow();
+</script>
+</body>
+</html>

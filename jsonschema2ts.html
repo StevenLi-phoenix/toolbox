@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Schema → TypeScript Interface Generator — Free Online Tool</title>
+<meta name="description" content="Convert JSON Schema (draft 4 / 6 / 7 / 2019-09 / 2020-12) to clean TypeScript interfaces and type aliases — handles $ref, definitions, oneOf / anyOf / allOf, tuples, enums, const, additionalProperties, and patternProperties. Runs entirely in your browser.">
+<meta name="keywords" content="json schema to typescript, json schema ts, jsonschema2ts, json-schema-to-typescript, draft-07, $ref, definitions, ts interface generator, openapi schema typescript">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/jsonschema2ts.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
+  textarea {
+    width: 100%; min-height: 360px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .85rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical; line-height: 1.45;
+    tab-size: 2;
+  }
+  label.head { display: flex; justify-content: space-between; align-items: center; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .controls {
+    display: flex; gap: 14px 18px; flex-wrap: wrap; margin: 12px 0 4px;
+    font-size: .85rem; color: var(--text); align-items: center;
+  }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .controls select, .controls input[type="text"] {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem;
+  }
+  .err {
+    color: var(--error); font-size: .85rem; min-height: 1.2em; margin-top: 8px;
+    font-family: var(--mono);
+  }
+  .actions {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;
+  }
+  .actions button {
+    padding: 6px 12px; font-size: .82rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2); color: var(--text); cursor: pointer; font-family: var(--sans);
+  }
+  .actions button:hover { background: var(--surface); }
+  .actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .presets button {
+    padding: 4px 10px; font-size: .75rem;
+    border: 1px solid var(--border); border-radius: 99px;
+    background: var(--surface); color: var(--muted); cursor: pointer; font-family: var(--mono);
+  }
+  .presets button:hover { background: var(--surface2); color: var(--text); }
+  .stats {
+    display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px;
+    font-size: .8rem; color: var(--muted);
+  }
+  .stats strong { color: var(--text); font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>JSON Schema → TypeScript</h1>
+<p class="subtitle">Convert a <b>JSON Schema</b> document (draft 4 through 2020-12, plus OpenAPI 3.x schemas) into TypeScript <code>interface</code> and <code>type</code> declarations. Handles <code>$ref</code>, local <code>definitions</code> / <code>$defs</code>, <code>oneOf</code> / <code>anyOf</code> / <code>allOf</code>, tuples (<code>prefixItems</code>), <code>enum</code>, <code>const</code>, <code>additionalProperties</code>, and <code>patternProperties</code>. Everything runs locally; your schema never leaves the page.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Root name: <input id="rootName" type="text" value="Root" size="14"></label>
+    <label>Indent:
+      <select id="indent">
+        <option value="2">2 spaces</option>
+        <option value="4">4 spaces</option>
+        <option value="\t">tab</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="useInterface" checked> Use <code>interface</code> for objects</label>
+    <label><input type="checkbox" id="exportTypes" checked> <code>export</code> top-level types</label>
+    <label><input type="checkbox" id="readonly"> Mark all fields <code>readonly</code></label>
+    <label><input type="checkbox" id="strictAdd"> Strict (forbid extra props unless allowed)</label>
+    <label><input type="checkbox" id="addComments" checked> Emit JSDoc from <code>title</code> / <code>description</code></label>
+    <label><input type="checkbox" id="sortKeys"> Sort object keys</label>
+  </div>
+
+  <div class="panels">
+    <div>
+      <label class="head" for="input">JSON Schema input <button type="button" onclick="copyOut('input')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:.78rem;">copy</button></label>
+      <textarea id="input" spellcheck="false" placeholder='Paste a JSON Schema here, e.g. { "type": "object", "properties": { ... } }'></textarea>
+    </div>
+    <div>
+      <label class="head" for="output">TypeScript output <button type="button" onclick="copyOut('output')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:.78rem;">copy</button></label>
+      <textarea id="output" spellcheck="false" readonly></textarea>
+    </div>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="stats">
+    <span>schema chars <strong id="inChars">0</strong></span>
+    <span>types emitted <strong id="typeCount">0</strong></span>
+    <span>$refs resolved <strong id="refCount">0</strong></span>
+  </div>
+
+  <div class="presets">
+    <span style="font-size:.75rem;color:var(--muted);align-self:center;font-family:var(--sans);">Examples:</span>
+    <button onclick="loadExample('user')">User</button>
+    <button onclick="loadExample('product')">Product (refs)</button>
+    <button onclick="loadExample('event')">Event (oneOf)</button>
+    <button onclick="loadExample('paginated')">Paginated list</button>
+    <button onclick="loadExample('openapi')">OpenAPI Pet</button>
+    <button onclick="loadExample('tuple')">Tuple (prefixItems)</button>
+  </div>
+  <div class="actions">
+    <button class="primary" onclick="run()">Convert</button>
+    <button onclick="document.getElementById('input').value=''; document.getElementById('output').value=''; updateStats();">Clear</button>
+    <button onclick="downloadOutput()">Download .ts</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Mapping cheat sheet</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+    <thead>
+      <tr><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--muted);">JSON Schema</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--muted);">TypeScript</th></tr>
+    </thead>
+    <tbody style="font-family:var(--mono);">
+      <tr><td style="padding:6px 8px;">"type": "string"</td><td style="padding:6px 8px;">string</td></tr>
+      <tr><td style="padding:6px 8px;">"type": "number" / "integer"</td><td style="padding:6px 8px;">number</td></tr>
+      <tr><td style="padding:6px 8px;">"type": "boolean"</td><td style="padding:6px 8px;">boolean</td></tr>
+      <tr><td style="padding:6px 8px;">"type": "null"</td><td style="padding:6px 8px;">null</td></tr>
+      <tr><td style="padding:6px 8px;">"type": ["string","null"]</td><td style="padding:6px 8px;">string | null</td></tr>
+      <tr><td style="padding:6px 8px;">"enum": ["a","b"]</td><td style="padding:6px 8px;">"a" | "b"</td></tr>
+      <tr><td style="padding:6px 8px;">"const": 42</td><td style="padding:6px 8px;">42</td></tr>
+      <tr><td style="padding:6px 8px;">"type":"array","items":T</td><td style="padding:6px 8px;">T[]</td></tr>
+      <tr><td style="padding:6px 8px;">"prefixItems":[A,B], "items":false</td><td style="padding:6px 8px;">[A, B]</td></tr>
+      <tr><td style="padding:6px 8px;">"oneOf"/"anyOf":[A,B]</td><td style="padding:6px 8px;">A | B</td></tr>
+      <tr><td style="padding:6px 8px;">"allOf":[A,B]</td><td style="padding:6px 8px;">A &amp; B</td></tr>
+      <tr><td style="padding:6px 8px;">"additionalProperties": T</td><td style="padding:6px 8px;">[k: string]: T</td></tr>
+      <tr><td style="padding:6px 8px;">"$ref": "#/$defs/X"</td><td style="padding:6px 8px;">X</td></tr>
+      <tr><td style="padding:6px 8px;">"required": [...]</td><td style="padding:6px 8px;">non-optional <code>?</code></td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55;margin-top:14px;">
+    Local refs of the form <code>#/definitions/Foo</code>, <code>#/$defs/Foo</code>, and OpenAPI-style <code>#/components/schemas/Foo</code> become named TypeScript types. External (<code>http://</code>) refs are emitted as <code>unknown</code> with a JSDoc note — fetching them would defeat the no-network promise.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const EXAMPLES = {
+  user: {
+    "title": "User",
+    "type": "object",
+    "required": ["id", "email"],
+    "properties": {
+      "id": { "type": "integer", "description": "Internal numeric id" },
+      "email": { "type": "string", "format": "email" },
+      "name": { "type": "string" },
+      "role": { "enum": ["admin", "editor", "viewer"] },
+      "verified": { "type": "boolean", "default": false },
+      "tags": { "type": "array", "items": { "type": "string" } }
+    },
+    "additionalProperties": false
+  },
+  product: {
+    "title": "Product",
+    "type": "object",
+    "$defs": {
+      "Money": {
+        "type": "object",
+        "required": ["amount", "currency"],
+        "properties": {
+          "amount": { "type": "number" },
+          "currency": { "enum": ["USD", "EUR", "GBP", "JPY"] }
+        }
+      },
+      "Dimensions": {
+        "type": "object",
+        "properties": {
+          "w": { "type": "number" }, "h": { "type": "number" }, "d": { "type": "number" }
+        }
+      }
+    },
+    "required": ["id", "name", "price"],
+    "properties": {
+      "id": { "type": "string", "format": "uuid" },
+      "name": { "type": "string" },
+      "price": { "$ref": "#/$defs/Money" },
+      "discount": { "anyOf": [{ "$ref": "#/$defs/Money" }, { "type": "null" }] },
+      "dimensions": { "$ref": "#/$defs/Dimensions" }
+    }
+  },
+  event: {
+    "title": "AnalyticsEvent",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": ["type", "userId"],
+        "properties": {
+          "type": { "const": "page_view" },
+          "userId": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      },
+      {
+        "type": "object",
+        "required": ["type", "userId", "name"],
+        "properties": {
+          "type": { "const": "track" },
+          "userId": { "type": "string" },
+          "name": { "type": "string" },
+          "props": { "type": "object", "additionalProperties": true }
+        }
+      }
+    ]
+  },
+  paginated: {
+    "title": "PaginatedResponse",
+    "type": "object",
+    "required": ["data", "page", "perPage", "total"],
+    "properties": {
+      "data": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": { "type": "string" },
+            "label": { "type": "string" }
+          }
+        }
+      },
+      "page": { "type": "integer", "minimum": 1 },
+      "perPage": { "type": "integer", "minimum": 1, "maximum": 200 },
+      "total": { "type": "integer" }
+    }
+  },
+  openapi: {
+    "title": "Pet",
+    "type": "object",
+    "required": ["id", "name"],
+    "properties": {
+      "id": { "type": "integer", "format": "int64" },
+      "name": { "type": "string" },
+      "category": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" }
+        }
+      },
+      "tags": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "integer" },
+            "name": { "type": "string" }
+          }
+        }
+      },
+      "status": { "enum": ["available", "pending", "sold"] }
+    }
+  },
+  tuple: {
+    "title": "Coordinate",
+    "type": "array",
+    "prefixItems": [
+      { "type": "number", "description": "longitude" },
+      { "type": "number", "description": "latitude" },
+      { "type": "number", "description": "altitude (m)" }
+    ],
+    "items": false
+  }
+};
+
+function loadExample(key) {
+  $('input').value = JSON.stringify(EXAMPLES[key], null, 2);
+  $('rootName').value = EXAMPLES[key].title || 'Root';
+  run();
+}
+
+function copyOut(id) {
+  const ta = $(id);
+  ta.select();
+  navigator.clipboard.writeText(ta.value).catch(() => {});
+}
+
+function downloadOutput() {
+  const blob = new Blob([$('output').value], { type: 'text/typescript' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = ($('rootName').value || 'types') + '.d.ts';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function updateStats() {
+  $('inChars').textContent = $('input').value.length;
+}
+
+// ----- Conversion -----
+
+function isValidIdent(s) {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s);
+}
+
+function pascal(s) {
+  return String(s).replace(/[^A-Za-z0-9]+(\w)/g, (_, c) => c.toUpperCase())
+    .replace(/^([a-z])/, (_, c) => c.toUpperCase())
+    .replace(/^[0-9]/, '_$&');
+}
+
+class Generator {
+  constructor(root, opts) {
+    this.root = root;
+    this.opts = opts;
+    this.indent = opts.indent === '\\t' ? '\t' : ' '.repeat(parseInt(opts.indent, 10));
+    this.types = new Map(); // name -> definition string (no leading export/keyword)
+    this.refsResolved = 0;
+    this.anonCounter = 0;
+    this.refToName = new Map(); // ref path -> name
+    this.pending = new Set();
+  }
+
+  resolveRef(ref) {
+    if (!ref.startsWith('#')) return null;
+    const parts = ref.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+    let node = this.root;
+    for (const p of parts) {
+      if (node && typeof node === 'object' && p in node) node = node[p];
+      else return null;
+    }
+    return { node, path: parts };
+  }
+
+  refName(ref, fallback) {
+    if (this.refToName.has(ref)) return this.refToName.get(ref);
+    const r = this.resolveRef(ref);
+    let name = fallback;
+    if (r) {
+      const last = r.path[r.path.length - 1];
+      name = (r.node && (r.node.title || last)) || fallback;
+    }
+    name = pascal(name);
+    // ensure unique
+    let n = name, i = 2;
+    while (this.types.has(n) && this.refToName.get(ref) !== n) n = name + i++;
+    this.refToName.set(ref, n);
+    return n;
+  }
+
+  emitType(name, schema, exported) {
+    if (this.types.has(name)) return name;
+    this.types.set(name, '__pending__'); // placeholder for cycles
+    const body = this.toTs(schema, name);
+    let header = '';
+    if (this.opts.addComments) header = this.docComment(schema);
+    let decl;
+    const useInterface = this.opts.useInterface && schema && (schema.type === 'object' || (!schema.type && (schema.properties || schema.required)));
+    const isObjectLiteral = body.kind === 'object';
+    if (useInterface && isObjectLiteral) {
+      decl = header + (exported ? 'export ' : '') + 'interface ' + name + ' ' + body.text;
+    } else {
+      decl = header + (exported ? 'export ' : '') + 'type ' + name + ' = ' + body.text + ';';
+    }
+    this.types.set(name, decl);
+    return name;
+  }
+
+  docComment(schema) {
+    if (!schema || typeof schema !== 'object') return '';
+    const lines = [];
+    if (schema.title) lines.push(schema.title);
+    if (schema.description) {
+      if (lines.length) lines.push('');
+      schema.description.split(/\r?\n/).forEach(l => lines.push(l));
+    }
+    if (schema.default !== undefined) lines.push('@default ' + JSON.stringify(schema.default));
+    if (schema.format) lines.push('@format ' + schema.format);
+    if (schema.examples) lines.push('@example ' + JSON.stringify(schema.examples[0] ?? schema.examples));
+    if (!lines.length) return '';
+    if (lines.length === 1) return '/** ' + lines[0] + ' */\n';
+    return '/**\n' + lines.map(l => ' * ' + l).join('\n') + '\n */\n';
+  }
+
+  toTs(schema, nameHint) {
+    if (schema === true || schema === undefined) return { text: 'unknown', kind: 'prim' };
+    if (schema === false) return { text: 'never', kind: 'prim' };
+    if (typeof schema !== 'object' || schema === null) return { text: 'unknown', kind: 'prim' };
+
+    if (schema.$ref) {
+      this.refsResolved++;
+      if (!schema.$ref.startsWith('#')) {
+        return { text: 'unknown /* external $ref: ' + schema.$ref + ' */', kind: 'prim' };
+      }
+      const r = this.resolveRef(schema.$ref);
+      if (!r) return { text: 'unknown /* unresolved $ref: ' + schema.$ref + ' */', kind: 'prim' };
+      const fallback = nameHint || r.path[r.path.length - 1] || 'Ref';
+      const refName = this.refName(schema.$ref, fallback);
+      if (!this.types.has(refName) && !this.pending.has(schema.$ref)) {
+        this.pending.add(schema.$ref);
+        this.emitType(refName, r.node, true);
+      }
+      return { text: refName, kind: 'ref' };
+    }
+
+    if (schema.const !== undefined) {
+      return { text: this.jsonLiteral(schema.const), kind: 'prim' };
+    }
+
+    if (schema.enum) {
+      const opts = schema.enum.map(v => this.jsonLiteral(v));
+      const ded = [...new Set(opts)];
+      return { text: ded.join(' | '), kind: 'union' };
+    }
+
+    if (schema.oneOf || schema.anyOf) {
+      const arr = schema.oneOf || schema.anyOf;
+      const parts = arr.map((s, i) => {
+        const t = this.toTs(s, nameHint ? nameHint + 'Variant' + (i + 1) : undefined);
+        return t.text;
+      });
+      return { text: '(' + parts.join(' | ') + ')', kind: 'union' };
+    }
+
+    if (schema.allOf) {
+      const parts = schema.allOf.map((s, i) => this.toTs(s, nameHint ? nameHint + 'Part' + (i + 1) : undefined).text);
+      return { text: '(' + parts.join(' & ') + ')', kind: 'intersection' };
+    }
+
+    let type = schema.type;
+    if (Array.isArray(type)) {
+      const parts = type.map(t => this.toTs({ ...schema, type: t }).text);
+      return { text: '(' + parts.join(' | ') + ')', kind: 'union' };
+    }
+
+    if (!type) {
+      // infer
+      if (schema.properties || schema.required || schema.additionalProperties !== undefined || schema.patternProperties) type = 'object';
+      else if (schema.items || schema.prefixItems) type = 'array';
+    }
+
+    switch (type) {
+      case 'string': return { text: 'string', kind: 'prim' };
+      case 'integer':
+      case 'number': return { text: 'number', kind: 'prim' };
+      case 'boolean': return { text: 'boolean', kind: 'prim' };
+      case 'null': return { text: 'null', kind: 'prim' };
+      case 'array': {
+        if (schema.prefixItems) {
+          const tup = schema.prefixItems.map(s => this.toTs(s).text);
+          if (schema.items === false || schema.items === undefined) return { text: '[' + tup.join(', ') + ']', kind: 'tuple' };
+          const rest = this.toTs(schema.items).text;
+          return { text: '[' + tup.join(', ') + ', ...' + rest + '[]]', kind: 'tuple' };
+        }
+        const item = schema.items ? this.toTs(schema.items).text : 'unknown';
+        // Wrap unions in parens for clean A | B → (A | B)[]
+        const needsParens = /[ |&]/.test(item) && !/^\(.*\)$/.test(item) && !/^\[.*\]$/.test(item);
+        return { text: (needsParens ? '(' + item + ')' : item) + '[]', kind: 'array' };
+      }
+      case 'object': {
+        return this.tsObject(schema, nameHint);
+      }
+      default:
+        return { text: 'unknown', kind: 'prim' };
+    }
+  }
+
+  tsObject(schema, nameHint) {
+    const props = schema.properties || {};
+    const required = new Set(schema.required || []);
+    const keys = Object.keys(props);
+    if (this.opts.sortKeys) keys.sort();
+    const ro = this.opts.readonly ? 'readonly ' : '';
+    const lines = [];
+    for (const k of keys) {
+      let propSchema = props[k];
+      const optional = !required.has(k) ? '?' : '';
+      // Generate inline type; if object with title, hoist to a named type.
+      let body;
+      if (propSchema && typeof propSchema === 'object' && propSchema.title && (propSchema.type === 'object' || propSchema.properties)) {
+        const name = pascal(propSchema.title);
+        this.emitType(name, propSchema, true);
+        body = name;
+      } else {
+        body = this.toTs(propSchema, nameHint ? nameHint + pascal(k) : pascal(k)).text;
+      }
+      if (this.opts.addComments) {
+        const doc = this.docComment(propSchema);
+        if (doc) lines.push(...doc.split('\n').slice(0, -1));
+      }
+      const keyTxt = isValidIdent(k) ? k : JSON.stringify(k);
+      lines.push(ro + keyTxt + optional + ': ' + body + ';');
+    }
+    // additionalProperties
+    let addProps = schema.additionalProperties;
+    let strict = this.opts.strictAdd;
+    let allowExtra = true;
+    if (addProps === false) allowExtra = false;
+    let extraType = 'unknown';
+    if (addProps && typeof addProps === 'object') {
+      extraType = this.toTs(addProps).text;
+    } else if (addProps === true) {
+      extraType = 'unknown';
+    }
+    if (schema.patternProperties && typeof schema.patternProperties === 'object') {
+      // merge pattern props into a single index sig (TS can't express the pattern)
+      const types = Object.values(schema.patternProperties).map(s => this.toTs(s).text);
+      extraType = [...new Set([extraType, ...types])].filter(t => t !== 'unknown' || !types.length).join(' | ') || 'unknown';
+    }
+    const hasIndex = (allowExtra && (addProps !== undefined || schema.patternProperties)) || (allowExtra && !strict && !keys.length);
+    if (hasIndex) {
+      lines.push(ro + '[key: string]: ' + extraType + ';');
+    } else if (addProps === false || strict) {
+      // no index sig
+    }
+    if (!lines.length) {
+      return { text: '{}', kind: 'object' };
+    }
+    const body = '{\n' + lines.map(l => this.indent + l).join('\n') + '\n}';
+    return { text: body, kind: 'object' };
+  }
+
+  jsonLiteral(v) {
+    if (v === null) return 'null';
+    if (typeof v === 'string') return JSON.stringify(v);
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (Array.isArray(v)) return 'readonly [' + v.map(x => this.jsonLiteral(x)).join(', ') + ']';
+    if (typeof v === 'object') {
+      return '{ ' + Object.entries(v).map(([k, val]) =>
+        (isValidIdent(k) ? k : JSON.stringify(k)) + ': ' + this.jsonLiteral(val)
+      ).join(', ') + ' }';
+    }
+    return 'unknown';
+  }
+
+  generate(rootName) {
+    // Pre-register $defs / definitions / components.schemas so refs use stable names.
+    const defs = this.root.$defs || this.root.definitions || (this.root.components && this.root.components.schemas) || {};
+    for (const [k, v] of Object.entries(defs)) {
+      const name = pascal(v && v.title ? v.title : k);
+      let path = this.root.$defs ? '#/$defs/' + k : this.root.definitions ? '#/definitions/' + k : '#/components/schemas/' + k;
+      this.refToName.set(path, name);
+    }
+    this.emitType(rootName, this.root, this.opts.exportTypes);
+    for (const [k, v] of Object.entries(defs)) {
+      const name = this.refToName.get(this.root.$defs ? '#/$defs/' + k : this.root.definitions ? '#/definitions/' + k : '#/components/schemas/' + k);
+      if (name && !this.types.has(name)) this.emitType(name, v, this.opts.exportTypes);
+    }
+    // Put root first
+    const ordered = [];
+    if (this.types.has(rootName)) {
+      ordered.push(this.types.get(rootName));
+      this.types.delete(rootName);
+    }
+    for (const v of this.types.values()) ordered.push(v);
+    return ordered.join('\n\n') + '\n';
+  }
+}
+
+function run() {
+  $('err').textContent = '';
+  const raw = $('input').value.trim();
+  if (!raw) { $('output').value = ''; updateStats(); $('typeCount').textContent='0'; $('refCount').textContent='0'; return; }
+  let schema;
+  try {
+    schema = JSON.parse(raw);
+  } catch (e) {
+    $('err').textContent = 'JSON parse error: ' + e.message;
+    return;
+  }
+  const opts = {
+    indent: $('indent').value,
+    useInterface: $('useInterface').checked,
+    exportTypes: $('exportTypes').checked,
+    readonly: $('readonly').checked,
+    strictAdd: $('strictAdd').checked,
+    addComments: $('addComments').checked,
+    sortKeys: $('sortKeys').checked
+  };
+  const rootName = pascal($('rootName').value || schema.title || 'Root') || 'Root';
+  try {
+    const gen = new Generator(schema, opts);
+    const out = gen.generate(rootName);
+    $('output').value = out;
+    $('typeCount').textContent = gen.types.size + 1;
+    $('refCount').textContent = gen.refsResolved;
+  } catch (e) {
+    $('err').textContent = 'Generation error: ' + e.message;
+  }
+  updateStats();
+}
+
+['input','rootName','indent','useInterface','exportTypes','readonly','strictAdd','addComments','sortKeys']
+  .forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => { if ($('input').value.trim()) run(); else updateStats(); });
+  });
+
+loadExample('user');
+</script>
+</body>
+</html>

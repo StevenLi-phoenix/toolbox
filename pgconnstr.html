@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PostgreSQL Connection String Parser &amp; Builder — Free Online Tool</title>
+<meta name="description" content="Parse and build PostgreSQL libpq connection URIs (postgres://) and keyword=value DSNs — split out user, password, host, port, database, sslmode, search_path, and every other parameter. Round-trip between URI and key-value form, and convert to JDBC, .NET, Node pg, psql, env vars, and Docker Compose snippets.">
+<meta name="keywords" content="postgres connection string, postgresql URI, libpq DSN, postgres parser, jdbc postgres, dotnet npgsql, sslmode, postgres pgpass, psql connection url, pg connection string">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pgconnstr.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; min-height: 80px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .92rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical; line-height: 1.45;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .row3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 768px) { .row, .row3 { grid-template-columns: 1fr; } }
+  .field { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .field label {
+    display: block; font-size: .7rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px;
+  }
+  .field input, .field select {
+    width: 100%; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .9rem; background: var(--bg); color: var(--text);
+    box-sizing: border-box;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .pw-wrap { position: relative; }
+  .pw-toggle {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: var(--muted); cursor: pointer; font-size: .8rem; padding: 2px 6px;
+  }
+  .err { color: var(--error); font-size: .85rem; min-height: 1.2em; margin-top: 8px; font-family: var(--mono); }
+  .warn { color: var(--warning); font-size: .85rem; margin-top: 6px; }
+  .ok { color: var(--success); font-size: .85rem; }
+  .params-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 10px; }
+  .params-table th, .params-table td {
+    padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; font-family: var(--mono);
+  }
+  .params-table th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .params-table input {
+    width: 100%; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; box-sizing: border-box;
+  }
+  .params-table .actions { width: 60px; text-align: right; }
+  .params-table button.del {
+    background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1.1rem;
+  }
+  .params-table button.del:hover { color: var(--error); }
+  .add-param {
+    margin-top: 8px; padding: 5px 12px; font-size: .8rem;
+    border: 1px dashed var(--border); border-radius: var(--radius);
+    background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .add-param:hover { border-color: var(--accent); color: var(--accent); }
+  .out-block { margin-top: 14px; }
+  .out-block label {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px;
+  }
+  .out-block pre {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; font-family: var(--mono); font-size: .85rem;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0; line-height: 1.5;
+  }
+  .out-block button {
+    background: none; border: none; color: var(--accent); cursor: pointer; font-size: .76rem; font-family: var(--sans);
+  }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .presets button {
+    padding: 4px 10px; font-size: .75rem;
+    border: 1px solid var(--border); border-radius: 99px;
+    background: var(--surface); color: var(--muted); cursor: pointer; font-family: var(--mono);
+  }
+  .presets button:hover { background: var(--surface2); color: var(--text); }
+  .badge {
+    display: inline-block; padding: 2px 7px; border-radius: 99px; font-size: .7rem;
+    font-family: var(--mono); margin-left: 6px;
+  }
+  .badge.s-disable { background: rgba(220,38,38,.15); color: var(--error); }
+  .badge.s-allow,
+  .badge.s-prefer { background: rgba(245,158,11,.15); color: var(--warning); }
+  .badge.s-require { background: rgba(59,130,246,.15); color: #3b82f6; }
+  .badge.s-verify-ca,
+  .badge.s-verify-full { background: rgba(16,185,129,.15); color: var(--success); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>PostgreSQL Connection String Parser</h1>
+<p class="subtitle">Parse a libpq <b>connection URI</b> (<code>postgres://user:pass@host:port/db?sslmode=…</code>) or a <b>keyword=value DSN</b> (<code>host=localhost user=postgres …</code>) into structured fields, edit any part, and round-trip back out. Convert the result to JDBC, .NET / Npgsql, Node <code>pg</code>, <code>psql</code> CLI, environment variables, and Docker Compose &mdash; all in your browser. Passwords are never logged or sent anywhere.</p>
+
+<div class="card">
+  <h2>Input</h2>
+  <label class="field-label" style="display:block;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Connection string</label>
+  <textarea id="input" spellcheck="false" placeholder="postgres://user:pass@host:5432/dbname?sslmode=require"></textarea>
+  <div class="presets">
+    <span style="font-size:.75rem;color:var(--muted);align-self:center;font-family:var(--sans);">Examples:</span>
+    <button onclick="loadExample(0)">URI basic</button>
+    <button onclick="loadExample(1)">URI + sslmode</button>
+    <button onclick="loadExample(2)">Multi-host failover</button>
+    <button onclick="loadExample(3)">Unix socket</button>
+    <button onclick="loadExample(4)">key=value DSN</button>
+    <button onclick="loadExample(5)">Supabase / RDS</button>
+    <button onclick="loadExample(6)">PgBouncer</button>
+    <button onclick="clearAll()">clear</button>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<div class="card">
+  <h2>Structured fields</h2>
+  <div class="row3">
+    <div class="field">
+      <label for="f_user">User</label>
+      <input id="f_user" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="f_pw">Password</label>
+      <div class="pw-wrap">
+        <input id="f_pw" type="password" autocomplete="off" spellcheck="false">
+        <button class="pw-toggle" type="button" onclick="togglePw()" id="pwBtn">show</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="f_db">Database</label>
+      <input id="f_db" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+  <div class="row3">
+    <div class="field">
+      <label for="f_host">Host(s)</label>
+      <input id="f_host" autocomplete="off" spellcheck="false" placeholder="comma-separated for failover">
+    </div>
+    <div class="field">
+      <label for="f_port">Port(s)</label>
+      <input id="f_port" autocomplete="off" spellcheck="false" placeholder="5432">
+    </div>
+    <div class="field">
+      <label for="f_ssl">sslmode</label>
+      <select id="f_ssl">
+        <option value="">(unset → defaults to prefer)</option>
+        <option>disable</option>
+        <option>allow</option>
+        <option>prefer</option>
+        <option>require</option>
+        <option>verify-ca</option>
+        <option>verify-full</option>
+      </select>
+    </div>
+  </div>
+  <div id="sslWarn" class="warn" style="display:none;"></div>
+
+  <h3 style="margin-top:18px;font-size:.95rem;">Other parameters</h3>
+  <table class="params-table" id="params">
+    <thead><tr><th style="width:30%">Key</th><th>Value</th><th class="actions"></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <button class="add-param" onclick="addParam()">+ add parameter</button>
+</div>
+
+<div class="card">
+  <h2>Outputs</h2>
+  <div class="out-block">
+    <label>libpq URI (postgres://) <button onclick="copyOut('out_uri')">copy</button></label>
+    <pre id="out_uri"></pre>
+  </div>
+  <div class="out-block">
+    <label>libpq keyword/value DSN <button onclick="copyOut('out_kv')">copy</button></label>
+    <pre id="out_kv"></pre>
+  </div>
+  <div class="out-block">
+    <label>JDBC URL (org.postgresql) <button onclick="copyOut('out_jdbc')">copy</button></label>
+    <pre id="out_jdbc"></pre>
+  </div>
+  <div class="out-block">
+    <label>Npgsql (.NET) <button onclick="copyOut('out_npg')">copy</button></label>
+    <pre id="out_npg"></pre>
+  </div>
+  <div class="out-block">
+    <label>Node <code>pg</code> client config <button onclick="copyOut('out_node')">copy</button></label>
+    <pre id="out_node"></pre>
+  </div>
+  <div class="out-block">
+    <label>psql command <button onclick="copyOut('out_psql')">copy</button></label>
+    <pre id="out_psql"></pre>
+  </div>
+  <div class="out-block">
+    <label>Environment variables (PG*) <button onclick="copyOut('out_env')">copy</button></label>
+    <pre id="out_env"></pre>
+  </div>
+  <div class="out-block">
+    <label>~/.pgpass line <button onclick="copyOut('out_pgpass')">copy</button></label>
+    <pre id="out_pgpass"></pre>
+  </div>
+  <div class="out-block">
+    <label>Docker Compose env <button onclick="copyOut('out_docker')">copy</button></label>
+    <pre id="out_docker"></pre>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65;">
+    Connection URIs follow <b>RFC&nbsp;3986</b> and libpq's documented format <code>postgresql://[userspec@][hostspec][/dbname][?paramspec]</code>. Both <code>postgres://</code> and <code>postgresql://</code> schemes are accepted. Multiple hosts are comma-separated and tried in order; the optional <code>target_session_attrs</code> parameter (default <code>any</code>) can require <code>read-write</code>, <code>read-only</code>, <code>primary</code>, or <code>standby</code> &mdash; how libpq picks the primary in a failover URL.
+    For <b>Unix-domain sockets</b>, use a percent-encoded path as the host (<code>/var/run/postgresql</code> → <code>%2Fvar%2Frun%2Fpostgresql</code>) or pass <code>host=/var/run/postgresql</code> in keyword form.
+    <code>sslmode</code> values progress from <i>no encryption</i> (<code>disable</code>) to <i>encryption + full certificate verification</i> (<code>verify-full</code>) &mdash; only the last two protect you against MITM attacks; <code>require</code> alone trusts any cert the server presents.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const EXAMPLES = [
+  'postgres://app_user:s3cret@db.example.com:5432/orders',
+  'postgresql://reader:hunter2@db.internal:5432/analytics?sslmode=require&application_name=etl-cron&connect_timeout=10',
+  'postgresql://app:pw@pg1.example.com:5432,pg2.example.com:5432,pg3.example.com:5432/orders?target_session_attrs=read-write&sslmode=verify-full',
+  'postgresql://app@%2Fvar%2Frun%2Fpostgresql/orders',
+  "host=db.example.com port=5432 user=app dbname=orders password='s3cret with spaces' sslmode=require application_name=worker",
+  'postgresql://postgres.abcdef:[your-password]@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require&pgbouncer=true',
+  'postgresql://app:pw@pgbouncer:6432/orders?sslmode=disable&statement_cache_size=0&prepareThreshold=0'
+];
+
+const ALWAYS_PARAMS = ['user','password','host','port','dbname'];
+// Common libpq params with hints
+const KNOWN_PARAMS = [
+  'application_name','connect_timeout','client_encoding','options',
+  'sslmode','sslcert','sslkey','sslrootcert','sslcrl','sslcompression','sslsni','sslnegotiation',
+  'requirepeer','channel_binding','gssencmode','krbsrvname','target_session_attrs',
+  'tcp_user_timeout','keepalives','keepalives_idle','keepalives_interval','keepalives_count',
+  'fallback_application_name','passfile','service','options','replication','pgbouncer'
+];
+
+// ---------- Parsing ----------
+
+// Parse a libpq connection string in either URI or keyword=value form.
+function parseConnStr(input) {
+  input = input.trim();
+  if (!input) return { ok: true, fields: blank(), extras: [], warnings: [] };
+  if (/^postgres(ql)?:\/\//i.test(input)) return parseURI(input);
+  return parseKv(input);
+}
+
+function blank() {
+  return { user:'', password:'', host:'', port:'', dbname:'' };
+}
+
+function parseURI(input) {
+  const warnings = [];
+  // strip scheme
+  const m = input.match(/^postgres(?:ql)?:\/\/(.*)$/i);
+  const body = m[1];
+  // Split off query
+  let main = body, query = '';
+  const qIdx = body.indexOf('?');
+  if (qIdx >= 0) { main = body.slice(0, qIdx); query = body.slice(qIdx + 1); }
+  // Split userinfo @ hostspec / dbname
+  let userinfo = '', rest = main;
+  const atIdx = lastUnescapedAt(main);
+  if (atIdx >= 0) { userinfo = main.slice(0, atIdx); rest = main.slice(atIdx + 1); }
+  let hostpart = rest, dbname = '';
+  // dbname is the FIRST '/' after the host section. But unix-socket paths are percent-encoded so '/' won't appear literally.
+  const slashIdx = rest.indexOf('/');
+  if (slashIdx >= 0) { hostpart = rest.slice(0, slashIdx); dbname = rest.slice(slashIdx + 1); }
+  // Decode userinfo
+  let user = '', password = '';
+  if (userinfo) {
+    const colon = userinfo.indexOf(':');
+    if (colon >= 0) {
+      user = decode(userinfo.slice(0, colon));
+      password = decode(userinfo.slice(colon + 1));
+    } else {
+      user = decode(userinfo);
+    }
+  }
+  // Parse hostpart: can be comma-separated host[:port],host2[:port2]
+  const hosts = [], ports = [];
+  if (hostpart) {
+    for (const seg of hostpart.split(',')) {
+      let h = seg, p = '';
+      // IPv6 [::1]:5432
+      if (h.startsWith('[')) {
+        const end = h.indexOf(']');
+        if (end < 0) { warnings.push('Unclosed IPv6 bracket in host'); }
+        else {
+          const after = h.slice(end + 1);
+          h = h.slice(1, end);
+          if (after.startsWith(':')) p = after.slice(1);
+        }
+      } else {
+        const ci = h.lastIndexOf(':');
+        if (ci >= 0 && /^\d+$/.test(h.slice(ci + 1))) {
+          p = h.slice(ci + 1);
+          h = h.slice(0, ci);
+        }
+      }
+      hosts.push(decode(h));
+      ports.push(decode(p));
+    }
+  }
+  const fields = {
+    user,
+    password,
+    host: hosts.join(','),
+    port: ports.filter(p => p !== '').join(',') || (hosts.length && ports.every(p => p === '') ? '' : ports.join(',')),
+    dbname: decode(dbname)
+  };
+  // Parse query string into ordered extras
+  const extras = [];
+  if (query) {
+    for (const pair of query.split('&')) {
+      if (!pair) continue;
+      const eq = pair.indexOf('=');
+      const k = eq >= 0 ? decode(pair.slice(0, eq)) : decode(pair);
+      const v = eq >= 0 ? decode(pair.slice(eq + 1).replace(/\+/g, ' ')) : '';
+      // Promote canonical fields if they appeared in query
+      if (k === 'user') fields.user = v;
+      else if (k === 'password') fields.password = v;
+      else if (k === 'host') fields.host = v;
+      else if (k === 'port') fields.port = v;
+      else if (k === 'dbname') fields.dbname = v;
+      else extras.push({ k, v });
+    }
+  }
+  return { ok: true, fields, extras, warnings };
+}
+
+function lastUnescapedAt(s) {
+  // Find @ separator before the host section. Userinfo only contains userinfo chars; the first @ from the END of the substring before any '/' or '?' is the separator. Use slash-aware:
+  const upTo = s.search(/[\/]/);
+  const slice = upTo >= 0 ? s.slice(0, upTo) : s;
+  return slice.lastIndexOf('@');
+}
+
+function decode(s) {
+  if (s == null) return '';
+  try { return decodeURIComponent(s.replace(/\+/g, '%20')); } catch { return s; }
+}
+
+function parseKv(input) {
+  const warnings = [];
+  const fields = blank();
+  const extras = [];
+  const errors = [];
+  let i = 0;
+  while (i < input.length) {
+    // skip whitespace
+    while (i < input.length && /\s/.test(input[i])) i++;
+    if (i >= input.length) break;
+    // read key
+    let key = '';
+    while (i < input.length && /[A-Za-z0-9_]/.test(input[i])) { key += input[i++]; }
+    if (!key) { errors.push('Expected key at offset ' + i); break; }
+    // skip whitespace + '='
+    while (i < input.length && /\s/.test(input[i])) i++;
+    if (input[i] !== '=') { errors.push("Expected '=' after '" + key + "'"); break; }
+    i++;
+    while (i < input.length && /\s/.test(input[i])) i++;
+    // read value: quoted single-quote string, or until unescaped whitespace
+    let val = '';
+    if (input[i] === "'") {
+      i++;
+      while (i < input.length && input[i] !== "'") {
+        if (input[i] === '\\' && i + 1 < input.length) { val += input[i + 1]; i += 2; }
+        else val += input[i++];
+      }
+      if (input[i] !== "'") errors.push('Unterminated quoted value');
+      i++;
+    } else {
+      while (i < input.length && !/\s/.test(input[i])) {
+        if (input[i] === '\\' && i + 1 < input.length) { val += input[i + 1]; i += 2; }
+        else val += input[i++];
+      }
+    }
+    if (key === 'user') fields.user = val;
+    else if (key === 'password') fields.password = val;
+    else if (key === 'host' || key === 'hostaddr') fields.host = val;
+    else if (key === 'port') fields.port = val;
+    else if (key === 'dbname' || key === 'database') fields.dbname = val;
+    else extras.push({ k: key, v: val });
+  }
+  return { ok: errors.length === 0, fields, extras, warnings, errors };
+}
+
+// ---------- Rendering ----------
+
+function renderFromInput() {
+  $('err').textContent = '';
+  const raw = $('input').value;
+  const r = parseConnStr(raw);
+  if (r.errors && r.errors.length) {
+    $('err').textContent = r.errors.join('; ');
+  }
+  $('f_user').value = r.fields.user || '';
+  $('f_pw').value = r.fields.password || '';
+  $('f_host').value = r.fields.host || '';
+  $('f_port').value = r.fields.port || '';
+  $('f_db').value = r.fields.dbname || '';
+  // sslmode
+  const sslExtra = r.extras.find(p => p.k === 'sslmode');
+  $('f_ssl').value = sslExtra ? sslExtra.v : '';
+  const otherExtras = r.extras.filter(p => p.k !== 'sslmode');
+  renderParamsTable(otherExtras);
+  rebuildOutputs();
+}
+
+function rebuildOutputs() {
+  // Pull current state
+  const fields = {
+    user: $('f_user').value,
+    password: $('f_pw').value,
+    host: $('f_host').value.trim(),
+    port: $('f_port').value.trim(),
+    dbname: $('f_db').value
+  };
+  const sslVal = $('f_ssl').value;
+  const params = collectParams();
+  const allExtras = [];
+  if (sslVal) allExtras.push({ k: 'sslmode', v: sslVal });
+  for (const p of params) if (p.k) allExtras.push(p);
+
+  // SSL warnings
+  const wEl = $('sslWarn');
+  if (sslVal === 'disable') { wEl.textContent = '⚠ sslmode=disable sends traffic in cleartext. Avoid for production.'; wEl.style.display = 'block'; }
+  else if (sslVal === 'require') { wEl.textContent = '⚠ sslmode=require encrypts the connection but does NOT verify the server certificate — vulnerable to MITM. Prefer verify-ca or verify-full.'; wEl.style.display = 'block'; }
+  else if (sslVal === 'prefer' || sslVal === 'allow') { wEl.textContent = 'ℹ With prefer/allow the server can downgrade to cleartext. Use require or stronger when SSL is mandatory.'; wEl.style.display = 'block'; }
+  else { wEl.style.display = 'none'; wEl.textContent = ''; }
+
+  $('out_uri').textContent = buildURI(fields, allExtras);
+  $('out_kv').textContent = buildKv(fields, allExtras);
+  $('out_jdbc').textContent = buildJDBC(fields, allExtras);
+  $('out_npg').textContent = buildNpgsql(fields, allExtras);
+  $('out_node').textContent = buildNode(fields, allExtras);
+  $('out_psql').textContent = buildPsql(fields, allExtras);
+  $('out_env').textContent = buildEnv(fields, allExtras);
+  $('out_pgpass').textContent = buildPgpass(fields);
+  $('out_docker').textContent = buildDocker(fields, allExtras);
+}
+
+function renderParamsTable(extras) {
+  const tbody = $('params').querySelector('tbody');
+  tbody.innerHTML = '';
+  for (const p of extras) addParamRow(p.k, p.v);
+  if (!extras.length) addParamRow('', '');
+}
+
+function addParam() { addParamRow('', ''); }
+
+function addParamRow(k, v) {
+  const tbody = $('params').querySelector('tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input list="known-params" placeholder="key" value="${esc(k)}"></td>
+                  <td><input placeholder="value" value="${esc(v)}"></td>
+                  <td class="actions"><button class="del" type="button" title="remove">&times;</button></td>`;
+  tr.querySelector('button.del').onclick = () => { tr.remove(); rebuildOutputs(); };
+  tr.querySelectorAll('input').forEach(inp => inp.addEventListener('input', rebuildOutputs));
+  tbody.appendChild(tr);
+  ensureDatalist();
+}
+
+function ensureDatalist() {
+  if (document.getElementById('known-params')) return;
+  const dl = document.createElement('datalist');
+  dl.id = 'known-params';
+  KNOWN_PARAMS.forEach(k => { const o = document.createElement('option'); o.value = k; dl.appendChild(o); });
+  document.body.appendChild(dl);
+}
+
+function collectParams() {
+  return [...$('params').querySelectorAll('tbody tr')].map(tr => {
+    const [kIn, vIn] = tr.querySelectorAll('input');
+    return { k: kIn.value.trim(), v: vIn.value };
+  });
+}
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ---------- Builders ----------
+
+function encUserinfo(s) {
+  // Encode everything except unreserved + sub-delims minus ':' and '@'
+  return encodeURIComponent(s).replace(/!/g, '%21').replace(/\*/g, '%2A');
+}
+
+function encHostSeg(s) {
+  // IPv6
+  if (s.includes(':')) return '[' + s + ']';
+  // Unix socket path
+  if (s.startsWith('/')) return encodeURIComponent(s);
+  return s;
+}
+
+function buildURI(f, extras) {
+  let s = 'postgresql://';
+  if (f.user || f.password) {
+    s += encUserinfo(f.user);
+    if (f.password) s += ':' + encUserinfo(f.password);
+    s += '@';
+  }
+  if (f.host) {
+    const hs = f.host.split(',').map(h => h.trim());
+    const ps = (f.port || '').split(',').map(p => p.trim());
+    const segs = hs.map((h, i) => {
+      const seg = encHostSeg(h);
+      const p = ps[i] || ps[0] || '';
+      return p ? seg + ':' + p : seg;
+    });
+    s += segs.join(',');
+  }
+  if (f.dbname) s += '/' + encodeURIComponent(f.dbname);
+  const params = extras.filter(p => p.k);
+  if (params.length) {
+    s += '?' + params.map(p => encodeURIComponent(p.k) + '=' + encodeURIComponent(p.v)).join('&');
+  }
+  return s;
+}
+
+function quoteKv(v) {
+  if (v === '') return "''";
+  if (/[\s'\\]/.test(v)) {
+    return "'" + v.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+  }
+  return v;
+}
+
+function buildKv(f, extras) {
+  const parts = [];
+  if (f.host) parts.push('host=' + quoteKv(f.host));
+  if (f.port) parts.push('port=' + quoteKv(f.port));
+  if (f.dbname) parts.push('dbname=' + quoteKv(f.dbname));
+  if (f.user) parts.push('user=' + quoteKv(f.user));
+  if (f.password) parts.push('password=' + quoteKv(f.password));
+  for (const p of extras) if (p.k) parts.push(p.k + '=' + quoteKv(p.v));
+  return parts.join(' ');
+}
+
+function buildJDBC(f, extras) {
+  const host = (f.host || 'localhost').split(',')[0];
+  const port = (f.port || '5432').split(',')[0];
+  let s = 'jdbc:postgresql://' + host + ':' + port + '/' + (f.dbname || '');
+  const q = [];
+  if (f.user) q.push('user=' + encodeURIComponent(f.user));
+  if (f.password) q.push('password=' + encodeURIComponent(f.password));
+  for (const p of extras) {
+    if (!p.k) continue;
+    // sslmode is libpq's name; JDBC accepts ssl=true, sslmode=...
+    q.push(encodeURIComponent(p.k) + '=' + encodeURIComponent(p.v));
+  }
+  if (q.length) s += '?' + q.join('&');
+  return s;
+}
+
+function buildNpgsql(f, extras) {
+  const parts = [];
+  parts.push('Host=' + (f.host || 'localhost'));
+  if (f.port) parts.push('Port=' + f.port);
+  if (f.dbname) parts.push('Database=' + f.dbname);
+  if (f.user) parts.push('Username=' + f.user);
+  if (f.password) parts.push('Password=' + f.password);
+  for (const p of extras) {
+    if (!p.k) continue;
+    // Map common libpq → Npgsql
+    if (p.k === 'sslmode') {
+      const mp = { 'disable':'Disable', 'allow':'Allow', 'prefer':'Prefer', 'require':'Require', 'verify-ca':'VerifyCA', 'verify-full':'VerifyFull' };
+      parts.push('SSL Mode=' + (mp[p.v] || p.v));
+    } else if (p.k === 'application_name') parts.push('Application Name=' + p.v);
+    else if (p.k === 'connect_timeout') parts.push('Timeout=' + p.v);
+    else parts.push(p.k + '=' + p.v);
+  }
+  return parts.join(';');
+}
+
+function buildNode(f, extras) {
+  const obj = {};
+  if (f.user) obj.user = f.user;
+  if (f.password) obj.password = f.password;
+  if (f.host) obj.host = f.host.split(',')[0];
+  if (f.port) obj.port = parseInt(f.port.split(',')[0], 10) || undefined;
+  if (f.dbname) obj.database = f.dbname;
+  const sslmode = extras.find(p => p.k === 'sslmode')?.v;
+  if (sslmode === 'require' || sslmode === 'verify-ca' || sslmode === 'verify-full') {
+    if (sslmode === 'require') obj.ssl = { rejectUnauthorized: false };
+    else obj.ssl = { rejectUnauthorized: true };
+  } else if (sslmode === 'disable') {
+    obj.ssl = false;
+  }
+  for (const p of extras) {
+    if (!p.k || p.k === 'sslmode') continue;
+    if (p.k === 'connect_timeout') obj.connectionTimeoutMillis = parseInt(p.v, 10) * 1000;
+    else if (p.k === 'application_name') obj.application_name = p.v;
+  }
+  return 'new Client(' + JSON.stringify(obj, null, 2) + ')';
+}
+
+function buildPsql(f, extras) {
+  // Prefer URI form for psql
+  const uri = buildURI(f, extras);
+  return 'psql "' + uri.replace(/"/g, '\\"') + '"';
+}
+
+function buildEnv(f, extras) {
+  const lines = [];
+  if (f.host) lines.push('PGHOST=' + sh(f.host));
+  if (f.port) lines.push('PGPORT=' + sh(f.port));
+  if (f.dbname) lines.push('PGDATABASE=' + sh(f.dbname));
+  if (f.user) lines.push('PGUSER=' + sh(f.user));
+  if (f.password) lines.push('PGPASSWORD=' + sh(f.password));
+  for (const p of extras) {
+    if (!p.k) continue;
+    if (p.k === 'sslmode') lines.push('PGSSLMODE=' + sh(p.v));
+    else if (p.k === 'sslrootcert') lines.push('PGSSLROOTCERT=' + sh(p.v));
+    else if (p.k === 'application_name') lines.push('PGAPPNAME=' + sh(p.v));
+    else if (p.k === 'connect_timeout') lines.push('PGCONNECT_TIMEOUT=' + sh(p.v));
+    else if (p.k === 'options') lines.push('PGOPTIONS=' + sh(p.v));
+  }
+  return lines.join('\n');
+}
+
+function sh(s) {
+  if (s === '') return "''";
+  if (/^[A-Za-z0-9_.\/:@-]+$/.test(s)) return s;
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+function buildPgpass(f) {
+  // hostname:port:database:username:password
+  const e = s => String(s ?? '').replace(/\\/g, '\\\\').replace(/:/g, '\\:');
+  const host = e(f.host.split(',')[0] || '*');
+  const port = e(f.port.split(',')[0] || '*');
+  const db   = e(f.dbname || '*');
+  const user = e(f.user || '*');
+  const pw   = e(f.password || '');
+  return host + ':' + port + ':' + db + ':' + user + ':' + pw;
+}
+
+function buildDocker(f, extras) {
+  const env = buildEnv(f, extras).split('\n').filter(Boolean);
+  const lines = ['services:', '  app:', '    image: my-app:latest', '    environment:'];
+  for (const ln of env) {
+    const eqIdx = ln.indexOf('=');
+    const k = ln.slice(0, eqIdx);
+    let v = ln.slice(eqIdx + 1);
+    if (/^'.*'$/.test(v)) v = v.slice(1, -1).replace(/'\\''/g, "'");
+    lines.push('      ' + k + ': ' + JSON.stringify(v));
+  }
+  const uri = buildURI(f, extras);
+  lines.push('      DATABASE_URL: ' + JSON.stringify(uri));
+  return lines.join('\n');
+}
+
+// ---------- UI plumbing ----------
+
+function togglePw() {
+  const el = $('f_pw');
+  if (el.type === 'password') { el.type = 'text'; $('pwBtn').textContent = 'hide'; }
+  else { el.type = 'password'; $('pwBtn').textContent = 'show'; }
+}
+
+function loadExample(i) {
+  $('input').value = EXAMPLES[i];
+  renderFromInput();
+}
+
+function clearAll() {
+  $('input').value = '';
+  ['f_user','f_pw','f_host','f_port','f_db'].forEach(id => $(id).value = '');
+  $('f_ssl').value = '';
+  $('params').querySelector('tbody').innerHTML = '';
+  addParamRow('', '');
+  rebuildOutputs();
+}
+
+function copyOut(id) {
+  navigator.clipboard.writeText($(id).textContent).catch(() => {});
+}
+
+$('input').addEventListener('input', renderFromInput);
+['f_user','f_pw','f_host','f_port','f_db','f_ssl'].forEach(id => $(id).addEventListener('input', rebuildOutputs));
+
+loadExample(1);
+</script>
+</body>
+</html>

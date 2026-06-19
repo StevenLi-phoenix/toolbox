@@ -39,6 +39,7 @@
 | [CSV → Markdown Table](csv2md.html) | Convert CSV / TSV to a GitHub-flavored Markdown table with auto column alignment by data type, pipe escaping, header detection, and `<br>` folding for multi-line cells. |
 | [TypeScript → Zod Schema](ts2zod.html) | Convert TypeScript `interface` and `type` declarations into Zod schemas — handles unions, intersections, tuples, literal types, optional / readonly props, nested objects, and built-in generics like `Record`, `Partial`, `Array`. |
 | [JSON5 ⇄ JSON Converter](json5.html) | Parse JSON5 — JSON with comments, trailing commas, unquoted keys, single quotes, hex literals, `NaN` / `Infinity`, and multi-line strings — and emit strict RFC 8259 JSON. Also pretty-prints strict JSON as ergonomic JSON5 with sort-keys and identifier-key options. |
+| [JSON Schema → TypeScript](jsonschema2ts.html) | Convert a JSON Schema document (draft 4 through 2020-12, plus OpenAPI 3.x schemas) into TypeScript `interface` and `type` declarations — resolves `$ref`, local `definitions` / `$defs` / `components.schemas`, handles `oneOf` / `anyOf` / `allOf`, tuples via `prefixItems`, `enum`, `const`, `additionalProperties`, and `patternProperties`, and emits JSDoc from `title` / `description`. |
 
 ## CSS & Styling
 
@@ -244,6 +245,7 @@
 | [WebRTC SDP Parser](sdpparser.html) | Inspect WebRTC SDP offers and answers — break out media sections, codecs, ICE candidates, DTLS fingerprints, and bandwidth limits. |
 | [Query String Builder & Parser](querystring.html) | Edit URL query strings as key/value pairs. Switch between repeat, bracket, indexed, and comma array styles, with JS, Python, and curl snippets. |
 | [gRPC Status Codes Reference](grpcstatus.html) | All 17 canonical gRPC codes with HTTP mapping, retry guidance, and ready-to-paste handler snippets in Go, Python, Node, and Java. |
+| [PostgreSQL Connection String Parser](pgconnstr.html) | Parse and round-trip libpq `postgres://` URIs and keyword=value DSNs into structured fields — multi-host failover, percent-encoded Unix sockets, sslmode warnings (disable/require → MITM risk), and converters to JDBC, Npgsql, Node `pg`, `psql` CLI, `PG*` env vars, `~/.pgpass`, and Docker Compose. |
 
 ## Developer Tools
 
@@ -346,6 +348,7 @@
 | [SMPTE Timecode Calculator](smpte.html) | Convert between SMPTE timecode `HH:MM:SS:FF` and frame counts at 23.976 / 24 / 25 / 29.97 DF + NDF / 30 / 50 / 59.94 / 60 fps — add or subtract timecodes, measure runtime between two points, and see wall-clock drift. |
 | [EAN / UPC / GTIN Check Digit Calculator](ean13.html) | Generate or verify the check digit for EAN-13, EAN-8, UPC-A, UPC-E, and GTIN-14 barcodes — step-by-step mod-10 weighted sum, schematic bar preview, and bulk validation of mixed-format codes pasted one per line. |
 | [Scientific & Engineering Notation Converter](scinotation.html) | Convert any number between standard decimal, scientific (1.23×10⁶), engineering (multiples of 3), SI prefix (k, M, μ, n, …), and E-notation — arbitrary precision via string arithmetic so values like `0.1 + 0.2` stay exact, with sig-fig control and bulk conversion. |
+| [Sun Position & Solar Times](sunposition.html) | Compute the sun's altitude and azimuth for any latitude / longitude / instant, plus the day's sunrise, sunset, solar noon, golden &amp; blue hours, and civil / nautical / astronomical twilight — using NOAA's solar position algorithm, with refraction correction, a live south-facing sky dome, a coloured day-phase bar, and a full-day altitude arc. Handles polar latitudes (no-event days return "—"). |
 
 ## AI & PM Tools
 
