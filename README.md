@@ -251,6 +251,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [FFT Visualizer & Spectrum Analyzer](fftvisualizer.html) | Synthesize a signal (sum of sines, square, triangle, sawtooth, chirp, DTMF, white noise, DC offset) and watch the Fast Fourier Transform reveal its frequency content. Configurable sample rate, FFT size (64 – 8192), 5 window functions (Hann, Hamming, Blackman, Flat-top, Rectangular), dB / linear magnitude, dB-floor clipping, and parabolic-interpolated top-peak detection. Pure radix-2 Cooley–Tukey, no Web Audio dependency. |
+| [Decibel (dB) Calculator](decibel.html) | Convert between decibels and linear ratios — 10·log for power, 20·log for voltage / SPL / current. Sum and subtract dB levels for combining noise sources (with the &lt;3 dB unreliable-correction warning from ISO&nbsp;1996), and round-trip `dBm`, `dBW`, `dBu`, `dBV`, `dBµV`, `dBFS` into voltages at 50 Ω / 75 Ω / 600 Ω. Includes a reference table of common SPL, audio, and RF signal levels. |
 | [Julian Date Converter](juliandate.html) | Convert calendar date ⇄ Julian Date (JD), Modified JD, Reduced JD, Truncated JD, Dublin JD, J2000 days, ANSI Date, and Unix epoch — handles proleptic vs. historical Julian/Gregorian, with day-of-year, day-of-week, and JDN integer view. |
 | [Trigonometry Calculator](trigcalc.html) | Evaluate sin/cos/tan, csc/sec/cot, asin/acos/atan, atan2(y, x), and the hyperbolic family for any angle. Live unit-circle diagram, degrees/radians toggle, exact-value table, and identity cheat sheet. |
 | [Temperature Converter](tempconvert.html) | Convert across eight scales at once — Celsius, Fahrenheit, Kelvin, Rankine, Réaumur, Newton, Delisle, and Rømer — with reference-point presets (absolute zero → sun surface) and an absolute-zero violation warning. |
@@ -385,6 +387,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [NPV, IRR & Payback Calculator](npv.html) | Discount any cash-flow series to find Net Present Value, Internal Rate of Return (Newton's method with bisection fallback for awkward series), modified IRR (separate finance &amp; reinvestment rates), discounted &amp; undiscounted payback (linear-interpolated within the crossing period), and the profitability index. Includes presets and a cumulative-flow chart that shows exactly when the project turns the corner. |
 | [Stopwatch with Lap Timer](stopwatch.html) | Millisecond-accurate stopwatch with split / lap tracking, keyboard shortcuts, best & worst highlighting, and CSV / Markdown export — state survives reloads. |
 | [Pomodoro Timer](pomodoro.html) | Customizable work/break intervals with audio alerts and tracking. |
 | [Time Card / Timesheet Calculator](timecard.html) | Log clock-in / clock-out shifts and compute total hours, regular vs overtime, gross pay, and weekly breakdowns. |

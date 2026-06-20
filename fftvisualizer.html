@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FFT Visualizer &amp; Spectrum Analyzer — Free Online Tool</title>
+<meta name="description" content="Visualize the Fast Fourier Transform of any synthesized signal — sum of sines, square, triangle, sawtooth, noise. Time-domain &amp; frequency-domain plots, magnitude in dB, top-peak detection, and 5 window functions (Hann, Hamming, Blackman, Flat-top, Rectangular). 100% client-side.">
+<meta name="keywords" content="fft visualizer, fast fourier transform, spectrum analyzer, dft, frequency analysis, signal processing, window function, hann window, hamming window, blackman window, fft online, time domain frequency domain">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/fftvisualizer.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 880px) { .row, .row3 { grid-template-columns: 1fr; } }
+  .panel { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .panel label { display:block; font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
+  .panel input, .panel select, .panel textarea {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg); color: var(--text); box-sizing: border-box;
+  }
+  .panel input:focus, .panel select:focus, .panel textarea:focus { outline: none; border-color: var(--accent); }
+  .panel textarea { min-height: 110px; resize: vertical; font-size: .88rem; line-height: 1.5; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+  .tile { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .tile .k { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-family: var(--mono); }
+  .tile .v { font-family: var(--mono); font-size: 1.05rem; font-weight: 600; margin-top: 3px; word-break: break-word; }
+  .chart { width: 100%; display: block; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .toolbar button {
+    padding: 6px 12px; font-size: .8rem; font-family: var(--mono);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); cursor: pointer;
+  }
+  .toolbar button:hover { background: var(--surface2); border-color: var(--border2); }
+  .toolbar button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  table.pk { width: 100%; border-collapse: collapse; font-size: .87rem; font-family: var(--mono); margin-top: 6px; }
+  table.pk th, table.pk td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.pk th:first-child, table.pk td:first-child { text-align: left; }
+  table.pk th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .err { color: var(--error); font-size: .85rem; min-height: 1.2em; margin-top: 6px; }
+  .help { font-size: .87rem; color: var(--muted); line-height: 1.6; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>FFT Visualizer &amp; Spectrum Analyzer</h1>
+<p class="subtitle">Synthesize a signal, see it in the <b>time domain</b>, and watch the <b>Fast Fourier Transform</b> reveal its frequency content. Tweak sample rate, window, and FFT size to study leakage, picket-fence loss, aliasing, and noise floor. The whole DSP pipeline runs in your browser &mdash; no audio is recorded or sent anywhere.</p>
+
+<div class="card">
+  <h2>1. Signal definition</h2>
+  <div class="row">
+    <div class="panel">
+      <label>Components (one per line: <code>sin|cos|sqr|tri|saw  amp  freqHz  [phaseDeg]</code>)</label>
+      <textarea id="sig" spellcheck="false">sin 1.0 440
+sin 0.5 880
+sin 0.25 1320</textarea>
+      <div class="checkbox-row">
+        <input type="checkbox" id="addNoise"><label for="addNoise">Add white noise σ =</label>
+        <input id="noise" type="number" step="any" value="0.05" inputmode="decimal" style="width: 100px; padding: 4px 8px;">
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="addDC"><label for="addDC">Add DC offset =</label>
+        <input id="dc" type="number" step="any" value="0" inputmode="decimal" style="width: 100px; padding: 4px 8px;">
+      </div>
+      <div class="toolbar">
+        <button data-preset="sines">Sines</button>
+        <button data-preset="square">Square wave</button>
+        <button data-preset="triangle">Triangle</button>
+        <button data-preset="sawtooth">Sawtooth</button>
+        <button data-preset="dtmf">DTMF "1"</button>
+        <button data-preset="am">AM modulated</button>
+        <button data-preset="chirp">Chirp 200→2000 Hz</button>
+        <button data-preset="noise">Pure white noise</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="row3" style="grid-template-columns: 1fr 1fr;">
+        <div>
+          <label>Sample rate (Hz)</label>
+          <input id="fs" type="number" step="1" value="8000" inputmode="numeric">
+        </div>
+        <div>
+          <label>FFT size N (power of 2)</label>
+          <select id="N">
+            <option>64</option><option>128</option><option>256</option><option>512</option>
+            <option selected>1024</option><option>2048</option><option>4096</option><option>8192</option>
+          </select>
+        </div>
+        <div>
+          <label>Window</label>
+          <select id="win">
+            <option value="rect">Rectangular</option>
+            <option value="hann" selected>Hann</option>
+            <option value="hamming">Hamming</option>
+            <option value="blackman">Blackman</option>
+            <option value="flattop">Flat-top</option>
+          </select>
+        </div>
+        <div>
+          <label>Magnitude scale</label>
+          <select id="scale">
+            <option value="db" selected>dB (20 log)</option>
+            <option value="lin">Linear</option>
+          </select>
+        </div>
+        <div>
+          <label>dB floor</label>
+          <input id="floor" type="number" step="any" value="-80" inputmode="decimal">
+        </div>
+        <div>
+          <label>Plot up to</label>
+          <select id="cutoff">
+            <option value="nyquist" selected>Nyquist (fs/2)</option>
+            <option value="half">fs/4</option>
+            <option value="quarter">fs/8</option>
+          </select>
+        </div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="k">Frequency resolution</div><div class="v" id="binW">—</div><div class="note">fs / N</div></div>
+        <div class="tile"><div class="k">Capture duration</div><div class="v" id="dur">—</div><div class="note">N / fs</div></div>
+        <div class="tile"><div class="k">Nyquist</div><div class="v" id="nyq">—</div></div>
+        <div class="tile"><div class="k">Window CG / NG</div><div class="v" id="winGain">—</div><div class="note">coherent / noise gain</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<div class="card">
+  <h2>2. Time domain</h2>
+  <svg class="chart" id="timeChart" viewBox="0 0 900 220" preserveAspectRatio="none"></svg>
+  <p class="help" style="margin-top:8px;">Showing the first N samples of the synthesized signal, with the applied window overlaid in grey. Aliased components (above Nyquist) wrap around — try a 5 kHz sine at fs = 8000.</p>
+</div>
+
+<div class="card">
+  <h2>3. Frequency domain (FFT magnitude)</h2>
+  <svg class="chart" id="freqChart" viewBox="0 0 900 260" preserveAspectRatio="none"></svg>
+  <h3 style="margin-top:14px; font-size:.95rem;">Top spectral peaks</h3>
+  <table class="pk">
+    <thead><tr><th>#</th><th>Bin</th><th>Frequency (Hz)</th><th>Magnitude</th><th>dB</th></tr></thead>
+    <tbody id="pkBody"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Background</h2>
+  <p class="help">The Discrete Fourier Transform decomposes a length-N signal into N complex frequency bins, each one a sinusoid at frequency <i>k · fs / N</i> for k = 0…N−1. Bins above N/2 mirror those below (for real input), so we only plot up to Nyquist (fs / 2). The Cooley–Tukey FFT computes this in O(N log N) instead of O(N²).</p>
+  <p class="help"><b>Windowing:</b> a rectangular window introduces spectral leakage (energy smears into neighboring bins). Smoother windows trade main-lobe width for lower side-lobes. Flat-top has the lowest amplitude error (good for amplitude measurement) but the widest main lobe.</p>
+  <p class="help"><b>Coherent gain (CG)</b> scales a sinusoid's apparent amplitude; we divide each bin by CG so a unit-amplitude tone shows ≈ 1.0 in linear mode (≈ 0 dB after the 2/N normalisation). <b>Noise gain (NG)</b> measures how noise variance survives the window.</p>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const TWO_PI = 2 * Math.PI;
+
+/* ---------- signal synthesis ---------- */
+function parseComponents(text) {
+  const comps = [];
+  text.split(/\n+/).forEach(line => {
+    line = line.replace(/#.*$/, '').trim();
+    if (!line) return;
+    const parts = line.split(/\s+/);
+    if (parts.length < 3) return;
+    const kind = parts[0].toLowerCase();
+    const amp = parseFloat(parts[1]);
+    const freq = parseFloat(parts[2]);
+    const phase = parts.length > 3 ? parseFloat(parts[3]) * Math.PI / 180 : 0;
+    if (!isFinite(amp) || !isFinite(freq)) return;
+    if (!['sin','cos','sqr','tri','saw','chirp'].includes(kind)) return;
+    comps.push({ kind, amp, freq, phase, end: parts.length > 4 ? parseFloat(parts[4]) : null });
+  });
+  return comps;
+}
+
+function genSignal(N, fs) {
+  const comps = parseComponents($('sig').value);
+  const out = new Float32Array(N);
+  const dc = $('addDC').checked ? (parseFloat($('dc').value) || 0) : 0;
+  const noiseAmp = $('addNoise').checked ? (parseFloat($('noise').value) || 0) : 0;
+  for (let i = 0; i < N; i++) {
+    const t = i / fs;
+    let s = dc;
+    for (const c of comps) {
+      const ph = TWO_PI * c.freq * t + c.phase;
+      switch (c.kind) {
+        case 'sin': s += c.amp * Math.sin(ph); break;
+        case 'cos': s += c.amp * Math.cos(ph); break;
+        case 'sqr': s += c.amp * (Math.sin(ph) >= 0 ? 1 : -1); break;
+        case 'tri': {
+          const x = (c.freq * t + c.phase / TWO_PI) % 1;
+          s += c.amp * (4 * Math.abs(x - 0.5) - 1);
+          break;
+        }
+        case 'saw': {
+          const x = (c.freq * t + c.phase / TWO_PI) % 1;
+          s += c.amp * (2 * x - 1);
+          break;
+        }
+        case 'chirp': {
+          const f0 = c.freq, f1 = c.end || c.freq * 2;
+          const T = N / fs;
+          const k = (f1 - f0) / T;
+          s += c.amp * Math.sin(TWO_PI * (f0 * t + 0.5 * k * t * t) + c.phase);
+          break;
+        }
+      }
+    }
+    if (noiseAmp !== 0) s += noiseAmp * gaussian();
+    out[i] = s;
+  }
+  return out;
+}
+
+function gaussian() {
+  // Box–Muller, single value
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(TWO_PI * v);
+}
+
+/* ---------- windows ---------- */
+function makeWindow(N, type) {
+  const w = new Float32Array(N);
+  for (let n = 0; n < N; n++) {
+    const x = n / (N - 1);
+    switch (type) {
+      case 'rect':     w[n] = 1; break;
+      case 'hann':     w[n] = 0.5 - 0.5 * Math.cos(TWO_PI * x); break;
+      case 'hamming':  w[n] = 0.54 - 0.46 * Math.cos(TWO_PI * x); break;
+      case 'blackman': w[n] = 0.42 - 0.5 * Math.cos(TWO_PI * x) + 0.08 * Math.cos(2 * TWO_PI * x); break;
+      case 'flattop': {
+        const a = [0.21557895, 0.41663158, 0.277263158, 0.083578947, 0.006947368];
+        w[n] = a[0] - a[1]*Math.cos(TWO_PI*x) + a[2]*Math.cos(2*TWO_PI*x) - a[3]*Math.cos(3*TWO_PI*x) + a[4]*Math.cos(4*TWO_PI*x);
+        break;
+      }
+    }
+  }
+  return w;
+}
+function windowGains(w) {
+  let cg = 0, ng = 0;
+  for (let i = 0; i < w.length; i++) { cg += w[i]; ng += w[i] * w[i]; }
+  return { cg: cg / w.length, ng: Math.sqrt(ng / w.length) };
+}
+
+/* ---------- FFT (iterative Cooley–Tukey, radix-2) ---------- */
+function fft(re, im) {
+  const N = re.length;
+  // bit reverse
+  for (let i = 1, j = 0; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = -TWO_PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let cRe = 1, cIm = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const uRe = re[i+k], uIm = im[i+k];
+        const vRe = re[i+k+len/2] * cRe - im[i+k+len/2] * cIm;
+        const vIm = re[i+k+len/2] * cIm + im[i+k+len/2] * cRe;
+        re[i+k] = uRe + vRe; im[i+k] = uIm + vIm;
+        re[i+k+len/2] = uRe - vRe; im[i+k+len/2] = uIm - vIm;
+        const ncRe = cRe * wRe - cIm * wIm;
+        cIm = cRe * wIm + cIm * wRe;
+        cRe = ncRe;
+      }
+    }
+  }
+}
+
+/* ---------- rendering ---------- */
+function fmtNum(v, sig = 4) {
+  if (!isFinite(v)) return '—';
+  const abs = Math.abs(v);
+  if (abs === 0) return '0';
+  if (abs >= 1e-3 && abs < 1e5) return parseFloat(v.toPrecision(sig)).toString();
+  return v.toExponential(sig - 1);
+}
+
+function drawTime(signal, win, fs) {
+  const W = 900, H = 220, PADL = 50, PADR = 16, PADT = 12, PADB = 28;
+  const N = signal.length;
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < N; i++) { if (signal[i] < mn) mn = signal[i]; if (signal[i] > mx) mx = signal[i]; }
+  if (mn === mx) { mn -= 1; mx += 1; }
+  const pad = (mx - mn) * 0.1;
+  const yLo = mn - pad, yHi = mx + pad;
+  const x = i => PADL + (W - PADL - PADR) * (i / (N - 1));
+  const y = v => PADT + (H - PADT - PADB) * (1 - (v - yLo) / (yHi - yLo));
+
+  let svg = '';
+  // grid
+  for (let i = 0; i <= 4; i++) {
+    const yy = PADT + (H - PADT - PADB) * i / 4;
+    const val = yHi - (yHi - yLo) * i / 4;
+    svg += `<line x1="${PADL}" y1="${yy}" x2="${W - PADR}" y2="${yy}" stroke="var(--border)" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${PADL - 6}" y="${yy + 3}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="var(--mono)">${fmtNum(val, 3)}</text>`;
+  }
+  // zero line
+  if (yLo < 0 && yHi > 0) svg += `<line x1="${PADL}" y1="${y(0)}" x2="${W - PADR}" y2="${y(0)}" stroke="var(--text)" stroke-width=".5"/>`;
+  // x ticks
+  for (let k = 0; k <= 5; k++) {
+    const i = Math.round((N - 1) * k / 5);
+    const xx = x(i);
+    const tMs = (i / fs * 1000);
+    svg += `<text x="${xx}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="var(--mono)">${tMs.toFixed(2)} ms</text>`;
+  }
+  // window outline (scaled to amplitude span)
+  const wSpan = (yHi - yLo) * 0.45;
+  const wMid = (yHi + yLo) / 2;
+  let wPath = '';
+  for (let i = 0; i < N; i++) {
+    const v = wMid + win[i] * wSpan / 2;
+    wPath += (i === 0 ? 'M' : 'L') + x(i).toFixed(2) + ',' + y(v).toFixed(2);
+  }
+  svg += `<path d="${wPath}" fill="none" stroke="#9ca3af" stroke-width="1" stroke-dasharray="2 4" opacity=".6"/>`;
+  // signal
+  let path = '';
+  for (let i = 0; i < N; i++) {
+    path += (i === 0 ? 'M' : 'L') + x(i).toFixed(2) + ',' + y(signal[i]).toFixed(2);
+  }
+  svg += `<path d="${path}" fill="none" stroke="#1f6feb" stroke-width="1.2"/>`;
+  $('timeChart').innerHTML = svg;
+}
+
+function drawFreq(mags, fs, N, cutoffMode) {
+  const W = 900, H = 260, PADL = 50, PADR = 16, PADT = 12, PADB = 28;
+  const scale = $('scale').value;
+  const floor = parseFloat($('floor').value) || -80;
+  const nBins = mags.length;
+  const fNyq = fs / 2;
+  const fMax = cutoffMode === 'nyquist' ? fNyq : cutoffMode === 'half' ? fNyq / 2 : fNyq / 4;
+  const kMax = Math.min(nBins - 1, Math.floor(fMax * N / fs));
+  const xs = [];
+  for (let k = 0; k <= kMax; k++) xs.push(k * fs / N);
+
+  let yLo, yHi;
+  if (scale === 'db') {
+    yLo = floor; yHi = 10;
+  } else {
+    let mx = 0;
+    for (let k = 0; k <= kMax; k++) if (mags[k] > mx) mx = mags[k];
+    yLo = 0; yHi = (mx || 1) * 1.1;
+  }
+  const x = f => PADL + (W - PADL - PADR) * (f / fMax);
+  const y = v => PADT + (H - PADT - PADB) * (1 - (v - yLo) / (yHi - yLo));
+
+  let svg = '';
+  for (let i = 0; i <= 5; i++) {
+    const yy = PADT + (H - PADT - PADB) * i / 5;
+    const val = yHi - (yHi - yLo) * i / 5;
+    svg += `<line x1="${PADL}" y1="${yy}" x2="${W - PADR}" y2="${yy}" stroke="var(--border)" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${PADL - 6}" y="${yy + 3}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="var(--mono)">${scale === 'db' ? val.toFixed(0) + ' dB' : fmtNum(val, 3)}</text>`;
+  }
+  // x ticks
+  const ticks = 6;
+  for (let i = 0; i <= ticks; i++) {
+    const f = fMax * i / ticks;
+    svg += `<text x="${x(f)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="var(--mono)">${f >= 1000 ? (f/1000).toFixed(1)+' kHz' : f.toFixed(0)+' Hz'}</text>`;
+  }
+
+  // bars
+  const stepX = (W - PADL - PADR) / kMax;
+  let bars = '';
+  for (let k = 0; k <= kMax; k++) {
+    const f = k * fs / N;
+    const m = mags[k];
+    const yv = scale === 'db' ? 20 * Math.log10(Math.max(m, 1e-30)) : m;
+    const yClipped = Math.max(yLo, Math.min(yHi, yv));
+    const xx = x(f);
+    const yy = y(yClipped);
+    const h = (H - PADB) - yy;
+    if (h > 0) bars += `<rect x="${(xx - stepX/2).toFixed(2)}" y="${yy.toFixed(2)}" width="${Math.max(stepX, 1).toFixed(2)}" height="${h.toFixed(2)}" fill="#1f6feb"/>`;
+  }
+  svg += bars;
+  $('freqChart').innerHTML = svg;
+}
+
+function findPeaks(mags, fs, N, k = 6) {
+  const peaks = [];
+  const nBins = mags.length;
+  for (let i = 1; i < nBins - 1; i++) {
+    if (mags[i] > mags[i-1] && mags[i] > mags[i+1] && mags[i] > 1e-6) {
+      // parabolic interpolation
+      const alpha = mags[i-1], beta = mags[i], gamma = mags[i+1];
+      const p = 0.5 * (alpha - gamma) / (alpha - 2*beta + gamma);
+      const interpBin = i + (isFinite(p) ? p : 0);
+      const mag = beta - 0.25 * (alpha - gamma) * (isFinite(p) ? p : 0);
+      peaks.push({ bin: interpBin, freq: interpBin * fs / N, mag });
+    }
+  }
+  peaks.sort((a, b) => b.mag - a.mag);
+  return peaks.slice(0, k);
+}
+
+/* ---------- pipeline ---------- */
+function compute() {
+  const fs = Math.max(1, parseFloat($('fs').value) || 1);
+  const N = parseInt($('N').value, 10);
+  const winType = $('win').value;
+  $('binW').textContent = (fs / N).toFixed(3) + ' Hz';
+  $('dur').textContent = (N / fs * 1000).toFixed(2) + ' ms';
+  $('nyq').textContent = (fs / 2).toFixed(0) + ' Hz';
+
+  const signal = genSignal(N, fs);
+  const win = makeWindow(N, winType);
+  const gains = windowGains(win);
+  $('winGain').textContent = gains.cg.toFixed(3) + ' / ' + gains.ng.toFixed(3);
+
+  drawTime(signal, win, fs);
+
+  const re = new Float64Array(N), im = new Float64Array(N);
+  for (let i = 0; i < N; i++) re[i] = signal[i] * win[i];
+  fft(re, im);
+
+  // normalize: 2/N for one-sided sinusoid amplitude, then / CG for window correction
+  const mags = new Float64Array(N / 2 + 1);
+  const norm = 2 / N / (gains.cg || 1);
+  for (let k = 0; k <= N/2; k++) {
+    let m = Math.sqrt(re[k]*re[k] + im[k]*im[k]) * norm;
+    if (k === 0 || k === N/2) m *= 0.5; // DC and Nyquist aren't doubled
+    mags[k] = m;
+  }
+  drawFreq(mags, fs, N, $('cutoff').value);
+
+  const pks = findPeaks(mags, fs, N, 6);
+  const tb = $('pkBody');
+  tb.innerHTML = pks.length === 0 ? '<tr><td colspan="5" style="color:var(--muted);text-align:center;">No peaks above 1e-6.</td></tr>' :
+    pks.map((p, i) => `<tr><td>${i+1}</td><td>${p.bin.toFixed(2)}</td><td>${p.freq.toFixed(2)}</td><td>${fmtNum(p.mag, 4)}</td><td>${(20*Math.log10(Math.max(p.mag,1e-30))).toFixed(2)}</td></tr>`).join('');
+}
+
+/* ---------- presets ---------- */
+const presets = {
+  sines:    'sin 1.0 440\nsin 0.5 880\nsin 0.25 1320',
+  square:   'sqr 1.0 200',
+  triangle: 'tri 1.0 200',
+  sawtooth: 'saw 1.0 200',
+  dtmf:     '# DTMF "1" = 697 Hz + 1209 Hz\nsin 0.5 697\nsin 0.5 1209',
+  am:       '# AM: 1000 Hz carrier modulated at 100 Hz\nsin 1.0 1000\nsin 0.5 900\nsin 0.5 1100',
+  chirp:    'chirp 1.0 200 0 2000',
+  noise:    ''
+};
+document.querySelectorAll('[data-preset]').forEach(b => {
+  b.addEventListener('click', () => {
+    $('sig').value = presets[b.dataset.preset];
+    if (b.dataset.preset === 'noise') { $('addNoise').checked = true; $('noise').value = 0.3; }
+    compute();
+  });
+});
+
+['sig','fs','N','win','scale','floor','cutoff','noise','dc','addNoise','addDC'].forEach(id => {
+  $(id).addEventListener('input', compute);
+  $(id).addEventListener('change', compute);
+});
+
+compute();
+</script>
+</body>
+</html>
