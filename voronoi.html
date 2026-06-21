@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voronoi Diagram Generator — Free Online Tool</title>
+<meta name="description" content="Generate Voronoi diagrams from click-to-add sites. Switch between Euclidean, Manhattan, and Chebyshev distance metrics, color cells, and inspect cell counts — all client-side.">
+<meta name="keywords" content="voronoi diagram, voronoi generator, computational geometry, nearest neighbor, distance metric, manhattan distance, chebyshev distance">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/voronoi.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .stage { position: relative; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+  canvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: none; }
+  .ctrl-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; font-size: .85rem; }
+  .ctrl-row label { display: inline-flex; align-items: center; gap: 6px; }
+  .ctrl-row select, .ctrl-row input[type="number"] { padding: 4px 8px; font-size: .82rem; height: auto; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat { padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .stat .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .val { font-family: var(--mono); font-size: 1.05rem; color: var(--text); margin-top: 2px; }
+  .hint { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Voronoi Diagram Generator</h1>
+<p class="subtitle">Click the canvas to drop sites (seeds). Every pixel is colored by the site closest to it, so the boundaries you see are the perpendicular bisectors between neighboring sites &mdash; that's a Voronoi diagram. Try different distance metrics: <em>Manhattan</em> bends cells into rectangular shapes, <em>Chebyshev</em> makes square cells, and <em>Euclidean</em> gives the classic convex polygonal cells used in mesh generation, nearest-neighbor lookups, and 2D coverage maps.</p>
+
+<div class="card">
+  <div class="ctrl-row">
+    <label>Metric
+      <select id="metric" onchange="render()">
+        <option value="euclid">Euclidean (L²)</option>
+        <option value="manhattan">Manhattan (L¹)</option>
+        <option value="chebyshev">Chebyshev (L∞)</option>
+        <option value="minkowski3">Minkowski p=3</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="showSites" checked onchange="render()"> Show sites</label>
+    <label><input type="checkbox" id="showEdges" checked onchange="render()"> Show edges</label>
+    <label><input type="checkbox" id="showIds" onchange="render()"> Show IDs</label>
+    <label>Random
+      <input type="number" id="randomN" value="20" min="2" max="500" style="width:70px">
+      <button onclick="randomize()">Add</button>
+    </label>
+    <button onclick="clearSites()">Clear</button>
+    <button onclick="undo()">Undo</button>
+  </div>
+  <div class="stage">
+    <canvas id="cv" width="800" height="520"></canvas>
+  </div>
+  <p class="hint">Tip: click empty space to add a site, click on a site to drag it, right-click (or long-press) a site to remove it.</p>
+  <div class="stat-grid">
+    <div class="stat"><div class="lbl">Sites</div><div class="val" id="nSites">0</div></div>
+    <div class="stat"><div class="lbl">Canvas</div><div class="val" id="dim">800 × 520</div></div>
+    <div class="stat"><div class="lbl">Metric</div><div class="val" id="metricLabel">Euclidean</div></div>
+    <div class="stat"><div class="lbl">Render</div><div class="val" id="renderTime">— ms</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About Voronoi Diagrams</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Given a set of points in a plane (called <em>sites</em>), the Voronoi diagram partitions the plane into regions where every point inside a region is closer to its associated site than to any other site. The construction is named after Russian mathematician Georgy Voronoy (1908), though the idea goes back to Descartes (1644) and Dirichlet (1850, hence "Dirichlet tessellation"). It's the dual of the Delaunay triangulation and shows up everywhere: cellular network coverage, robot path planning, generative art, k-nearest-neighbor classification, fracture patterns in geology, and the textures of giraffe spots and dried mud. The optimal Fortune's sweep-line algorithm runs in O(n log n), but for visualization a brute-force "each pixel finds its nearest site" works fine up to a few hundred sites.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+
+let sites = [];
+let dragIdx = -1;
+let nextId = 1;
+
+const METRIC_LABELS = {euclid:'Euclidean',manhattan:'Manhattan',chebyshev:'Chebyshev',minkowski3:'Minkowski p=3'};
+
+function fitCanvas() {
+  const r = cv.getBoundingClientRect();
+  const cssW = Math.floor(r.width);
+  const cssH = Math.max(360, Math.min(620, Math.floor(cssW * 0.65)));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = cssW * dpr;
+  cv.height = cssH * dpr;
+  cv.style.height = cssH + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  $('dim').textContent = cssW + ' × ' + cssH;
+  render();
+}
+
+function hslForId(id) {
+  const h = (id * 137.508) % 360;
+  return [h, 60, 62];
+}
+
+function dist(metric, dx, dy) {
+  if (metric === 'manhattan') return Math.abs(dx) + Math.abs(dy);
+  if (metric === 'chebyshev') return Math.max(Math.abs(dx), Math.abs(dy));
+  if (metric === 'minkowski3') return Math.cbrt(Math.abs(dx)**3 + Math.abs(dy)**3);
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+function render() {
+  const t0 = performance.now();
+  const metric = $('metric').value;
+  $('metricLabel').textContent = METRIC_LABELS[metric];
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (sites.length === 0) {
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--surface') || '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(127,127,127,.55)';
+    ctx.font = '14px var(--sans, sans-serif)';
+    ctx.textAlign = 'center';
+    ctx.fillText('Click to add Voronoi sites', w/2, h/2);
+    $('nSites').textContent = '0';
+    $('renderTime').textContent = (performance.now()-t0).toFixed(1) + ' ms';
+    return;
+  }
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+  const showEdges = $('showEdges').checked;
+  // Pre-compute HSL→RGB for each site
+  const colors = sites.map(s => {
+    const [hh, ss, ll] = hslForId(s.id);
+    return hslToRgb(hh, ss, ll);
+  });
+  let prevRow = new Int32Array(w);
+  for (let y = 0; y < h; y++) {
+    let prevOwner = -1;
+    for (let x = 0; x < w; x++) {
+      let best = Infinity, owner = 0;
+      for (let i = 0; i < sites.length; i++) {
+        const d = dist(metric, x - sites[i].x, y - sites[i].y);
+        if (d < best) { best = d; owner = i; }
+      }
+      const off = (y * w + x) * 4;
+      const c = colors[owner];
+      let r = c[0], g = c[1], b = c[2];
+      const onEdge = showEdges && ((x > 0 && prevOwner !== -1 && prevOwner !== owner) || (y > 0 && prevRow[x] !== owner));
+      if (onEdge) { r = 30; g = 30; b = 36; }
+      data[off] = r; data[off+1] = g; data[off+2] = b; data[off+3] = 255;
+      prevOwner = owner;
+      prevRow[x] = owner;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  if ($('showSites').checked) {
+    ctx.lineWidth = 2;
+    for (let i = 0; i < sites.length; i++) {
+      const s = sites[i];
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 4, 0, Math.PI*2);
+      ctx.fillStyle = '#111';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+    }
+  }
+  if ($('showIds').checked) {
+    ctx.font = 'bold 12px var(--sans, sans-serif)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < sites.length; i++) {
+      const s = sites[i];
+      ctx.fillStyle = '#fff';
+      ctx.fillText(String(s.id), s.x, s.y - 12);
+      ctx.fillStyle = '#111';
+      ctx.fillText(String(s.id), s.x, s.y - 13);
+    }
+  }
+  $('nSites').textContent = sites.length;
+  $('renderTime').textContent = (performance.now()-t0).toFixed(1) + ' ms';
+}
+
+function hslToRgb(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h/30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1)));
+  return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255)];
+}
+
+function eventPos(ev) {
+  const r = cv.getBoundingClientRect();
+  const t = ev.touches ? ev.touches[0] : ev;
+  return { x: t.clientX - r.left, y: t.clientY - r.top };
+}
+
+function findSiteAt(x, y, tol = 10) {
+  for (let i = sites.length - 1; i >= 0; i--) {
+    const dx = sites[i].x - x, dy = sites[i].y - y;
+    if (dx*dx + dy*dy <= tol*tol) return i;
+  }
+  return -1;
+}
+
+cv.addEventListener('mousedown', ev => {
+  if (ev.button === 2) return;
+  const p = eventPos(ev);
+  const idx = findSiteAt(p.x, p.y);
+  if (idx >= 0) {
+    dragIdx = idx;
+  } else {
+    sites.push({ id: nextId++, x: p.x, y: p.y });
+    render();
+  }
+});
+cv.addEventListener('mousemove', ev => {
+  if (dragIdx < 0) return;
+  const p = eventPos(ev);
+  sites[dragIdx].x = p.x;
+  sites[dragIdx].y = p.y;
+  render();
+});
+window.addEventListener('mouseup', () => { dragIdx = -1; });
+cv.addEventListener('contextmenu', ev => {
+  ev.preventDefault();
+  const p = eventPos(ev);
+  const idx = findSiteAt(p.x, p.y);
+  if (idx >= 0) { sites.splice(idx, 1); render(); }
+});
+cv.addEventListener('touchstart', ev => {
+  ev.preventDefault();
+  const p = eventPos(ev);
+  const idx = findSiteAt(p.x, p.y, 16);
+  if (idx >= 0) { dragIdx = idx; }
+  else { sites.push({ id: nextId++, x: p.x, y: p.y }); render(); }
+}, {passive:false});
+cv.addEventListener('touchmove', ev => {
+  if (dragIdx < 0) return;
+  ev.preventDefault();
+  const p = eventPos(ev);
+  sites[dragIdx].x = p.x;
+  sites[dragIdx].y = p.y;
+  render();
+}, {passive:false});
+cv.addEventListener('touchend', () => { dragIdx = -1; });
+
+function randomize() {
+  const n = Math.max(2, Math.min(500, parseInt($('randomN').value, 10) || 20));
+  const w = cv.clientWidth, h = cv.clientHeight;
+  for (let i = 0; i < n; i++) {
+    sites.push({ id: nextId++, x: 20 + Math.random() * (w - 40), y: 20 + Math.random() * (h - 40) });
+  }
+  render();
+}
+function clearSites() { sites = []; nextId = 1; render(); }
+function undo() { sites.pop(); render(); }
+
+window.addEventListener('resize', fitCanvas);
+fitCanvas();
+// seed with a few demo sites
+sites = [
+  {id: nextId++, x: 200, y: 150}, {id: nextId++, x: 500, y: 120},
+  {id: nextId++, x: 350, y: 300}, {id: nextId++, x: 150, y: 400},
+  {id: nextId++, x: 600, y: 380}, {id: nextId++, x: 700, y: 200}
+];
+render();
+</script>
+</body>
+</html>

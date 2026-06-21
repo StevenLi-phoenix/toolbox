@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Convex Hull Visualizer — Free Online Tool</title>
+<meta name="description" content="Click to drop points and watch the convex hull form using Andrew's monotone chain, Graham scan, or Jarvis march (gift wrapping). Compares operation counts, perimeter, and area.">
+<meta name="keywords" content="convex hull, computational geometry, graham scan, andrew monotone chain, jarvis march, gift wrapping, algorithm visualizer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/convexhull.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .stage { position: relative; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+  canvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: none; }
+  .ctrl-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; font-size: .85rem; }
+  .ctrl-row label { display: inline-flex; align-items: center; gap: 6px; }
+  .ctrl-row select, .ctrl-row input[type="number"] { padding: 4px 8px; font-size: .82rem; height: auto; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat { padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .stat .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .val { font-family: var(--mono); font-size: 1.05rem; color: var(--text); margin-top: 2px; }
+  .hint { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+  .compare-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 6px; }
+  .compare-table th, .compare-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  .compare-table th { font-size: .72rem; text-transform: uppercase; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+  .compare-table td.num { font-family: var(--mono); text-align: right; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Convex Hull Visualizer</h1>
+<p class="subtitle">The convex hull of a set of points is the smallest convex polygon that contains every point &mdash; the shape a rubber band makes around a fistful of pins. Click the canvas to drop points and watch the hull update. Switch between three classic algorithms &mdash; <em>Andrew's monotone chain</em> (O(n log n)), <em>Graham scan</em> (O(n log n)), and <em>Jarvis march / gift wrapping</em> (O(nh)) &mdash; and compare how many comparisons each one needs.</p>
+
+<div class="card">
+  <div class="ctrl-row">
+    <label>Algorithm
+      <select id="algo" onchange="render()">
+        <option value="andrew">Andrew's monotone chain</option>
+        <option value="graham">Graham scan</option>
+        <option value="jarvis">Jarvis march (gift wrap)</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="showOrder" onchange="render()"> Number hull vertices</label>
+    <label><input type="checkbox" id="showInside" checked onchange="render()"> Highlight interior points</label>
+    <label><input type="checkbox" id="fillHull" checked onchange="render()"> Fill hull</label>
+    <label>Random
+      <input type="number" id="randomN" value="30" min="3" max="2000" style="width:70px">
+      <button onclick="randomize('uniform')">Uniform</button>
+      <button onclick="randomize('disc')">Disc</button>
+      <button onclick="randomize('gauss')">Gaussian</button>
+    </label>
+    <button onclick="clearPoints()">Clear</button>
+    <button onclick="undo()">Undo</button>
+  </div>
+  <div class="stage">
+    <canvas id="cv" width="800" height="520"></canvas>
+  </div>
+  <p class="hint">Tip: click to add points, right-click (or long-press) a point to remove it.</p>
+  <div class="stat-grid">
+    <div class="stat"><div class="lbl">Points</div><div class="val" id="nPts">0</div></div>
+    <div class="stat"><div class="lbl">Hull vertices</div><div class="val" id="nHull">0</div></div>
+    <div class="stat"><div class="lbl">Perimeter (px)</div><div class="val" id="perim">0</div></div>
+    <div class="stat"><div class="lbl">Area (px²)</div><div class="val" id="area">0</div></div>
+    <div class="stat"><div class="lbl">Orientation tests</div><div class="val" id="ops">0</div></div>
+    <div class="stat"><div class="lbl">Time</div><div class="val" id="ms">— ms</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Compare all three on the same input</h2>
+  <table class="compare-table">
+    <thead><tr><th>Algorithm</th><th>Big-O</th><th class="num">Orientation tests</th><th class="num">Time (ms)</th><th class="num">Hull verts</th></tr></thead>
+    <tbody id="cmp"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Algorithm notes</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    <strong>Andrew's monotone chain</strong> sorts points by x (then y), then sweeps left-to-right building the lower hull and right-to-left building the upper hull, popping whenever a non-left turn appears. <strong>Graham scan</strong> picks the bottom-most point as a pivot, sorts the rest by polar angle, and walks around them with the same left-turn check. Both run in O(n log n) dominated by the sort. <strong>Jarvis march</strong> &mdash; the original "gift wrapping" algorithm &mdash; starts from the leftmost point and repeatedly picks the next hull vertex as the most counter-clockwise point seen so far. It takes O(nh) where h is the number of hull vertices, which makes it brilliant when h is tiny and terrible when h ≈ n.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const cv = $('cv');
+const ctx = cv.getContext('2d');
+let pts = [];
+let dragIdx = -1;
+
+function fitCanvas() {
+  const r = cv.getBoundingClientRect();
+  const cssW = Math.floor(r.width);
+  const cssH = Math.max(360, Math.min(620, Math.floor(cssW * 0.65)));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = cssW * dpr; cv.height = cssH * dpr;
+  cv.style.height = cssH + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  render();
+}
+
+function cross(o, a, b, ops) {
+  ops.n++;
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+
+function andrew(points, ops) {
+  if (points.length < 3) return points.slice();
+  const pp = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const n = pp.length;
+  const lower = [];
+  for (let i = 0; i < n; i++) {
+    while (lower.length >= 2 && cross(lower[lower.length-2], lower[lower.length-1], pp[i], ops) <= 0) lower.pop();
+    lower.push(pp[i]);
+  }
+  const upper = [];
+  for (let i = n - 1; i >= 0; i--) {
+    while (upper.length >= 2 && cross(upper[upper.length-2], upper[upper.length-1], pp[i], ops) <= 0) upper.pop();
+    upper.push(pp[i]);
+  }
+  upper.pop(); lower.pop();
+  return lower.concat(upper);
+}
+
+function graham(points, ops) {
+  if (points.length < 3) return points.slice();
+  let p0 = points[0];
+  for (const p of points) if (p.y < p0.y || (p.y === p0.y && p.x < p0.x)) p0 = p;
+  const rest = points.filter(p => p !== p0).map(p => ({...p, ang: Math.atan2(p.y - p0.y, p.x - p0.x), d: (p.x-p0.x)**2 + (p.y-p0.y)**2}));
+  rest.sort((a, b) => a.ang - b.ang || a.d - b.d);
+  const stack = [p0, rest[0]];
+  for (let i = 1; i < rest.length; i++) {
+    while (stack.length >= 2 && cross(stack[stack.length-2], stack[stack.length-1], rest[i], ops) <= 0) stack.pop();
+    stack.push(rest[i]);
+  }
+  return stack;
+}
+
+function jarvis(points, ops) {
+  if (points.length < 3) return points.slice();
+  let start = points[0];
+  for (const p of points) if (p.x < start.x || (p.x === start.x && p.y < start.y)) start = p;
+  const hull = [];
+  let cur = start;
+  do {
+    hull.push(cur);
+    let next = points[0] === cur ? points[1] : points[0];
+    for (const p of points) {
+      if (p === cur) continue;
+      const c = cross(cur, next, p, ops);
+      if (c < 0 || (c === 0 && (p.x-cur.x)**2 + (p.y-cur.y)**2 > (next.x-cur.x)**2 + (next.y-cur.y)**2)) {
+        next = p;
+      }
+    }
+    cur = next;
+    if (hull.length > points.length + 1) break;
+  } while (cur !== start);
+  return hull;
+}
+
+const ALGOS = { andrew, graham, jarvis };
+const NAMES = { andrew: "Andrew's monotone chain", graham: 'Graham scan', jarvis: 'Jarvis march' };
+const BIG_O = { andrew: 'O(n log n)', graham: 'O(n log n)', jarvis: 'O(n·h)' };
+
+function compute(algoName) {
+  const ops = { n: 0 };
+  const t0 = performance.now();
+  const hull = ALGOS[algoName](pts, ops);
+  const t1 = performance.now();
+  return { hull, ops: ops.n, ms: t1 - t0 };
+}
+
+function perimeter(hull) {
+  if (hull.length < 2) return 0;
+  let s = 0;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i+1)%hull.length];
+    s += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  return s;
+}
+function polyArea(hull) {
+  if (hull.length < 3) return 0;
+  let s = 0;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i+1)%hull.length];
+    s += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(s) / 2;
+}
+
+function render() {
+  const w = cv.clientWidth, h = cv.clientHeight;
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--surface') || '#fff';
+  ctx.fillRect(0, 0, w, h);
+  if (pts.length === 0) {
+    ctx.fillStyle = 'rgba(127,127,127,.55)';
+    ctx.font = '14px var(--sans, sans-serif)';
+    ctx.textAlign = 'center';
+    ctx.fillText('Click to add points', w/2, h/2);
+    $('nPts').textContent = '0';
+    $('nHull').textContent = '0';
+    $('perim').textContent = '0';
+    $('area').textContent = '0';
+    $('ops').textContent = '0';
+    $('ms').textContent = '— ms';
+    renderCompare();
+    return;
+  }
+  const algo = $('algo').value;
+  const { hull, ops, ms } = compute(algo);
+  const onHull = new Set(hull);
+  if (hull.length >= 3 && $('fillHull').checked) {
+    ctx.fillStyle = 'rgba(78,158,255,.12)';
+    ctx.beginPath();
+    ctx.moveTo(hull[0].x, hull[0].y);
+    for (let i = 1; i < hull.length; i++) ctx.lineTo(hull[i].x, hull[i].y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (hull.length >= 2) {
+    ctx.strokeStyle = '#4e9eff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(hull[0].x, hull[0].y);
+    for (let i = 1; i < hull.length; i++) ctx.lineTo(hull[i].x, hull[i].y);
+    ctx.closePath();
+    ctx.stroke();
+  }
+  const hi = $('showInside').checked;
+  for (const p of pts) {
+    const isH = onHull.has(p);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, isH ? 5 : 3.5, 0, Math.PI*2);
+    ctx.fillStyle = isH ? '#ff6b6b' : (hi ? '#7c8aa0' : '#444');
+    ctx.fill();
+    if (isH) {
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+    }
+  }
+  if ($('showOrder').checked && hull.length > 0) {
+    ctx.font = 'bold 12px var(--sans, sans-serif)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < hull.length; i++) {
+      const p = hull[i];
+      ctx.fillStyle = '#fff';
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        ctx.fillText(String(i+1), p.x + dx, p.y - 12 + dy);
+      }
+      ctx.fillStyle = '#111';
+      ctx.fillText(String(i+1), p.x, p.y - 12);
+    }
+  }
+  $('nPts').textContent = pts.length;
+  $('nHull').textContent = hull.length;
+  $('perim').textContent = perimeter(hull).toFixed(1);
+  $('area').textContent = polyArea(hull).toLocaleString(undefined, {maximumFractionDigits:1});
+  $('ops').textContent = ops.toLocaleString();
+  $('ms').textContent = ms.toFixed(2) + ' ms';
+  renderCompare();
+}
+
+function renderCompare() {
+  const tb = $('cmp');
+  tb.innerHTML = '';
+  if (pts.length < 3) {
+    tb.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center">add at least 3 points</td></tr>';
+    return;
+  }
+  for (const key of ['andrew','graham','jarvis']) {
+    const { hull, ops, ms } = compute(key);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${NAMES[key]}</td><td>${BIG_O[key]}</td><td class="num">${ops.toLocaleString()}</td><td class="num">${ms.toFixed(2)}</td><td class="num">${hull.length}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+function eventPos(ev) {
+  const r = cv.getBoundingClientRect();
+  const t = ev.touches ? ev.touches[0] : ev;
+  return { x: t.clientX - r.left, y: t.clientY - r.top };
+}
+function findPointAt(x, y, tol = 10) {
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const dx = pts[i].x - x, dy = pts[i].y - y;
+    if (dx*dx + dy*dy <= tol*tol) return i;
+  }
+  return -1;
+}
+
+cv.addEventListener('mousedown', ev => {
+  if (ev.button === 2) return;
+  const p = eventPos(ev);
+  const idx = findPointAt(p.x, p.y);
+  if (idx >= 0) dragIdx = idx;
+  else { pts.push({ x: p.x, y: p.y }); render(); }
+});
+cv.addEventListener('mousemove', ev => {
+  if (dragIdx < 0) return;
+  const p = eventPos(ev);
+  pts[dragIdx].x = p.x; pts[dragIdx].y = p.y;
+  render();
+});
+window.addEventListener('mouseup', () => { dragIdx = -1; });
+cv.addEventListener('contextmenu', ev => {
+  ev.preventDefault();
+  const p = eventPos(ev);
+  const idx = findPointAt(p.x, p.y);
+  if (idx >= 0) { pts.splice(idx, 1); render(); }
+});
+cv.addEventListener('touchstart', ev => {
+  ev.preventDefault();
+  const p = eventPos(ev);
+  const idx = findPointAt(p.x, p.y, 16);
+  if (idx >= 0) dragIdx = idx;
+  else { pts.push({ x: p.x, y: p.y }); render(); }
+}, {passive:false});
+cv.addEventListener('touchmove', ev => {
+  if (dragIdx < 0) return;
+  ev.preventDefault();
+  const p = eventPos(ev);
+  pts[dragIdx].x = p.x; pts[dragIdx].y = p.y;
+  render();
+}, {passive:false});
+cv.addEventListener('touchend', () => { dragIdx = -1; });
+
+function randn() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function randomize(kind) {
+  const n = Math.max(3, Math.min(2000, parseInt($('randomN').value, 10) || 30));
+  const w = cv.clientWidth, h = cv.clientHeight;
+  const cx = w/2, cy = h/2;
+  pts = [];
+  if (kind === 'uniform') {
+    for (let i = 0; i < n; i++) pts.push({ x: 20 + Math.random()*(w-40), y: 20 + Math.random()*(h-40) });
+  } else if (kind === 'disc') {
+    const R = Math.min(w, h)/2 - 20;
+    for (let i = 0; i < n; i++) {
+      const r = R * Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
+      pts.push({ x: cx + r*Math.cos(a), y: cy + r*Math.sin(a) });
+    }
+  } else {
+    const s = Math.min(w, h) / 6;
+    for (let i = 0; i < n; i++) {
+      pts.push({ x: Math.max(10, Math.min(w-10, cx + randn()*s)), y: Math.max(10, Math.min(h-10, cy + randn()*s)) });
+    }
+  }
+  render();
+}
+function clearPoints() { pts = []; render(); }
+function undo() { pts.pop(); render(); }
+
+window.addEventListener('resize', fitCanvas);
+fitCanvas();
+randomize('disc');
+</script>
+</body>
+</html>
