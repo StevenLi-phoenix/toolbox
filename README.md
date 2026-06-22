@@ -110,6 +110,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Image Histogram Viewer](imagehistogram.html) | Inspect any image's RGB and BT.709 luminance histograms with stats, clipping warnings, and linear/log/√ Y-scale. |
 | [Image to Base64](img2base64.html) | Convert images to Base64 data URIs for embedding in HTML & CSS. |
 | [Image to ASCII Art](img2ascii.html) | Convert any image to ASCII art. |
 | [Image Compressor](imgcompress.html) | Compress JPEG, PNG, and WebP images in your browser. |
@@ -169,6 +170,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Bitcoin Address Validator](btcaddress.html) | Validate Bitcoin addresses across every format — Legacy `1…` (P2PKH), Script `3…` (P2SH), Native SegWit `bc1q…` (P2WPKH/P2WSH), and Taproot `bc1p…` (P2TR Bech32m). Decodes the version byte, witness program, HRP, checksum, and recognises testnet, regtest, signet, and Litecoin variants. |
 | [MurmurHash3 Calculator](murmurhash.html) | Hash any string with Austin Appleby's MurmurHash3 — 32-bit and 128-bit (x86 and x64) variants, configurable seed, hex / decimal / base36 outputs, shard-bucket modulus, and reference vectors that match Python's `mmh3`, Guava, and Cassandra. |
 | [Substitution Cipher Solver](subcipher.html) | Crack a monoalphabetic substitution cipher (cryptogram) by hand or let a hill-climbing solver guess the key from English letter and bigram frequencies. Interactive A→? mapping with lockable cells, live frequency table vs ETAOIN ranking, and one-click ROT13 / classic-cryptogram presets. |
 | [WebAuthn / Passkey Decoder](webauthn.html) | Decode WebAuthn registration and authentication responses — `clientDataJSON`, CBOR `attestationObject`, `authenticatorData` flags, AAGUID lookup, credential ID, and the COSE-encoded public key (EC2/RSA/OKP). |
@@ -251,6 +253,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [DTMF Tone Generator](dtmf.html) | Play Dual-Tone Multi-Frequency touch-tone signals for digits `0-9`, `*`, `#`, and `A-D`. Tap a keypad key or dial a full sequence like a phone number — tune tone duration, pause length, and volume, see each key's row + column Hz pair light up. Web Audio API, no files needed. |
 | [Voronoi Diagram Generator](voronoi.html) | Click to drop sites on a canvas and watch a Voronoi tessellation render in real time — each pixel colored by its nearest site. Switch between Euclidean (L²), Manhattan (L¹), Chebyshev (L∞), and Minkowski p=3 metrics, drag sites around, sprinkle random sets, and inspect the edge boundaries and per-site IDs. |
 | [L-System Fractal Generator](lsystem.html) | Build Lindenmayer-system fractals from an axiom and production rules: Koch curve, Koch snowflake, Sierpinski triangle & arrowhead, dragon curve, Hilbert curve, Levy C, Gosper, plant, tree, and bush presets. Adjustable iterations (0–9), angle, step length, starting heading, stroke color or rainbow gradient. |
 | [Convex Hull Visualizer](convexhull.html) | Click points to compute the convex hull using Andrew's monotone chain, Graham scan, or Jarvis march (gift wrapping). Side-by-side comparison of orientation-test counts, runtime, and hull size on the same input — plus uniform / disc / Gaussian random scatter presets and perimeter / area readouts. |

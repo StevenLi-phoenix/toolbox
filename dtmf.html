@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DTMF Tone Generator & Sequence Player — Free Online Tool</title>
+<meta name="description" content="Generate and play DTMF (Dual-Tone Multi-Frequency) touch-tone signals for any digit, *, #, or A–D key. Dial a full sequence like a phone number, tune duration and pause, see the row + column Hz pair. Runs entirely in your browser with the Web Audio API.">
+<meta name="keywords" content="dtmf, touch tone, tone generator, phone keypad, dialer, dual tone, multi frequency, 697 770 852 941, web audio">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dtmf.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .keypad {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    max-width: 480px; margin: 0 auto;
+  }
+  .key {
+    aspect-ratio: 1.4 / 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); cursor: pointer; user-select: none;
+    transition: background .08s, border-color .08s, transform .04s;
+  }
+  .key:hover { background: var(--surface2); border-color: var(--border2); }
+  .key:active, .key.active {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+    transform: scale(.97);
+  }
+  .key .lbl { font-family: var(--mono); font-size: 1.6rem; font-weight: 600; line-height: 1; }
+  .key .freq { font-size: .65rem; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+  .key.active .freq { color: rgba(255,255,255,.8); }
+  .key.letter { background: var(--surface2); }
+  .row-label { writing-mode: vertical-rl; transform: rotate(180deg);
+    font-family: var(--mono); font-size: .72rem; color: var(--muted);
+    display: flex; align-items: center; justify-content: center; }
+  .col-label {
+    font-family: var(--mono); font-size: .72rem; color: var(--muted);
+    text-align: center; padding-bottom: 4px;
+  }
+  .keypad-wrap {
+    display: grid; grid-template-columns: auto 1fr; gap: 8px;
+    max-width: 520px; margin: 0 auto;
+  }
+  .col-header { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 4px; }
+  .row-header { display: grid; grid-template-rows: repeat(4, 1fr); gap: 10px; padding-right: 4px; }
+  .row-hz { display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: .7rem; color: var(--muted); }
+  .controls-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px; margin-bottom: 12px;
+  }
+  .stat-row {
+    display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px;
+    padding: 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .85rem;
+  }
+  .stat-row strong { color: var(--text); }
+  .stat-row span { color: var(--muted); }
+  .seq-input {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: 1.1rem;
+    background: var(--bg); color: var(--text); letter-spacing: .15em;
+  }
+  .freq-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .85rem; margin-top: 10px; }
+  .freq-table th, .freq-table td { padding: 6px 10px; border: 1px solid var(--border); text-align: center; }
+  .freq-table th { background: var(--surface2); color: var(--muted); font-size: .72rem; text-transform: uppercase; }
+  .now-playing {
+    padding: 10px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .9rem;
+    margin-top: 12px; min-height: 42px; display: flex; align-items: center; gap: 12px;
+  }
+  .now-playing .digit { font-size: 1.3rem; font-weight: 600; }
+  .small-muted { font-size: .8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>DTMF Tone Generator</h1>
+<p class="subtitle">Play Dual-Tone Multi-Frequency (touch-tone) signals — the sounds your landline phone made when you dialed a number. Each key is the sum of one row and one column sine wave. Tap a key to hear it, or paste a sequence and dial it like a phone.</p>
+
+<div class="card">
+  <h2>Sequence Dialer</h2>
+  <div class="field">
+    <label for="seq">Sequence (digits, * # A-D, comma or , for pause)</label>
+    <input type="text" id="seq" class="seq-input" value="1-800-555-1234" autocomplete="off" spellcheck="false">
+    <div class="hint">Whitespace, hyphens, and parentheses are stripped. Use <code>,</code> or <code>p</code> for a half-second pause; <code>w</code> for a full pause.</div>
+  </div>
+  <div class="controls-grid">
+    <div>
+      <label for="dur">Tone duration (ms)</label>
+      <input type="number" id="dur" min="40" max="2000" step="10" value="180">
+    </div>
+    <div>
+      <label for="gap">Gap between tones (ms)</label>
+      <input type="number" id="gap" min="20" max="2000" step="10" value="80">
+    </div>
+    <div>
+      <label for="vol">Volume</label>
+      <input type="range" id="vol" min="0" max="1" step="0.01" value="0.25">
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="playSeq">▶ Dial Sequence</button>
+    <button class="btn btn-secondary" id="stopAll">■ Stop</button>
+  </div>
+  <div class="now-playing" id="nowPlaying"><span class="small-muted">Idle. Press a key or dial the sequence.</span></div>
+</div>
+
+<div class="card">
+  <h2>Keypad</h2>
+  <div class="keypad-wrap">
+    <div class="row-header" id="rowHeader"></div>
+    <div>
+      <div class="col-header" id="colHeader"></div>
+      <div class="keypad" id="keypad"></div>
+    </div>
+  </div>
+  <div class="stat-row">
+    <div><span>Row frequencies:</span> <strong>697, 770, 852, 941 Hz</strong></div>
+    <div><span>Column frequencies:</span> <strong>1209, 1336, 1477, 1633 Hz</strong></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>DTMF Frequency Matrix</h2>
+  <table class="freq-table">
+    <thead><tr><th></th><th>1209 Hz</th><th>1336 Hz</th><th>1477 Hz</th><th>1633 Hz</th></tr></thead>
+    <tbody>
+      <tr><th>697 Hz</th><td>1</td><td>2</td><td>3</td><td>A</td></tr>
+      <tr><th>770 Hz</th><td>4</td><td>5</td><td>6</td><td>B</td></tr>
+      <tr><th>852 Hz</th><td>7</td><td>8</td><td>9</td><td>C</td></tr>
+      <tr><th>941 Hz</th><td>*</td><td>0</td><td>#</td><td>D</td></tr>
+    </tbody>
+  </table>
+  <p class="small-muted" style="margin-top:10px;line-height:1.55">
+    DTMF (ITU-T Q.23 / Q.24) replaced rotary pulse dialing in the 1960s — AT&amp;T trademarked it as <em>Touch-Tone</em>. The four extra <strong>A–D</strong> keys exist in the spec (1633 Hz column) but were dropped from consumer phones; they survive in amateur radio and some military autodialers. Each tone pair was chosen so no row frequency is a harmonic of any column frequency, which lets the receiver tell them apart even on a noisy line. The minimum recommended tone duration is 40 ms, with at least 40 ms of silence between tones.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const ROWS = [697, 770, 852, 941];
+const COLS = [1209, 1336, 1477, 1633];
+const KEYS = [
+  ['1','2','3','A'],
+  ['4','5','6','B'],
+  ['7','8','9','C'],
+  ['*','0','#','D'],
+];
+const KEY_TO_FREQS = {};
+for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+  KEY_TO_FREQS[KEYS[r][c]] = { row: ROWS[r], col: COLS[c] };
+}
+
+const $ = id => document.getElementById(id);
+let audioCtx = null;
+let activePlayback = null; // {cancelled: bool, gains: [GainNode]}
+
+function ensureCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playTone(key, durMs) {
+  const ctx = ensureCtx();
+  const freqs = KEY_TO_FREQS[key];
+  if (!freqs) return null;
+  const vol = parseFloat($('vol').value);
+  const dur = durMs / 1000;
+  const now = ctx.currentTime;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(vol, now + 0.01);
+  gain.gain.setValueAtTime(vol, now + dur - 0.02);
+  gain.gain.linearRampToValueAtTime(0, now + dur);
+  gain.connect(ctx.destination);
+  const oscR = ctx.createOscillator();
+  const oscC = ctx.createOscillator();
+  oscR.type = 'sine'; oscC.type = 'sine';
+  oscR.frequency.value = freqs.row;
+  oscC.frequency.value = freqs.col;
+  oscR.connect(gain); oscC.connect(gain);
+  oscR.start(now); oscC.start(now);
+  oscR.stop(now + dur); oscC.stop(now + dur);
+  return { gain, oscR, oscC, freqs };
+}
+
+function setNowPlaying(key) {
+  const np = $('nowPlaying');
+  if (key == null) {
+    np.innerHTML = '<span class="small-muted">Idle.</span>';
+    return;
+  }
+  const f = KEY_TO_FREQS[key];
+  if (!f) { np.innerHTML = '<span class="small-muted">Pause…</span>'; return; }
+  np.innerHTML = '<span class="digit">' + (key === '*' ? '✱' : key === '#' ? '♯' : key) + '</span>' +
+    '<span>' + f.row + ' Hz + ' + f.col + ' Hz</span>';
+}
+
+function highlightKey(key, on) {
+  document.querySelectorAll('.key').forEach(el => {
+    if (el.dataset.key === key) el.classList.toggle('active', on);
+  });
+}
+
+async function dialSequence(raw) {
+  stopAll();
+  const dur = parseInt($('dur').value, 10) || 180;
+  const gap = parseInt($('gap').value, 10) || 80;
+  const seq = parseSequence(raw);
+  if (!seq.length) return;
+  const ctrl = { cancelled: false };
+  activePlayback = ctrl;
+  for (const item of seq) {
+    if (ctrl.cancelled) break;
+    if (item.type === 'pause') {
+      setNowPlaying(null);
+      await sleep(item.ms);
+    } else {
+      playTone(item.key, dur);
+      highlightKey(item.key, true);
+      setNowPlaying(item.key);
+      await sleep(dur);
+      highlightKey(item.key, false);
+      await sleep(gap);
+    }
+  }
+  setNowPlaying(null);
+  activePlayback = null;
+}
+
+function parseSequence(raw) {
+  const out = [];
+  for (const ch of raw.toUpperCase()) {
+    if (KEY_TO_FREQS[ch]) out.push({ type: 'tone', key: ch });
+    else if (ch === ',' || ch === 'P') out.push({ type: 'pause', ms: 500 });
+    else if (ch === 'W') out.push({ type: 'pause', ms: 1500 });
+    // ignore spaces, hyphens, parens, plus, etc.
+  }
+  return out;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function stopAll() {
+  if (activePlayback) activePlayback.cancelled = true;
+  if (audioCtx) {
+    // Best-effort: ramp master via creating a brief gain mute is overkill; oscillators self-terminate.
+  }
+  document.querySelectorAll('.key.active').forEach(el => el.classList.remove('active'));
+  setNowPlaying(null);
+}
+
+function buildKeypad() {
+  const ch = $('colHeader');
+  ch.innerHTML = COLS.map(f => '<div class="col-label">' + f + ' Hz</div>').join('');
+  const rh = $('rowHeader');
+  rh.innerHTML = ROWS.map(f => '<div class="row-hz">' + f + ' Hz</div>').join('');
+  const pad = $('keypad');
+  pad.innerHTML = '';
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+    const key = KEYS[r][c];
+    const el = document.createElement('div');
+    el.className = 'key' + (/[A-D]/.test(key) ? ' letter' : '');
+    el.dataset.key = key;
+    el.innerHTML = '<div class="lbl">' + (key === '*' ? '✱' : key === '#' ? '♯' : key) + '</div>' +
+      '<div class="freq">' + ROWS[r] + '+' + COLS[c] + '</div>';
+    let pressed = false;
+    const press = e => {
+      e.preventDefault();
+      if (pressed) return;
+      pressed = true;
+      el.classList.add('active');
+      playTone(key, parseInt($('dur').value, 10) || 180);
+      setNowPlaying(key);
+    };
+    const release = () => {
+      if (!pressed) return;
+      pressed = false;
+      el.classList.remove('active');
+      setTimeout(() => { if (!document.querySelector('.key.active')) setNowPlaying(null); }, 200);
+    };
+    el.addEventListener('mousedown', press);
+    el.addEventListener('mouseup', release);
+    el.addEventListener('mouseleave', release);
+    el.addEventListener('touchstart', press, { passive: false });
+    el.addEventListener('touchend', release);
+    pad.appendChild(el);
+  }
+}
+
+$('playSeq').addEventListener('click', () => dialSequence($('seq').value));
+$('stopAll').addEventListener('click', stopAll);
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const k = e.key.toUpperCase();
+  if (KEY_TO_FREQS[k]) {
+    playTone(k, parseInt($('dur').value, 10) || 180);
+    highlightKey(k, true);
+    setNowPlaying(k);
+    setTimeout(() => { highlightKey(k, false); setNowPlaying(null); }, 200);
+  }
+});
+
+buildKeypad();
+</script>
+</body>
+</html>

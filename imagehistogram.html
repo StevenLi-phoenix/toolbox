@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Histogram Viewer — Free Online Tool</title>
+<meta name="description" content="Inspect any image's RGB and luminance histograms in the browser. Visualise per-channel exposure, find clipped highlights and crushed blacks, see min/max/mean/median statistics, and switch between linear and log scaling. 100% client-side — your photos never leave your machine.">
+<meta name="keywords" content="image histogram, rgb histogram, luminance histogram, exposure check, clipped highlights, photo statistics, image analysis">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/imagehistogram.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .drop {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 36px 20px; text-align: center; color: var(--muted);
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.drag { border-color: var(--accent); background: var(--surface2); }
+  .drop strong { color: var(--text); }
+  .preview-wrap {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 220px;
+  }
+  .preview-wrap img {
+    max-width: 100%; max-height: 360px;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    background: #fff;
+  }
+  .hist-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .hist-card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; background: var(--surface);
+  }
+  .hist-card h3 {
+    font-size: .85rem; font-weight: 600;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+  canvas.hist { width: 100%; height: 140px; background: var(--bg); border-radius: 4px; display: block; }
+  .stats {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;
+    margin-top: 8px; font-family: var(--mono); font-size: .78rem;
+  }
+  .stats div span { color: var(--muted); }
+  .stats div strong { color: var(--text); font-weight: 600; }
+  .controls-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px; margin-bottom: 14px;
+  }
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px; margin-top: 12px;
+  }
+  .summary .tile { padding: 10px 12px; }
+  .summary .tile span { font-size: .72rem; }
+  .summary .tile strong { font-family: var(--mono); font-size: .9rem; }
+  .warning-row {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;
+  }
+  .warning-row .badge { font-size: .8rem; padding: 4px 10px; }
+  .placeholder { color: var(--muted); text-align: center; padding: 30px; font-size: .9rem; }
+  input[type="file"] { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Image Histogram Viewer</h1>
+<p class="subtitle">Drop an image — JPG, PNG, WebP, GIF, anything your browser decodes — and read its tonal distribution. Per-channel RGB and luminance histograms with min, max, mean, median, standard deviation, plus clipping warnings for blown highlights and crushed shadows. Everything runs locally; your image never gets uploaded.</p>
+
+<div class="card">
+  <h2>Image</h2>
+  <label class="drop" id="drop" for="file">
+    <div><strong>Click to choose</strong> or drop an image here</div>
+    <div style="font-size:.8rem;margin-top:6px">JPG · PNG · WebP · GIF · AVIF · BMP</div>
+  </label>
+  <input type="file" id="file" accept="image/*">
+  <div class="preview-wrap" id="previewWrap" style="margin-top:14px">
+    <div class="placeholder" id="placeholder">No image loaded.</div>
+    <img id="preview" alt="" style="display:none">
+  </div>
+  <div class="summary" id="summary" style="display:none"></div>
+  <div class="warning-row" id="warnings"></div>
+</div>
+
+<div class="card" id="resultsCard" style="display:none">
+  <h2>Histograms</h2>
+  <div class="controls-grid">
+    <div>
+      <label for="scale">Y-axis scale</label>
+      <select id="scale">
+        <option value="linear">Linear</option>
+        <option value="log" selected>Logarithmic</option>
+        <option value="sqrt">Square root</option>
+      </select>
+    </div>
+    <div>
+      <label for="bins">Bins</label>
+      <select id="bins">
+        <option value="256" selected>256 (per-value)</option>
+        <option value="128">128</option>
+        <option value="64">64</option>
+        <option value="32">32</option>
+      </select>
+    </div>
+    <div>
+      <label for="alpha">Include alpha</label>
+      <select id="alpha">
+        <option value="ignore" selected>Ignore transparent pixels</option>
+        <option value="include">Include every pixel</option>
+      </select>
+    </div>
+  </div>
+  <div class="hist-grid" id="histGrid"></div>
+</div>
+
+<div class="card">
+  <h2>What the bars mean</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65">
+    A histogram counts how many pixels fall into each brightness bucket from 0 (black) to 255 (white). Tall bars on the right side mean lots of bright pixels; tall bars on the left mean deep shadows. A spike crammed against either edge is <strong>clipping</strong> — pixels lost detail because they exceeded the captured range. A balanced photo usually has data spanning the whole 0–255 range without spikes at either end.
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.65;margin-top:8px">
+    The <strong>luminance</strong> channel uses the BT.709 weighting (<code>Y = 0.2126·R + 0.7152·G + 0.0722·B</code>) — the same formula your TV and most image editors apply to compute perceived brightness. Mean &lt; 64 hints at an underexposed shot; mean &gt; 192 hints at overexposure. The <em>standard deviation</em> is a rough proxy for contrast — a flat, foggy image has low σ; a high-contrast scene with deep shadows and bright highlights has high σ.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let currentData = null; // { r:[], g:[], b:[], l:[], total, transparent }
+
+function readImage(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    $('preview').src = img.src;
+    $('preview').style.display = 'block';
+    $('placeholder').style.display = 'none';
+    analyse(img, file);
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    $('placeholder').style.display = 'block';
+    $('placeholder').textContent = 'Could not decode image.';
+  };
+  img.src = url;
+}
+
+function analyse(img, file) {
+  // Downsize huge images to keep analysis fast — sampling at most ~4 MP
+  const maxPx = 4_000_000;
+  let { naturalWidth: w, naturalHeight: h } = img;
+  let scale = 1;
+  if (w * h > maxPx) {
+    scale = Math.sqrt(maxPx / (w * h));
+    w = Math.floor(w * scale); h = Math.floor(h * scale);
+  }
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  let data;
+  try { data = ctx.getImageData(0, 0, w, h).data; }
+  catch (e) {
+    $('placeholder').style.display = 'block';
+    $('placeholder').textContent = 'Cannot read pixels (image may be cross-origin or corrupted).';
+    return;
+  }
+  const r = new Uint32Array(256);
+  const g = new Uint32Array(256);
+  const b = new Uint32Array(256);
+  const l = new Uint32Array(256);
+  let total = 0, transparent = 0;
+  const includeAlpha = $('alpha').value === 'include';
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3];
+    if (a === 0) { transparent++; if (!includeAlpha) continue; }
+    const R = data[i], G = data[i+1], B = data[i+2];
+    r[R]++; g[G]++; b[B]++;
+    const Y = Math.round(0.2126 * R + 0.7152 * G + 0.0722 * B);
+    l[Math.max(0, Math.min(255, Y))]++;
+    total++;
+  }
+  currentData = {
+    r, g, b, l, total, transparent,
+    width: img.naturalWidth, height: img.naturalHeight,
+    sampledW: w, sampledH: h,
+    fileSize: file ? file.size : 0,
+    fileType: file ? file.type : '',
+    fileName: file ? file.name : '',
+  };
+  render();
+}
+
+function channelStats(counts, total) {
+  if (!total) return { min:0, max:0, mean:0, median:0, std:0, mode:0, clipLow:0, clipHigh:0 };
+  let sum = 0, n = 0, sq = 0;
+  let mn = -1, mx = -1, mode = 0, modeCount = 0;
+  for (let v = 0; v < 256; v++) {
+    const c = counts[v];
+    if (c === 0) continue;
+    if (mn === -1) mn = v;
+    mx = v;
+    n += c;
+    sum += v * c;
+    sq += v * v * c;
+    if (c > modeCount) { modeCount = c; mode = v; }
+  }
+  const mean = n ? sum / n : 0;
+  const variance = n ? (sq / n) - mean * mean : 0;
+  const std = Math.sqrt(Math.max(0, variance));
+  // Median
+  let half = n / 2, cum = 0, median = 0;
+  for (let v = 0; v < 256; v++) {
+    cum += counts[v];
+    if (cum >= half) { median = v; break; }
+  }
+  const clipLow = counts[0] / n * 100;
+  const clipHigh = counts[255] / n * 100;
+  return { min: mn, max: mx, mean, median, std, mode, clipLow, clipHigh };
+}
+
+function rebin(counts, bins) {
+  if (bins === 256) return Array.from(counts);
+  const out = new Array(bins).fill(0);
+  const w = 256 / bins;
+  for (let v = 0; v < 256; v++) {
+    out[Math.min(bins - 1, Math.floor(v / w))] += counts[v];
+  }
+  return out;
+}
+
+function drawHistogram(canvas, counts, color, baseColor) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth;
+  const H = canvas.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  // Background grid
+  ctx.strokeStyle = 'rgba(0,0,0,.06)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const y = (H / 4) * i;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  // Tick marks at 0, 64, 128, 192, 255
+  ctx.fillStyle = 'rgba(0,0,0,.25)';
+  ctx.font = '9px ' + getComputedStyle(document.body).fontFamily;
+  [0, 64, 128, 192, 255].forEach(v => {
+    const x = v / 255 * W;
+    ctx.fillRect(x, H - 2, 1, 2);
+  });
+
+  const scaleMode = $('scale').value;
+  let max = 0;
+  for (const c of counts) if (c > max) max = c;
+  if (!max) return;
+  const transform = v => {
+    if (scaleMode === 'log') return Math.log(1 + v) / Math.log(1 + max);
+    if (scaleMode === 'sqrt') return Math.sqrt(v / max);
+    return v / max;
+  };
+
+  const n = counts.length;
+  const barW = W / n;
+  ctx.fillStyle = color;
+  for (let i = 0; i < n; i++) {
+    const v = transform(counts[i]);
+    const h = v * (H - 4);
+    ctx.fillRect(i * barW, H - h, Math.max(barW, 1), h);
+  }
+}
+
+function fmt(n, d=1) {
+  if (!isFinite(n)) return '—';
+  if (n >= 1000000) return (n/1000000).toFixed(2) + 'M';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'k';
+  return d === 0 ? Math.round(n).toString() : n.toFixed(d);
+}
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/1024/1024).toFixed(2) + ' MB';
+}
+
+function render() {
+  if (!currentData) return;
+  const bins = parseInt($('bins').value, 10);
+  const { r, g, b, l, total, transparent, width, height, sampledW, sampledH, fileSize, fileType, fileName } = currentData;
+
+  // Summary tiles
+  const sampledNote = (sampledW !== width || sampledH !== height)
+    ? ' (sampled ' + sampledW + '×' + sampledH + ')' : '';
+  $('summary').style.display = 'grid';
+  $('summary').innerHTML = [
+    ['Dimensions', width + ' × ' + height + ' px' + sampledNote],
+    ['Pixels analysed', total.toLocaleString()],
+    ['Format', fileType.replace('image/', '').toUpperCase() || '—'],
+    ['File size', fileSize ? fmtBytes(fileSize) : '—'],
+    ['Transparent', transparent ? (transparent.toLocaleString() + ' px (' + (transparent/(total+transparent)*100).toFixed(1) + '%)') : 'None'],
+  ].map(([k,v]) => '<div class="tile"><span>' + k + '</span><strong>' + v + '</strong></div>').join('');
+
+  // Warnings
+  const lStats = channelStats(l, total);
+  const warns = [];
+  if (lStats.clipHigh > 1) warns.push({ cls: 'warn', text: '⚠ Clipped highlights: ' + lStats.clipHigh.toFixed(2) + '% at 255' });
+  if (lStats.clipLow > 1) warns.push({ cls: 'warn', text: '⚠ Crushed shadows: ' + lStats.clipLow.toFixed(2) + '% at 0' });
+  if (lStats.mean < 50) warns.push({ cls: 'warn', text: '⚠ Underexposed (mean ' + lStats.mean.toFixed(1) + ')' });
+  if (lStats.mean > 200) warns.push({ cls: 'warn', text: '⚠ Overexposed (mean ' + lStats.mean.toFixed(1) + ')' });
+  if (lStats.max - lStats.min < 100) warns.push({ cls: 'warn', text: '⚠ Low tonal range (' + (lStats.max - lStats.min) + ')' });
+  if (!warns.length) warns.push({ cls: 'good', text: '✓ Tonal distribution looks healthy' });
+  $('warnings').innerHTML = warns.map(w => '<span class="badge ' + w.cls + '">' + w.text + '</span>').join('');
+
+  // Render the four channels
+  const grid = $('histGrid');
+  grid.innerHTML = '';
+  const channels = [
+    { key:'r', counts: r, color: '#e11d48', swatch: '#e11d48', name: 'Red' },
+    { key:'g', counts: g, color: '#16a34a', swatch: '#16a34a', name: 'Green' },
+    { key:'b', counts: b, color: '#2563eb', swatch: '#2563eb', name: 'Blue' },
+    { key:'l', counts: l, color: '#111', swatch: '#111', name: 'Luminance (BT.709)' },
+  ];
+  for (const ch of channels) {
+    const stats = channelStats(ch.counts, total);
+    const card = document.createElement('div');
+    card.className = 'hist-card';
+    card.innerHTML =
+      '<h3><span class="swatch" style="background:' + ch.swatch + '"></span>' + ch.name + '</h3>' +
+      '<canvas class="hist"></canvas>' +
+      '<div class="stats">' +
+        '<div><span>Min</span> <strong>' + stats.min + '</strong></div>' +
+        '<div><span>Max</span> <strong>' + stats.max + '</strong></div>' +
+        '<div><span>Mean</span> <strong>' + stats.mean.toFixed(2) + '</strong></div>' +
+        '<div><span>Median</span> <strong>' + stats.median + '</strong></div>' +
+        '<div><span>σ (StdDev)</span> <strong>' + stats.std.toFixed(2) + '</strong></div>' +
+        '<div><span>Mode</span> <strong>' + stats.mode + '</strong></div>' +
+        '<div><span>% at 0</span> <strong>' + stats.clipLow.toFixed(2) + '%</strong></div>' +
+        '<div><span>% at 255</span> <strong>' + stats.clipHigh.toFixed(2) + '%</strong></div>' +
+      '</div>';
+    grid.appendChild(card);
+    const canvas = card.querySelector('canvas');
+    requestAnimationFrame(() => drawHistogram(canvas, rebin(ch.counts, bins), ch.color, ch.swatch));
+  }
+  $('resultsCard').style.display = 'block';
+}
+
+// File handling
+$('file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  if (f) readImage(f);
+});
+const drop = $('drop');
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove('drag');
+}));
+drop.addEventListener('drop', e => {
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) readImage(f);
+});
+// Paste support
+document.addEventListener('paste', e => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.type.startsWith('image/')) {
+      const f = it.getAsFile();
+      if (f) { readImage(f); break; }
+    }
+  }
+});
+
+['scale','bins','alpha'].forEach(id => $(id).addEventListener('change', () => {
+  if (id === 'alpha' && currentData) {
+    // Need to re-read the image to honor the alpha toggle — but we don't have it cached.
+    // Fall back to a re-analyse from current preview image element.
+    const img = $('preview');
+    if (img.src) {
+      const tmp = new Image();
+      tmp.onload = () => analyse(tmp, { size: currentData.fileSize, type: currentData.fileType, name: currentData.fileName });
+      tmp.src = img.src;
+    }
+  } else {
+    render();
+  }
+}));
+
+window.addEventListener('resize', () => {
+  if (currentData) render();
+});
+</script>
+</body>
+</html>
