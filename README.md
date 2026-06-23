@@ -138,6 +138,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Scrabble & Word Score Calculator](scrabble.html) | Compute the score of any word in Scrabble (TWL/SOWPODS), Words With Friends, or Boggle. Tap tile multipliers (DL, TL, DW, TW) per letter, flag blank wildcards as zero-point tiles, and add the 50-point *bingo* bonus for laying down all seven rack tiles in one turn. |
 | [Jaro-Winkler Similarity Calculator](jarowinkler.html) | Compute Jaro and Jaro-Winkler scores between two strings with adjustable prefix length and scaling factor — plus Jaro distance, Sørensen-Dice on bigrams, and normalized Levenshtein — with a character match map that highlights prefix, matched, and transposed letters. |
 | [ICU MessageFormat Playground](icumessage.html) | Type an ICU MessageFormat string — `{count, plural, one {# item} other {# items}}`, `select`, `selectordinal`, currency, and date placeholders — set variables and watch the rendered output update side-by-side across English, Spanish, French, German, Polish, Arabic, Chinese, and more, powered by `Intl.PluralRules`. |
 | [Number → Words Converter](numwords.html) | Spell numbers in English — cardinal, ordinal, currency (cheque format), US short-scale or UK long-scale. Handles negatives, decimals, fractions, percentages, and arbitrarily large integers via BigInt. |
@@ -170,6 +171,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CRC Multi-Polynomial Calculator](crcmulti.html) | Compute 18 standard CRC checksums in one pass — CRC-8 (SMBus, MAXIM, ROHC, CDMA2000), CRC-16 (ARC, CCITT-FALSE, KERMIT, MODBUS, USB, XMODEM, GENIBUS, MCRF4XX), CRC-32 (IEEE 802.3, BZIP2, MPEG-2, POSIX, Castagnoli, JAMCRC). ASCII or hex input, full Rocksoft parameter display (poly, init, refIn/Out, xorOut). |
 | [Bitcoin Address Validator](btcaddress.html) | Validate Bitcoin addresses across every format — Legacy `1…` (P2PKH), Script `3…` (P2SH), Native SegWit `bc1q…` (P2WPKH/P2WSH), and Taproot `bc1p…` (P2TR Bech32m). Decodes the version byte, witness program, HRP, checksum, and recognises testnet, regtest, signet, and Litecoin variants. |
 | [MurmurHash3 Calculator](murmurhash.html) | Hash any string with Austin Appleby's MurmurHash3 — 32-bit and 128-bit (x86 and x64) variants, configurable seed, hex / decimal / base36 outputs, shard-bucket modulus, and reference vectors that match Python's `mmh3`, Guava, and Cassandra. |
 | [Substitution Cipher Solver](subcipher.html) | Crack a monoalphabetic substitution cipher (cryptogram) by hand or let a hill-climbing solver guess the key from English letter and bigram frequencies. Interactive A→? mapping with lockable cells, live frequency table vs ETAOIN ranking, and one-click ROT13 / classic-cryptogram presets. |
@@ -393,6 +395,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Business Days Calculator](businessdays.html) | Count business days between two dates, or add / subtract working days from a reference date for SLA &amp; deadline planning. Customizable weekend pattern (Sat/Sun, Fri/Sat for GCC, Sun-only, none), built-in US federal / UK bank / EU common holiday calendars (with Easter math), and a per-month calendar view that colors business days, weekends, and holidays. |
 | [NPV, IRR & Payback Calculator](npv.html) | Discount any cash-flow series to find Net Present Value, Internal Rate of Return (Newton's method with bisection fallback for awkward series), modified IRR (separate finance &amp; reinvestment rates), discounted &amp; undiscounted payback (linear-interpolated within the crossing period), and the profitability index. Includes presets and a cumulative-flow chart that shows exactly when the project turns the corner. |
 | [Stopwatch with Lap Timer](stopwatch.html) | Millisecond-accurate stopwatch with split / lap tracking, keyboard shortcuts, best & worst highlighting, and CSV / Markdown export — state survives reloads. |
 | [Pomodoro Timer](pomodoro.html) | Customizable work/break intervals with audio alerts and tracking. |
