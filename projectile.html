@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projectile Motion Calculator — Free Online Tool</title>
+<meta name="description" content="Calculate projectile motion — range, max height, time of flight, impact velocity, apogee. Adjustable launch angle, initial velocity, launch height, and gravity (Earth, Moon, Mars, Jupiter, custom). Interactive SVG trajectory with time-step table — 100% client-side.">
+<meta name="keywords" content="projectile motion calculator, trajectory calculator, range calculator, max height, time of flight, ballistic, parabolic motion, physics calculator, kinematic, launch angle, gravity calculator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/projectile.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 760px) { .row, .row3, .row4 { grid-template-columns: 1fr; } }
+  .panel { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .panel label { display:block; font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
+  .panel input, .panel select {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .95rem; background: var(--bg); color: var(--text); box-sizing: border-box;
+  }
+  .panel input:focus, .panel select:focus { outline: none; border-color: var(--accent); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 12px; }
+  .tile { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .tile .k { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-family: var(--mono); }
+  .tile .v { font-family: var(--mono); font-size: 1.05rem; font-weight: 600; margin-top: 3px; word-break: break-word; }
+  .tile .note { font-size: .72rem; color: var(--muted); margin-top: 3px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; flex-wrap: wrap; }
+  .seg button { padding: 6px 12px; font-size: .8rem; border: none; background: var(--bg); cursor: pointer; color: var(--muted); font-family: var(--mono); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .traj-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; overflow-x: auto; }
+  svg.traj { width: 100%; height: auto; display: block; min-width: 320px; }
+  .traj-path { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .traj-ground { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; fill: none; }
+  .traj-marker { fill: var(--accent); }
+  .traj-apogee { fill: var(--warning); }
+  .traj-grid { stroke: var(--border); stroke-width: 0.5; }
+  .traj-label { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+  table.steps { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 10px; font-family: var(--mono); }
+  table.steps th, table.steps td { padding: 6px 9px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.steps th:first-child, table.steps td:first-child { text-align: left; }
+  table.steps th { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .help { font-size: .87rem; color: var(--muted); line-height: 1.6; }
+  .err { color: var(--error); font-size: .85rem; min-height: 1.2em; margin-top: 6px; }
+  .range { width: 100%; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Projectile Motion Calculator</h1>
+<p class="subtitle">Compute the trajectory of a projectile launched at a given speed and angle from a given height. Get range, max height (apogee), time of flight, impact velocity, and impact angle — for Earth, Moon, Mars, Jupiter, the Sun, or any custom gravity. See the parabola plotted in real time, scrub time-step values, and read the kinematic equations behind every number. 100% client-side, drag-free ideal projectile physics (no air resistance).</p>
+
+<div class="card">
+  <h2>1. Inputs</h2>
+  <div class="row4">
+    <div class="panel">
+      <label>Initial velocity v₀</label>
+      <input id="v0" type="number" step="any" value="25" min="0" inputmode="decimal">
+      <p class="help" style="margin:6px 0 0;">m/s</p>
+    </div>
+    <div class="panel">
+      <label>Launch angle θ</label>
+      <input id="angle" type="number" step="any" value="45" inputmode="decimal">
+      <input id="angleRange" type="range" min="-90" max="90" step="1" value="45" class="range" style="margin-top:8px;">
+      <p class="help" style="margin:6px 0 0;">degrees from horizontal</p>
+    </div>
+    <div class="panel">
+      <label>Launch height h₀</label>
+      <input id="h0" type="number" step="any" value="0" inputmode="decimal">
+      <p class="help" style="margin:6px 0 0;">m above ground</p>
+    </div>
+    <div class="panel">
+      <label>Gravity g</label>
+      <input id="g" type="number" step="any" value="9.80665" min="0" inputmode="decimal">
+      <p class="help" style="margin:6px 0 0;">m/s²</p>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;">
+    <label style="font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:6px;">Gravity presets</label>
+    <div class="seg" id="gravPresets">
+      <button data-g="9.80665" class="on">Earth</button>
+      <button data-g="1.625">Moon</button>
+      <button data-g="3.711">Mars</button>
+      <button data-g="24.79">Jupiter</button>
+      <button data-g="274.0">Sun</button>
+      <button data-g="0.62">Pluto</button>
+      <button data-g="8.87">Venus</button>
+      <button data-g="3.7">Mercury</button>
+    </div>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<div class="card">
+  <h2>2. Results</h2>
+  <div class="tiles" id="results">
+    <div class="tile"><div class="k">Range</div><div class="v" id="rRange">—</div><div class="note">horizontal distance to impact</div></div>
+    <div class="tile"><div class="k">Time of flight</div><div class="v" id="rTime">—</div><div class="note">launch → impact</div></div>
+    <div class="tile"><div class="k">Max height (apogee)</div><div class="v" id="rHmax">—</div><div class="note">above ground</div></div>
+    <div class="tile"><div class="k">Time to apogee</div><div class="v" id="rTpeak">—</div><div class="note">when v<sub>y</sub> = 0</div></div>
+    <div class="tile"><div class="k">Range at apogee</div><div class="v" id="rXpeak">—</div></div>
+    <div class="tile"><div class="k">Initial vₓ</div><div class="v" id="rVx">—</div><div class="note">v₀ · cos θ</div></div>
+    <div class="tile"><div class="k">Initial vᵧ</div><div class="v" id="rVy">—</div><div class="note">v₀ · sin θ</div></div>
+    <div class="tile"><div class="k">Impact speed</div><div class="v" id="rVimp">—</div><div class="note">√(vₓ² + vᵧ²) at landing</div></div>
+    <div class="tile"><div class="k">Impact angle</div><div class="v" id="rAimp">—</div><div class="note">below horizontal</div></div>
+    <div class="tile"><div class="k">Launch KE per kg</div><div class="v" id="rKE">—</div><div class="note">½ v₀²</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>3. Trajectory</h2>
+  <div class="traj-wrap"><svg class="traj" id="svg" viewBox="0 0 600 320" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <p class="help" style="margin-top:8px;">Path shown to scale. The orange marker is the apogee, the arrowhead is the impact point. Adjust angle / speed / gravity above to see the parabola morph in real time.</p>
+</div>
+
+<div class="card">
+  <h2>4. Time-step table</h2>
+  <p class="help" style="margin-bottom:10px;">10 evenly spaced samples between launch (t=0) and impact, showing position and velocity components.</p>
+  <div style="overflow-x:auto;">
+    <table class="steps" id="stepTable">
+      <thead><tr><th>t (s)</th><th>x (m)</th><th>y (m)</th><th>v<sub>x</sub> (m/s)</th><th>v<sub>y</sub> (m/s)</th><th>|v| (m/s)</th></tr></thead>
+      <tbody id="stepBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Formulas (idealized, drag-free)</h2>
+  <p class="help"><b>Position:</b> x(t) = v₀ cos θ · t &nbsp; · &nbsp; y(t) = h₀ + v₀ sin θ · t − ½ g t²</p>
+  <p class="help"><b>Velocity:</b> vₓ = v₀ cos θ &nbsp; (constant) &nbsp; · &nbsp; vᵧ(t) = v₀ sin θ − g t</p>
+  <p class="help"><b>Time of flight</b> (impact on y = 0):&nbsp; t<sub>f</sub> = (v₀ sin θ + √((v₀ sin θ)² + 2 g h₀)) / g</p>
+  <p class="help"><b>Range:</b> R = vₓ · t<sub>f</sub>. When h₀ = 0 this reduces to R = v₀² sin(2θ) / g, peaking at θ = 45°.</p>
+  <p class="help"><b>Max height:</b> h<sub>max</sub> = h₀ + (v₀ sin θ)² / (2 g), reached at t = v₀ sin θ / g.</p>
+  <p class="help"><b>Impact speed:</b> |v<sub>imp</sub>| = √(v₀² + 2 g h₀). <b>Impact angle:</b> arctan(vᵧ<sub>imp</sub> / vₓ).</p>
+  <p class="help" style="opacity:.85;">Real-world projectiles experience air drag, Magnus force, and Coriolis effects — this tool models the textbook parabola, not a ballistic-grade prediction.</p>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function fmtNum(v, digits = 3) {
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a < 1e-3 || a >= 1e6) return v.toExponential(digits);
+  return parseFloat(v.toPrecision(digits + 1)).toString();
+}
+
+function fmtUnit(v, unit, digits = 3) {
+  return fmtNum(v, digits) + ' ' + unit;
+}
+
+function compute() {
+  const v0 = parseFloat($('v0').value);
+  const angle = parseFloat($('angle').value);
+  const h0 = parseFloat($('h0').value);
+  const g = parseFloat($('g').value);
+  const err = $('err');
+  err.textContent = '';
+
+  if (!isFinite(v0) || v0 < 0) { err.textContent = 'Initial velocity must be ≥ 0.'; return null; }
+  if (!isFinite(angle) || angle < -90 || angle > 90) { err.textContent = 'Angle must be between −90° and 90°.'; return null; }
+  if (!isFinite(h0) || h0 < 0) { err.textContent = 'Launch height must be ≥ 0.'; return null; }
+  if (!isFinite(g) || g <= 0) { err.textContent = 'Gravity must be > 0.'; return null; }
+
+  const rad = angle * Math.PI / 180;
+  const vx = v0 * Math.cos(rad);
+  const vy0 = v0 * Math.sin(rad);
+  const tPeak = vy0 / g;
+  const hMax = h0 + (vy0 * vy0) / (2 * g);
+  // time of flight: solve h0 + vy0 t - 0.5 g t^2 = 0
+  // t = (vy0 + sqrt(vy0^2 + 2 g h0)) / g
+  const disc = vy0 * vy0 + 2 * g * h0;
+  let tFlight;
+  if (disc < 0) { tFlight = NaN; }
+  else { tFlight = (vy0 + Math.sqrt(disc)) / g; }
+  if (tFlight < 0) tFlight = 0;
+  const range = vx * tFlight;
+  const xPeak = vx * Math.max(tPeak, 0);
+  const vyImp = vy0 - g * tFlight;
+  const vImp = Math.sqrt(vx * vx + vyImp * vyImp);
+  const aImp = Math.atan2(-vyImp, vx) * 180 / Math.PI;
+  const ke = 0.5 * v0 * v0;
+
+  return { v0, angle, h0, g, vx, vy0, tPeak, hMax, tFlight, range, xPeak, vImp, aImp, ke };
+}
+
+function render() {
+  const R = compute();
+  if (!R) return;
+  $('rRange').textContent = fmtUnit(R.range, 'm');
+  $('rTime').textContent = fmtUnit(R.tFlight, 's');
+  $('rHmax').textContent = fmtUnit(R.hMax, 'm');
+  $('rTpeak').textContent = R.tPeak < 0 ? '—' : fmtUnit(R.tPeak, 's');
+  $('rXpeak').textContent = fmtUnit(R.xPeak, 'm');
+  $('rVx').textContent = fmtUnit(R.vx, 'm/s');
+  $('rVy').textContent = fmtUnit(R.vy0, 'm/s');
+  $('rVimp').textContent = fmtUnit(R.vImp, 'm/s');
+  $('rAimp').textContent = R.tFlight > 0 ? R.aImp.toFixed(2) + '°' : '—';
+  $('rKE').textContent = fmtUnit(R.ke, 'J/kg');
+
+  drawTrajectory(R);
+  buildStepTable(R);
+}
+
+function drawTrajectory(R) {
+  const svg = $('svg');
+  const w = 600, h = 320, pad = 36;
+  const ground = h - 28;
+  svg.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg';
+
+  // sample
+  const N = 80;
+  const pts = [];
+  const tEnd = Math.max(R.tFlight, 0.0001);
+  for (let i = 0; i <= N; i++) {
+    const t = (i / N) * tEnd;
+    const x = R.vx * t;
+    const y = R.h0 + R.vy0 * t - 0.5 * R.g * t * t;
+    pts.push([x, Math.max(y, 0)]);
+  }
+
+  let xMin = 0, xMax = R.range;
+  let yMin = 0, yMax = R.hMax;
+  for (const [x, y] of pts) {
+    if (x < xMin) xMin = x;
+    if (x > xMax) xMax = x;
+    if (y > yMax) yMax = y;
+  }
+  // ensure visible
+  if (xMax - xMin < 0.5) xMax = xMin + 1;
+  if (yMax - yMin < 0.5) yMax = yMin + 1;
+
+  // padding
+  const xPad = (xMax - xMin) * 0.05;
+  const yPad = (yMax - yMin) * 0.1;
+  xMin -= xPad; xMax += xPad;
+  yMax += yPad;
+
+  const px = x => pad + ((x - xMin) / (xMax - xMin)) * (w - 2 * pad);
+  const py = y => ground - ((y - yMin) / (yMax - yMin)) * (ground - pad);
+
+  // grid
+  const grid = (x1, y1, x2, y2) => {
+    const l = document.createElementNS(ns, 'line');
+    l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+    l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+    l.setAttribute('class', 'traj-grid');
+    svg.appendChild(l);
+  };
+  const gridLabel = (x, y, txt, anchor = 'middle') => {
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', x); t.setAttribute('y', y);
+    t.setAttribute('text-anchor', anchor);
+    t.setAttribute('class', 'traj-label');
+    t.textContent = txt;
+    svg.appendChild(t);
+  };
+
+  // x gridlines
+  for (let i = 0; i <= 5; i++) {
+    const xv = xMin + (i / 5) * (xMax - xMin);
+    grid(px(xv), pad, px(xv), ground);
+    gridLabel(px(xv), ground + 14, fmtNum(xv, 3) + ' m');
+  }
+  // y gridlines
+  for (let i = 0; i <= 4; i++) {
+    const yv = yMin + (i / 4) * (yMax - yMin);
+    grid(pad, py(yv), w - pad, py(yv));
+    gridLabel(pad - 4, py(yv) + 3, fmtNum(yv, 3) + ' m', 'end');
+  }
+
+  // ground
+  const ground_l = document.createElementNS(ns, 'line');
+  ground_l.setAttribute('x1', pad); ground_l.setAttribute('y1', ground);
+  ground_l.setAttribute('x2', w - pad); ground_l.setAttribute('y2', ground);
+  ground_l.setAttribute('class', 'traj-ground');
+  svg.appendChild(ground_l);
+
+  // path
+  const path = document.createElementNS(ns, 'path');
+  let d = '';
+  pts.forEach(([x, y], i) => {
+    d += (i === 0 ? 'M' : 'L') + px(x).toFixed(2) + ' ' + py(y).toFixed(2);
+  });
+  path.setAttribute('d', d);
+  path.setAttribute('class', 'traj-path');
+  svg.appendChild(path);
+
+  // apogee marker
+  if (R.tPeak > 0 && R.tPeak < R.tFlight) {
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', px(R.xPeak));
+    c.setAttribute('cy', py(R.hMax));
+    c.setAttribute('r', 4);
+    c.setAttribute('class', 'traj-apogee');
+    svg.appendChild(c);
+    const tl = document.createElementNS(ns, 'text');
+    tl.setAttribute('x', px(R.xPeak));
+    tl.setAttribute('y', py(R.hMax) - 8);
+    tl.setAttribute('text-anchor', 'middle');
+    tl.setAttribute('class', 'traj-label');
+    tl.setAttribute('fill', 'var(--warning)');
+    tl.textContent = 'apogee ' + fmtNum(R.hMax, 3) + ' m';
+    svg.appendChild(tl);
+  }
+  // launch marker
+  const lp = document.createElementNS(ns, 'circle');
+  lp.setAttribute('cx', px(0));
+  lp.setAttribute('cy', py(R.h0));
+  lp.setAttribute('r', 4);
+  lp.setAttribute('class', 'traj-marker');
+  svg.appendChild(lp);
+  // impact marker
+  const ip = document.createElementNS(ns, 'circle');
+  ip.setAttribute('cx', px(R.range));
+  ip.setAttribute('cy', py(0));
+  ip.setAttribute('r', 4);
+  ip.setAttribute('class', 'traj-marker');
+  svg.appendChild(ip);
+  const il = document.createElementNS(ns, 'text');
+  il.setAttribute('x', px(R.range));
+  il.setAttribute('y', py(0) - 8);
+  il.setAttribute('text-anchor', 'middle');
+  il.setAttribute('class', 'traj-label');
+  il.setAttribute('fill', 'var(--accent)');
+  il.textContent = 'impact ' + fmtNum(R.range, 3) + ' m';
+  svg.appendChild(il);
+}
+
+function buildStepTable(R) {
+  const tb = $('stepBody');
+  tb.innerHTML = '';
+  const N = 10;
+  for (let i = 0; i <= N; i++) {
+    const t = (i / N) * R.tFlight;
+    const x = R.vx * t;
+    const y = R.h0 + R.vy0 * t - 0.5 * R.g * t * t;
+    const vy = R.vy0 - R.g * t;
+    const v = Math.sqrt(R.vx * R.vx + vy * vy);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${t.toFixed(3)}</td><td>${x.toFixed(3)}</td><td>${y.toFixed(3)}</td><td>${R.vx.toFixed(3)}</td><td>${vy.toFixed(3)}</td><td>${v.toFixed(3)}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+// Wire up inputs
+['v0', 'angle', 'h0', 'g'].forEach(id => {
+  $(id).addEventListener('input', () => {
+    if (id === 'angle') $('angleRange').value = $(id).value;
+    render();
+  });
+});
+$('angleRange').addEventListener('input', () => {
+  $('angle').value = $('angleRange').value;
+  render();
+});
+
+document.querySelectorAll('#gravPresets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#gravPresets button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    $('g').value = btn.dataset.g;
+    render();
+  });
+});
+
+render();
+</script>
+</body>
+</html>
