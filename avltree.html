@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AVL Tree Visualizer — Free Online Tool</title>
+<meta name="description" content="Insert, delete, and search keys in a live AVL self-balancing BST. Watch single and double rotations fire, see balance factors and heights light up, and step through the imbalance cases (LL, LR, RL, RR) as they happen.">
+<meta name="keywords" content="avl tree, self balancing bst, rotation, ll rr lr rl, height balanced, binary search tree, data structure visualizer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/avltree.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; font-size: .88rem; }
+  .controls input[type=number], .controls input[type=text] {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .92rem;
+    width: 120px;
+  }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:hover { filter: brightness(1.05); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; }
+  @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: auto; max-height: 560px; padding: 8px;
+  }
+  svg.tree { display: block; min-width: 100%; }
+  .node circle { stroke: var(--border); stroke-width: 1.5; fill: var(--surface2); }
+  .node text.k { font-family: var(--mono); font-size: 14px; font-weight: 700; fill: var(--text); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .node text.h { font-family: var(--mono); font-size: 10px; fill: var(--muted); text-anchor: middle; pointer-events: none; }
+  .node text.b { font-family: var(--mono); font-size: 10px; text-anchor: middle; pointer-events: none; }
+  .node.imbalanced circle { fill: rgba(231, 76, 60, .25); stroke: var(--error); stroke-width: 2.6; }
+  .node.rotated circle { fill: rgba(99, 102, 241, .28); stroke: var(--accent); stroke-width: 2.4; }
+  .node.found circle { fill: rgba(40, 180, 99, .3); stroke: var(--success); stroke-width: 2.4; }
+  .edge { stroke: var(--border); stroke-width: 1.6; fill: none; }
+  .edge.match { stroke: var(--accent); stroke-width: 2.6; }
+  .log {
+    padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2);
+    max-height: 280px; overflow-y: auto;
+  }
+  .log h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .log .entry { font-family: var(--mono); font-size: .82rem; padding: 3px 0; color: var(--text); }
+  .log .entry.op { color: var(--accent); font-weight: 600; }
+  .log .entry.rot { color: var(--warning); }
+  .log .entry.dim { color: var(--muted); }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 12px; }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .traversal { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-top: 12px; }
+  .traversal h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .traversal .row { font-family: var(--mono); font-size: .82rem; padding: 2px 0; color: var(--text); word-break: break-word; }
+  .traversal .row .lbl { color: var(--muted); margin-right: 6px; }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; margin-right: 4px; border: 1.4px solid var(--border); }
+  .legend .sw.r { background: rgba(231, 76, 60, .25); border-color: var(--error); }
+  .legend .sw.a { background: rgba(99, 102, 241, .28); border-color: var(--accent); }
+  .legend .sw.f { background: rgba(40, 180, 99, .3); border-color: var(--success); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>AVL Tree Visualizer</h1>
+<p class="subtitle">An <strong>AVL tree</strong> is a binary search tree that re-balances itself after every insert and delete so the heights of the left and right subtrees of every node differ by at most one. When that invariant breaks, exactly one of four rotation patterns (LL, LR, RL, RR) restores it — and you can watch each one fire live below.</p>
+
+<div class="card">
+  <div class="controls">
+    <input type="number" id="keyInput" placeholder="key" autocomplete="off">
+    <button class="primary" onclick="insertKey()">Insert</button>
+    <button onclick="deleteKey()">Delete</button>
+    <button onclick="searchKey()">Search</button>
+    <input type="text" id="bulkInput" placeholder="comma list e.g. 10,20,30,40,25" style="width:280px;">
+    <button onclick="bulkInsert()">Bulk insert</button>
+    <button onclick="randomSeq()">🎲 Random 12</button>
+    <button onclick="ascendingSeq()">↗ Worst-case 1…10</button>
+    <button onclick="clearTree()">Clear</button>
+  </div>
+  <div class="layout">
+    <div class="svg-wrap" id="svgWrap"><svg class="tree" id="svgTree" viewBox="0 0 800 400" preserveAspectRatio="xMinYMin meet"></svg></div>
+    <div>
+      <div class="stats">
+        <h3>Tree statistics</h3>
+        <div class="stat-row"><span>Nodes</span><span class="v" id="sNodes">0</span></div>
+        <div class="stat-row"><span>Height</span><span class="v" id="sHeight">0</span></div>
+        <div class="stat-row"><span>Worst-case h for BST</span><span class="v" id="sBstWorst">0</span></div>
+        <div class="stat-row"><span>Optimal h (⌈log₂ n⌉)</span><span class="v" id="sOpt">0</span></div>
+        <div class="stat-row"><span>Rotations so far</span><span class="v" id="sRot">0</span></div>
+      </div>
+      <div class="log">
+        <h3>Operation log</h3>
+        <div id="logEntries"></div>
+      </div>
+      <div class="traversal">
+        <h3>Traversals</h3>
+        <div class="row"><span class="lbl">in-order:</span><span id="tInorder">—</span></div>
+        <div class="row"><span class="lbl">pre-order:</span><span id="tPreorder">—</span></div>
+        <div class="row"><span class="lbl">post-order:</span><span id="tPostorder">—</span></div>
+        <div class="row"><span class="lbl">level-order:</span><span id="tLevel">—</span></div>
+      </div>
+      <p class="legend">
+        Each node shows <strong>key</strong> in the centre, height (<code>h</code>) above-right, and balance factor (<code>bf</code>) below-right.<br>
+        <span class="sw r"></span> imbalanced (|bf| ≥ 2) &nbsp;
+        <span class="sw a"></span> rotated this step &nbsp;
+        <span class="sw f"></span> search hit
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>The four rotation cases</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Imbalance is named by where the new key landed relative to the unbalanced ancestor's two-edge ladder:
+  </p>
+  <ul style="font-size:.88rem;color:var(--muted);line-height:1.7">
+    <li><strong>LL</strong> — heavy on left, inserted into left child's left subtree → one right rotation.</li>
+    <li><strong>RR</strong> — heavy on right, inserted into right child's right subtree → one left rotation.</li>
+    <li><strong>LR</strong> — heavy on left, inserted into left child's right subtree → left rotation on left child, then right rotation on root.</li>
+    <li><strong>RL</strong> — heavy on right, inserted into right child's left subtree → right rotation on right child, then left rotation on root.</li>
+  </ul>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Because AVL re-balances eagerly, lookups are guaranteed <code>O(log n)</code> — the height is bounded by roughly <code>1.44 · log₂(n + 2)</code>. Compare this to inserting <code>1, 2, 3, 4, 5</code> into a plain BST, which would degenerate to a height-5 linked list; click the worst-case button above to watch AVL keep that flat.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+class Node {
+  constructor(k) { this.k = k; this.h = 1; this.l = null; this.r = null; }
+}
+
+let root = null;
+let totalRotations = 0;
+let logBuf = [];
+let lastTouched = new Set();    // nodes rotated this step
+let lastImbalanced = new Set(); // pre-rotation imbalanced
+let lastFound = null;
+
+function h(n) { return n ? n.h : 0; }
+function bf(n) { return n ? h(n.l) - h(n.r) : 0; }
+function update(n) { n.h = 1 + Math.max(h(n.l), h(n.r)); }
+
+function rotR(y) {
+  const x = y.l, t2 = x.r;
+  x.r = y; y.l = t2;
+  update(y); update(x);
+  totalRotations++; lastTouched.add(x); lastTouched.add(y);
+  return x;
+}
+function rotL(x) {
+  const y = x.r, t2 = y.l;
+  y.l = x; x.r = t2;
+  update(x); update(y);
+  totalRotations++; lastTouched.add(x); lastTouched.add(y);
+  return y;
+}
+
+function rebalance(n, who) {
+  const b = bf(n);
+  if (b > 1) {
+    if (bf(n.l) >= 0) { log(`rot &nbsp;<b>LL</b> at ${n.k} — right rotation`, 'rot'); return rotR(n); }
+    log(`rot &nbsp;<b>LR</b> at ${n.k} — left-rotate ${n.l.k}, right-rotate ${n.k}`, 'rot');
+    n.l = rotL(n.l); return rotR(n);
+  }
+  if (b < -1) {
+    if (bf(n.r) <= 0) { log(`rot &nbsp;<b>RR</b> at ${n.k} — left rotation`, 'rot'); return rotL(n); }
+    log(`rot &nbsp;<b>RL</b> at ${n.k} — right-rotate ${n.r.k}, left-rotate ${n.k}`, 'rot');
+    n.r = rotR(n.r); return rotL(n);
+  }
+  return n;
+}
+
+function insert(n, k) {
+  if (!n) return new Node(k);
+  if (k === n.k) return n;            // dedup
+  if (k < n.k) n.l = insert(n.l, k);
+  else n.r = insert(n.r, k);
+  update(n);
+  return rebalance(n);
+}
+
+function minNode(n) { while (n.l) n = n.l; return n; }
+
+function del(n, k) {
+  if (!n) return n;
+  if (k < n.k) n.l = del(n.l, k);
+  else if (k > n.k) n.r = del(n.r, k);
+  else {
+    if (!n.l || !n.r) n = n.l || n.r;
+    else {
+      const succ = minNode(n.r);
+      n.k = succ.k;
+      n.r = del(n.r, succ.k);
+    }
+  }
+  if (!n) return n;
+  update(n);
+  return rebalance(n);
+}
+
+function search(n, k, path) {
+  if (!n) return null;
+  path.push(n);
+  if (k === n.k) return n;
+  return search(k < n.k ? n.l : n.r, k, path);
+}
+
+// --- Actions -------------------------------------------------------------
+
+function clearLastMarks() { lastTouched = new Set(); lastImbalanced = new Set(); lastFound = null; }
+
+function insertKey() {
+  const v = parseInt($('keyInput').value, 10);
+  if (!Number.isInteger(v)) return;
+  clearLastMarks();
+  log(`insert <b>${v}</b>`, 'op');
+  root = insert(root, v);
+  $('keyInput').value = '';
+  render();
+}
+
+function deleteKey() {
+  const v = parseInt($('keyInput').value, 10);
+  if (!Number.isInteger(v)) return;
+  clearLastMarks();
+  log(`delete <b>${v}</b>`, 'op');
+  root = del(root, v);
+  $('keyInput').value = '';
+  render();
+}
+
+function searchKey() {
+  const v = parseInt($('keyInput').value, 10);
+  if (!Number.isInteger(v)) return;
+  clearLastMarks();
+  log(`search <b>${v}</b>`, 'op');
+  const path = [];
+  const hit = search(root, v, path);
+  if (hit) { lastFound = hit; log(`hit at depth ${path.length - 1}`, 'dim'); }
+  else log(`miss — visited ${path.length} node${path.length === 1 ? '' : 's'}`, 'dim');
+  $('keyInput').value = '';
+  render();
+}
+
+function bulkInsert() {
+  const list = $('bulkInput').value.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(Number.isInteger);
+  if (!list.length) return;
+  clearLastMarks();
+  log(`bulk insert ${list.join(', ')}`, 'op');
+  for (const v of list) root = insert(root, v);
+  $('bulkInput').value = '';
+  render();
+}
+
+function randomSeq() {
+  clearTree();
+  const used = new Set();
+  while (used.size < 12) used.add(1 + Math.floor(Math.random() * 99));
+  const seq = Array.from(used);
+  $('bulkInput').value = seq.join(',');
+  bulkInsert();
+}
+
+function ascendingSeq() {
+  clearTree();
+  log('inserting 1..10 — a plain BST would become a 10-deep chain', 'dim');
+  for (let v = 1; v <= 10; v++) {
+    log(`insert <b>${v}</b>`, 'op');
+    root = insert(root, v);
+  }
+  render();
+}
+
+function clearTree() {
+  root = null;
+  totalRotations = 0;
+  logBuf = [];
+  clearLastMarks();
+  render();
+}
+
+function log(msg, cls) { logBuf.push({ msg, cls: cls || '' }); }
+
+// --- Layout & SVG --------------------------------------------------------
+
+function inorderIndex(n, ix) {
+  if (!n) return;
+  inorderIndex(n.l, ix);
+  ix.map.set(n, ix.i++);
+  inorderIndex(n.r, ix);
+}
+
+function countNodes(n) { return n ? 1 + countNodes(n.l) + countNodes(n.r) : 0; }
+
+function render() {
+  // Update logs
+  const el = $('logEntries');
+  el.innerHTML = '';
+  // newest at top
+  const slice = logBuf.slice(-50).reverse();
+  for (const { msg, cls } of slice) {
+    const d = document.createElement('div');
+    d.className = 'entry ' + cls;
+    d.innerHTML = msg;
+    el.appendChild(d);
+  }
+
+  // Compute imbalanced nodes (for highlight)
+  lastImbalanced = new Set();
+  (function walk(n) {
+    if (!n) return; walk(n.l); walk(n.r);
+    if (Math.abs(bf(n)) >= 2) lastImbalanced.add(n);
+  })(root);
+
+  // Stats
+  const N = countNodes(root);
+  $('sNodes').textContent = N;
+  $('sHeight').textContent = h(root);
+  $('sBstWorst').textContent = N;
+  $('sOpt').textContent = N === 0 ? 0 : Math.ceil(Math.log2(N + 1));
+  $('sRot').textContent = totalRotations;
+
+  // Traversals
+  $('tInorder').textContent = traverse(root, 'in').join(', ') || '—';
+  $('tPreorder').textContent = traverse(root, 'pre').join(', ') || '—';
+  $('tPostorder').textContent = traverse(root, 'post').join(', ') || '—';
+  $('tLevel').textContent = levelOrder(root).join(', ') || '—';
+
+  // SVG
+  const svg = $('svgTree');
+  svg.innerHTML = '';
+  if (!root) {
+    svg.setAttribute('viewBox', '0 0 800 200');
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', 400); t.setAttribute('y', 100);
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('fill', 'var(--muted)');
+    t.setAttribute('font-family', 'var(--sans)');
+    t.setAttribute('font-size', '14');
+    t.textContent = 'Empty tree — try the random or worst-case button.';
+    svg.appendChild(t);
+    return;
+  }
+  const idx = { i: 0, map: new Map() };
+  inorderIndex(root, idx);
+  const dx = 60, dy = 80;
+  const W = Math.max(800, (idx.i + 1) * dx);
+  const treeH = (h(root) + 1) * dy + 30;
+  const H = Math.max(220, treeH);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+
+  function posOf(n, depth) {
+    return { x: (idx.map.get(n) + 0.5) * dx + 10, y: depth * dy + 30 };
+  }
+
+  // Edges
+  (function walk(n, depth) {
+    if (!n) return;
+    const a = posOf(n, depth);
+    for (const ch of [n.l, n.r]) {
+      if (ch) {
+        const b = posOf(ch, depth + 1);
+        const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p.setAttribute('d', `M ${a.x} ${a.y} L ${b.x} ${b.y}`);
+        p.setAttribute('class', 'edge');
+        svg.appendChild(p);
+        walk(ch, depth + 1);
+      }
+    }
+  })(root, 0);
+
+  // Nodes
+  (function walk(n, depth) {
+    if (!n) return;
+    walk(n.l, depth + 1);
+    const p = posOf(n, depth);
+    let cls = 'node';
+    if (lastImbalanced.has(n)) cls += ' imbalanced';
+    if (lastTouched.has(n)) cls += ' rotated';
+    if (lastFound === n) cls += ' found';
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', cls);
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', 22);
+    g.appendChild(c);
+    const kt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    kt.setAttribute('class', 'k'); kt.setAttribute('x', p.x); kt.setAttribute('y', p.y);
+    kt.textContent = n.k;
+    g.appendChild(kt);
+    const ht = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    ht.setAttribute('class', 'h'); ht.setAttribute('x', p.x + 22); ht.setAttribute('y', p.y - 22);
+    ht.textContent = 'h=' + n.h;
+    g.appendChild(ht);
+    const b = bf(n);
+    const bt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    bt.setAttribute('class', 'b');
+    bt.setAttribute('x', p.x + 22); bt.setAttribute('y', p.y + 30);
+    bt.setAttribute('fill', Math.abs(b) >= 2 ? 'var(--error)' : (b === 0 ? 'var(--success)' : 'var(--muted)'));
+    bt.textContent = (b > 0 ? '+' : '') + b;
+    g.appendChild(bt);
+    svg.appendChild(g);
+    walk(n.r, depth + 1);
+  })(root, 0);
+}
+
+function traverse(n, mode) {
+  const out = [];
+  (function go(n) {
+    if (!n) return;
+    if (mode === 'pre') out.push(n.k);
+    go(n.l);
+    if (mode === 'in') out.push(n.k);
+    go(n.r);
+    if (mode === 'post') out.push(n.k);
+  })(n);
+  return out;
+}
+
+function levelOrder(root) {
+  const out = [];
+  if (!root) return out;
+  const q = [root];
+  while (q.length) {
+    const n = q.shift();
+    out.push(n.k);
+    if (n.l) q.push(n.l);
+    if (n.r) q.push(n.r);
+  }
+  return out;
+}
+
+$('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') insertKey(); });
+
+// Initial seed
+$('bulkInput').value = '10,20,30,40,50,25';
+bulkInsert();
+</script>
+</body>
+</html>

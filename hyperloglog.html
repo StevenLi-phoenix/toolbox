@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HyperLogLog Cardinality Estimator — Free Online Tool</title>
+<meta name="description" content="Stream items into an interactive HyperLogLog sketch, watch the bucket-register histogram fill in, and see the estimated unique count converge on the true value with Flajolet's leading-zero estimator, LinearCounting low-range fix, and bias correction.">
+<meta name="keywords" content="hyperloglog, hll, cardinality estimator, count distinct, probabilistic data structure, leading zeros, sketch">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hyperloglog.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; font-size: .88rem; }
+  .controls label { display: flex; align-items: center; gap: 6px; }
+  .controls input[type=text] {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .92rem;
+    min-width: 200px;
+  }
+  .controls input[type=number], .controls select {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .88rem;
+  }
+  .controls input[type=number] { width: 100px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:hover { filter: brightness(1.05); }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat-card { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat-card .lbl { font-size: .72rem; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; margin-bottom: 4px; }
+  .stat-card .val { font-family: var(--mono); font-size: 1.2rem; font-weight: 700; color: var(--text); word-break: break-all; }
+  .stat-card .sub { font-size: .72rem; color: var(--muted); margin-top: 4px; }
+  .err-pos { color: var(--success); }
+  .err-neg { color: var(--error); }
+  .registers {
+    display: grid; gap: 2px; margin-top: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(16px, 1fr));
+  }
+  .reg {
+    height: 14px; background: var(--surface2); border-radius: 2px;
+    position: relative; cursor: default;
+  }
+  .reg .bar {
+    position: absolute; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(180deg, var(--accent), #4f46e5);
+    border-radius: 2px;
+  }
+  .legend { font-size: .8rem; color: var(--muted); margin-top: 10px; line-height: 1.55; }
+  .legend code { font-family: var(--mono); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  textarea.bulk {
+    width: 100%; min-height: 90px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .88rem; box-sizing: border-box; resize: vertical;
+  }
+  .chart-wrap { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; background: var(--bg); }
+  canvas { width: 100%; height: 220px; display: block; }
+  .formula { padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--mono); font-size: .85rem; line-height: 1.7; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HyperLogLog Cardinality Estimator</h1>
+<p class="subtitle">Pour items into a HyperLogLog sketch and watch <code>2^p</code> registers track the longest run of leading zeros each one has seen. With a few KB of state, HLL estimates the count of distinct items in a stream that may be billions long — at a typical ±2&nbsp;% standard error for <code>p=14</code>.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Precision <code>p</code>:
+      <select id="precision">
+        <option value="4">4 (16 buckets · σ≈26 %)</option>
+        <option value="6">6 (64 · σ≈13 %)</option>
+        <option value="8">8 (256 · σ≈6.5 %)</option>
+        <option value="10">10 (1024 · σ≈3.25 %)</option>
+        <option value="12" selected>12 (4096 · σ≈1.62 %)</option>
+        <option value="14">14 (16384 · σ≈0.81 %)</option>
+        <option value="16">16 (65536 · σ≈0.40 %)</option>
+      </select>
+    </label>
+    <button onclick="resetSketch()">↺ Reset sketch</button>
+  </div>
+  <div class="controls">
+    <input type="text" id="oneInput" placeholder="add a single item" autocomplete="off">
+    <button class="primary" onclick="addOne()">Add</button>
+    <input type="number" id="bulkN" value="10000" min="1" max="10000000">
+    <button onclick="addRandom(false)">Add N random uniques</button>
+    <button onclick="addRandom(true)">Add N with 50 % duplicates</button>
+  </div>
+  <div class="controls">
+    <textarea class="bulk" id="bulk" placeholder="paste a list — one item per line or whitespace-separated"></textarea>
+  </div>
+  <div class="controls">
+    <button onclick="ingestBulk()">Ingest list</button>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="lbl">True unique count</div><div class="val" id="sTrue">0</div><div class="sub">tracked by an in-browser Set</div></div>
+    <div class="stat-card"><div class="lbl">HLL estimate</div><div class="val" id="sEst">0</div><div class="sub" id="sMode">empty</div></div>
+    <div class="stat-card"><div class="lbl">Relative error</div><div class="val" id="sErr">—</div><div class="sub" id="sErrBand">target σ for this p</div></div>
+    <div class="stat-card"><div class="lbl">Items inserted (raw)</div><div class="val" id="sIns">0</div><div class="sub">duplicates included</div></div>
+    <div class="stat-card"><div class="lbl">Sketch size</div><div class="val" id="sSize">0 B</div><div class="sub">6-bit registers</div></div>
+    <div class="stat-card"><div class="lbl">vs. Set memory</div><div class="val" id="sRatio">—</div><div class="sub">naive set: ~36 B / item</div></div>
+  </div>
+
+  <h3 style="font-size:.85rem;margin:14px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Register histogram <span id="regCount" style="color:var(--text);font-family:var(--mono);"></span></h3>
+  <div class="chart-wrap">
+    <canvas id="regChart"></canvas>
+  </div>
+  <p class="legend">Each bar is one of the <code>2ᵖ</code> registers; the height is the register's stored value — the longest run of leading zeros seen by any item that hashed into that bucket. Empty registers stay at 0.</p>
+
+  <h3 style="font-size:.85rem;margin:14px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Estimate vs. true count over time</h3>
+  <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+</div>
+
+<div class="card">
+  <h2>How it works</h2>
+  <div class="formula">
+    h(x) = 64-bit hash<br>
+    j = first p bits of h(x) &nbsp; → bucket index<br>
+    M[j] ← max(M[j], rank of first 1 in remaining bits)<br>
+    Z = (Σ 2^(-M[j]))⁻¹<br>
+    E = α<sub>m</sub> · m² · Z &nbsp; with α<sub>m</sub> ≈ 0.7213 / (1 + 1.079 / m)<br>
+    if E ≤ 2.5 m and there are <em>V</em> empty registers → use LinearCounting: m · ln(m / V)
+  </div>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6;margin-top:12px">
+    HLL trades exactness for memory. A <code>p=14</code> sketch is 12&nbsp;KB and estimates billions of distinct items with about ±0.8 % standard error. The same job with a plain hash set would need megabytes for thousands of items, and gigabytes once you reach the billions. HLL sketches are mergeable: <code>HLL(A ∪ B) = elementwise-max(HLL(A), HLL(B))</code>, which is why Redis, BigQuery, Snowflake, and ClickHouse all use HLL (or HLL++) under the hood for <code>COUNT DISTINCT</code> approximations.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let p = 12, m = 1 << p;
+let registers = new Uint8Array(m);
+let trueSet = new Set();
+let insertedRaw = 0;
+const trend = []; // {raw, est, truth}
+
+// 32-bit MurmurHash3 (x86) — good distribution for HLL bucketing and rank
+function mmh3(key, seed) {
+  let h1 = seed >>> 0;
+  const c1 = 0xcc9e2d51, c2 = 0x1b873593;
+  const data = new TextEncoder().encode(key);
+  const len = data.length;
+  const nblocks = Math.floor(len / 4);
+  for (let i = 0; i < nblocks; i++) {
+    const o = i * 4;
+    let k1 = (data[o] | (data[o + 1] << 8) | (data[o + 2] << 16) | (data[o + 3] << 24)) >>> 0;
+    k1 = Math.imul(k1, c1);
+    k1 = (k1 << 15) | (k1 >>> 17);
+    k1 = Math.imul(k1, c2);
+    h1 ^= k1;
+    h1 = (h1 << 13) | (h1 >>> 19);
+    h1 = (Math.imul(h1, 5) + 0xe6546b64) >>> 0;
+  }
+  const tailIdx = nblocks * 4;
+  let k1 = 0;
+  switch (len & 3) {
+    case 3: k1 ^= data[tailIdx + 2] << 16;
+    case 2: k1 ^= data[tailIdx + 1] << 8;
+    case 1:
+      k1 ^= data[tailIdx];
+      k1 = Math.imul(k1, c1);
+      k1 = (k1 << 15) | (k1 >>> 17);
+      k1 = Math.imul(k1, c2);
+      h1 ^= k1;
+  }
+  h1 ^= len;
+  h1 ^= h1 >>> 16;
+  h1 = Math.imul(h1, 0x85ebca6b);
+  h1 ^= h1 >>> 13;
+  h1 = Math.imul(h1, 0xc2b2ae35);
+  h1 ^= h1 >>> 16;
+  return h1 >>> 0;
+}
+
+// Build a 64-bit hash by concatenating two 32-bit hashes with different seeds.
+function hash64(key) {
+  const a = mmh3(key, 0x9747b28c);
+  const b = mmh3(key, 0xc2b2ae35);
+  return { hi: a, lo: b };
+}
+
+// Bucket index = first p bits of the 64-bit hash. Rank counts the position of the first 1
+// in the remaining (64 - p) bits.
+function bucketAndRank(key) {
+  const { hi, lo } = hash64(key);
+  const bucket = hi >>> (32 - p);
+  // Bits of interest: low (32 - p) bits of hi followed by all 32 bits of lo
+  const tailHiWidth = 32 - p;
+  let rank = 1;
+  if (tailHiWidth > 0) {
+    const tailHi = hi & ((1 << tailHiWidth) - 1);
+    for (let i = tailHiWidth - 1; i >= 0; i--) {
+      if ((tailHi >>> i) & 1) return { bucket, rank };
+      rank++;
+    }
+  }
+  for (let i = 31; i >= 0; i--) {
+    if ((lo >>> i) & 1) return { bucket, rank };
+    rank++;
+  }
+  return { bucket, rank };
+}
+
+function add(item) {
+  const { bucket, rank } = bucketAndRank(item);
+  if (rank > registers[bucket]) registers[bucket] = rank;
+  trueSet.add(item);
+  insertedRaw++;
+}
+
+function alpha(m) {
+  if (m === 16) return 0.673;
+  if (m === 32) return 0.697;
+  if (m === 64) return 0.709;
+  return 0.7213 / (1 + 1.079 / m);
+}
+
+function estimate() {
+  let sum = 0, zeros = 0;
+  for (let i = 0; i < m; i++) {
+    sum += Math.pow(2, -registers[i]);
+    if (registers[i] === 0) zeros++;
+  }
+  const rawE = alpha(m) * m * m / sum;
+  // Small-range correction (LinearCounting)
+  if (rawE <= 2.5 * m && zeros > 0) {
+    return { value: m * Math.log(m / zeros), mode: 'LinearCounting' };
+  }
+  // 32-bit hashes need a large-range correction; we use a 64-bit hash so we
+  // skip it. Still report the regular HLL estimate.
+  return { value: rawE, mode: 'HLL' };
+}
+
+function resetSketch() {
+  p = parseInt($('precision').value, 10);
+  m = 1 << p;
+  registers = new Uint8Array(m);
+  trueSet = new Set();
+  insertedRaw = 0;
+  trend.length = 0;
+  refresh();
+}
+
+function addOne() {
+  const v = $('oneInput').value.trim();
+  if (!v) return;
+  add(v);
+  $('oneInput').value = '';
+  refresh();
+}
+
+function ingestBulk() {
+  const lines = $('bulk').value.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+  for (const v of lines) add(v);
+  $('bulk').value = '';
+  refresh();
+}
+
+// Tiny PRNG — Mulberry32 — so the same browser draws different sequences without ever needing crypto.
+let prngState = 0x12345678;
+function rand() {
+  let t = (prngState += 0x6D2B79F5);
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+function addRandom(withDup) {
+  const N = Math.max(1, Math.min(10000000, parseInt($('bulkN').value, 10) || 0));
+  prngState = (prngState + 0xa5a5a5) >>> 0;
+  const total = withDup ? N : N;
+  for (let i = 0; i < total; i++) {
+    let key;
+    if (withDup && (rand() < 0.5) && trueSet.size > 0) {
+      // pick a re-issued key from already-seen "pool" — synthesize a fixed earlier id.
+      const k = Math.floor(rand() * (trueSet.size));
+      key = 'r' + k;
+    } else {
+      const idx = Math.floor(rand() * 0x7fffffff);
+      key = 'u' + idx;
+    }
+    add(key);
+  }
+  refresh();
+}
+
+// --- Rendering ----------------------------------------------------------
+
+function refresh() {
+  $('regCount').textContent = `(p = ${p}, m = ${m} buckets)`;
+  const e = estimate();
+  $('sTrue').textContent = trueSet.size.toLocaleString();
+  $('sEst').textContent = Math.round(e.value).toLocaleString();
+  $('sMode').textContent = e.mode === 'LinearCounting' ? 'LinearCounting (small range)' : 'HLL formula';
+  $('sIns').textContent = insertedRaw.toLocaleString();
+  const sketchBytes = Math.ceil(m * 6 / 8);
+  $('sSize').textContent = humanBytes(sketchBytes);
+  // Rough memory estimate for a JS Set of strings (V8 ~ 32-40 bytes per small string entry)
+  const setBytes = trueSet.size * 36;
+  $('sRatio').textContent = trueSet.size === 0 ? '—' : (setBytes / sketchBytes).toFixed(1) + '×';
+  if (trueSet.size === 0) {
+    $('sErr').textContent = '—';
+    $('sErrBand').textContent = `target σ ≈ ${(1.04 / Math.sqrt(m) * 100).toFixed(2)} % for this p`;
+  } else {
+    const err = (e.value - trueSet.size) / trueSet.size;
+    $('sErr').innerHTML = (err >= 0 ? '+' : '') + (err * 100).toFixed(2) + ' %';
+    $('sErr').className = 'val ' + (Math.abs(err) <= 1.04 / Math.sqrt(m) ? 'err-pos' : 'err-neg');
+    $('sErrBand').textContent = `target σ ≈ ${(1.04 / Math.sqrt(m) * 100).toFixed(2)} %`;
+  }
+
+  // Trend snapshot
+  trend.push({ raw: insertedRaw, est: e.value, truth: trueSet.size });
+  if (trend.length > 200) trend.shift();
+
+  drawRegisters();
+  drawTrend();
+}
+
+function humanBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KiB';
+  return (b / 1024 / 1024).toFixed(2) + ' MiB';
+}
+
+function drawRegisters() {
+  const canvas = $('regChart');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  const maxVal = Math.max(1, ...registers);
+  const bw = Math.max(0.6, W / m);
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6366f1';
+  ctx.fillStyle = accent;
+  for (let i = 0; i < m; i++) {
+    const h = (registers[i] / maxVal) * (H - 24);
+    ctx.fillRect(i * bw, H - 12 - h, Math.max(1, bw - 0.4), h);
+  }
+  // Axis text
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#888';
+  ctx.font = '11px ui-monospace, monospace';
+  ctx.fillText(`max register = ${maxVal}`, 4, 14);
+}
+
+function drawTrend() {
+  const canvas = $('trendChart');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  if (trend.length < 2) {
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#888';
+    ctx.font = '12px ui-sans-serif, sans-serif';
+    ctx.fillText('add items to see how estimate tracks truth', 12, H / 2);
+    return;
+  }
+  const maxV = Math.max(...trend.map(t => Math.max(t.est, t.truth))) * 1.05 || 1;
+  const x0 = 40, y0 = H - 18, x1 = W - 8, y1 = 12;
+  const xs = (i) => x0 + (i / (trend.length - 1)) * (x1 - x0);
+  const ys = (v) => y0 - (v / maxV) * (y0 - y1);
+
+  // Grid
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#ccc';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.moveTo(x0, y0); ctx.lineTo(x0, y1); ctx.stroke();
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#888';
+  ctx.font = '10px ui-monospace, monospace';
+  ctx.fillText(Math.round(maxV).toLocaleString(), 4, y1 + 8);
+  ctx.fillText('0', 4, y0);
+
+  // truth line (success)
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--success').trim() || '#22c55e';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  trend.forEach((t, i) => {
+    const px = xs(i), py = ys(t.truth);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  });
+  ctx.stroke();
+
+  // estimate line (accent)
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6366f1';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  trend.forEach((t, i) => {
+    const px = xs(i), py = ys(t.est);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  });
+  ctx.stroke();
+
+  // legend
+  ctx.font = '11px ui-sans-serif, sans-serif';
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--success').trim() || '#22c55e';
+  ctx.fillText('true', x1 - 80, y1 + 8);
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6366f1';
+  ctx.fillText('estimate', x1 - 50, y1 + 8);
+}
+
+$('precision').addEventListener('change', resetSketch);
+$('oneInput').addEventListener('keydown', e => { if (e.key === 'Enter') addOne(); });
+window.addEventListener('resize', () => { drawRegisters(); drawTrend(); });
+
+resetSketch();
+</script>
+</body>
+</html>

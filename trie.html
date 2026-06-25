@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trie (Prefix Tree) Visualizer — Free Online Tool</title>
+<meta name="description" content="Build and explore a trie (prefix tree) interactively — insert and delete words, run prefix queries, watch nodes light up as autocomplete walks the tree, and inspect node-count and memory savings versus a flat word list.">
+<meta name="keywords" content="trie, prefix tree, autocomplete, data structure, visualizer, radix tree, dictionary">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/trie.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; font-size: .88rem; }
+  .controls input[type=text] {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .92rem;
+    min-width: 200px;
+  }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button:hover { background: var(--surface2); }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button.primary:hover { filter: brightness(1.05); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; }
+  @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: auto; max-height: 560px;
+  }
+  svg.tree { display: block; min-width: 100%; }
+  .node circle { stroke: var(--border); stroke-width: 1.4; fill: var(--surface2); }
+  .node.terminal circle { fill: rgba(40, 180, 99, .25); stroke: var(--success); stroke-width: 2; }
+  .node.highlight circle { fill: rgba(241, 196, 15, .35); stroke: var(--warning); stroke-width: 2.4; }
+  .node.match circle { fill: rgba(99, 102, 241, .3); stroke: var(--accent); stroke-width: 2.4; }
+  .node text.lbl { font-family: var(--mono); font-size: 13px; fill: var(--text); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .edge { stroke: var(--border); stroke-width: 1.4; fill: none; }
+  .edge.match { stroke: var(--accent); stroke-width: 2.6; }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; color: var(--text); }
+  .completions { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .completions h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .completions ul { margin: 0; padding-left: 18px; font-family: var(--mono); font-size: .88rem; color: var(--text); }
+  .completions ul li { padding: 1px 0; }
+  .completions em { color: var(--muted); font-style: normal; }
+  .completions ul li mark { background: rgba(99, 102, 241, .22); color: var(--accent); border-radius: 2px; padding: 0 1px; }
+  .legend { font-size: .8rem; color: var(--muted); margin-top: 10px; line-height: 1.55; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; margin-right: 4px; border: 1.4px solid var(--border); }
+  .legend .sw.t { background: rgba(40, 180, 99, .25); border-color: var(--success); }
+  .legend .sw.m { background: rgba(99, 102, 241, .3); border-color: var(--accent); }
+  .legend .sw.h { background: rgba(241, 196, 15, .35); border-color: var(--warning); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Trie (Prefix Tree) Visualizer</h1>
+<p class="subtitle">A <strong>trie</strong> stores a dictionary by sharing common prefixes — every path from the root to a marked node spells one word. Insert words, type a prefix to watch autocomplete walk the matching branch, and read off how much space the shared prefixes save versus a flat list.</p>
+
+<div class="card">
+  <div class="controls">
+    <input type="text" id="wordInput" placeholder="word to insert" autocomplete="off" spellcheck="false">
+    <button class="primary" onclick="insertWord()">Insert</button>
+    <button onclick="deleteWord()">Delete</button>
+    <input type="text" id="prefixInput" placeholder="search prefix" autocomplete="off" spellcheck="false">
+    <button onclick="runSearch()">Search prefix</button>
+    <button onclick="loadSample()">Sample words</button>
+    <button onclick="clearAll()">Clear</button>
+  </div>
+  <div class="layout">
+    <div class="svg-wrap" id="svgWrap"><svg class="tree" id="svgTree" viewBox="0 0 800 400" preserveAspectRatio="xMinYMin meet"></svg></div>
+    <div>
+      <div class="stats">
+        <h3>Trie statistics</h3>
+        <div class="stat-row"><span>Words</span><span class="v" id="sWords">0</span></div>
+        <div class="stat-row"><span>Nodes</span><span class="v" id="sNodes">1</span></div>
+        <div class="stat-row"><span>Edges</span><span class="v" id="sEdges">0</span></div>
+        <div class="stat-row"><span>Max depth</span><span class="v" id="sDepth">0</span></div>
+        <div class="stat-row"><span>Total chars (flat)</span><span class="v" id="sFlat">0</span></div>
+        <div class="stat-row"><span>Chars stored (trie)</span><span class="v" id="sStored">0</span></div>
+        <div class="stat-row"><span>Compression</span><span class="v" id="sCompression">—</span></div>
+      </div>
+      <div class="completions">
+        <h3>Completions</h3>
+        <ul id="completions"><li><em>type a prefix above</em></li></ul>
+      </div>
+      <p class="legend">
+        <span class="sw"></span> internal node &nbsp;
+        <span class="sw t"></span> word ends here &nbsp;
+        <span class="sw m"></span> on search path &nbsp;
+        <span class="sw h"></span> last-inserted node
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why tries?</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    A trie answers <em>does any stored word start with this prefix?</em> in <code>O(P)</code> time where <code>P</code> is the prefix length — independent of how many words are in the dictionary. That's why autocomplete, IP-routing FIB lookups, and the suggest box in your editor reach for tries (or their compressed cousins, the radix / Patricia tree). Every node is either a path-shared prefix or a word boundary; the green ring marks word boundaries.
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    The compression number compares the total characters across all inserted words to the number of edge labels actually stored. The bigger the shared-prefix overlap, the better the trie does. With <em>cat / car / cart / care</em> the trie stores 7 characters instead of 14 — a 50&nbsp;% saving.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function makeNode(ch) { return { ch, children: new Map(), terminal: false }; }
+let root = makeNode('');
+let totalCharsFlat = 0;
+let highlightPath = []; // array of node refs that should be marked .match
+let highlightLastInsert = null;
+
+function insertWord() {
+  const w = $('wordInput').value.trim().toLowerCase();
+  if (!w) return;
+  let node = root;
+  let added = false;
+  for (const c of w) {
+    if (!node.children.has(c)) { node.children.set(c, makeNode(c)); added = true; }
+    node = node.children.get(c);
+  }
+  if (!node.terminal) { totalCharsFlat += w.length; node.terminal = true; added = true; }
+  if (added) {
+    highlightLastInsert = node;
+  }
+  $('wordInput').value = '';
+  render();
+}
+
+function deleteWord() {
+  const w = $('wordInput').value.trim().toLowerCase();
+  if (!w) return;
+  const path = [];
+  let node = root;
+  for (const c of w) {
+    if (!node.children.has(c)) return;
+    node = node.children.get(c);
+    path.push(node);
+  }
+  if (!node.terminal) return;
+  node.terminal = false;
+  totalCharsFlat = Math.max(0, totalCharsFlat - w.length);
+  for (let i = path.length - 1; i >= 0; i--) {
+    const n = path[i];
+    if (!n.terminal && n.children.size === 0) {
+      const parent = (i === 0) ? root : path[i - 1];
+      parent.children.delete(n.ch);
+    } else break;
+  }
+  $('wordInput').value = '';
+  highlightLastInsert = null;
+  render();
+}
+
+function runSearch() {
+  render();
+}
+
+function clearAll() {
+  root = makeNode('');
+  totalCharsFlat = 0;
+  highlightLastInsert = null;
+  $('prefixInput').value = '';
+  render();
+}
+
+function loadSample() {
+  ['cat','car','cart','care','cargo','dog','dove','dot','done','door'].forEach(w => {
+    $('wordInput').value = w; insertWord();
+  });
+  highlightLastInsert = null;
+  render();
+}
+
+// --- Layout & SVG ---------------------------------------------------------
+
+function collectWords(node, prefix, out) {
+  if (node.terminal) out.push(prefix);
+  const keys = Array.from(node.children.keys()).sort();
+  for (const k of keys) collectWords(node.children.get(k), prefix + k, out);
+}
+
+function findPrefixNode(prefix) {
+  let n = root;
+  for (const c of prefix) {
+    if (!n.children.has(c)) return null;
+    n = n.children.get(c);
+  }
+  return n;
+}
+
+function layout(node, depth, leafCounter, positions) {
+  const keys = Array.from(node.children.keys()).sort();
+  if (keys.length === 0) {
+    positions.set(node, { x: leafCounter.n++, y: depth });
+    return;
+  }
+  let firstX, lastX;
+  for (const k of keys) {
+    const child = node.children.get(k);
+    layout(child, depth + 1, leafCounter, positions);
+    const cx = positions.get(child).x;
+    if (firstX === undefined) firstX = cx;
+    lastX = cx;
+  }
+  positions.set(node, { x: (firstX + lastX) / 2, y: depth });
+}
+
+function countNodes(node) {
+  let c = 1;
+  for (const ch of node.children.values()) c += countNodes(ch);
+  return c;
+}
+function countEdges(node) {
+  let e = 0;
+  for (const ch of node.children.values()) { e += 1 + countEdges(ch); }
+  return e;
+}
+function maxDepth(node, d) {
+  let m = d;
+  for (const ch of node.children.values()) m = Math.max(m, maxDepth(ch, d + 1));
+  return m;
+}
+function countWords(node) {
+  let c = node.terminal ? 1 : 0;
+  for (const ch of node.children.values()) c += countWords(ch);
+  return c;
+}
+
+function render() {
+  const prefix = ($('prefixInput').value || '').toLowerCase();
+  // Collect match path
+  const pathNodes = new Set();
+  let pathOk = true;
+  let n = root;
+  pathNodes.add(n);
+  for (const c of prefix) {
+    if (!n.children.has(c)) { pathOk = false; break; }
+    n = n.children.get(c);
+    pathNodes.add(n);
+  }
+
+  // Layout
+  const positions = new Map();
+  const leafCounter = { n: 0 };
+  layout(root, 0, leafCounter, positions);
+  const leaves = Math.max(1, leafCounter.n);
+  const depth = maxDepth(root, 0);
+
+  const dx = 56, dy = 70;
+  const W = Math.max(800, (leaves + 1) * dx);
+  const H = Math.max(200, (depth + 1) * dy + 60);
+  const svg = $('svgTree');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.innerHTML = '';
+
+  // Draw edges first
+  const edges = [];
+  function walk(node, parent) {
+    if (parent) {
+      const a = positions.get(parent), b = positions.get(node);
+      const matched = pathOk && pathNodes.has(parent) && pathNodes.has(node);
+      edges.push({ a, b, ch: node.ch, matched });
+    }
+    for (const ch of node.children.values()) walk(ch, node);
+  }
+  walk(root, null);
+
+  for (const e of edges) {
+    const ax = e.a.x * dx + dx, ay = e.a.y * dy + 30;
+    const bx = e.b.x * dx + dx, by = e.b.y * dy + 30;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M ${ax} ${ay} C ${ax} ${(ay + by) / 2}, ${bx} ${(ay + by) / 2}, ${bx} ${by}`);
+    path.setAttribute('class', 'edge' + (e.matched ? ' match' : ''));
+    svg.appendChild(path);
+    // Edge label (char)
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', (ax + bx) / 2);
+    t.setAttribute('y', (ay + by) / 2 - 4);
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('font-family', 'var(--mono)');
+    t.setAttribute('font-size', '11');
+    t.setAttribute('fill', e.matched ? 'var(--accent)' : 'var(--muted)');
+    t.textContent = e.ch;
+    svg.appendChild(t);
+  }
+
+  // Draw nodes
+  function drawNodes(node) {
+    const p = positions.get(node);
+    const cx = p.x * dx + dx, cy = p.y * dy + 30;
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    let cls = 'node';
+    if (node.terminal) cls += ' terminal';
+    if (pathOk && pathNodes.has(node)) cls += ' match';
+    if (node === highlightLastInsert) cls += ' highlight';
+    g.setAttribute('class', cls);
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', 16);
+    g.appendChild(c);
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('class', 'lbl');
+    t.setAttribute('x', cx); t.setAttribute('y', cy);
+    t.textContent = (node === root) ? '•' : node.ch;
+    g.appendChild(t);
+    svg.appendChild(g);
+    for (const ch of node.children.values()) drawNodes(ch);
+  }
+  drawNodes(root);
+
+  // Stats
+  const nodes = countNodes(root);
+  $('sWords').textContent = countWords(root);
+  $('sNodes').textContent = nodes;
+  $('sEdges').textContent = countEdges(root);
+  $('sDepth').textContent = depth;
+  $('sFlat').textContent = totalCharsFlat;
+  const stored = nodes - 1;
+  $('sStored').textContent = stored;
+  $('sCompression').textContent = totalCharsFlat === 0 ? '—' : (100 * (1 - stored / totalCharsFlat)).toFixed(1) + ' %';
+
+  // Completions
+  const compEl = $('completions');
+  compEl.innerHTML = '';
+  if (!prefix) {
+    compEl.innerHTML = '<li><em>type a prefix above</em></li>';
+  } else if (!pathOk) {
+    compEl.innerHTML = `<li><em>no word starts with "${escapeHtml(prefix)}"</em></li>`;
+  } else {
+    const startNode = findPrefixNode(prefix);
+    const words = [];
+    collectWords(startNode, prefix, words);
+    if (words.length === 0) compEl.innerHTML = `<li><em>"${escapeHtml(prefix)}" is a prefix but no word ends here</em></li>`;
+    else {
+      for (const w of words) {
+        const li = document.createElement('li');
+        li.innerHTML = `<mark>${escapeHtml(prefix)}</mark>${escapeHtml(w.slice(prefix.length))}`;
+        compEl.appendChild(li);
+      }
+    }
+  }
+}
+
+function escapeHtml(s) { return s.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])); }
+
+$('wordInput').addEventListener('keydown', e => { if (e.key === 'Enter') insertWord(); });
+$('prefixInput').addEventListener('input', render);
+
+loadSample();
+$('prefixInput').value = 'ca';
+render();
+</script>
+</body>
+</html>
