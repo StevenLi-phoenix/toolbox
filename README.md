@@ -12,6 +12,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSV Column Reorder & Filter](csvreorder.html) | Drag-and-drop reorder columns in a CSV, hide unwanted columns, rename headers, and re-emit clean CSV — auto-detects delimiter, handles quoted fields and embedded newlines. |
 | [JSON Formatter](json.html) | Format, validate, minify, and beautify JSON with syntax highlighting. |
 | [JSON → Swift](json2swift.html) | Generate Swift Codable structs or classes with CodingKeys, Optionals, and nested types. |
 | [JSON → Go Struct](json2go.html) | Convert JSON objects to Go structs with proper json tags. |
@@ -45,6 +46,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS :has() Selector Playground](cshas.html) | Type any `:has()` parent-selector expression and see exactly which elements in your HTML match — with live preview, ready-made recipes, generated CSS, and a Selectors 4 specificity breakdown. |
 | [CSS :nth-child Tester](nthchild.html) | Type an `an+b` formula and watch matched children highlight in real time. Switch between `:nth-child`, `:nth-of-type`, `:nth-last-child`, and `:nth-last-of-type`; mix child types to see how *of-type* changes the count; try Selectors 4's `of S` filter syntax. |
 | [CSS grid-template-areas Visual Builder](gridareas.html) | Paint named areas on a grid and get the matching `grid-template-areas` rule with rows aligned column-by-column, dot placeholders for empty cells, and automatic validation that every area is rectangular (anything else is illegal CSS). Live preview with Holy Grail / Dashboard / App Shell presets. |
 | [CSS text-box-trim Playground](textboxtrim.html) | Compare `text-box-trim` and `text-box-edge` values side by side — see exactly how trimming the half-leading down to cap-height & baseline finally centers text inside a button. Live preview, edge cheat sheet, and a copy-ready `text-box` shorthand with an `@supports` fallback. |
@@ -110,6 +112,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Image Convolution Kernel Playground](imgkernel.html) | Apply 3×3, 5×5, or 7×7 convolution kernels (sharpen, blur, Sobel, Laplacian, Gaussian, emboss…) to an image. Edit any cell, tweak divisor/bias/edge mode, and see the result in real time. |
 | [Image Histogram Viewer](imagehistogram.html) | Inspect any image's RGB and BT.709 luminance histograms with stats, clipping warnings, and linear/log/√ Y-scale. |
 | [Image to Base64](img2base64.html) | Convert images to Base64 data URIs for embedding in HTML & CSS. |
 | [Image to ASCII Art](img2ascii.html) | Convert any image to ASCII art. |

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Convolution Kernel Playground — Free Online Tool</title>
+<meta name="description" content="Apply 3×3, 5×5, and 7×7 convolution kernels (sharpen, blur, edge-detect, emboss, Sobel, Laplacian, Gaussian) to an image — edit any kernel cell and see the result in real time.">
+<meta name="keywords" content="image convolution, kernel filter, sharpen, blur, edge detection, sobel, laplacian, gaussian, emboss, image kernel, dsp">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/imgkernel.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .drop {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 26px; text-align: center; color: var(--muted);
+    cursor: pointer; transition: border-color .15s, background .15s;
+    font-size: .9rem;
+  }
+  .drop.over { border-color: var(--accent); background: var(--surface2); }
+  .preset-row {
+    display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0;
+  }
+  .preset-row button {
+    padding: 5px 10px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text); cursor: pointer;
+    font-family: var(--sans); font-size: .82rem;
+  }
+  .preset-row button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .grid-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  .kernel-wrap { display: flex; flex-direction: column; align-items: flex-start; }
+  table.kernel { border-collapse: collapse; margin: 8px 0; }
+  table.kernel td { padding: 0; }
+  table.kernel input {
+    width: 60px; height: 38px; text-align: center;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .9rem; box-sizing: border-box;
+  }
+  table.kernel input:focus { border-color: var(--accent); outline: none; position: relative; z-index: 1; }
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 10px 0; font-size: .85rem; }
+  .controls label { display: flex; align-items: center; gap: 6px; }
+  .controls input[type="number"] {
+    width: 80px; padding: 5px 8px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .85rem;
+  }
+  .controls select {
+    padding: 5px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .85rem;
+  }
+  .images { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+  .images > div { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; }
+  .images h3 { font-size: .82rem; color: var(--muted); margin: 0 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  canvas { max-width: 100%; height: auto; display: block; background: #fff; border-radius: 4px; }
+  .stat-row { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  .stat-row strong { color: var(--text); font-family: var(--mono); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .btn-row button {
+    padding: 6px 12px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text); cursor: pointer;
+    font-family: var(--sans); font-size: .82rem;
+  }
+  .btn-row button:hover { background: var(--bg); border-color: var(--accent); }
+  @media (max-width: 768px) {
+    .grid-row, .images { grid-template-columns: 1fr; }
+    table.kernel input { width: 48px; height: 34px; font-size: .82rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Image Convolution Kernel Playground</h1>
+<p class="subtitle">Drop in an image, pick a preset (Sobel, Gaussian, sharpen, emboss…) or hand-edit any cell, and watch the filtered output update in real time. Useful for understanding the kernels behind every CV pipeline, Photoshop filter, and CNN layer.</p>
+
+<div class="card">
+  <h2>Image</h2>
+  <div id="drop" class="drop">Drop an image, click to pick, or paste from clipboard. A demo gradient is loaded by default.</div>
+  <input type="file" id="file" accept="image/*" style="display:none">
+  <div class="stat-row" style="margin-top:10px">
+    <span><strong id="statSize">—</strong> px</span>
+    <span><strong id="statTime">—</strong> ms / frame</span>
+    <span>working size: <strong id="statScale">—</strong></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Kernel</h2>
+  <div class="controls">
+    <label>Size
+      <select id="ksize" onchange="resizeKernel()">
+        <option value="3" selected>3 × 3</option>
+        <option value="5">5 × 5</option>
+        <option value="7">7 × 7</option>
+      </select>
+    </label>
+    <label>Divisor
+      <input type="number" id="divisor" value="1" step="any" oninput="apply()">
+    </label>
+    <label>Bias
+      <input type="number" id="bias" value="0" step="1" oninput="apply()">
+    </label>
+    <label>Edge
+      <select id="edgeMode" onchange="apply()">
+        <option value="clamp">clamp</option>
+        <option value="wrap">wrap</option>
+        <option value="mirror">mirror</option>
+        <option value="zero">zero</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="autoNorm" onchange="apply()"> Auto-normalize divisor</label>
+    <label><input type="checkbox" id="grayscale" onchange="apply()"> Grayscale first</label>
+  </div>
+  <div class="grid-row">
+    <div class="kernel-wrap">
+      <table class="kernel" id="kernelGrid"></table>
+      <div class="btn-row">
+        <button onclick="kernelFill(0)">Zero</button>
+        <button onclick="kernelIdentity()">Identity</button>
+        <button onclick="randomKernel()">Randomize</button>
+      </div>
+    </div>
+    <div>
+      <h3 style="font-size:.82rem;color:var(--muted);margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em">Presets</h3>
+      <div class="preset-row" id="presetRow"></div>
+      <p style="font-size:.78rem;color:var(--muted);margin-top:8px;line-height:1.5">A convolution multiplies each pixel and its neighbors by the matching kernel cell, sums the products, divides by the divisor, and adds the bias. Identity (1 in the center, 0 elsewhere) leaves the image unchanged.</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Result</h2>
+  <div class="images">
+    <div>
+      <h3>Original</h3>
+      <canvas id="canvasIn"></canvas>
+    </div>
+    <div>
+      <h3>Filtered</h3>
+      <canvas id="canvasOut"></canvas>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button onclick="downloadResult()">Download PNG</button>
+    <button onclick="swapIO()">Use result as input</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About the math</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+    For each output pixel <code>O(x,y)</code> the tool computes <code>(Σ K(i,j) · I(x+i, y+j)) / divisor + bias</code>, then clamps to <code>[0,255]</code>. Each color channel is processed independently. Auto-normalize divides by the kernel sum (or by 1 if the sum is zero, common for edge detectors). Edge mode controls how pixels outside the image are sampled — <em>clamp</em> repeats the nearest edge, <em>wrap</em> tiles, <em>mirror</em> reflects, <em>zero</em> treats them as black. Large images are auto-downscaled to ≤ 600 px on the longest side to keep things interactive — download the PNG to keep the working copy.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const PRESETS = {
+  'Identity':       { k: [0,0,0, 0,1,0, 0,0,0], d: 1, b: 0, auto: false },
+  'Box blur':       { k: [1,1,1, 1,1,1, 1,1,1], d: 9, b: 0, auto: false },
+  'Gaussian 3':     { k: [1,2,1, 2,4,2, 1,2,1], d: 16, b: 0, auto: false },
+  'Gaussian 5':     { size: 5, k: [1,4,6,4,1, 4,16,24,16,4, 6,24,36,24,6, 4,16,24,16,4, 1,4,6,4,1], d: 256, b: 0, auto: false },
+  'Sharpen':        { k: [0,-1,0, -1,5,-1, 0,-1,0], d: 1, b: 0, auto: false },
+  'Unsharp mask':   { k: [-1,-1,-1, -1,9,-1, -1,-1,-1], d: 1, b: 0, auto: false },
+  'Edge detect':    { k: [-1,-1,-1, -1,8,-1, -1,-1,-1], d: 1, b: 0, auto: false },
+  'Laplacian':      { k: [0,1,0, 1,-4,1, 0,1,0], d: 1, b: 128, auto: false, gray: true },
+  'Sobel X':        { k: [-1,0,1, -2,0,2, -1,0,1], d: 1, b: 128, auto: false, gray: true },
+  'Sobel Y':        { k: [-1,-2,-1, 0,0,0, 1,2,1], d: 1, b: 128, auto: false, gray: true },
+  'Prewitt X':      { k: [-1,0,1, -1,0,1, -1,0,1], d: 1, b: 128, auto: false, gray: true },
+  'Prewitt Y':      { k: [-1,-1,-1, 0,0,0, 1,1,1], d: 1, b: 128, auto: false, gray: true },
+  'Emboss':         { k: [-2,-1,0, -1,1,1, 0,1,2], d: 1, b: 128, auto: false },
+  'Ridge':          { k: [0,-1,0, -1,4,-1, 0,-1,0], d: 1, b: 0, auto: false },
+  'Outline':        { k: [-1,-1,-1, -1,8,-1, -1,-1,-1], d: 1, b: 0, auto: false },
+  'Motion blur 5':  { size: 5, k: [1,0,0,0,0, 0,1,0,0,0, 0,0,1,0,0, 0,0,0,1,0, 0,0,0,0,1], d: 5, b: 0, auto: false },
+};
+
+let size = 3;
+let kernel = [0,0,0, 0,1,0, 0,0,0];
+let srcImage = null;
+const MAX_DIM = 600;
+
+function renderKernelGrid() {
+  const tbl = $('kernelGrid');
+  tbl.innerHTML = '';
+  for (let r = 0; r < size; r++) {
+    const tr = document.createElement('tr');
+    for (let c = 0; c < size; c++) {
+      const td = document.createElement('td');
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.step = 'any';
+      inp.value = kernel[r * size + c] ?? 0;
+      inp.dataset.r = r; inp.dataset.c = c;
+      inp.oninput = () => {
+        kernel[+inp.dataset.r * size + +inp.dataset.c] = parseFloat(inp.value) || 0;
+        if ($('autoNorm').checked) updateAutoDivisor();
+        apply();
+      };
+      td.appendChild(inp);
+      tr.appendChild(td);
+    }
+    tbl.appendChild(tr);
+  }
+}
+
+function resizeKernel() {
+  const newSize = +$('ksize').value;
+  const old = kernel, oldSize = size;
+  size = newSize;
+  kernel = new Array(size * size).fill(0);
+  kernel[Math.floor(size * size / 2)] = 1;
+  renderKernelGrid();
+  if ($('autoNorm').checked) updateAutoDivisor();
+  apply();
+}
+
+function loadPreset(name) {
+  const p = PRESETS[name];
+  if (!p) return;
+  size = p.size || 3;
+  $('ksize').value = String(size);
+  kernel = p.k.slice();
+  $('divisor').value = p.d;
+  $('bias').value = p.b;
+  $('autoNorm').checked = !!p.auto;
+  if (p.gray !== undefined) $('grayscale').checked = !!p.gray;
+  renderKernelGrid();
+  document.querySelectorAll('#presetRow button').forEach(b => b.classList.toggle('active', b.textContent === name));
+  apply();
+}
+
+function renderPresets() {
+  const row = $('presetRow');
+  row.innerHTML = '';
+  for (const name of Object.keys(PRESETS)) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => loadPreset(name);
+    row.appendChild(b);
+  }
+}
+
+function kernelFill(v) {
+  kernel = new Array(size * size).fill(v);
+  renderKernelGrid();
+  if ($('autoNorm').checked) updateAutoDivisor();
+  apply();
+}
+function kernelIdentity() {
+  kernel = new Array(size * size).fill(0);
+  kernel[Math.floor(size * size / 2)] = 1;
+  renderKernelGrid();
+  if ($('autoNorm').checked) updateAutoDivisor();
+  apply();
+}
+function randomKernel() {
+  kernel = kernel.map(() => Math.round((Math.random() * 4 - 2) * 10) / 10);
+  renderKernelGrid();
+  if ($('autoNorm').checked) updateAutoDivisor();
+  apply();
+}
+
+function updateAutoDivisor() {
+  const sum = kernel.reduce((a, b) => a + b, 0);
+  $('divisor').value = sum === 0 ? 1 : sum;
+}
+
+function convolve(src, w, h, k, ksize, divisor, bias, edgeMode, gray) {
+  const dst = new Uint8ClampedArray(src.length);
+  const half = (ksize - 1) >> 1;
+  const inv = 1 / divisor;
+  const get = (x, y) => {
+    if (x >= 0 && x < w && y >= 0 && y < h) return (y * w + x) * 4;
+    if (edgeMode === 'zero') return -1;
+    if (edgeMode === 'clamp') {
+      x = Math.max(0, Math.min(w - 1, x));
+      y = Math.max(0, Math.min(h - 1, y));
+    } else if (edgeMode === 'wrap') {
+      x = ((x % w) + w) % w;
+      y = ((y % h) + h) % h;
+    } else { // mirror
+      if (x < 0) x = -x - 1;
+      else if (x >= w) x = 2 * w - x - 1;
+      if (y < 0) y = -y - 1;
+      else if (y >= h) y = 2 * h - y - 1;
+      x = Math.max(0, Math.min(w - 1, x));
+      y = Math.max(0, Math.min(h - 1, y));
+    }
+    return (y * w + x) * 4;
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let r = 0, g = 0, b = 0;
+      for (let j = 0; j < ksize; j++) {
+        for (let i = 0; i < ksize; i++) {
+          const kv = k[j * ksize + i];
+          if (!kv) continue;
+          const idx = get(x + i - half, y + j - half);
+          if (idx < 0) continue;
+          r += src[idx]     * kv;
+          g += src[idx + 1] * kv;
+          b += src[idx + 2] * kv;
+        }
+      }
+      const di = (y * w + x) * 4;
+      if (gray) {
+        const v = (r + g + b) / 3 * inv + bias;
+        dst[di] = dst[di + 1] = dst[di + 2] = v;
+      } else {
+        dst[di]     = r * inv + bias;
+        dst[di + 1] = g * inv + bias;
+        dst[di + 2] = b * inv + bias;
+      }
+      dst[di + 3] = src[di + 3];
+    }
+  }
+  return dst;
+}
+
+function toGray(src) {
+  const out = new Uint8ClampedArray(src.length);
+  for (let i = 0; i < src.length; i += 4) {
+    const g = 0.2126 * src[i] + 0.7152 * src[i + 1] + 0.0722 * src[i + 2];
+    out[i] = out[i + 1] = out[i + 2] = g;
+    out[i + 3] = src[i + 3];
+  }
+  return out;
+}
+
+function apply() {
+  if (!srcImage) return;
+  const t0 = performance.now();
+  const cIn = $('canvasIn'), cOut = $('canvasOut');
+  let w = srcImage.width, h = srcImage.height;
+  const scale = Math.min(1, MAX_DIM / Math.max(w, h));
+  w = Math.round(w * scale); h = Math.round(h * scale);
+  cIn.width = cOut.width = w;
+  cIn.height = cOut.height = h;
+  $('statScale').textContent = w + ' × ' + h;
+  const ctxIn = cIn.getContext('2d');
+  ctxIn.drawImage(srcImage, 0, 0, w, h);
+  let imgData = ctxIn.getImageData(0, 0, w, h);
+  let data = imgData.data;
+  if ($('grayscale').checked) data = toGray(data);
+  const div = parseFloat($('divisor').value) || 1;
+  const bias = parseFloat($('bias').value) || 0;
+  const out = convolve(data, w, h, kernel, size, div, bias, $('edgeMode').value, false);
+  const ctxOut = cOut.getContext('2d');
+  const outData = ctxOut.createImageData(w, h);
+  outData.data.set(out);
+  ctxOut.putImageData(outData, 0, 0);
+  const t1 = performance.now();
+  $('statTime').textContent = (t1 - t0).toFixed(1);
+}
+
+function loadFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    srcImage = img;
+    $('statSize').textContent = img.width + ' × ' + img.height;
+    apply();
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+function downloadResult() {
+  const c = $('canvasOut');
+  if (!c.width) return;
+  c.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'filtered.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+}
+
+function swapIO() {
+  const c = $('canvasOut');
+  if (!c.width) return;
+  const img = new Image();
+  img.onload = () => {
+    srcImage = img;
+    $('statSize').textContent = img.width + ' × ' + img.height;
+    apply();
+  };
+  img.src = c.toDataURL('image/png');
+}
+
+function makeDemoImage() {
+  const c = document.createElement('canvas');
+  c.width = 320; c.height = 200;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 320, 200);
+  grad.addColorStop(0, '#1e3a8a');
+  grad.addColorStop(0.5, '#7c3aed');
+  grad.addColorStop(1, '#f59e0b');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 320, 200);
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(90, 100, 50, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(180, 50, 100, 100);
+  ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(10, 180); ctx.lineTo(310, 30); ctx.stroke();
+  ctx.font = 'bold 36px sans-serif'; ctx.fillStyle = '#fff';
+  ctx.fillText('kernel', 110, 175);
+  const img = new Image();
+  img.onload = () => {
+    srcImage = img;
+    $('statSize').textContent = img.width + ' × ' + img.height;
+    apply();
+  };
+  img.src = c.toDataURL();
+}
+
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => loadFile(e.target.files[0]);
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.classList.remove('over');
+  loadFile(e.dataTransfer.files[0]);
+});
+window.addEventListener('paste', e => {
+  for (const it of e.clipboardData.items) {
+    if (it.type.startsWith('image/')) { loadFile(it.getAsFile()); return; }
+  }
+});
+
+renderPresets();
+renderKernelGrid();
+makeDemoImage();
+</script>
+</body>
+</html>
