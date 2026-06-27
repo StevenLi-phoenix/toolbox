@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N-Queens Solver &amp; Backtracking Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch the classic N-Queens problem solve itself — step-by-step backtracking on a 4×4 to 16×16 board with attack heat-map, all-solutions enumeration, and unique-by-symmetry count.">
+<meta name="keywords" content="n queens, eight queens, backtracking visualizer, n-queens solver, chess puzzle, recursion, csp">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/nqueens.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .ctrl-row label { font-size: .82rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  input[type="number"] { width: 70px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); }
+  input[type="range"] { width: 120px; accent-color: var(--accent, #2563eb); }
+  button.btn { padding: 7px 14px; font-size: .82rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); cursor: pointer; color: var(--text); font-weight: 600; }
+  button.btn.primary { background: var(--accent, #2563eb); color: white; border-color: var(--accent, #2563eb); }
+  button.btn:hover:not(:disabled) { border-color: var(--accent, #2563eb); }
+  button.btn:disabled { opacity: .5; cursor: not-allowed; }
+  .board-wrap { display: flex; justify-content: center; padding: 10px 0; }
+  .board { display: grid; gap: 0; border: 2px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .cell { width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; line-height: 1; position: relative; transition: background .12s; }
+  .cell.light { background: #f1e9d2; }
+  .cell.dark { background: #b88762; }
+  .cell.attacked { box-shadow: inset 0 0 0 2px rgba(220, 38, 38, .55); }
+  .cell.tried { background: #fbbf24 !important; }
+  .cell.placed::after { content: '♛'; color: #1f2937; font-size: 80%; }
+  .cell.placed.fail::after { color: #dc2626; }
+  .cell .att { position: absolute; bottom: 1px; right: 3px; font-size: .55rem; font-family: var(--mono); color: rgba(0,0,0,.5); }
+  .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-family: var(--mono); font-weight: 700; font-size: 1.02rem; }
+  .log { margin-top: 10px; max-height: 220px; overflow-y: auto; font-family: var(--mono); font-size: .76rem; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .log .l { padding: 1px 0; }
+  .log .l.place { color: var(--success, #16a34a); }
+  .log .l.back { color: var(--error, #dc2626); }
+  .log .l.try { color: var(--muted); }
+  .log .l.sol { color: var(--accent, #2563eb); font-weight: 700; }
+  .solgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin-top: 8px; }
+  .mini { border: 1px solid var(--border); border-radius: 4px; padding: 4px; background: var(--surface2); cursor: pointer; transition: border-color .12s; }
+  .mini:hover { border-color: var(--accent, #2563eb); }
+  .mini .b { display: grid; }
+  .mini .c { aspect-ratio: 1; font-size: .65rem; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  .mini .c.light { background: #f1e9d2; }
+  .mini .c.dark { background: #b88762; }
+  .mini .lab { text-align: center; font-size: .68rem; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>♛ N-Queens Solver &amp; Backtracking Visualizer</h1>
+<p class="subtitle">Place <em>n</em> queens on an <em>n</em>×<em>n</em> chessboard so no two attack each other. Watch backtracking try every column on every row, prune the doomed branches, and enumerate every distinct solution. Boards from 4×4 up to 12×12 (one-shot solve up to 16×16).</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Controls</h2>
+    <div class="ctrl-row">
+      <label>n <input type="number" id="n" value="8" min="4" max="16" step="1"></label>
+      <label>speed <input type="range" id="speed" min="1" max="100" value="60"></label>
+      <button class="btn primary" id="btnSolve" onclick="startSolve()">▶ Step-solve</button>
+      <button class="btn" id="btnPause" onclick="togglePause()" disabled>⏸ Pause</button>
+      <button class="btn" id="btnReset" onclick="reset()">↺ Reset</button>
+      <button class="btn" id="btnAll" onclick="solveAll()">All solutions</button>
+    </div>
+    <div class="board-wrap"><div class="board" id="board"></div></div>
+    <div class="stats-grid">
+      <div class="stat"><div class="k">Step</div><div class="v" id="sStep">0</div></div>
+      <div class="stat"><div class="k">Placements tried</div><div class="v" id="sTries">0</div></div>
+      <div class="stat"><div class="k">Backtracks</div><div class="v" id="sBack">0</div></div>
+      <div class="stat"><div class="k">Solutions found</div><div class="v" id="sSol">0</div></div>
+    </div>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:8px">Click any solution thumbnail below to load it onto the big board.</p>
+  </div>
+
+  <div class="card">
+    <h2>Trace</h2>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Solutions</h2>
+  <div id="solSummary" style="font-size:.85rem;color:var(--muted);margin-bottom:6px"></div>
+  <div class="solgrid" id="solGrid"></div>
+</div>
+
+<div class="card">
+  <h2>The problem</h2>
+  <p>The N-Queens problem asks for an arrangement of <em>n</em> queens on an <em>n</em>×<em>n</em> board so that no two queens share a row, column, or diagonal. Posed by Max Bezzel in 1848 for <em>n</em> = 8, generalized by Franz Nauck in 1850. There is no solution for <em>n</em> = 2 and <em>n</em> = 3.</p>
+  <p>Backtracking places one queen per row, trying columns 0 to <em>n</em>−1 and pruning the moment a placement is attacked. The number of distinct solutions grows fast — 92 for <em>n</em> = 8, 14 200 for <em>n</em> = 11, 73 712 for <em>n</em> = 12 — and is sequence <a style="color:var(--accent, #2563eb)" href="https://oeis.org/A000170" rel="noopener">A000170</a> in OEIS.</p>
+</div>
+
+</div>
+
+<footer>
+  Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+let N = 8;
+let placement = []; // placement[row] = col, or -1
+let attacked = []; // count of queens attacking each cell
+let running = false, paused = false, stopRequested = false;
+let stepCount = 0, tryCount = 0, backCount = 0, solCount = 0;
+let solutions = []; // array of placement arrays
+let currentRow = 0, currentCol = 0;
+
+const KNOWN = { 4:2, 5:10, 6:4, 7:40, 8:92, 9:352, 10:724, 11:2680, 12:14200, 13:73712, 14:365596, 15:2279184, 16:14772512 };
+const UNIQUE = { 4:1, 5:2, 6:1, 7:6, 8:12, 9:46, 10:92, 11:341, 12:1787, 13:9233, 14:45752, 15:285053, 16:1846955 };
+
+function buildBoard() {
+  const b = document.getElementById('board');
+  b.innerHTML = '';
+  const size = Math.min(420, Math.max(220, 56 * (8 - Math.max(0, N - 8))));
+  const cellPx = Math.floor(Math.min(440, Math.max(200, 360)) / N);
+  b.style.gridTemplateColumns = `repeat(${N}, ${cellPx}px)`;
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell ' + ((r + c) % 2 ? 'dark' : 'light');
+      cell.id = `c${r}_${c}`;
+      b.appendChild(cell);
+    }
+  }
+}
+
+function clearBoard() {
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const el = document.getElementById(`c${r}_${c}`);
+    if (!el) continue;
+    el.classList.remove('attacked', 'placed', 'fail', 'tried');
+    el.querySelector('.att')?.remove();
+  }
+}
+
+function renderState(highlight) {
+  clearBoard();
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (attacked[r * N + c] > 0 && placement[r] !== c) {
+      const el = document.getElementById(`c${r}_${c}`);
+      el.classList.add('attacked');
+    }
+  }
+  placement.forEach((col, row) => {
+    if (col >= 0) {
+      const el = document.getElementById(`c${row}_${col}`);
+      el.classList.add('placed');
+    }
+  });
+  if (highlight) {
+    const { row, col, status } = highlight;
+    const el = document.getElementById(`c${row}_${col}`);
+    if (el) {
+      if (status === 'try') el.classList.add('tried');
+      if (status === 'fail') el.classList.add('placed', 'fail');
+    }
+  }
+}
+
+function addAttack(row, col, delta) {
+  for (let i = 0; i < N; i++) {
+    if (i !== col) attacked[row * N + i] += delta;
+    if (i !== row) attacked[i * N + col] += delta;
+  }
+  for (let d = 1; d < N; d++) {
+    if (row + d < N && col + d < N) attacked[(row + d) * N + (col + d)] += delta;
+    if (row + d < N && col - d >= 0) attacked[(row + d) * N + (col - d)] += delta;
+    if (row - d >= 0 && col + d < N) attacked[(row - d) * N + (col + d)] += delta;
+    if (row - d >= 0 && col - d >= 0) attacked[(row - d) * N + (col - d)] += delta;
+  }
+}
+
+function isSafe(row, col) { return attacked[row * N + col] === 0; }
+
+function log(msg, cls) {
+  const el = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'l ' + (cls || '');
+  div.textContent = msg;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateStats() {
+  document.getElementById('sStep').textContent = stepCount;
+  document.getElementById('sTries').textContent = tryCount;
+  document.getElementById('sBack').textContent = backCount;
+  document.getElementById('sSol').textContent = solCount;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function delay() { const s = parseInt(document.getElementById('speed').value, 10); return Math.max(0, 320 - s * 3); }
+
+async function waitWhilePaused() { while (paused && !stopRequested) await sleep(60); }
+
+async function solveStep(row) {
+  if (stopRequested) return false;
+  if (row === N) {
+    solCount++;
+    solutions.push([...placement]);
+    log('✓ Solution #' + solCount + ': [' + placement.join(', ') + ']', 'sol');
+    updateStats();
+    refreshSolutions();
+    return false; // keep searching
+  }
+  for (let col = 0; col < N; col++) {
+    if (stopRequested) return false;
+    await waitWhilePaused();
+    stepCount++;
+    tryCount++;
+    renderState({ row, col, status: 'try' });
+    updateStats();
+    await sleep(delay());
+    if (isSafe(row, col)) {
+      placement[row] = col;
+      addAttack(row, col, 1);
+      log(`row ${row} → col ${col} ✓ place`, 'place');
+      renderState();
+      await sleep(delay());
+      const done = await solveStep(row + 1);
+      if (done) return true;
+      addAttack(row, col, -1);
+      placement[row] = -1;
+      backCount++;
+      log(`row ${row} ← backtrack from col ${col}`, 'back');
+      renderState();
+      updateStats();
+      await sleep(delay() / 2);
+    } else {
+      log(`row ${row} × col ${col} attacked`, 'try');
+    }
+  }
+  return false;
+}
+
+async function startSolve() {
+  if (running) return;
+  reset();
+  running = true;
+  stopRequested = false;
+  paused = false;
+  document.getElementById('btnSolve').disabled = true;
+  document.getElementById('btnAll').disabled = true;
+  document.getElementById('btnPause').disabled = false;
+  log(`Solving ${N}-queens with backtracking…`);
+  await solveStep(0);
+  running = false;
+  document.getElementById('btnSolve').disabled = false;
+  document.getElementById('btnAll').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+  if (!stopRequested) log(`Done. ${solCount} solution(s).`, 'sol');
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('btnPause').textContent = paused ? '▶ Resume' : '⏸ Pause';
+}
+
+function reset() {
+  stopRequested = true;
+  running = false; paused = false;
+  placement = new Array(N).fill(-1);
+  attacked = new Array(N * N).fill(0);
+  stepCount = 0; tryCount = 0; backCount = 0; solCount = 0;
+  solutions = [];
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('solGrid').innerHTML = '';
+  document.getElementById('solSummary').textContent = '';
+  document.getElementById('btnSolve').disabled = false;
+  document.getElementById('btnAll').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnPause').textContent = '⏸ Pause';
+  buildBoard();
+  renderState();
+  updateStats();
+}
+
+// Fast solver, no animation
+function solveAllFast(n) {
+  const sols = [];
+  const cols = new Set(), d1 = new Set(), d2 = new Set();
+  const place = new Array(n).fill(-1);
+  function recurse(row) {
+    if (row === n) { sols.push([...place]); return; }
+    for (let c = 0; c < n; c++) {
+      if (cols.has(c) || d1.has(row - c) || d2.has(row + c)) continue;
+      cols.add(c); d1.add(row - c); d2.add(row + c);
+      place[row] = c;
+      recurse(row + 1);
+      cols.delete(c); d1.delete(row - c); d2.delete(row + c);
+    }
+  }
+  recurse(0);
+  return sols;
+}
+
+function solveAll() {
+  reset();
+  const t0 = performance.now();
+  const sols = solveAllFast(N);
+  const t1 = performance.now();
+  solutions = sols;
+  solCount = sols.length;
+  updateStats();
+  log(`Enumerated ${sols.length} solutions in ${(t1 - t0).toFixed(1)} ms`, 'sol');
+  if (sols.length) {
+    placement = [...sols[0]];
+    attacked = new Array(N * N).fill(0);
+    placement.forEach((c, r) => addAttack(r, c, 1));
+    renderState();
+  }
+  refreshSolutions();
+}
+
+function refreshSolutions() {
+  const grid = document.getElementById('solGrid');
+  const cap = 200;
+  const shown = solutions.slice(0, cap);
+  grid.innerHTML = shown.map((sol, i) => miniBoard(sol, i)).join('');
+  grid.querySelectorAll('.mini').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.i, 10);
+      placement = [...solutions[idx]];
+      attacked = new Array(N * N).fill(0);
+      placement.forEach((c, r) => addAttack(r, c, 1));
+      renderState();
+    });
+  });
+  const known = KNOWN[N];
+  const unique = UNIQUE[N];
+  const note = known ? ` (OEIS A000170: ${known.toLocaleString()} total / ${unique.toLocaleString()} unique up to symmetry)` : '';
+  document.getElementById('solSummary').textContent = `${solutions.length} solution(s) found${solutions.length > cap ? `, showing first ${cap}` : ''}${note}`;
+}
+
+function miniBoard(sol, idx) {
+  let cells = '';
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    cells += `<div class="c ${(r+c)%2 ? 'dark':'light'}">${sol[r] === c ? '♛' : ''}</div>`;
+  }
+  return `<div class="mini" data-i="${idx}"><div class="b" style="grid-template-columns:repeat(${N},1fr)">${cells}</div><div class="lab">#${idx + 1}</div></div>`;
+}
+
+document.getElementById('n').addEventListener('change', e => {
+  const v = Math.max(4, Math.min(16, parseInt(e.target.value, 10) || 8));
+  e.target.value = v;
+  N = v;
+  reset();
+});
+
+reset();
+</script>
+</body>
+</html>

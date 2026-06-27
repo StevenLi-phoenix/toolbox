@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Box &amp; Whisker Plot Generator — Free Online Tool</title>
+<meta name="description" content="Paste a list of numbers and get a true Tukey box-and-whisker plot — Q1, median, Q3, IQR, fences, outliers, mean, stddev, and a side-by-side group view. 100% client-side.">
+<meta name="keywords" content="box plot, box and whisker plot, tukey, quartile, IQR, outlier detection, descriptive statistics, summary stats">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/boxplot.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  textarea { width: 100%; min-height: 240px; font-family: var(--mono); font-size: .85rem; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; box-sizing: border-box; }
+  .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+  .stat { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .stat .v { font-size: 1.05rem; font-weight: 700; font-family: var(--mono); }
+  .five-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: .88rem; }
+  .five-row:last-child { border-bottom: none; }
+  .five-row .lab { min-width: 76px; font-family: var(--mono); font-weight: 700; color: var(--muted); }
+  .five-row .val { margin-left: auto; font-family: var(--mono); font-weight: 600; }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .preset-btn { padding: 6px 12px; font-size: .78rem; border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .preset-btn:hover { border-color: var(--accent, #2563eb); }
+  .empty { color: var(--muted); text-align: center; padding: 20px; font-size: .85rem; }
+  .error { color: var(--error, #dc2626); font-size: .82rem; margin-top: 6px; }
+  .outliers { margin-top: 12px; font-size: .8rem; color: var(--muted); }
+  .outliers .pill { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--border); font-family: var(--mono); color: var(--text); font-size: .76rem; }
+  .outliers .pill.hi { color: var(--error, #dc2626); border-color: var(--error, #dc2626); }
+  .outliers .pill.lo { color: var(--accent, #2563eb); border-color: var(--accent, #2563eb); }
+  .opts { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 4px; font-size: .82rem; color: var(--muted); }
+  .opts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } .stats-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>📦 Box &amp; Whisker Plot Generator</h1>
+<p class="subtitle">Paste raw numbers (one per line or comma/space separated) and get a proper Tukey box plot with Q1, median, Q3, IQR fences, mild and extreme outliers, and a full five-number summary. Compare multiple groups by separating them with a blank line.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Input</h2>
+    <div class="preset-row">
+      <button class="preset-btn" onclick="loadSample('skewed')">Sample: skewed</button>
+      <button class="preset-btn" onclick="loadSample('normal')">Sample: normal</button>
+      <button class="preset-btn" onclick="loadSample('outliers')">Sample: with outliers</button>
+      <button class="preset-btn" onclick="loadSample('groups')">Sample: 3 groups</button>
+      <button class="preset-btn" onclick="clearAll()">Clear</button>
+    </div>
+    <textarea id="input" placeholder="One number per line, or comma/space separated.&#10;Separate multiple groups with a BLANK line.&#10;Optional label: prefix a group with `name:` on its own line.&#10;&#10;Example:&#10;control:&#10;12 15 18 19 21 23 26 28&#10;&#10;treatment:&#10;14 16 19 24 27 31 34 38 42 88"></textarea>
+    <div class="opts">
+      <label><input type="checkbox" id="optMean" checked> show mean (◆)</label>
+      <label><input type="checkbox" id="optNotch"> notched box (95% CI of median)</label>
+    </div>
+    <div id="err" class="error"></div>
+    <p style="font-size:.8rem;color:var(--muted);margin-top:8px">Quartiles use linear interpolation (Tukey / type-7). Fences: Q1 − 1.5·IQR and Q3 + 1.5·IQR for mild outliers, ±3·IQR for extreme.</p>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div id="output">
+      <div class="empty">Paste numbers to see the box plot.</div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const SAMPLES = {
+  skewed: '2 3 3 4 5 5 6 7 8 10 13 17 23 31 44 62 89 130 200 320',
+  normal: '45 48 50 52 53 55 56 57 58 59 60 60 61 62 62 63 64 64 65 65 66 66 67 68 68 69 70 71 72 73 75',
+  outliers: '20 22 23 24 25 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 65 -8 110',
+  groups: 'control:\n12 15 18 19 21 23 26 28 31 33\n\ntreatment:\n14 16 19 24 27 31 34 38 42 88\n\nplacebo:\n9 11 12 14 15 17 18 19 20 22 24'
+};
+
+function loadSample(k) {
+  document.getElementById('input').value = SAMPLES[k];
+  compute();
+}
+
+function clearAll() {
+  document.getElementById('input').value = '';
+  document.getElementById('output').innerHTML = '<div class="empty">Paste numbers to see the box plot.</div>';
+  document.getElementById('err').textContent = '';
+}
+
+function parseInput(text) {
+  const lines = text.split(/\r?\n/);
+  const groups = [];
+  let current = { label: 'Series 1', values: [] };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line === '') {
+      if (current.values.length) { groups.push(current); current = { label: 'Series ' + (groups.length + 1), values: [] }; }
+      continue;
+    }
+    const m = line.match(/^([^:]{1,40}):\s*$/);
+    if (m && current.values.length === 0) { current.label = m[1].trim(); continue; }
+    const inlineLabel = line.match(/^([^:]{1,40}):\s*(.+)$/);
+    let body = line;
+    if (inlineLabel && !/^-?\d/.test(inlineLabel[1].trim())) { current.label = inlineLabel[1].trim(); body = inlineLabel[2]; }
+    body.split(/[\s,;]+/).forEach(tok => {
+      const n = parseFloat(tok);
+      if (Number.isFinite(n)) current.values.push(n);
+    });
+  }
+  if (current.values.length) groups.push(current);
+  return groups;
+}
+
+function quantile(sorted, p) {
+  const n = sorted.length;
+  if (n === 0) return NaN;
+  if (n === 1) return sorted[0];
+  const rank = p * (n - 1);
+  const lo = Math.floor(rank);
+  const hi = Math.ceil(rank);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (rank - lo);
+}
+
+function fmt(n) {
+  if (!Number.isFinite(n)) return '—';
+  if (Math.abs(n) >= 10000) return n.toFixed(0);
+  if (Math.abs(n) >= 100) return n.toFixed(1);
+  if (Math.abs(n) >= 1) return n.toFixed(2);
+  return n.toFixed(3);
+}
+
+function summary(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  const q1 = quantile(sorted, 0.25);
+  const med = quantile(sorted, 0.5);
+  const q3 = quantile(sorted, 0.75);
+  const iqr = q3 - q1;
+  const lowFence = q1 - 1.5 * iqr;
+  const highFence = q3 + 1.5 * iqr;
+  const lowExt = q1 - 3 * iqr;
+  const highExt = q3 + 3 * iqr;
+  const mildLow = sorted.filter(v => v < lowFence && v >= lowExt);
+  const mildHigh = sorted.filter(v => v > highFence && v <= highExt);
+  const extLow = sorted.filter(v => v < lowExt);
+  const extHigh = sorted.filter(v => v > highExt);
+  const outliers = new Set([...mildLow, ...mildHigh, ...extLow, ...extHigh]);
+  const inFence = sorted.filter(v => !outliers.has(v));
+  const whiskerLow = inFence.length ? inFence[0] : q1;
+  const whiskerHigh = inFence.length ? inFence[inFence.length - 1] : q3;
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  const mean = sum / n;
+  const variance = sorted.reduce((a, v) => a + (v - mean) * (v - mean), 0) / n;
+  const stddev = Math.sqrt(variance);
+  return { n, sorted, q1, med, q3, iqr, lowFence, highFence, mildLow, mildHigh, extLow, extHigh, whiskerLow, whiskerHigh, sum, mean, stddev, min: sorted[0], max: sorted[n - 1] };
+}
+
+function renderBoxes(groups, opts) {
+  const all = groups.flatMap(g => [g.stats.whiskerLow, g.stats.whiskerHigh, ...g.stats.mildLow, ...g.stats.mildHigh, ...g.stats.extLow, ...g.stats.extHigh, g.stats.min, g.stats.max]);
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.06;
+  lo -= pad; hi += pad;
+  const W = 640, H = Math.max(140, 50 + groups.length * 60), LEFT = 110, RIGHT = 24, TOP = 18, BOT = 30;
+  const plotW = W - LEFT - RIGHT;
+  const xOf = v => LEFT + ((v - lo) / (hi - lo)) * plotW;
+  const ticks = 6;
+  const tickVals = Array.from({length: ticks + 1}, (_, i) => lo + (i / ticks) * (hi - lo));
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius)">`;
+  // grid + ticks
+  svg += `<g font-family="var(--mono)" font-size="9" fill="var(--muted)">`;
+  tickVals.forEach(v => {
+    const x = xOf(v);
+    svg += `<line x1="${x}" y1="${TOP}" x2="${x}" y2="${H - BOT}" stroke="var(--border)" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${x}" y="${H - BOT + 14}" text-anchor="middle">${fmt(v)}</text>`;
+  });
+  svg += `</g>`;
+
+  groups.forEach((g, i) => {
+    const s = g.stats;
+    const cy = TOP + 30 + i * 60;
+    const bh = 28;
+    const boxL = xOf(s.q1), boxR = xOf(s.q3), medX = xOf(s.med);
+    const whL = xOf(s.whiskerLow), whR = xOf(s.whiskerHigh);
+    // label
+    svg += `<text x="${LEFT - 8}" y="${cy + 4}" text-anchor="end" font-family="var(--sans)" font-size="11" fill="var(--text)" font-weight="600">${escapeXml(g.label)}</text>`;
+    svg += `<text x="${LEFT - 8}" y="${cy + 18}" text-anchor="end" font-family="var(--mono)" font-size="9" fill="var(--muted)">n=${s.n}</text>`;
+    // whisker line
+    svg += `<line x1="${whL}" y1="${cy}" x2="${whR}" y2="${cy}" stroke="var(--text)" stroke-width="1"/>`;
+    svg += `<line x1="${whL}" y1="${cy - 8}" x2="${whL}" y2="${cy + 8}" stroke="var(--text)" stroke-width="1"/>`;
+    svg += `<line x1="${whR}" y1="${cy - 8}" x2="${whR}" y2="${cy + 8}" stroke="var(--text)" stroke-width="1"/>`;
+    // notch
+    if (opts.notch) {
+      const ci = 1.57 * (s.iqr / Math.sqrt(s.n));
+      const nL = xOf(s.med - ci), nR = xOf(s.med + ci);
+      svg += `<polygon points="${boxL},${cy - bh/2} ${nL},${cy} ${boxL},${cy + bh/2} ${boxR},${cy + bh/2} ${nR},${cy} ${boxR},${cy - bh/2}" fill="var(--accent, #2563eb)" fill-opacity="0.22" stroke="var(--accent, #2563eb)" stroke-width="1.4"/>`;
+    } else {
+      svg += `<rect x="${boxL}" y="${cy - bh/2}" width="${Math.max(2, boxR - boxL)}" height="${bh}" fill="var(--accent, #2563eb)" fill-opacity="0.22" stroke="var(--accent, #2563eb)" stroke-width="1.4"/>`;
+    }
+    // median
+    svg += `<line x1="${medX}" y1="${cy - bh/2}" x2="${medX}" y2="${cy + bh/2}" stroke="var(--accent, #2563eb)" stroke-width="2.4"/>`;
+    // mean diamond
+    if (opts.mean) {
+      const mx = xOf(s.mean);
+      svg += `<polygon points="${mx},${cy - 6} ${mx + 5},${cy} ${mx},${cy + 6} ${mx - 5},${cy}" fill="var(--warning, #d97706)" stroke="var(--bg)" stroke-width="0.8"/>`;
+    }
+    // outliers
+    [...s.mildLow, ...s.mildHigh].forEach(v => {
+      svg += `<circle cx="${xOf(v)}" cy="${cy}" r="3" fill="none" stroke="var(--warning, #d97706)" stroke-width="1.2"><title>${fmt(v)} (mild outlier)</title></circle>`;
+    });
+    [...s.extLow, ...s.extHigh].forEach(v => {
+      svg += `<circle cx="${xOf(v)}" cy="${cy}" r="3.5" fill="var(--error, #dc2626)"><title>${fmt(v)} (extreme outlier)</title></circle>`;
+    });
+  });
+
+  svg += `</svg>`;
+  return svg;
+}
+
+function escapeXml(s) { return String(s).replace(/[<>&"']/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;' }[c])); }
+function escapeHtml(s) { return String(s).replace(/[<>&"']/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;' }[c])); }
+
+function renderGroup(g) {
+  const s = g.stats;
+  let html = `<h3 style="margin-top:14px;font-size:.9rem">${escapeHtml(g.label)} <span style="color:var(--muted);font-weight:400;font-size:.78rem">(n=${s.n})</span></h3>`;
+  html += '<div class="stats-grid">';
+  html += `<div class="stat"><div class="k">Mean</div><div class="v">${fmt(s.mean)}</div></div>`;
+  html += `<div class="stat"><div class="k">Std Dev</div><div class="v">${fmt(s.stddev)}</div></div>`;
+  html += `<div class="stat"><div class="k">IQR</div><div class="v">${fmt(s.iqr)}</div></div>`;
+  html += `<div class="stat"><div class="k">Range</div><div class="v">${fmt(s.max - s.min)}</div></div>`;
+  html += '</div>';
+  const rows = [
+    ['min', s.min], ['lower fence', s.lowFence],
+    ['Q1 (25%)', s.q1], ['median', s.med], ['Q3 (75%)', s.q3],
+    ['upper fence', s.highFence], ['max', s.max]
+  ];
+  html += '<div style="margin-top:8px">';
+  rows.forEach(([k, v]) => {
+    html += `<div class="five-row"><span class="lab">${k}</span><span class="val">${fmt(v)}</span></div>`;
+  });
+  html += '</div>';
+  const outs = [...s.extLow, ...s.mildLow, ...s.mildHigh, ...s.extHigh];
+  if (outs.length) {
+    html += '<div class="outliers"><strong>Outliers</strong>: ';
+    s.extLow.forEach(v => html += `<span class="pill lo" title="extreme &lt; Q1 − 3·IQR">${fmt(v)}</span>`);
+    s.mildLow.forEach(v => html += `<span class="pill lo" title="mild &lt; Q1 − 1.5·IQR">${fmt(v)}</span>`);
+    s.mildHigh.forEach(v => html += `<span class="pill hi" title="mild &gt; Q3 + 1.5·IQR">${fmt(v)}</span>`);
+    s.extHigh.forEach(v => html += `<span class="pill hi" title="extreme &gt; Q3 + 3·IQR">${fmt(v)}</span>`);
+    html += '</div>';
+  } else {
+    html += '<div class="outliers">No outliers beyond the 1.5·IQR fences.</div>';
+  }
+  return html;
+}
+
+function compute() {
+  const text = document.getElementById('input').value;
+  const err = document.getElementById('err');
+  const out = document.getElementById('output');
+  err.textContent = '';
+  if (!text.trim()) { out.innerHTML = '<div class="empty">Paste numbers to see the box plot.</div>'; return; }
+  let groups;
+  try { groups = parseInput(text); } catch (e) { err.textContent = e.message; return; }
+  groups = groups.filter(g => g.values.length >= 1);
+  if (groups.length === 0) { err.textContent = 'No valid numbers found.'; out.innerHTML = '<div class="empty">No valid numbers.</div>'; return; }
+  groups.forEach(g => { g.stats = summary(g.values); });
+  const opts = { mean: document.getElementById('optMean').checked, notch: document.getElementById('optNotch').checked };
+  let html = renderBoxes(groups, opts);
+  groups.forEach(g => { html += renderGroup(g); });
+  out.innerHTML = html;
+}
+
+document.getElementById('input').addEventListener('input', compute);
+document.getElementById('optMean').addEventListener('change', compute);
+document.getElementById('optNotch').addEventListener('change', compute);
+loadSample('groups');
+</script>
+</body>
+</html>
