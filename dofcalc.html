@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Depth of Field &amp; Hyperfocal Distance Calculator — Free Online Tool</title>
+<meta name="description" content="Calculate hyperfocal distance, near and far focus, and total depth of field from focal length, aperture, subject distance, and sensor format — full-frame, APS-C, Micro 4/3, 1″, medium-format, with diffraction-limit warning.">
+<meta name="keywords" content="depth of field calculator, hyperfocal distance, dof, photography, circle of confusion, aperture, focal length, full frame, aps-c, micro four thirds, diffraction limit">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dofcalc.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .field .row { display: flex; gap: 6px; align-items: center; }
+  .field input, .field select {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1rem;
+    box-sizing: border-box;
+  }
+  .field input { flex: 1; text-align: right; min-width: 0; }
+  .field select { background: var(--surface2); }
+  .display { padding: 18px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; }
+  .display .big { font-family: var(--mono); font-weight: 800; font-size: 2.2rem; color: var(--accent, #2563eb); line-height: 1; }
+  .display .sub { font-family: var(--mono); font-size: .9rem; color: var(--text); margin-top: 6px; }
+  .display .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; }
+  .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-top: 12px; }
+  .result { padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .result .k { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1rem; margin-top: 3px; word-break: break-word; }
+  .result.ok .v { color: var(--success, #15803d); }
+  .result.warn { border-color: rgba(180,83,9,.4); background: rgba(180,83,9,.06); }
+  .result.warn .v { color: var(--warning, #b45309); }
+  .scale-wrap { padding: 18px 14px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .scale-svg { width: 100%; height: auto; }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .preset-btn { padding: 5px 10px; font-size: .76rem; border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .preset-btn:hover { border-color: var(--accent); }
+  .preset-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .note { font-size: .82rem; color: var(--muted); line-height: 1.55; margin: 10px 0 0; }
+  .note code { background: var(--surface2); padding: 1px 4px; border-radius: 3px; font-size: .85rem; }
+  .badge { display: inline-block; padding: 2px 8px; font-size: .7rem; font-family: var(--mono); border-radius: 99px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); margin-left: 6px; }
+  .badge.warn { background: rgba(180,83,9,.12); color: var(--warning,#b45309); border-color: rgba(180,83,9,.3); }
+  .badge.ok { background: rgba(21,128,61,.12); color: var(--success,#15803d); border-color: rgba(21,128,61,.3); }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Depth of Field &amp; Hyperfocal Distance</h1>
+<p class="subtitle">For a given focal length, aperture, and subject distance — find the hyperfocal distance, the near and far in-focus limits, and the total depth of field. Pick a sensor format and the circle-of-confusion is set for you. Flags small apertures where diffraction starts to undo your DoF gain.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Camera &amp; lens</h2>
+
+    <div class="field">
+      <label>Sensor format</label>
+      <select id="sensor"></select>
+    </div>
+
+    <div class="field">
+      <label for="coc">Circle of confusion <span class="badge" id="cocBadge">auto</span></label>
+      <div class="row">
+        <input type="number" id="coc" step="0.001" min="0.001" value="0.030">
+        <span style="font-family:var(--mono);font-size:.85rem;color:var(--muted)">mm</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="focal">Focal length</label>
+      <div class="row">
+        <input type="number" id="focal" step="0.1" min="1" value="50">
+        <span style="font-family:var(--mono);font-size:.85rem;color:var(--muted)">mm</span>
+      </div>
+      <div class="preset-row" id="focalPresets"></div>
+    </div>
+
+    <div class="field">
+      <label for="aperture">Aperture <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;font-size:.8rem;">(f-number)</span></label>
+      <div class="row">
+        <span style="font-family:var(--mono);font-size:1rem;color:var(--muted)">f /</span>
+        <input type="number" id="aperture" step="0.1" min="0.7" value="5.6">
+      </div>
+      <div class="preset-row" id="apPresets"></div>
+    </div>
+
+    <div class="field">
+      <label for="distance">Subject distance</label>
+      <div class="row">
+        <input type="number" id="distance" step="0.1" min="0.01" value="3">
+        <select id="distUnit" style="max-width:90px">
+          <option value="1">m</option>
+          <option value="0.01">cm</option>
+          <option value="0.3048">ft</option>
+          <option value="0.0254">in</option>
+        </select>
+      </div>
+    </div>
+
+    <p class="note">
+      Mathematically: <code>H = f² / (N · c) + f</code> is the hyperfocal distance, where <code>f</code> is the focal length, <code>N</code> the f-number, and <code>c</code> the circle of confusion.
+      For a subject at distance <code>s</code>, the near focus is <code>D<sub>n</sub> = s(H − f) / (H + s − 2f)</code> and the far focus is <code>D<sub>f</sub> = s(H − f) / (H − s)</code> (infinite once <code>s ≥ H</code>).
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Depth of field</h2>
+    <div class="display">
+      <div class="lbl">Total in-focus depth</div>
+      <div class="big" id="totalDof">—</div>
+      <div class="sub" id="dofSub"></div>
+    </div>
+
+    <div class="result-grid">
+      <div class="result"><div class="k">Hyperfocal distance</div><div class="v" id="rHyper">—</div></div>
+      <div class="result"><div class="k">Near focus limit</div><div class="v" id="rNear">—</div></div>
+      <div class="result"><div class="k">Far focus limit</div><div class="v" id="rFar">—</div></div>
+      <div class="result"><div class="k">In front of subject</div><div class="v" id="rFront">—</div></div>
+      <div class="result"><div class="k">Behind subject</div><div class="v" id="rBack">—</div></div>
+      <div class="result" id="diffractionCard"><div class="k">Diffraction limit</div><div class="v" id="rDiff">—</div></div>
+    </div>
+
+    <div class="scale-wrap" style="margin-top:14px">
+      <div class="lbl" style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Focus scale (log distance)</div>
+      <svg id="scale" class="scale-svg" viewBox="0 0 600 90" xmlns="http://www.w3.org/2000/svg" aria-label="Depth of field scale"></svg>
+    </div>
+
+    <p class="note" id="hyperHint"></p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why the format matters</h2>
+  <p style="font-size:.88rem;line-height:1.6;color:var(--text)">
+    Two photographers shooting the same scene with the same f-stop will get different depths of field if their sensors are different sizes.
+    A larger sensor needs a longer focal length to frame the same view, and longer focal lengths cut DoF roughly with the square of the focal length —
+    that's why full-frame portraits feel creamier than the same shot on Micro 4/3.
+    The accepted rule of thumb is to set the circle of confusion proportional to the sensor's diagonal (about <code>d / 1500</code>),
+    which is what the format presets here use.
+  </p>
+  <p style="font-size:.88rem;line-height:1.6;color:var(--text);margin-top:8px">
+    At small apertures, diffraction blurs the image enough that further stopping down stops increasing the apparent sharpness depth.
+    The diffraction limit shown is the f-number where the Airy disk diameter on the sensor equals the chosen circle of confusion —
+    below that, going to f/22 (or smaller) wastes light and loses fine detail.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Format presets — diagonal (mm) and conventional CoC for d/1500.
+const FORMATS = [
+  { id:'mf645',   label:'Medium format (645)',    diag: 69.6, coc: 0.047 },
+  { id:'ff',      label:'Full frame (35 mm / 36×24)', diag: 43.3, coc: 0.030 },
+  { id:'apsh',    label:'APS-H (Canon 1D)',       diag: 33.5, coc: 0.023 },
+  { id:'apsc',    label:'APS-C (1.5×, Nikon/Sony/Fuji)', diag: 28.4, coc: 0.020 },
+  { id:'apsc_c',  label:'APS-C (1.6×, Canon)',    diag: 26.8, coc: 0.019 },
+  { id:'m43',     label:'Micro Four Thirds',      diag: 21.6, coc: 0.015 },
+  { id:'one',     label:'1″ (CX / RX100)',        diag: 15.9, coc: 0.011 },
+  { id:'one23',   label:'1/2.3″ (compact / phone)', diag: 7.66, coc: 0.005 },
+  { id:'custom',  label:'Custom (set CoC manually)', diag: null, coc: null }
+];
+
+function buildSensors() {
+  const sel = $('sensor');
+  sel.innerHTML = FORMATS.map(f =>
+    `<option value="${f.id}"${f.id === 'ff' ? ' selected' : ''}>${f.label}${f.coc !== null ? '  (c ≈ ' + f.coc.toFixed(3) + ' mm)' : ''}</option>`
+  ).join('');
+}
+
+function buildPresets() {
+  const focals = [14, 24, 35, 50, 85, 135, 200, 400];
+  $('focalPresets').innerHTML = focals.map(f =>
+    `<button class="preset-btn" data-f="${f}">${f} mm</button>`).join('');
+  $('focalPresets').querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => { $('focal').value = b.dataset.f; recalc(); }));
+
+  const aps = [1.4, 2, 2.8, 4, 5.6, 8, 11, 16, 22];
+  $('apPresets').innerHTML = aps.map(a =>
+    `<button class="preset-btn" data-a="${a}">f /${a}</button>`).join('');
+  $('apPresets').querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => { $('aperture').value = b.dataset.a; recalc(); }));
+}
+
+function onSensorChange() {
+  const fmt = FORMATS.find(f => f.id === $('sensor').value);
+  if (fmt && fmt.coc !== null) {
+    $('coc').value = fmt.coc.toFixed(3);
+    $('coc').disabled = false;
+    $('cocBadge').textContent = 'auto for format';
+    $('cocBadge').className = 'badge ok';
+  } else {
+    $('coc').disabled = false;
+    $('cocBadge').textContent = 'custom';
+    $('cocBadge').className = 'badge';
+  }
+  recalc();
+}
+
+function fmtDist(m) {
+  if (!isFinite(m)) return '∞ (infinity)';
+  if (m < 0.01) return (m * 1000).toFixed(1) + ' mm';
+  if (m < 1)    return (m * 100).toFixed(1) + ' cm';
+  if (m < 100)  return m.toFixed(2) + ' m';
+  return (m / 1000).toFixed(3) + ' km';
+}
+function fmtDist2(m) {
+  if (!isFinite(m)) return '∞';
+  const ft = m / 0.3048;
+  return fmtDist(m) + '  (' + (ft < 1 ? (ft * 12).toFixed(1) + ' in' : ft.toFixed(2) + ' ft') + ')';
+}
+
+function recalc() {
+  const fmm = parseFloat($('focal').value);   // mm
+  const N   = parseFloat($('aperture').value);
+  const sM  = parseFloat($('distance').value) * parseFloat($('distUnit').value);
+  const cmm = parseFloat($('coc').value);     // mm
+
+  const clear = () => {
+    ['rHyper','rNear','rFar','rFront','rBack','rDiff'].forEach(id => $(id).textContent = '—');
+    $('totalDof').textContent = '—'; $('dofSub').textContent = '';
+    $('scale').innerHTML = '';
+    $('hyperHint').textContent = '';
+    document.getElementById('diffractionCard').classList.remove('warn');
+  };
+  if (!isFinite(fmm) || !isFinite(N) || !isFinite(sM) || !isFinite(cmm)
+      || fmm <= 0 || N <= 0 || sM <= 0 || cmm <= 0) { clear(); return; }
+
+  // Everything in metres for the DoF math.
+  const f = fmm / 1000;
+  const c = cmm / 1000;
+  const s = sM;
+
+  const H = (f * f) / (N * c) + f; // hyperfocal distance (m)
+
+  // Standard near / far limits (with focal-length correction).
+  let dn, df;
+  if (s >= H) {
+    dn = H / 2;            // near limit reduces to H/2 at and beyond hyperfocal
+    df = Infinity;
+  } else {
+    dn = s * (H - f) / (H + s - 2 * f);
+    df = s * (H - f) / (H - s);
+  }
+
+  const totalDof = isFinite(df) ? (df - dn) : Infinity;
+  const front = s - dn;
+  const back = isFinite(df) ? (df - s) : Infinity;
+
+  // Diffraction: Airy disk diameter d_airy ≈ 2.44 · λ · N. Use λ = 550 nm.
+  const lambda = 550e-9;                 // m
+  const airyMm = 2.44 * lambda * N * 1000; // mm at the sensor
+  // f-number where airyMm equals chosen CoC:
+  const NlimDiff = cmm / (2.44 * lambda * 1000);
+
+  $('rHyper').textContent = fmtDist(H);
+  $('rNear').textContent  = fmtDist2(dn);
+  $('rFar').textContent   = fmtDist2(df);
+  $('rFront').textContent = fmtDist2(front);
+  $('rBack').textContent  = fmtDist2(back);
+
+  // Diffraction display + warning
+  const diffCard = document.getElementById('diffractionCard');
+  let diffMsg = 'f /' + NlimDiff.toFixed(1) + ' (Airy ≈ ' + airyMm.toFixed(4) + ' mm @ f/' + N.toFixed(1) + ')';
+  if (N > NlimDiff) {
+    diffCard.classList.add('warn');
+    diffMsg += '  — past limit';
+  } else {
+    diffCard.classList.remove('warn');
+  }
+  $('rDiff').textContent = diffMsg;
+
+  $('totalDof').textContent = isFinite(totalDof) ? fmtDist(totalDof) : '∞ (focused at / past hyperfocal)';
+  $('dofSub').textContent = isFinite(totalDof)
+    ? `Subject ${fmtDist(s)}  ·  in focus from ${fmtDist(dn)} to ${fmtDist(df)}`
+    : `Focused at ${fmtDist(s)} — everything from ${fmtDist(dn)} to infinity is acceptably sharp`;
+
+  $('hyperHint').textContent = s >= H
+    ? `Subject is at or past the hyperfocal distance. Focus there to keep everything from ${fmtDist(H/2)} to infinity sharp at f/${N}.`
+    : `Focus at the hyperfocal distance (${fmtDist(H)}) to extend the far limit to infinity while pulling the near limit to ${fmtDist(H/2)}.`;
+
+  drawScale(dn, s, df, H);
+}
+
+function drawScale(dn, s, df, H) {
+  const svg = $('scale');
+  const W = 600, h = 90;
+  svg.setAttribute('viewBox', `0 0 ${W} ${h}`);
+  // logarithmic distance axis, from 0.1m to max(2*max(visible)) capped at 1000.
+  const visibleMax = Math.min(1000, Math.max(50, isFinite(df) ? df * 1.6 : H * 2));
+  const minD = 0.1, maxD = visibleMax;
+  const logMin = Math.log10(minD), logMax = Math.log10(maxD);
+  const x = d => 30 + (W - 60) * (Math.log10(Math.max(minD, d)) - logMin) / (logMax - logMin);
+
+  let svg_inner = '';
+  // Axis baseline
+  svg_inner += `<line x1="30" y1="55" x2="${W - 30}" y2="55" stroke="var(--border)" stroke-width="1"/>`;
+  // Ticks at decade marks
+  const ticks = [0.1, 0.3, 1, 3, 10, 30, 100, 300];
+  for (const t of ticks) {
+    if (t < minD || t > maxD) continue;
+    const tx = x(t);
+    svg_inner += `<line x1="${tx}" y1="50" x2="${tx}" y2="60" stroke="var(--muted)" stroke-width="1"/>`;
+    const lbl = t < 1 ? (t * 100) + ' cm' : t + ' m';
+    svg_inner += `<text x="${tx}" y="76" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">${lbl}</text>`;
+  }
+  // DoF band
+  const xN = x(dn);
+  const xF = isFinite(df) ? x(df) : (W - 30);
+  svg_inner += `<rect x="${xN}" y="36" width="${xF - xN}" height="38" fill="var(--accent,#2563eb)" fill-opacity="0.18" stroke="var(--accent,#2563eb)" stroke-width="1" rx="3"/>`;
+  // Subject point
+  const xS = x(s);
+  svg_inner += `<line x1="${xS}" y1="20" x2="${xS}" y2="74" stroke="var(--accent,#2563eb)" stroke-width="2"/>`;
+  svg_inner += `<circle cx="${xS}" cy="55" r="4" fill="var(--accent,#2563eb)"/>`;
+  svg_inner += `<text x="${xS}" y="14" text-anchor="middle" font-family="var(--mono)" font-size="11" font-weight="700" fill="var(--accent,#2563eb)">subject</text>`;
+  // Hyperfocal marker
+  if (H < maxD * 1.5) {
+    const xH = Math.min(W - 32, x(H));
+    svg_inner += `<line x1="${xH}" y1="32" x2="${xH}" y2="58" stroke="var(--warning,#b45309)" stroke-width="1" stroke-dasharray="4 3"/>`;
+    svg_inner += `<text x="${xH}" y="30" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--warning,#b45309)">H</text>`;
+  }
+  // Infinity tail
+  if (!isFinite(df)) {
+    svg_inner += `<text x="${W - 36}" y="60" font-family="var(--mono)" font-size="18" fill="var(--accent,#2563eb)">∞</text>`;
+  }
+  svg.innerHTML = svg_inner;
+}
+
+['focal','aperture','distance','distUnit','coc'].forEach(id => $(id).addEventListener('input', recalc));
+$('sensor').addEventListener('change', onSensorChange);
+
+buildSensors();
+buildPresets();
+onSensorChange();
+</script>
+</body>
+</html>

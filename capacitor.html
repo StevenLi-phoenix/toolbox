@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Capacitor Code Calculator — 3-Digit, EIA-96 & SMD Marking Decoder</title>
+<meta name="description" content="Decode capacitor markings — 3-digit ceramic codes (104 → 100 nF), tolerance and voltage letters, EIA-96 SMD codes (A2 → 1.0 nF × 10²) — and reverse-build a code from any capacitance value.">
+<meta name="keywords" content="capacitor code, capacitor calculator, ceramic capacitor code, smd capacitor, eia-96, 3 digit capacitor code, capacitance decoder, picofarad to nanofarad">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/capacitor.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .field .row { display: flex; gap: 6px; align-items: center; }
+  .field input, .field select {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 1rem;
+    box-sizing: border-box;
+  }
+  .field input { flex: 1; text-align: right; min-width: 0; }
+  .field select { background: var(--surface2); }
+  .code-input { font-size: 2rem !important; font-weight: 700; text-align: center !important; letter-spacing: .12em; text-transform: uppercase; }
+  .display { padding: 18px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; margin-bottom: 14px; }
+  .display .big { font-family: var(--mono); font-weight: 800; font-size: 2.2rem; color: var(--accent, #2563eb); line-height: 1; }
+  .display .sub { font-family: var(--mono); font-size: .92rem; color: var(--text); margin-top: 6px; }
+  .display .desc { font-size: .82rem; color: var(--muted); margin-top: 6px; }
+  .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .result { padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .result .k { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .result .v { font-family: var(--mono); font-weight: 700; font-size: 1rem; margin-top: 3px; word-break: break-word; }
+  .err { color: var(--error, #dc2626); font-family: var(--mono); font-size: .88rem; padding: 9px 12px; background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.3); border-radius: var(--radius); }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .pill { padding: 4px 10px; font-size: .76rem; font-family: var(--mono); border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .pill:hover { border-color: var(--accent); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tab { padding: 8px 14px; background: none; border: none; color: var(--muted); cursor: pointer; font-family: var(--sans); font-size: .9rem; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .pane { display: none; }
+  .pane.active { display: block; }
+  .ref-table { width: 100%; border-collapse: collapse; font-size: .82rem; font-family: var(--mono); }
+  .ref-table th, .ref-table td { padding: 6px 9px; text-align: left; border-bottom: 1px solid var(--border); }
+  .ref-table th { background: var(--surface2); color: var(--muted); text-transform: uppercase; font-size: .72rem; letter-spacing: .04em; font-weight: 600; }
+  .ref-table td.num { text-align: right; }
+  .cap-vis { display: flex; justify-content: center; margin: 12px 0; }
+  .cap-vis svg { max-width: 220px; height: auto; }
+  @media (max-width: 768px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Capacitor Code Calculator</h1>
+<p class="subtitle">Decode the cryptic 2- and 3-digit numbers printed on ceramic disc, monolithic, and tantalum capacitors; expand EIA-96 SMD codes (<code>A2</code>, <code>B5</code>…); and reverse the process: type a capacitance and get the code that should appear on the part.</p>
+
+<div class="tabs">
+  <button class="tab active" data-tab="decode">Decode marking</button>
+  <button class="tab" data-tab="eia96">Decode EIA-96 SMD</button>
+  <button class="tab" data-tab="encode">Encode value → code</button>
+  <button class="tab" data-tab="reference">Reference</button>
+</div>
+
+<!-- =============== DECODE PANE =============== -->
+<div class="pane active" id="pane-decode">
+  <div class="grid-two">
+    <div class="card">
+      <h2>Marking</h2>
+      <div class="field">
+        <label for="code">Number printed on cap</label>
+        <input type="text" id="code" class="code-input" value="104K" maxlength="6" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Common examples</label>
+        <div class="pill-row" id="codePresets"></div>
+      </div>
+      <p style="font-size:.8rem;color:var(--muted);line-height:1.55;margin:8px 0 0">
+        Ceramic capacitors print capacitance in picofarads using a JIS-style mnemonic.
+        A 1- or 2-digit number is the value <em>directly in pF</em>.
+        A 3-digit number reads as <code>XY × 10<sup>Z</sup> pF</code>, like resistors:
+        <code>104</code> → 10 × 10<sup>4</sup> = 100 000 pF = 100 nF = 0.1 µF.
+        Letter suffixes give tolerance (<code>J</code> = ±5 %, <code>K</code> = ±10 %, <code>M</code> = ±20 %);
+        a leading or trailing letter often gives voltage rating
+        (<code>2A</code> = 100 V, <code>1H</code> = 50 V, <code>2D</code> = 200 V).
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Decoded</h2>
+      <div class="display">
+        <div class="big" id="primaryValue">—</div>
+        <div class="sub" id="secondaryValue"></div>
+        <div class="desc" id="rangeDesc"></div>
+      </div>
+      <div id="errorBox"></div>
+      <div class="result-grid">
+        <div class="result"><div class="k">Picofarads</div><div class="v" id="rPf">—</div></div>
+        <div class="result"><div class="k">Nanofarads</div><div class="v" id="rNf">—</div></div>
+        <div class="result"><div class="k">Microfarads</div><div class="v" id="rUf">—</div></div>
+        <div class="result"><div class="k">Farads</div><div class="v" id="rF">—</div></div>
+        <div class="result"><div class="k">Tolerance</div><div class="v" id="rTol">—</div></div>
+        <div class="result"><div class="k">Voltage rating</div><div class="v" id="rVolt">—</div></div>
+      </div>
+      <div class="cap-vis" id="capVis"></div>
+    </div>
+  </div>
+</div>
+
+<!-- =============== EIA-96 PANE =============== -->
+<div class="pane" id="pane-eia96">
+  <div class="grid-two">
+    <div class="card">
+      <h2>SMD marking (EIA-96)</h2>
+      <div class="field">
+        <label for="eia96Code">Two-character marking</label>
+        <input type="text" id="eia96Code" class="code-input" value="A2" maxlength="3" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Common SMD markings</label>
+        <div class="pill-row" id="eia96Presets"></div>
+      </div>
+      <p style="font-size:.8rem;color:var(--muted);line-height:1.55;margin:8px 0 0">
+        Tiny 0402 / 0603 / 0805 SMD ceramic caps don't have room for full numerics.
+        The EIA-96 scheme uses <strong>2 digits + 1 letter multiplier</strong> or <strong>1 letter + 1 digit</strong>:
+        the digit pair (or letter index) gives the significant value, and the letter is a power-of-ten multiplier.
+        Letters skip <code>I</code>, <code>O</code>, <code>Q</code>, <code>R</code>, <code>U</code>, <code>V</code>, <code>W</code>, <code>X</code>
+        to avoid look-alikes.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Decoded</h2>
+      <div class="display">
+        <div class="big" id="eia96Primary">—</div>
+        <div class="sub" id="eia96Secondary"></div>
+        <div class="desc" id="eia96Desc"></div>
+      </div>
+      <div id="eia96Error"></div>
+      <div class="result-grid">
+        <div class="result"><div class="k">Picofarads</div><div class="v" id="eRpF">—</div></div>
+        <div class="result"><div class="k">Nanofarads</div><div class="v" id="eRnF">—</div></div>
+        <div class="result"><div class="k">Microfarads</div><div class="v" id="eRuF">—</div></div>
+        <div class="result"><div class="k">Significand</div><div class="v" id="eRsig">—</div></div>
+        <div class="result"><div class="k">Multiplier</div><div class="v" id="eRmul">—</div></div>
+        <div class="result"><div class="k">Scheme</div><div class="v" id="eRscheme">—</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =============== ENCODE PANE =============== -->
+<div class="pane" id="pane-encode">
+  <div class="grid-two">
+    <div class="card">
+      <h2>Value</h2>
+      <div class="field">
+        <label for="valNum">Capacitance</label>
+        <div class="row">
+          <input type="number" id="valNum" value="100" step="any" min="0">
+          <select id="valUnit">
+            <option value="1e-12">pF (picofarad)</option>
+            <option value="1e-9" selected>nF (nanofarad)</option>
+            <option value="1e-6">µF (microfarad)</option>
+            <option value="1e-3">mF (millifarad)</option>
+            <option value="1">F (farad)</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Tolerance suffix</label>
+        <select id="tolSel">
+          <option value="">— none —</option>
+          <option value="B">B  ±0.10 pF</option>
+          <option value="C">C  ±0.25 pF</option>
+          <option value="D">D  ±0.5 pF</option>
+          <option value="F">F  ±1 %</option>
+          <option value="G">G  ±2 %</option>
+          <option value="J" selected>J  ±5 %</option>
+          <option value="K">K  ±10 %</option>
+          <option value="M">M  ±20 %</option>
+          <option value="Z">Z  +80 / −20 %</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Voltage rating prefix (optional)</label>
+        <select id="voltSel">
+          <option value="">— none —</option>
+          <option value="0E">0E   2.5 V</option>
+          <option value="0G">0G   4 V</option>
+          <option value="0J">0J   6.3 V</option>
+          <option value="1A">1A   10 V</option>
+          <option value="1C">1C   16 V</option>
+          <option value="1E">1E   25 V</option>
+          <option value="1H">1H   50 V</option>
+          <option value="1J">1J   63 V</option>
+          <option value="2A">2A   100 V</option>
+          <option value="2D">2D   200 V</option>
+          <option value="2E">2E   250 V</option>
+          <option value="2H">2H   500 V</option>
+          <option value="2J">2J   630 V</option>
+          <option value="3A">3A   1000 V</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Suggested markings</h2>
+      <div class="display">
+        <div class="big" id="encodeCode">—</div>
+        <div class="sub" id="encodeFull"></div>
+        <div class="desc" id="encodeNote"></div>
+      </div>
+      <div class="result-grid">
+        <div class="result"><div class="k">3-digit code</div><div class="v" id="enc3">—</div></div>
+        <div class="result"><div class="k">2-digit code</div><div class="v" id="enc2">—</div></div>
+        <div class="result"><div class="k">EIA-96</div><div class="v" id="encEia">—</div></div>
+        <div class="result"><div class="k">Picofarads</div><div class="v" id="encPf">—</div></div>
+        <div class="result"><div class="k">In nF</div><div class="v" id="encNf">—</div></div>
+        <div class="result"><div class="k">In µF</div><div class="v" id="encUf">—</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =============== REFERENCE PANE =============== -->
+<div class="pane" id="pane-reference">
+  <div class="card">
+    <h2>Tolerance letters (JIS C 5101 / EIA RS-198)</h2>
+    <table class="ref-table">
+      <thead><tr><th>Letter</th><th>Tolerance</th><th>Notes</th></tr></thead>
+      <tbody id="tolTable"></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2>Voltage rating prefix (EIA / JIS)</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">A digit-letter pair printed before the numeric code maps to a working DC voltage.</p>
+    <table class="ref-table">
+      <thead><tr><th>Code</th><th>Volts</th><th>Code</th><th>Volts</th><th>Code</th><th>Volts</th></tr></thead>
+      <tbody id="voltTable"></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2>EIA-96 significand table</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">For 2-digit + letter SMD markings, the digits look up the significand here, and the trailing letter multiplies it by a power of ten.</p>
+    <table class="ref-table">
+      <thead><tr><th>Code</th><th>Value</th><th>Code</th><th>Value</th><th>Code</th><th>Value</th><th>Code</th><th>Value</th></tr></thead>
+      <tbody id="eiaSigTable"></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2>EIA-96 multiplier letters</h2>
+    <table class="ref-table">
+      <thead><tr><th>Letter</th><th>Multiplier</th><th>Letter</th><th>Multiplier</th><th>Letter</th><th>Multiplier</th></tr></thead>
+      <tbody id="eiaMulTable"></tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// === Reference tables ===
+const TOL = {
+  B: { pct: null, abs: 0.10, label: '±0.10 pF (for caps ≤ 10 pF)' },
+  C: { pct: null, abs: 0.25, label: '±0.25 pF (for caps ≤ 10 pF)' },
+  D: { pct: null, abs: 0.5,  label: '±0.5 pF (for caps ≤ 10 pF)' },
+  F: { pct: 1,    abs: null, label: '±1 %' },
+  G: { pct: 2,    abs: null, label: '±2 %' },
+  H: { pct: 3,    abs: null, label: '±3 %' },
+  J: { pct: 5,    abs: null, label: '±5 %' },
+  K: { pct: 10,   abs: null, label: '±10 %' },
+  M: { pct: 20,   abs: null, label: '±20 %' },
+  N: { pct: 30,   abs: null, label: '±30 %' },
+  P: { pct: null, abs: null, label: '+100 / −0 %' },
+  S: { pct: null, abs: null, label: '+50 / −20 %' },
+  W: { pct: null, abs: null, label: '+200 / −0 %' },
+  X: { pct: null, abs: null, label: '+40 / −20 %' },
+  Z: { pct: null, abs: null, label: '+80 / −20 %' }
+};
+const VOLT = {
+  '0E':2.5,'0G':4,'0J':6.3,
+  '1A':10,'1C':16,'1D':20,'1E':25,'1G':40,'1H':50,'1J':63,
+  '2A':100,'2C':160,'2D':200,'2E':250,'2G':400,'2H':500,'2J':630,
+  '3A':1000,'3D':2000
+};
+
+// EIA-96 significand: code "01" → 100, code "96" → 976
+const EIA_SIG = {
+  '01':100,'02':102,'03':105,'04':107,'05':110,'06':113,'07':115,'08':118,
+  '09':121,'10':124,'11':127,'12':130,'13':133,'14':137,'15':140,'16':143,
+  '17':147,'18':150,'19':154,'20':158,'21':162,'22':165,'23':169,'24':174,
+  '25':178,'26':182,'27':187,'28':191,'29':196,'30':200,'31':205,'32':210,
+  '33':215,'34':221,'35':226,'36':232,'37':237,'38':243,'39':249,'40':255,
+  '41':261,'42':267,'43':274,'44':280,'45':287,'46':294,'47':301,'48':309,
+  '49':316,'50':324,'51':332,'52':340,'53':348,'54':357,'55':365,'56':374,
+  '57':383,'58':392,'59':402,'60':412,'61':422,'62':432,'63':442,'64':453,
+  '65':464,'66':475,'67':487,'68':499,'69':511,'70':523,'71':536,'72':549,
+  '73':562,'74':576,'75':590,'76':604,'77':619,'78':634,'79':649,'80':665,
+  '81':681,'82':698,'83':715,'84':732,'85':750,'86':768,'87':787,'88':806,
+  '89':825,'90':845,'91':866,'92':887,'93':909,'94':931,'95':953,'96':976
+};
+const EIA_MUL = { A:1, B:10, C:100, D:1000, E:10000, F:100000, G:1000000, H:10000000, J:100000000, K:1000000000 };
+// Letter-coded EIA single-letter significand (rare 1-letter + 1-digit scheme).
+const EIA_LETTER_SIG = {
+  A:1.0, B:1.1, C:1.2, D:1.3, E:1.5, F:1.6, G:1.8, H:2.0,
+  J:2.2, K:2.4, L:2.7, M:3.0, N:3.3, P:3.6, Q:3.9, R:4.3,
+  S:4.7, T:5.1, U:5.6, V:6.2, W:6.8, X:7.5, Y:8.2, Z:9.1
+};
+
+// === Formatting helpers ===
+function formatFarads(pf) {
+  if (!isFinite(pf) || pf <= 0) return { primary:'—', secondary:'', desc:'' };
+  if (pf < 1000) return { primary: pf.toString() + ' pF', secondary: (pf/1000).toFixed(4).replace(/0+$/,'').replace(/\.$/,'') + ' nF', desc: smartDesc(pf) };
+  if (pf < 1e6)  return { primary: prettyNum(pf/1000) + ' nF', secondary: prettyNum(pf) + ' pF', desc: smartDesc(pf) };
+  if (pf < 1e9)  return { primary: prettyNum(pf/1e6) + ' µF', secondary: prettyNum(pf/1000) + ' nF', desc: smartDesc(pf) };
+  if (pf < 1e12) return { primary: prettyNum(pf/1e9) + ' mF', secondary: prettyNum(pf/1e6) + ' µF', desc: smartDesc(pf) };
+  return { primary: prettyNum(pf/1e12) + ' F', secondary: '', desc: smartDesc(pf) };
+}
+function prettyNum(n) {
+  if (n === 0) return '0';
+  const s = n.toPrecision(6);
+  return parseFloat(s).toString();
+}
+function smartDesc(pf) {
+  if (pf < 10) return 'NP0/C0G class-1 dielectric territory — temperature-stable, low loss.';
+  if (pf < 1000) return 'Common bypass / RF tuning range; ceramic disc or NP0/X7R MLCC.';
+  if (pf < 100000) return 'X7R / Y5V ceramic, or polypropylene film for audio coupling.';
+  if (pf < 1e7) return 'Bulk decoupling / DC blocking — large ceramic, tantalum, or aluminium electrolytic.';
+  if (pf < 1e10) return 'Power supply reservoir — electrolytic or supercapacitor range.';
+  return 'Supercapacitor / energy-storage territory (≥ 10 mF).';
+}
+
+// === DECODE ===
+function decode() {
+  const raw = $('code').value.trim().toUpperCase();
+  $('errorBox').innerHTML = '';
+  if (!raw) { setDecoded(NaN, '', ''); return; }
+
+  // Strip voltage prefix (digit+letter pair at start that matches VOLT table)
+  let voltCode = '';
+  let body = raw;
+  if (body.length >= 4 && /^[0-9][A-Z]/.test(body) && VOLT[body.slice(0,2)] !== undefined) {
+    voltCode = body.slice(0, 2);
+    body = body.slice(2);
+  }
+  // Trailing voltage prefix too (some manufacturers print it last)
+  if (!voltCode && body.length >= 4 && /[0-9][A-Z]$/.test(body) && VOLT[body.slice(-2)] !== undefined) {
+    voltCode = body.slice(-2);
+    body = body.slice(0, -2);
+  }
+
+  // Trailing tolerance letter
+  let tolCode = '';
+  if (/^[0-9]+[A-Z]$/.test(body) && TOL[body.slice(-1)]) {
+    tolCode = body.slice(-1);
+    body = body.slice(0, -1);
+  }
+
+  // Decimal-point ceramic markings like "4n7" / "2p2"
+  let pf = NaN;
+  if (/^\d+(N|P|U)\d+$/.test(body) || /^(N|P|U)\d+$/.test(body) || /^\d+(N|P|U)$/.test(body)) {
+    const m = body.match(/^(\d*)(N|P|U)(\d*)$/);
+    if (m) {
+      const int = m[1] || '0', sym = m[2], frac = m[3] || '0';
+      const value = parseFloat(int + '.' + frac);
+      const mult = sym === 'P' ? 1 : (sym === 'N' ? 1000 : 1e6);
+      pf = value * mult;
+    }
+  } else if (/^\d+$/.test(body)) {
+    if (body.length === 1 || body.length === 2) {
+      pf = parseInt(body, 10);
+    } else if (body.length === 3) {
+      const sig = parseInt(body.slice(0, 2), 10);
+      const exp = parseInt(body.slice(2), 10);
+      pf = sig * Math.pow(10, exp);
+    } else if (body.length === 4) {
+      // 4 digits: first 3 = significand, last = exponent (used on some film caps)
+      const sig = parseInt(body.slice(0, 3), 10);
+      const exp = parseInt(body.slice(3), 10);
+      pf = sig * Math.pow(10, exp);
+    }
+  } else {
+    showErr('Marking <code>' + raw + '</code> not recognized. Try a 1–4 digit number, optional tolerance letter (J, K, M…), and / or voltage prefix like 2A, 1H.');
+    setDecoded(NaN, '', ''); return;
+  }
+
+  if (!isFinite(pf) || pf <= 0) {
+    showErr('Could not parse a positive value from <code>' + raw + '</code>.');
+    setDecoded(NaN, '', ''); return;
+  }
+  setDecoded(pf, tolCode, voltCode);
+}
+
+function setDecoded(pf, tolCode, voltCode) {
+  const f = formatFarads(pf);
+  $('primaryValue').textContent = f.primary;
+  $('secondaryValue').textContent = f.secondary;
+  $('rangeDesc').textContent = f.desc;
+  if (!isFinite(pf) || pf <= 0) {
+    ['rPf','rNf','rUf','rF','rTol','rVolt'].forEach(id => $(id).textContent = '—');
+    $('capVis').innerHTML = '';
+    return;
+  }
+  $('rPf').textContent = prettyNum(pf) + ' pF';
+  $('rNf').textContent = prettyNum(pf/1000) + ' nF';
+  $('rUf').textContent = prettyNum(pf/1e6) + ' µF';
+  $('rF').textContent  = (pf/1e12).toExponential(3) + ' F';
+  if (tolCode) {
+    const t = TOL[tolCode];
+    let range = '';
+    if (t.pct !== null) {
+      const d = pf * t.pct / 100;
+      range = ' (' + prettyNum(pf - d) + ' – ' + prettyNum(pf + d) + ' pF)';
+    } else if (t.abs !== null) {
+      range = ' (' + prettyNum(pf - t.abs) + ' – ' + prettyNum(pf + t.abs) + ' pF)';
+    }
+    $('rTol').textContent = tolCode + ' — ' + t.label + range;
+  } else {
+    $('rTol').textContent = '— (not marked)';
+  }
+  $('rVolt').textContent = voltCode ? (voltCode + ' — ' + VOLT[voltCode] + ' V DC') : '— (not marked)';
+  drawCapVis(pf, tolCode, voltCode);
+}
+
+function drawCapVis(pf, tolCode, voltCode) {
+  const f = formatFarads(pf);
+  const top = (voltCode ? voltCode : '') + (voltCode ? ' ' : '') + f.primary.replace(' ', '').replace('µF','uF');
+  const bot = tolCode || '';
+  $('capVis').innerHTML = `
+    <svg viewBox="0 0 220 130" xmlns="http://www.w3.org/2000/svg" aria-label="Ceramic disc capacitor">
+      <line x1="60" y1="115" x2="60" y2="80" stroke="#888" stroke-width="2"/>
+      <line x1="160" y1="115" x2="160" y2="80" stroke="#888" stroke-width="2"/>
+      <circle cx="110" cy="55" r="42" fill="#e6b765" stroke="#a07a35" stroke-width="2"/>
+      <text x="110" y="50" text-anchor="middle" font-family="monospace" font-size="13" font-weight="700" fill="#3a2a0c">${top}</text>
+      <text x="110" y="68" text-anchor="middle" font-family="monospace" font-size="11" fill="#3a2a0c">${bot}</text>
+    </svg>`;
+}
+
+function showErr(msg) { $('errorBox').innerHTML = '<div class="err">' + msg + '</div>'; }
+
+// === EIA-96 DECODE ===
+function decodeEia96() {
+  const raw = $('eia96Code').value.trim().toUpperCase();
+  $('eia96Error').innerHTML = '';
+  const clear = () => ['eRpF','eRnF','eRuF','eRsig','eRmul','eRscheme'].forEach(id => $(id).textContent = '—');
+  if (!raw) { $('eia96Primary').textContent = '—'; $('eia96Secondary').textContent = ''; $('eia96Desc').textContent = ''; clear(); return; }
+
+  let pF, scheme = '', sigDesc = '', mulDesc = '';
+  if (/^[0-9]{2}[A-Z]$/.test(raw)) {
+    const digits = raw.slice(0, 2);
+    const letter = raw.slice(2);
+    const sig = EIA_SIG[digits];
+    const mul = EIA_MUL[letter];
+    if (sig === undefined) { $('eia96Error').innerHTML = '<div class="err">Code <code>' + digits + '</code> isn\'t in the EIA-96 significand table (01–96).</div>'; clear(); return; }
+    if (mul === undefined) { $('eia96Error').innerHTML = '<div class="err">Multiplier letter <code>' + letter + '</code> isn\'t a valid EIA-96 letter. Use A–H, J, K.</div>'; clear(); return; }
+    pF = sig * mul / 10; // EIA-96 caps: significand reads in 0.1 pF units when paired with multiplier letter
+    scheme = '2-digit + multiplier';
+    sigDesc = digits + ' → ' + sig;
+    mulDesc = letter + ' → ×' + mul + ' / 10';
+  } else if (/^[A-Z][0-9]$/.test(raw)) {
+    const letter = raw[0];
+    const digit = parseInt(raw[1], 10);
+    const sig = EIA_LETTER_SIG[letter];
+    if (sig === undefined) { $('eia96Error').innerHTML = '<div class="err">Letter <code>' + letter + '</code> isn\'t in the 1-letter EIA significand table.</div>'; clear(); return; }
+    pF = sig * Math.pow(10, digit);
+    scheme = '1-letter + exponent';
+    sigDesc = letter + ' → ' + sig;
+    mulDesc = digit + ' → ×10^' + digit;
+  } else {
+    $('eia96Error').innerHTML = '<div class="err">Expected either two digits then a letter (e.g. <code>10C</code>) or a letter then a digit (e.g. <code>A2</code>).</div>';
+    clear(); return;
+  }
+
+  const f = formatFarads(pF);
+  $('eia96Primary').textContent = f.primary;
+  $('eia96Secondary').textContent = f.secondary;
+  $('eia96Desc').textContent = f.desc;
+  $('eRpF').textContent = prettyNum(pF) + ' pF';
+  $('eRnF').textContent = prettyNum(pF/1000) + ' nF';
+  $('eRuF').textContent = prettyNum(pF/1e6) + ' µF';
+  $('eRsig').textContent = sigDesc;
+  $('eRmul').textContent = mulDesc;
+  $('eRscheme').textContent = scheme;
+}
+
+// === ENCODE ===
+function encode() {
+  const num = parseFloat($('valNum').value);
+  const unit = parseFloat($('valUnit').value);
+  if (!isFinite(num) || num <= 0) {
+    ['enc3','enc2','encEia','encPf','encNf','encUf'].forEach(id => $(id).textContent = '—');
+    $('encodeCode').textContent = '—'; $('encodeFull').textContent = ''; $('encodeNote').textContent = 'Enter a positive value.';
+    return;
+  }
+  const farads = num * unit;
+  const pF = farads * 1e12;
+
+  // 3-digit code: two significand digits then exponent count
+  let code3 = '—';
+  if (pF >= 10 && pF <= 99e9) {
+    let s = pF;
+    let exp = 0;
+    while (s >= 100) { s /= 10; exp++; }
+    const sig = Math.round(s);
+    if (exp >= 0 && exp <= 9 && sig >= 10 && sig <= 99) code3 = String(sig) + String(exp);
+  } else if (pF >= 1 && pF < 10) {
+    // Some 1-2 digit caps printed in pF directly
+    code3 = String(Math.round(pF));
+  }
+
+  // 2-digit code: direct pF reading (caps < 100 pF)
+  let code2 = '—';
+  if (pF < 100 && pF >= 1) code2 = String(Math.round(pF));
+  else if (pF < 1) code2 = 'R' + String(Math.round(pF * 10));
+
+  // EIA-96 (closest)
+  let eiaCode = '—';
+  if (pF >= 0.1 && pF <= 9.99e9) {
+    const target = pF * 10; // EIA-96 reads in tenths of pF
+    let bestErr = Infinity, bestDigits = null, bestLetter = null;
+    for (const letter of Object.keys(EIA_MUL)) {
+      const sig = target / EIA_MUL[letter];
+      if (sig < 100 || sig > 999) continue;
+      // Find closest entry in EIA_SIG
+      let bd = null, be = Infinity;
+      for (const k of Object.keys(EIA_SIG)) {
+        const e = Math.abs(EIA_SIG[k] - sig) / sig;
+        if (e < be) { be = e; bd = k; }
+      }
+      if (bd && be < bestErr) { bestErr = be; bestDigits = bd; bestLetter = letter; }
+    }
+    if (bestDigits) eiaCode = bestDigits + bestLetter + (bestErr > 0.01 ? '  ≈' : '');
+  }
+
+  const tol = $('tolSel').value;
+  const volt = $('voltSel').value;
+  let fullCode = code3 === '—' ? '—' : code3;
+  if (fullCode !== '—' && tol) fullCode += tol;
+  if (fullCode !== '—' && volt) fullCode = volt + ' ' + fullCode;
+
+  $('encodeCode').textContent = fullCode;
+  const f = formatFarads(pF);
+  $('encodeFull').textContent = f.primary + (f.secondary ? '  ·  ' + f.secondary : '');
+  $('encodeNote').textContent = code3 === '—'
+    ? 'No clean 3-digit form — value is outside the typical 10 pF – 99 µF range that ceramics use this marking for.'
+    : 'Manufacturers may use the 2-digit, 3-digit, or EIA-96 form depending on case size.';
+  $('enc3').textContent = code3;
+  $('enc2').textContent = code2;
+  $('encEia').textContent = eiaCode;
+  $('encPf').textContent = prettyNum(pF) + ' pF';
+  $('encNf').textContent = prettyNum(pF/1000) + ' nF';
+  $('encUf').textContent = prettyNum(pF/1e6) + ' µF';
+}
+
+// === UI ===
+function setTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => setTab(t.dataset.tab)));
+
+function buildPresets() {
+  const presets = ['10','22','47','100','101','102','103','104','105','220','221','222','223','473','474','475','684','105K','104K','2A104J','1H103','4N7','2p2'];
+  $('codePresets').innerHTML = presets.map(p =>
+    `<button class="pill" data-v="${p}">${p}</button>`).join('');
+  $('codePresets').querySelectorAll('.pill').forEach(b =>
+    b.addEventListener('click', () => { $('code').value = b.dataset.v; decode(); }));
+
+  const eiaPresets = ['01A','10C','22A','47B','A2','B2','C3','D4','E1','J5'];
+  $('eia96Presets').innerHTML = eiaPresets.map(p =>
+    `<button class="pill" data-v="${p}">${p}</button>`).join('');
+  $('eia96Presets').querySelectorAll('.pill').forEach(b =>
+    b.addEventListener('click', () => { $('eia96Code').value = b.dataset.v; decodeEia96(); }));
+}
+
+function buildRefTables() {
+  $('tolTable').innerHTML = Object.entries(TOL).map(([k, v]) =>
+    `<tr><td><strong>${k}</strong></td><td>${v.label}</td>
+    <td>${v.pct !== null ? 'Percentage tolerance' : (v.abs !== null ? 'Absolute pF tolerance — applies to caps ≤ 10 pF' : 'Asymmetric range — common on electrolytics')}</td></tr>`).join('');
+
+  const voltKeys = Object.keys(VOLT);
+  let rows = '';
+  for (let i = 0; i < voltKeys.length; i += 3) {
+    rows += '<tr>';
+    for (let j = 0; j < 3; j++) {
+      const k = voltKeys[i + j];
+      rows += k
+        ? `<td><strong>${k}</strong></td><td class="num">${VOLT[k]} V</td>`
+        : '<td></td><td></td>';
+    }
+    rows += '</tr>';
+  }
+  $('voltTable').innerHTML = rows;
+
+  const sigKeys = Object.keys(EIA_SIG);
+  let srows = '';
+  for (let i = 0; i < sigKeys.length; i += 4) {
+    srows += '<tr>';
+    for (let j = 0; j < 4; j++) {
+      const k = sigKeys[i + j];
+      srows += k ? `<td><strong>${k}</strong></td><td class="num">${EIA_SIG[k]}</td>` : '<td></td><td></td>';
+    }
+    srows += '</tr>';
+  }
+  $('eiaSigTable').innerHTML = srows;
+
+  const mulKeys = Object.keys(EIA_MUL);
+  let mrows = '';
+  for (let i = 0; i < mulKeys.length; i += 3) {
+    mrows += '<tr>';
+    for (let j = 0; j < 3; j++) {
+      const k = mulKeys[i + j];
+      mrows += k ? `<td><strong>${k}</strong></td><td class="num">×${EIA_MUL[k].toLocaleString()}</td>` : '<td></td><td></td>';
+    }
+    mrows += '</tr>';
+  }
+  $('eiaMulTable').innerHTML = mrows;
+}
+
+['code'].forEach(id => $(id).addEventListener('input', decode));
+$('eia96Code').addEventListener('input', decodeEia96);
+['valNum','valUnit','tolSel','voltSel'].forEach(id => $(id).addEventListener('input', encode));
+
+buildPresets();
+buildRefTables();
+decode();
+decodeEia96();
+encode();
+</script>
+</body>
+</html>
