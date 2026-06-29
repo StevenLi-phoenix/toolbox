@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pareto Chart Builder — Free 80/20 Analysis Tool</title>
+<meta name="description" content="Build a Pareto chart from CSV or pasted data to find the vital few causes that drive most of your impact. Bars + cumulative percentage line, 80% guideline, vital-few highlight, SVG export. 100% client-side.">
+<meta name="keywords" content="pareto chart, pareto analysis, 80/20 rule, vital few, root cause analysis, quality tools, project management">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pareto.html">
+<meta property="og:title" content="Pareto Chart Builder">
+<meta property="og:description" content="Find the vital few — paste categorized counts and instantly get a Pareto chart with the 80% line and exportable SVG.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/pareto.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .editor-grid { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .editor-grid { grid-template-columns: 1fr; } }
+  textarea.data { width: 100%; min-height: 260px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; line-height: 1.55; resize: vertical; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; align-items: center; }
+  .controls label { font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: flex; align-items: center; gap: 6px; }
+  .controls input[type="number"] { width: 70px; padding: 5px 7px; font-family: var(--mono); border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .controls input[type="range"] { width: 120px; }
+  .canvas-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; overflow-x: auto; min-height: 320px; }
+  .canvas-wrap svg { display: block; width: 100%; height: auto; background: var(--bg); border-radius: 4px; }
+  .vital-bar { fill: #dc2626; }
+  .other-bar { fill: #2563eb; }
+  .axis-line { stroke: var(--muted); stroke-width: 1; }
+  .axis-text { font-family: var(--sans); font-size: 11px; fill: var(--muted); }
+  .cum-line { fill: none; stroke: #ea580c; stroke-width: 2; }
+  .cum-dot { fill: #ea580c; }
+  .ref-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
+  .ref-label { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+  .bar-label { font-family: var(--mono); font-size: 10px; fill: var(--text); }
+  .err { color: var(--error, #dc2626); font-family: var(--mono); font-size: .82rem; padding: 8px 11px; background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.3); border-radius: var(--radius); margin-bottom: 10px; white-space: pre-line; }
+  .table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 12px; }
+  .table th, .table td { padding: 6px 9px; border-bottom: 1px solid var(--border); text-align: left; font-family: var(--mono); }
+  .table th { background: var(--surface2); color: var(--muted); text-transform: uppercase; font-size: .7rem; letter-spacing: .04em; font-weight: 600; }
+  .table td.num { text-align: right; }
+  .table tr.vital { background: rgba(220,38,38,.06); }
+  .table tr.vital td { font-weight: 600; }
+  .examples { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .ex-pill { padding: 4px 10px; font-size: .74rem; font-family: var(--mono); border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .ex-pill:hover { border-color: var(--accent); }
+  .stats { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: .82rem; color: var(--muted); }
+  .stats b { color: var(--text); font-family: var(--mono); }
+  .legend { display: inline-flex; gap: 12px; font-size: .76rem; color: var(--muted); margin-left: 6px; }
+  .legend i { width: 11px; height: 11px; display: inline-block; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Pareto Chart Builder</h1>
+<p class="subtitle">Paste categorized counts and find the "vital few" causes that explain most of the impact. Bars are sorted descending; an orange cumulative-percentage line shows when you cross the 80% threshold so you know where to focus first.</p>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <div class="editor-grid">
+    <div>
+      <label style="display:block;font-size:.76rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Data · <code>category, count</code> per line</label>
+      <textarea class="data" id="data" spellcheck="false"></textarea>
+      <div class="examples">
+        <button class="ex-pill" data-ex="bugs">Bug causes</button>
+        <button class="ex-pill" data-ex="latency">Latency sources</button>
+        <button class="ex-pill" data-ex="support">Support tickets</button>
+        <button class="ex-pill" data-ex="defects">Defect types</button>
+      </div>
+      <div class="controls">
+        <label>Threshold % <input type="number" id="thr" min="50" max="95" value="80" step="5"></label>
+        <label>Height <input type="number" id="ht" min="240" max="900" value="400" step="20"></label>
+      </div>
+      <div class="controls" style="margin-top:4px">
+        <label style="text-transform:none;letter-spacing:0;font-size:.78rem;color:var(--text)"><input type="checkbox" id="showLabels" checked> Bar value labels</label>
+        <label style="text-transform:none;letter-spacing:0;font-size:.78rem;color:var(--text)"><input type="checkbox" id="rotateX" checked> Rotate X labels</label>
+      </div>
+      <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:6px">
+        <button class="btn btn-secondary" id="svgBtn">Download SVG</button>
+        <button class="btn btn-secondary" id="pngBtn">Download PNG</button>
+        <button class="btn btn-secondary" id="copyTable">Copy table (TSV)</button>
+      </div>
+    </div>
+
+    <div>
+      <div id="errBox" style="display:none" class="err"></div>
+      <div class="canvas-wrap"><svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div style="margin-top:6px"><span class="legend"><span><i style="background:#dc2626"></i>Vital few (≤ threshold)</span><span><i style="background:#2563eb"></i>Useful many</span><span><i style="background:#ea580c;border-radius:50%"></i>Cumulative %</span></span></div>
+      <div class="stats" id="stats"></div>
+      <table class="table" id="resTable" style="display:none">
+        <thead><tr><th>#</th><th>Category</th><th class="num">Count</th><th class="num">%</th><th class="num">Cumulative %</th></tr></thead>
+        <tbody id="resBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <h3 style="margin:0 0 8px;font-size:.95rem">About Pareto analysis</h3>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55;margin:0">
+    The Pareto principle (Joseph M. Juran, 1941, named for Vilfredo Pareto) observes that for many phenomena ≈80% of the effects come from ≈20% of the causes.
+    A Pareto chart makes that visible: bars descend by frequency or cost, and a cumulative line tracks running share. The bars to the left of where the line crosses your threshold are the "vital few" — fix those first for the biggest return. Counts can represent defects, dollars, minutes, tickets, anything additive.
+  </p>
+</div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const dataEl = document.getElementById('data');
+const errBox = document.getElementById('errBox');
+const svgEl = document.getElementById('canvas');
+const statsEl = document.getElementById('stats');
+const tableEl = document.getElementById('resTable');
+const bodyEl = document.getElementById('resBody');
+const thrEl = document.getElementById('thr');
+const htEl = document.getElementById('ht');
+const showLabelsEl = document.getElementById('showLabels');
+const rotateXEl = document.getElementById('rotateX');
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+const EXAMPLES = {
+  bugs: `# Defect root causes from a sprint retro
+Race condition, 27
+Null reference, 21
+Off-by-one, 14
+Bad input validation, 11
+Stale cache, 9
+Wrong env var, 6
+Timezone bug, 5
+Memory leak, 3
+Other, 4`,
+  latency: `# Where the 250ms came from
+DB query, 95
+Network RTT, 62
+JSON parse, 28
+Auth check, 22
+Template render, 18
+Logging, 8
+Other, 17`,
+  support: `# Inbound support volume this month
+Login problems, 312
+Billing question, 198
+Bug report, 154
+Feature request, 88
+Refund, 41
+Account merge, 22
+Other, 35`,
+  defects: `# Manufacturing line defects this week
+Scratched paint, 88
+Misaligned panel, 64
+Bad weld, 52
+Missing fastener, 31
+Wrong color, 18
+Loose wiring, 11
+Other, 7`
+};
+
+function parse(text) {
+  const rows = [];
+  const errs = [];
+  const lines = text.split(/\r?\n/);
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) return;
+    let m = line.match(/^(.+?)\s*[,;\t]\s*([-+]?[\d.,]+)\s*$/);
+    if (!m) m = line.match(/^(.+?)\s+([-+]?\d[\d.]*)\s*$/);
+    if (!m) { errs.push(`Line ${i+1}: cannot parse "${line}"`); return; }
+    const cat = m[1].trim();
+    const v = parseFloat(m[2].replace(/,/g,''));
+    if (!isFinite(v) || v < 0) { errs.push(`Line ${i+1}: count must be a non-negative number`); return; }
+    if (v === 0) return;
+    rows.push({ cat, v });
+  });
+  // merge duplicate categories
+  const map = new Map();
+  for (const r of rows) map.set(r.cat, (map.get(r.cat) || 0) + r.v);
+  const out = [...map.entries()].map(([cat, v]) => ({ cat, v }));
+  out.sort((a,b) => b.v - a.v);
+  return { rows: out, errors: errs };
+}
+
+function compute(rows, threshold) {
+  const total = rows.reduce((s,r) => s+r.v, 0);
+  let acc = 0;
+  let vitalCount = 0;
+  let crossed = false;
+  const enriched = rows.map((r, i) => {
+    acc += r.v;
+    const pct = total > 0 ? r.v / total * 100 : 0;
+    const cum = total > 0 ? acc / total * 100 : 0;
+    if (!crossed) {
+      vitalCount = i + 1;
+      if (cum >= threshold) crossed = true;
+    }
+    return { ...r, pct, cum, vital: false };
+  });
+  if (!crossed) vitalCount = enriched.length;
+  for (let i = 0; i < vitalCount; i++) enriched[i].vital = true;
+  return { enriched, total, vitalCount };
+}
+
+function formatNum(v) {
+  if (v >= 1e6) return (v/1e6).toFixed(2) + 'M';
+  if (v >= 1e4) return (v/1e3).toFixed(1) + 'k';
+  if (Number.isInteger(v)) return v.toString();
+  return v.toFixed(2);
+}
+
+function draw(result, opts) {
+  const { enriched, total } = result;
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+  if (!enriched.length) return;
+
+  const H = opts.height;
+  const rotate = opts.rotateX;
+  const labelH = rotate ? 60 : 30;
+  const padTop = 22, padBottom = labelH + 24, padLeft = 56, padRight = 56;
+  const minW = padLeft + padRight + enriched.length * 44;
+  const W = Math.max(640, minW);
+  const innerW = W - padLeft - padRight;
+  const innerH = H - padTop - padBottom;
+
+  svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svgEl.style.minWidth = W + 'px';
+  svgEl.style.minHeight = H + 'px';
+
+  const n = enriched.length;
+  const barGap = 6;
+  const bw = (innerW - barGap * (n - 1)) / n;
+  const maxV = Math.max(...enriched.map(r => r.v));
+
+  // axes
+  const ax = document.createElementNS(SVGNS, 'line');
+  ax.setAttribute('x1', padLeft); ax.setAttribute('y1', padTop + innerH);
+  ax.setAttribute('x2', padLeft + innerW); ax.setAttribute('y2', padTop + innerH);
+  ax.setAttribute('class', 'axis-line');
+  svgEl.appendChild(ax);
+  const ay = document.createElementNS(SVGNS, 'line');
+  ay.setAttribute('x1', padLeft); ay.setAttribute('y1', padTop);
+  ay.setAttribute('x2', padLeft); ay.setAttribute('y2', padTop + innerH);
+  ay.setAttribute('class', 'axis-line');
+  svgEl.appendChild(ay);
+  const ay2 = document.createElementNS(SVGNS, 'line');
+  ay2.setAttribute('x1', padLeft + innerW); ay2.setAttribute('y1', padTop);
+  ay2.setAttribute('x2', padLeft + innerW); ay2.setAttribute('y2', padTop + innerH);
+  ay2.setAttribute('class', 'axis-line');
+  svgEl.appendChild(ay2);
+
+  // y-axis ticks (count)
+  const ticks = 5;
+  for (let t = 0; t <= ticks; t++) {
+    const frac = t / ticks;
+    const y = padTop + innerH - frac * innerH;
+    const v = frac * maxV;
+    const tk = document.createElementNS(SVGNS, 'line');
+    tk.setAttribute('x1', padLeft - 4); tk.setAttribute('y1', y);
+    tk.setAttribute('x2', padLeft); tk.setAttribute('y2', y);
+    tk.setAttribute('class', 'axis-line');
+    svgEl.appendChild(tk);
+    const lbl = document.createElementNS(SVGNS, 'text');
+    lbl.setAttribute('x', padLeft - 7); lbl.setAttribute('y', y + 4);
+    lbl.setAttribute('class', 'axis-text');
+    lbl.setAttribute('text-anchor', 'end');
+    lbl.textContent = formatNum(Math.round(v));
+    svgEl.appendChild(lbl);
+  }
+  // y-axis right (percentage)
+  for (let t = 0; t <= ticks; t++) {
+    const frac = t / ticks;
+    const y = padTop + innerH - frac * innerH;
+    const v = frac * 100;
+    const tk = document.createElementNS(SVGNS, 'line');
+    tk.setAttribute('x1', padLeft + innerW); tk.setAttribute('y1', y);
+    tk.setAttribute('x2', padLeft + innerW + 4); tk.setAttribute('y2', y);
+    tk.setAttribute('class', 'axis-line');
+    svgEl.appendChild(tk);
+    const lbl = document.createElementNS(SVGNS, 'text');
+    lbl.setAttribute('x', padLeft + innerW + 7); lbl.setAttribute('y', y + 4);
+    lbl.setAttribute('class', 'axis-text');
+    lbl.setAttribute('text-anchor', 'start');
+    lbl.textContent = Math.round(v) + '%';
+    svgEl.appendChild(lbl);
+  }
+
+  // threshold line
+  const thy = padTop + innerH - (opts.threshold / 100) * innerH;
+  const thl = document.createElementNS(SVGNS, 'line');
+  thl.setAttribute('x1', padLeft); thl.setAttribute('y1', thy);
+  thl.setAttribute('x2', padLeft + innerW); thl.setAttribute('y2', thy);
+  thl.setAttribute('class', 'ref-line');
+  svgEl.appendChild(thl);
+  const thtxt = document.createElementNS(SVGNS, 'text');
+  thtxt.setAttribute('x', padLeft + 4); thtxt.setAttribute('y', thy - 4);
+  thtxt.setAttribute('class', 'ref-label');
+  thtxt.textContent = opts.threshold + '% threshold';
+  svgEl.appendChild(thtxt);
+
+  // bars
+  enriched.forEach((r, i) => {
+    const x = padLeft + i * (bw + barGap);
+    const h = maxV > 0 ? (r.v / maxV) * innerH : 0;
+    const y = padTop + innerH - h;
+    const rect = document.createElementNS(SVGNS, 'rect');
+    rect.setAttribute('x', x); rect.setAttribute('y', y);
+    rect.setAttribute('width', bw); rect.setAttribute('height', h);
+    rect.setAttribute('class', r.vital ? 'vital-bar' : 'other-bar');
+    const tit = document.createElementNS(SVGNS, 'title');
+    tit.textContent = `${r.cat}: ${formatNum(r.v)} (${r.pct.toFixed(1)}% · cum ${r.cum.toFixed(1)}%)`;
+    rect.appendChild(tit);
+    svgEl.appendChild(rect);
+
+    if (opts.showLabels) {
+      const lab = document.createElementNS(SVGNS, 'text');
+      lab.setAttribute('x', x + bw/2); lab.setAttribute('y', y - 4);
+      lab.setAttribute('class', 'bar-label');
+      lab.setAttribute('text-anchor', 'middle');
+      lab.textContent = formatNum(r.v);
+      svgEl.appendChild(lab);
+    }
+
+    // x-label
+    const xlab = document.createElementNS(SVGNS, 'text');
+    const cx = x + bw / 2;
+    const cy = padTop + innerH + 14;
+    xlab.setAttribute('class', 'axis-text');
+    if (rotate) {
+      xlab.setAttribute('x', cx); xlab.setAttribute('y', cy);
+      xlab.setAttribute('text-anchor', 'end');
+      xlab.setAttribute('transform', `rotate(-40 ${cx} ${cy})`);
+    } else {
+      xlab.setAttribute('x', cx); xlab.setAttribute('y', cy);
+      xlab.setAttribute('text-anchor', 'middle');
+    }
+    const trunc = r.cat.length > 22 ? r.cat.slice(0,20) + '…' : r.cat;
+    xlab.textContent = trunc;
+    const t = document.createElementNS(SVGNS, 'title');
+    t.textContent = r.cat;
+    xlab.appendChild(t);
+    svgEl.appendChild(xlab);
+  });
+
+  // cumulative line
+  const pts = enriched.map((r, i) => {
+    const x = padLeft + i * (bw + barGap) + bw / 2;
+    const y = padTop + innerH - (r.cum / 100) * innerH;
+    return { x, y, cum: r.cum };
+  });
+  // start at origin (0%)
+  if (pts.length) {
+    const path = document.createElementNS(SVGNS, 'path');
+    const dParts = [`M ${padLeft} ${padTop + innerH}`];
+    for (const p of pts) dParts.push(`L ${p.x} ${p.y}`);
+    path.setAttribute('d', dParts.join(' '));
+    path.setAttribute('class', 'cum-line');
+    svgEl.appendChild(path);
+    for (const p of pts) {
+      const c = document.createElementNS(SVGNS, 'circle');
+      c.setAttribute('cx', p.x); c.setAttribute('cy', p.y);
+      c.setAttribute('r', 3);
+      c.setAttribute('class', 'cum-dot');
+      const tit = document.createElementNS(SVGNS, 'title');
+      tit.textContent = `cumulative ${p.cum.toFixed(1)}%`;
+      c.appendChild(tit);
+      svgEl.appendChild(c);
+    }
+  }
+
+  // axis titles
+  const yt = document.createElementNS(SVGNS, 'text');
+  yt.setAttribute('x', -(padTop + innerH/2)); yt.setAttribute('y', 14);
+  yt.setAttribute('transform', 'rotate(-90)');
+  yt.setAttribute('class', 'axis-text');
+  yt.setAttribute('text-anchor', 'middle');
+  yt.textContent = 'Count';
+  svgEl.appendChild(yt);
+
+  const yt2 = document.createElementNS(SVGNS, 'text');
+  yt2.setAttribute('x', -(padTop + innerH/2)); yt2.setAttribute('y', W - 6);
+  yt2.setAttribute('transform', 'rotate(-90)');
+  yt2.setAttribute('class', 'axis-text');
+  yt2.setAttribute('text-anchor', 'middle');
+  yt2.textContent = 'Cumulative %';
+  svgEl.appendChild(yt2);
+}
+
+function renderTable(result) {
+  bodyEl.innerHTML = '';
+  for (let i = 0; i < result.enriched.length; i++) {
+    const r = result.enriched[i];
+    const tr = document.createElement('tr');
+    if (r.vital) tr.className = 'vital';
+    tr.innerHTML =
+      `<td>${i+1}</td>` +
+      `<td>${escapeHtml(r.cat)}</td>` +
+      `<td class="num">${formatNum(r.v)}</td>` +
+      `<td class="num">${r.pct.toFixed(1)}%</td>` +
+      `<td class="num">${r.cum.toFixed(1)}%</td>`;
+    bodyEl.appendChild(tr);
+  }
+  tableEl.style.display = result.enriched.length ? 'table' : 'none';
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function render() {
+  const { rows, errors } = parse(dataEl.value);
+  if (errors.length) {
+    errBox.style.display = 'block';
+    errBox.textContent = errors.join('\n');
+  } else errBox.style.display = 'none';
+
+  if (!rows.length) {
+    while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+    statsEl.textContent = '';
+    tableEl.style.display = 'none';
+    return;
+  }
+
+  const threshold = Math.min(99, Math.max(1, +thrEl.value || 80));
+  const result = compute(rows, threshold);
+  draw(result, {
+    height: Math.max(240, +htEl.value || 400),
+    threshold,
+    showLabels: showLabelsEl.checked,
+    rotateX: rotateXEl.checked
+  });
+  renderTable(result);
+
+  const vitalPctOfCats = result.enriched.length ? (result.vitalCount / result.enriched.length * 100) : 0;
+  const vitalShare = result.enriched.slice(0, result.vitalCount).reduce((s,r) => s+r.v, 0);
+  const vitalPctOfTotal = result.total ? (vitalShare / result.total * 100) : 0;
+  statsEl.innerHTML =
+    `<span>Categories: <b>${result.enriched.length}</b></span>` +
+    `<span>Total: <b>${formatNum(result.total)}</b></span>` +
+    `<span>Vital few: <b>${result.vitalCount}</b> (${vitalPctOfCats.toFixed(0)}% of categories)</span>` +
+    `<span>covering <b>${vitalPctOfTotal.toFixed(1)}%</b> of total</span>`;
+}
+
+function svgAsString() {
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('xmlns', SVGNS);
+  const css = `<style>.vital-bar{fill:#dc2626}.other-bar{fill:#2563eb}.axis-line{stroke:#666;stroke-width:1}.axis-text{font-family:system-ui,sans-serif;font-size:11px;fill:#666}.cum-line{fill:none;stroke:#ea580c;stroke-width:2}.cum-dot{fill:#ea580c}.ref-line{stroke:#888;stroke-width:1;stroke-dasharray:4 4}.ref-label{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;fill:#666}.bar-label{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;fill:#111}</style>`;
+  clone.insertAdjacentHTML('afterbegin', css);
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' + clone.outerHTML;
+}
+
+document.getElementById('svgBtn').onclick = () => {
+  const blob = new Blob([svgAsString()], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'pareto.svg';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+};
+
+document.getElementById('pngBtn').onclick = () => {
+  const str = svgAsString();
+  const vb = svgEl.getAttribute('viewBox').split(' ').map(Number);
+  const scale = 2;
+  const w = vb[2] * scale, h = vb[3] * scale;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  const img = new Image();
+  const blob = new Blob([str], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    canvas.toBlob((b) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'pareto.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    }, 'image/png');
+  };
+  img.src = url;
+};
+
+document.getElementById('copyTable').onclick = async () => {
+  const { rows } = parse(dataEl.value);
+  if (!rows.length) return;
+  const threshold = Math.min(99, Math.max(1, +thrEl.value || 80));
+  const r = compute(rows, threshold);
+  const lines = ['rank\tcategory\tcount\tpercent\tcumulative_percent\tvital'];
+  r.enriched.forEach((row, i) => {
+    lines.push(`${i+1}\t${row.cat}\t${row.v}\t${row.pct.toFixed(2)}\t${row.cum.toFixed(2)}\t${row.vital}`);
+  });
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'));
+    const b = document.getElementById('copyTable');
+    const old = b.textContent;
+    b.textContent = 'Copied!';
+    setTimeout(()=>b.textContent = old, 1200);
+  } catch (e) {}
+};
+
+document.querySelectorAll('.ex-pill').forEach(p => {
+  p.onclick = () => { dataEl.value = EXAMPLES[p.dataset.ex]; render(); };
+});
+
+dataEl.addEventListener('input', render);
+[thrEl, htEl, showLabelsEl, rotateXEl].forEach(el => el.addEventListener('input', render));
+
+dataEl.value = EXAMPLES.bugs;
+render();
+</script>
+</body>
+</html>

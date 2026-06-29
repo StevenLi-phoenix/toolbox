@@ -258,6 +258,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Sankey Diagram Builder](sankey.html) | Type one flow per line as `Source [value] Target` and get a clean Sankey diagram with auto-laid columns, proportional node heights, and curved flow ribbons. Cycle detection, hover totals, configurable node width / column gap, and SVG / PNG export. |
 | [Capacitor Code Calculator](capacitor.html) | Decode the 1-, 2-, 3-, and 4-digit numbers printed on ceramic and film capacitors (`104` → 100 nF), trailing tolerance letters (`J`, `K`, `M`), and EIA voltage-rating prefixes (`2A` = 100 V, `1H` = 50 V). Expand EIA-96 SMD markings (`10C`, `A2`) and reverse-build the marking for any capacitance, with a full tolerance and voltage reference and a visual disc-capacitor preview. |
 | [Depth of Field & Hyperfocal Calculator](dofcalc.html) | For any focal length, aperture, and subject distance, find the hyperfocal distance, the near and far in-focus limits, and the total depth of field. Pick a sensor format (medium format, full frame, APS-C, Micro 4/3, 1″, 1/2.3″) and the circle of confusion is set for you, with a log-distance focus scale, front-vs-back split, and a diffraction-limit warning that catches you stopping down past usefully sharp. |
 | [Box & Whisker Plot Generator](boxplot.html) | Paste raw numbers and get a proper Tukey box plot — Q1, median, Q3, IQR fences, mild and extreme outliers, mean diamond, optional 95% CI notch — for one series or several groups stacked side-by-side. Five-number summary, mean, stddev, and a scalable SVG you can screenshot. |
@@ -377,6 +378,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [Pareto Chart Builder](pareto.html) | Find the vital few — paste `category, count` rows and instantly get a sorted bar chart with an orange cumulative-percentage line, configurable 80% threshold, vital-few highlight, and SVG / PNG / TSV export. Built-in examples for bug causes, latency sources, support tickets, and defect types. |
+| [SWOT & TOWS Analysis Builder](swot.html) | Lay out Strengths, Weaknesses, Opportunities, and Threats; drag to reorder; weight each item 1–5; and auto-derive the four TOWS strategy quadrants (SO grow, WO improve, ST defend, WT survive). Posture verdict (S−W vs O−T), Markdown / JSON / PNG export, auto-saves to local storage. |
 | [RACI Matrix Builder](raci.html) | Build a RACI / RASCI responsibility matrix for tasks and stakeholders — assign Responsible, Accountable, Consulted, Informed (and optional Support), validate that every row has exactly one Accountable, flag overloaded owners, and export as Markdown, CSV, HTML, or JSON. |
 | [ADR Generator](adr.html) | Write Architecture Decision Records in MADR, Nygard, or full template format — capture context, decision drivers, options with pros & cons, the chosen path, positive and negative consequences, and references. Live Markdown preview and `NNNN-slug.md` download. |
 | [SaaS Metrics Calculator](saasmetrics.html) | Plug in customers, ARPU, gross margin, churn, expansion, and CAC — get the full unit-economics scorecard: MRR, ARR, NRR, customer LTV (simple & discounted), CAC payback, LTV:CAC ratio, quick ratio, and burn multiple with rule-of-thumb verdicts. |

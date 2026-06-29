@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sankey Diagram Builder — Free Online Flow Visualizer</title>
+<meta name="description" content="Build Sankey diagrams in your browser from simple Source [value] Target text. Auto-layout columns, color flows, hover totals, and export crisp SVG or PNG — fully client-side.">
+<meta name="keywords" content="sankey diagram, sankey builder, flow chart, flow diagram, sankey svg, sankey generator, energy flow, budget flow">
+<meta name="author" content="Steven Li">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/sankey.html">
+<meta property="og:title" content="Sankey Diagram Builder">
+<meta property="og:description" content="Type flows as Source [value] Target and get a clean Sankey diagram in seconds. Export SVG or PNG.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/sankey.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .editor-grid { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .editor-grid { grid-template-columns: 1fr; } }
+  textarea.flows { width: 100%; min-height: 280px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; line-height: 1.55; resize: vertical; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; align-items: center; }
+  .controls label { font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: flex; align-items: center; gap: 6px; }
+  .controls input[type="number"] { width: 70px; padding: 5px 7px; font-family: var(--mono); border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  .canvas-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; overflow-x: auto; min-height: 320px; }
+  .canvas-wrap svg { display: block; width: 100%; height: auto; background: var(--bg); border-radius: 4px; }
+  .node-rect { cursor: default; transition: opacity .12s; }
+  .flow-path { fill: none; stroke-opacity: .42; transition: stroke-opacity .12s; }
+  .flow-path:hover { stroke-opacity: .85; }
+  .node-label { font-family: var(--sans); font-size: 12px; fill: var(--text); pointer-events: none; }
+  .node-value { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); pointer-events: none; }
+  .err { color: var(--error, #dc2626); font-family: var(--mono); font-size: .82rem; padding: 8px 11px; background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.3); border-radius: var(--radius); margin-bottom: 10px; white-space: pre-line; }
+  .stats { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: .82rem; color: var(--muted); }
+  .stats b { color: var(--text); font-family: var(--mono); }
+  .examples { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .ex-pill { padding: 4px 10px; font-size: .74rem; font-family: var(--mono); border: 1px solid var(--border); border-radius: 99px; background: var(--bg); cursor: pointer; color: var(--text); }
+  .ex-pill:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Sankey Diagram Builder</h1>
+<p class="subtitle">Type one flow per line as <code>Source [value] Target</code> and get a clean Sankey diagram with auto-laid columns, proportional node heights, and curved flow ribbons. Export as SVG or PNG. Everything runs in your browser.</p>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <div class="editor-grid">
+    <div>
+      <label style="display:block;font-size:.76rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Flows · one per line</label>
+      <textarea class="flows" id="flows" spellcheck="false"></textarea>
+      <div class="examples">
+        <button class="ex-pill" data-ex="budget">Budget</button>
+        <button class="ex-pill" data-ex="energy">Energy</button>
+        <button class="ex-pill" data-ex="funnel">Conversion</button>
+        <button class="ex-pill" data-ex="org">Headcount</button>
+      </div>
+      <div class="controls">
+        <label>Node width <input type="number" id="nw" min="6" max="40" value="14"></label>
+        <label>Column gap <input type="number" id="cgap" min="40" max="320" value="160"></label>
+        <label>Node gap <input type="number" id="ngap" min="2" max="40" value="10"></label>
+        <label>Height <input type="number" id="ht" min="200" max="1200" value="440" step="20"></label>
+      </div>
+      <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:6px">
+        <button class="btn btn-secondary" id="svgBtn">Download SVG</button>
+        <button class="btn btn-secondary" id="pngBtn">Download PNG</button>
+        <button class="btn btn-secondary" id="copySvg">Copy SVG</button>
+      </div>
+    </div>
+
+    <div>
+      <div id="errBox" style="display:none" class="err"></div>
+      <div class="canvas-wrap"><svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="padding:16px;margin-top:16px">
+  <h3 style="margin:0 0 8px;font-size:.95rem">Syntax</h3>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55;margin:0 0 8px">
+    Each non-empty, non-comment line is one flow. Both of these forms work and can be mixed:
+  </p>
+  <pre style="font-family:var(--mono);font-size:.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin:0;overflow-x:auto">Salary [4500] Take-home
+Take-home [1800] Rent
+Take-home, 1200, Groceries
+# lines starting with # are ignored</pre>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.55;margin:10px 0 0">
+    Names are case-sensitive. Cycles are rejected (a Sankey diagram is a directed acyclic flow). Column position for each node is its longest path from any source, so flows always read left-to-right.
+  </p>
+</div>
+</div>
+
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const flowsEl = document.getElementById('flows');
+const errBox = document.getElementById('errBox');
+const svgEl = document.getElementById('canvas');
+const statsEl = document.getElementById('stats');
+const nwEl = document.getElementById('nw');
+const cgapEl = document.getElementById('cgap');
+const ngapEl = document.getElementById('ngap');
+const htEl = document.getElementById('ht');
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+const EXAMPLES = {
+  budget: `# Monthly budget flow
+Salary [5200] Take-home
+Side gig [800] Take-home
+Take-home [1900] Housing
+Take-home [820] Food
+Take-home [410] Transport
+Take-home [620] Subscriptions
+Take-home [1200] Savings
+Take-home [450] Discretionary
+Housing [1500] Rent
+Housing [400] Utilities
+Food [620] Groceries
+Food [200] Eating out
+Savings [800] Emergency fund
+Savings [400] Brokerage`,
+  energy: `# Household energy use (kWh)
+Grid [620] Home
+Solar [340] Home
+Home [220] Heating
+Home [180] Cooling
+Home [140] Appliances
+Home [120] Lighting
+Home [180] EV charging
+Home [120] Loss`,
+  funnel: `# Funnel as a Sankey (drop-offs as separate sinks)
+Visitors [10000] Signed up
+Visitors [3200] Bounced
+Signed up [4800] Activated
+Signed up [2000] Lapsed
+Activated [3100] Paid
+Activated [1700] Free`,
+  org: `# Headcount roll-up
+Engineering [42] Product
+Engineering [18] Platform
+Engineering [11] Infra
+Product [12] Web
+Product [16] Mobile
+Product [14] API
+Platform [10] Auth
+Platform [8] Billing
+Infra [5] SRE
+Infra [6] Data`
+};
+
+const PALETTE = [
+  '#2563eb','#16a34a','#dc2626','#9333ea','#ea580c','#0891b2','#ca8a04','#db2777','#0d9488','#7c3aed','#84cc16','#f59e0b'
+];
+
+function colorFor(idx) { return PALETTE[idx % PALETTE.length]; }
+
+function parse(text) {
+  const flows = [];
+  const lines = text.split(/\r?\n/);
+  const errors = [];
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || line.startsWith('//')) return;
+    let m = line.match(/^(.+?)\s*[\[(]\s*([-+]?[\d.,]+)\s*[\])]\s*(.+)$/);
+    if (!m) m = line.match(/^(.+?)\s*[,;\t]\s*([-+]?[\d.]+)\s*[,;\t]\s*(.+)$/);
+    if (!m) m = line.match(/^(.+?)\s+([-+]?\d[\d.]*)\s+(.+)$/);
+    if (!m) { errors.push(`Line ${i+1}: cannot parse "${line}"`); return; }
+    const src = m[1].trim();
+    const tgt = m[3].trim();
+    const valStr = m[2].replace(/,/g,'');
+    const v = parseFloat(valStr);
+    if (!isFinite(v) || v <= 0) { errors.push(`Line ${i+1}: value must be a positive number`); return; }
+    if (!src || !tgt) { errors.push(`Line ${i+1}: empty source or target`); return; }
+    if (src === tgt) { errors.push(`Line ${i+1}: source equals target`); return; }
+    flows.push({ src, tgt, v });
+  });
+  return { flows, errors };
+}
+
+function layout(flows) {
+  const nodeSet = new Map();
+  const ord = (name) => {
+    if (!nodeSet.has(name)) nodeSet.set(name, { name, inSum: 0, outSum: 0, depth: 0, idx: nodeSet.size });
+    return nodeSet.get(name);
+  };
+  for (const f of flows) { ord(f.src); ord(f.tgt); }
+  for (const f of flows) {
+    nodeSet.get(f.src).outSum += f.v;
+    nodeSet.get(f.tgt).inSum += f.v;
+  }
+
+  // Topological sort via Kahn (detect cycles)
+  const adj = new Map();
+  const indeg = new Map();
+  for (const n of nodeSet.values()) { adj.set(n.name, []); indeg.set(n.name, 0); }
+  for (const f of flows) {
+    adj.get(f.src).push(f.tgt);
+    indeg.set(f.tgt, indeg.get(f.tgt) + 1);
+  }
+  const q = [];
+  for (const [k,v] of indeg.entries()) if (v === 0) q.push(k);
+  const order = [];
+  while (q.length) {
+    const k = q.shift();
+    order.push(k);
+    for (const nb of adj.get(k)) {
+      indeg.set(nb, indeg.get(nb) - 1);
+      if (indeg.get(nb) === 0) q.push(nb);
+    }
+  }
+  if (order.length !== nodeSet.size) {
+    throw new Error('Cycle detected — Sankey diagrams must be acyclic. Remove the loop in your flows.');
+  }
+  // longest path from any source (depth)
+  for (const name of order) {
+    const n = nodeSet.get(name);
+    for (const nb of adj.get(name)) {
+      const nbn = nodeSet.get(nb);
+      if (nbn.depth < n.depth + 1) nbn.depth = n.depth + 1;
+    }
+  }
+  // group by depth column
+  const cols = [];
+  for (const n of nodeSet.values()) {
+    while (cols.length <= n.depth) cols.push([]);
+    cols[n.depth].push(n);
+  }
+  // compute "value" of each node: max(inSum, outSum)
+  for (const n of nodeSet.values()) n.value = Math.max(n.inSum, n.outSum);
+  return { nodes: nodeSet, cols, flows };
+}
+
+function draw(layoutResult, opts) {
+  const { cols, flows, nodes } = layoutResult;
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+
+  const nw = opts.nw;
+  const cgap = opts.cgap;
+  const ngap = opts.ngap;
+  const H = opts.height;
+  const padTop = 16, padBottom = 28, padLeft = 12, padRight = 12;
+  const innerH = H - padTop - padBottom;
+
+  const W = padLeft + padRight + (cols.length - 1) * cgap + nw;
+  svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svgEl.style.minWidth = Math.max(W, 600) + 'px';
+  svgEl.style.minHeight = H + 'px';
+
+  // scale: ensure tallest column fits in innerH minus gaps
+  let maxColSum = 0;
+  for (const col of cols) {
+    const sum = col.reduce((s, n) => s + n.value, 0);
+    const totalGap = (col.length - 1) * ngap;
+    const need = sum;
+    if (need > maxColSum) maxColSum = need;
+    col._gapPx = totalGap;
+  }
+  const availPerCol = cols.map(c => innerH - (c.length - 1) * ngap);
+  const minAvail = Math.min(...availPerCol);
+  const scale = maxColSum > 0 ? minAvail / maxColSum : 1;
+
+  // assign y/height to each node
+  for (const col of cols) {
+    col.sort((a,b) => b.value - a.value);
+    let y = padTop;
+    const colSum = col.reduce((s, n) => s + n.value * scale, 0);
+    const slack = innerH - colSum - (col.length - 1) * ngap;
+    y += Math.max(0, slack / 2);
+    for (const n of col) {
+      n.h = Math.max(2, n.value * scale);
+      n.y = y;
+      y += n.h + ngap;
+    }
+  }
+  // x position for each column
+  for (let c = 0; c < cols.length; c++) {
+    for (const n of cols[c]) n.x = padLeft + c * cgap;
+  }
+
+  // Assign positions for each flow port on source and target
+  // sort flows around each node by target's y (for source side) and source's y (for target side)
+  const outBy = new Map(), inBy = new Map();
+  for (const f of flows) {
+    if (!outBy.has(f.src)) outBy.set(f.src, []);
+    if (!inBy.has(f.tgt)) inBy.set(f.tgt, []);
+    outBy.get(f.src).push(f);
+    inBy.get(f.tgt).push(f);
+  }
+  for (const [name, arr] of outBy) {
+    arr.sort((a,b) => nodes.get(a.tgt).y - nodes.get(b.tgt).y);
+    const n = nodes.get(name);
+    let off = 0;
+    for (const f of arr) {
+      f._srcY = n.y + off * scale + (f.v * scale) / 2;
+      f._srcThick = f.v * scale;
+      off += f.v;
+    }
+  }
+  for (const [name, arr] of inBy) {
+    arr.sort((a,b) => nodes.get(a.src).y - nodes.get(b.src).y);
+    const n = nodes.get(name);
+    let off = 0;
+    for (const f of arr) {
+      f._tgtY = n.y + off * scale + (f.v * scale) / 2;
+      f._tgtThick = f.v * scale;
+      off += f.v;
+    }
+  }
+
+  // draw flows first (so node rects sit on top of port edges)
+  let idx = 0;
+  for (const n of nodes.values()) n._colorIdx = idx++;
+  for (const f of flows) {
+    const s = nodes.get(f.src), t = nodes.get(f.tgt);
+    const x0 = s.x + nw, x1 = t.x;
+    const cx = (x0 + x1) / 2;
+    const d = `M ${x0} ${f._srcY} C ${cx} ${f._srcY} ${cx} ${f._tgtY} ${x1} ${f._tgtY}`;
+    const p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('class', 'flow-path');
+    p.setAttribute('stroke', colorFor(s._colorIdx));
+    p.setAttribute('stroke-width', Math.max(.5, f._srcThick));
+    const title = document.createElementNS(SVGNS, 'title');
+    title.textContent = `${f.src} → ${f.tgt}: ${formatNum(f.v)}`;
+    p.appendChild(title);
+    svgEl.appendChild(p);
+  }
+  // draw nodes
+  for (const n of nodes.values()) {
+    const r = document.createElementNS(SVGNS, 'rect');
+    r.setAttribute('x', n.x);
+    r.setAttribute('y', n.y);
+    r.setAttribute('width', nw);
+    r.setAttribute('height', n.h);
+    r.setAttribute('rx', 1.5);
+    r.setAttribute('class', 'node-rect');
+    r.setAttribute('fill', colorFor(n._colorIdx));
+    const tit = document.createElementNS(SVGNS, 'title');
+    tit.textContent = `${n.name}\nin: ${formatNum(n.inSum)}  out: ${formatNum(n.outSum)}`;
+    r.appendChild(tit);
+    svgEl.appendChild(r);
+
+    const label = document.createElementNS(SVGNS, 'text');
+    const isLast = n.x + nw + cgap / 2 > W - padRight;
+    const lx = isLast ? n.x - 5 : n.x + nw + 5;
+    const ly = n.y + n.h / 2 + 4;
+    label.setAttribute('x', lx);
+    label.setAttribute('y', ly);
+    label.setAttribute('class', 'node-label');
+    label.setAttribute('text-anchor', isLast ? 'end' : 'start');
+    label.textContent = n.name;
+    svgEl.appendChild(label);
+
+    const val = document.createElementNS(SVGNS, 'text');
+    val.setAttribute('x', lx);
+    val.setAttribute('y', ly + 13);
+    val.setAttribute('class', 'node-value');
+    val.setAttribute('text-anchor', isLast ? 'end' : 'start');
+    val.textContent = formatNum(n.value);
+    svgEl.appendChild(val);
+  }
+}
+
+function formatNum(v) {
+  if (v >= 1e6) return (v/1e6).toFixed(2) + 'M';
+  if (v >= 1e4) return (v/1e3).toFixed(1) + 'k';
+  if (Number.isInteger(v)) return v.toString();
+  return v.toFixed(2);
+}
+
+function render() {
+  const { flows, errors } = parse(flowsEl.value);
+  if (errors.length) {
+    errBox.style.display = 'block';
+    errBox.textContent = errors.join('\n');
+  } else {
+    errBox.style.display = 'none';
+  }
+  if (!flows.length) {
+    while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+    statsEl.textContent = '';
+    return;
+  }
+  try {
+    const lay = layout(flows);
+    const opts = {
+      nw: +nwEl.value || 14,
+      cgap: +cgapEl.value || 160,
+      ngap: +ngapEl.value || 10,
+      height: +htEl.value || 440
+    };
+    draw(lay, opts);
+    const totalFlow = flows.reduce((s,f) => s+f.v, 0);
+    const sourceSet = new Set(flows.map(f=>f.src));
+    const sinkSet = new Set(flows.map(f=>f.tgt));
+    const pureSources = [...sourceSet].filter(s => !sinkSet.has(s)).length;
+    const pureSinks = [...sinkSet].filter(s => !sourceSet.has(s)).length;
+    statsEl.innerHTML =
+      `<span>Nodes: <b>${lay.nodes.size}</b></span>` +
+      `<span>Flows: <b>${flows.length}</b></span>` +
+      `<span>Columns: <b>${lay.cols.length}</b></span>` +
+      `<span>Pure sources: <b>${pureSources}</b></span>` +
+      `<span>Pure sinks: <b>${pureSinks}</b></span>` +
+      `<span>Total flow: <b>${formatNum(totalFlow)}</b></span>`;
+  } catch (e) {
+    errBox.style.display = 'block';
+    errBox.textContent = e.message;
+    while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+    statsEl.textContent = '';
+  }
+}
+
+function svgAsString() {
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('xmlns', SVGNS);
+  // inline minimal styles so the export looks right standalone
+  const css = `<style>.flow-path{fill:none;stroke-opacity:.42}.node-label{font-family:system-ui,sans-serif;font-size:12px;fill:#111}.node-value{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;fill:#666}</style>`;
+  clone.insertAdjacentHTML('afterbegin', css);
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' + clone.outerHTML;
+}
+
+document.getElementById('svgBtn').onclick = () => {
+  const blob = new Blob([svgAsString()], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sankey.svg';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+};
+
+document.getElementById('copySvg').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(svgAsString());
+    const b = document.getElementById('copySvg');
+    const old = b.textContent;
+    b.textContent = 'Copied!';
+    setTimeout(()=>b.textContent = old, 1200);
+  } catch (e) {}
+};
+
+document.getElementById('pngBtn').onclick = () => {
+  const str = svgAsString();
+  const vb = svgEl.getAttribute('viewBox').split(' ').map(Number);
+  const scale = 2;
+  const w = vb[2] * scale, h = vb[3] * scale;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  const img = new Image();
+  const blob = new Blob([str], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    canvas.toBlob((b) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'sankey.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    }, 'image/png');
+  };
+  img.src = url;
+};
+
+document.querySelectorAll('.ex-pill').forEach(p => {
+  p.onclick = () => { flowsEl.value = EXAMPLES[p.dataset.ex]; render(); };
+});
+
+flowsEl.addEventListener('input', render);
+[nwEl, cgapEl, ngapEl, htEl].forEach(el => el.addEventListener('input', render));
+
+flowsEl.value = EXAMPLES.budget;
+render();
+</script>
+</body>
+</html>
