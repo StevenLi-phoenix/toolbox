@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smith Chart Visualizer — Free Online Tool</title>
+<meta name="description" content="Plot complex impedances and admittances on an interactive Smith Chart. Enter R + jX values (or Γ magnitude / phase), pick any characteristic impedance Z₀, and see VSWR, return loss, mismatch loss, reflection coefficient, and admittance in real time — 100% client-side.">
+<meta name="keywords" content="smith chart, smith chart calculator, smith chart visualizer, vswr calculator, reflection coefficient, return loss, impedance matching, rf engineering, antenna design, microwave, complex impedance, admittance">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/smithchart.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .panel { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .panel label { display:block; font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
+  .panel input, .panel select { width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius); font-family:var(--mono); font-size:.92rem; background:var(--bg); color:var(--text); box-sizing:border-box; }
+  .panel input:focus, .panel select:focus { outline:none; border-color:var(--accent); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pt-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .pt-row { display: grid; grid-template-columns: 24px 1fr 1fr 28px; gap: 6px; align-items: center; }
+  .pt-row .swatch { width: 18px; height: 18px; border-radius: 50%; margin: 0 auto; border: 1px solid var(--border); }
+  .pt-row input { padding: 6px 8px; font-size: .85rem; }
+  .pt-row button { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 0; }
+  .pt-row button:hover { color: var(--error); }
+  .btn-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .btn-row button { padding: 6px 12px; font-size: .82rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--text); font-family: var(--mono); }
+  .btn-row button:hover { border-color: var(--accent); }
+  .btn-row button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .chart-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; overflow: hidden; }
+  svg.smith { width: 100%; height: auto; display: block; max-height: 640px; }
+  .grid-r { fill: none; stroke: var(--border); stroke-width: 0.6; }
+  .grid-r.major { stroke: var(--muted); stroke-width: 0.8; opacity: 0.55; }
+  .grid-x { fill: none; stroke: var(--border); stroke-width: 0.6; }
+  .grid-x.major { stroke: var(--muted); stroke-width: 0.8; opacity: 0.55; }
+  .axis { stroke: var(--muted); stroke-width: 0.9; }
+  .label-r, .label-x { font-family: var(--mono); font-size: 9px; fill: var(--muted); pointer-events: none; }
+  .vswr-ring { fill: none; stroke-dasharray: 3 3; stroke-width: 1; opacity: 0.75; }
+  .point { stroke: #000; stroke-width: 1; cursor: pointer; }
+  .point-label { font-family: var(--mono); font-size: 11px; font-weight: 600; pointer-events: none; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+  .tile { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .tile .k { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-family: var(--mono); }
+  .tile .v { font-family: var(--mono); font-size: 1rem; font-weight: 600; margin-top: 3px; word-break: break-word; }
+  .tile.bad .v { color: var(--error); }
+  .tile.ok .v { color: var(--success); }
+  table.pts { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 10px; font-family: var(--mono); }
+  table.pts th, table.pts td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.pts th:first-child, table.pts td:first-child { text-align: left; }
+  table.pts th { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .swatch-cell { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; margin-right: 6px; border: 1px solid var(--border); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .seg button { padding: 6px 12px; font-size: .8rem; border: none; background: var(--bg); cursor: pointer; color: var(--muted); font-family: var(--mono); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .ref { font-size: .87rem; color: var(--muted); line-height: 1.7; }
+  details summary { cursor: pointer; padding: 8px 0; font-weight: 600; color: var(--text); }
+  details summary:hover { color: var(--accent); }
+  code.inline { background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .9em; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Smith Chart Visualizer</h1>
+<p class="subtitle">Plot complex impedances and admittances on an interactive Smith chart and read off VSWR, return loss, mismatch loss, and reflection coefficient at a glance. Pick any characteristic impedance Z₀ (50 Ω, 75 Ω, 300 Ω, or custom), enter values as <code>R + jX</code>, <code>|Γ|∠θ</code>, or <code>G + jB</code>, and toggle the constant-VSWR circles to see how matched each load is. Everything runs in your browser.</p>
+
+<div class="layout">
+  <div>
+    <div class="panel">
+      <label>Characteristic impedance Z₀</label>
+      <div class="row2">
+        <select id="z0Sel">
+          <option value="50" selected>50 Ω (coax/RF)</option>
+          <option value="75">75 Ω (video/CATV)</option>
+          <option value="100">100 Ω (Ethernet)</option>
+          <option value="300">300 Ω (twin-lead)</option>
+          <option value="377">377 Ω (free space)</option>
+          <option value="600">600 Ω (audio)</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <input id="z0" type="number" step="any" value="50" min="0.000001" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:10px;">
+      <label>Input mode</label>
+      <div class="seg" id="modeSeg">
+        <button data-m="z" class="on">Z = R + jX</button>
+        <button data-m="y">Y = G + jB</button>
+        <button data-m="g">Γ = ρ ∠ θ°</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:10px;">
+      <label>Points</label>
+      <div class="pt-list" id="ptList"></div>
+      <div class="btn-row">
+        <button id="addPt">+ Add point</button>
+        <button id="clearPts">Clear</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:10px;">
+      <label>Display</label>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:.85rem;">
+        <label style="text-transform:none;letter-spacing:0;font-size:.85rem;color:var(--text);font-family:var(--sans);"><input type="checkbox" id="showVswr" checked> Constant-VSWR circles</label>
+        <label style="text-transform:none;letter-spacing:0;font-size:.85rem;color:var(--text);font-family:var(--sans);"><input type="checkbox" id="showAdmit"> Admittance grid (mirrored)</label>
+        <label style="text-transform:none;letter-spacing:0;font-size:.85rem;color:var(--text);font-family:var(--sans);"><input type="checkbox" id="showLabels" checked> Grid labels</label>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:10px;">
+      <button id="examplesBtn">Examples</button>
+      <button id="exportSvg" class="primary">Export SVG</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="card" style="padding:14px;">
+      <div class="chart-wrap">
+        <svg id="smith" class="smith" viewBox="-1.15 -1.18 2.30 2.36" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="tiles" id="summary"></div>
+      <table class="pts" id="ptsTable">
+        <thead><tr>
+          <th>Label</th><th>Z (Ω)</th><th>Y (mS)</th><th>|Γ|</th><th>∠Γ°</th><th>VSWR</th><th>RL (dB)</th><th>ML (dB)</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card" style="padding:14px;margin-top:14px;">
+      <details open>
+        <summary>What the chart shows</summary>
+        <p class="ref">A Smith chart maps the complex reflection coefficient <code class="inline">Γ = (Z − Z₀) / (Z + Z₀)</code> onto a unit disk. The grid superimposes circles of constant <em>normalized resistance</em> r = R/Z₀ (the family bowing to the right) and arcs of constant <em>normalized reactance</em> x = X/Z₀ (upper half = inductive, lower half = capacitive). The center is a perfect match (Γ = 0, VSWR = 1), the outer rim is total reflection (|Γ| = 1), the rightmost point is an open (Z = ∞), and the leftmost is a short (Z = 0).</p>
+      </details>
+      <details>
+        <summary>Formulas</summary>
+        <p class="ref">
+          Γ = (z − 1) / (z + 1), where z = Z/Z₀<br>
+          Z = Z₀ · (1 + Γ) / (1 − Γ)<br>
+          Y = 1/Z, normalized y = 1/z<br>
+          VSWR = (1 + |Γ|) / (1 − |Γ|)<br>
+          Return loss = −20·log₁₀(|Γ|) dB<br>
+          Mismatch loss = −10·log₁₀(1 − |Γ|²) dB<br>
+          On the admittance chart, the entire impedance grid is rotated 180°.
+        </p>
+      </details>
+      <details>
+        <summary>Tips</summary>
+        <p class="ref">
+          • <strong>Inductive</strong> loads land in the upper half (X &gt; 0). <strong>Capacitive</strong> in the lower half.<br>
+          • A constant-VSWR ring is a circle of constant |Γ| centered at the chart center; everything along it has the same reflected power.<br>
+          • To convert impedance ⇌ admittance graphically, reflect through the center.<br>
+          • Moving toward the generator (along a lossless line) rotates Γ <em>clockwise</em>; toward the load rotates <em>counter-clockwise</em>.
+        </p>
+      </details>
+    </div>
+  </div>
+</div>
+
+<footer class="footer" style="margin-top:36px;text-align:center;font-size:.85rem;color:var(--muted);">
+  Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const COLORS = ['#ef4444','#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+
+let mode = 'z';
+let points = [
+  { a: 50,  b: 0,   label: 'A' },
+  { a: 100, b: 50,  label: 'B' },
+  { a: 25,  b: -30, label: 'C' },
+];
+
+// === Math ===
+function computePoint(p, z0) {
+  let R, X;
+  if (mode === 'z') {
+    R = p.a; X = p.b;
+  } else if (mode === 'y') {
+    // Y in millisiemens → S
+    const G = p.a / 1000, B = p.b / 1000;
+    const den = G*G + B*B;
+    if (den === 0) { R = Infinity; X = 0; }
+    else { R = G / den; X = -B / den; }
+  } else {
+    // Γ mag/phase
+    const rho = p.a, ph = p.b * Math.PI / 180;
+    const gx = rho * Math.cos(ph), gy = rho * Math.sin(ph);
+    // z = (1+Γ)/(1−Γ)
+    const num_r = 1 + gx, num_i = gy;
+    const den_r = 1 - gx, den_i = -gy;
+    const dmag = den_r*den_r + den_i*den_i;
+    if (dmag === 0) { R = Infinity; X = 0; }
+    else {
+      const z_r = (num_r*den_r + num_i*den_i) / dmag;
+      const z_i = (num_i*den_r - num_r*den_i) / dmag;
+      R = z_r * z0; X = z_i * z0;
+    }
+  }
+  // normalized z
+  let z_r, z_i, gx, gy, gMag, gPh, vswr, rlDb, mlDb;
+  if (!isFinite(R) || !isFinite(X)) {
+    z_r = Infinity; z_i = 0;
+    gx = 1; gy = 0; gMag = 1; gPh = 0;
+    vswr = Infinity; rlDb = 0; mlDb = Infinity;
+  } else {
+    z_r = R / z0; z_i = X / z0;
+    // Γ = (z-1)/(z+1)
+    const a = z_r - 1, b = z_i, c = z_r + 1, d = z_i;
+    const den = c*c + d*d;
+    if (den === 0) { gx = -1; gy = 0; }
+    else {
+      gx = (a*c + b*d) / den;
+      gy = (b*c - a*d) / den;
+    }
+    gMag = Math.hypot(gx, gy);
+    gPh  = Math.atan2(gy, gx) * 180 / Math.PI;
+    if (gMag >= 1) { vswr = Infinity; rlDb = 0; mlDb = Infinity; }
+    else if (gMag < 1e-9) {
+      vswr = 1; rlDb = Infinity; mlDb = 0;
+    } else {
+      vswr = (1 + gMag) / (1 - gMag);
+      rlDb = -20 * Math.log10(gMag);
+      mlDb = -10 * Math.log10(Math.max(1 - gMag*gMag, 1e-12));
+    }
+  }
+  let G_mS = 0, B_mS = 0;
+  if (isFinite(R) && (R !== 0 || X !== 0)) {
+    const mag = R*R + X*X;
+    G_mS = (R / mag) * 1000;
+    B_mS = (-X / mag) * 1000;
+  }
+  return { R, X, gx, gy, gMag, gPh, vswr, rlDb, mlDb, G_mS, B_mS, z_r, z_i };
+}
+
+// === Render ===
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs={}) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function drawChart() {
+  const svg = $('smith');
+  svg.innerHTML = '';
+  const z0 = parseFloat($('z0').value) || 50;
+  const showVswr = $('showVswr').checked;
+  const showAdmit = $('showAdmit').checked;
+  const showLabels = $('showLabels').checked;
+
+  // Outer unit circle
+  svg.appendChild(svgEl('circle', { cx: 0, cy: 0, r: 1, fill: 'var(--bg)', stroke: 'var(--muted)', 'stroke-width': 0.012 }));
+
+  // Constant-r circles: center (r/(r+1),0), radius 1/(r+1)
+  const rValues = [0.2, 0.5, 1, 2, 5];
+  const rMinor  = [0.1, 0.3, 0.4, 0.7, 1.5, 3, 10];
+  rMinor.forEach(r => {
+    const cx = r/(r+1), R = 1/(r+1);
+    svg.appendChild(svgEl('circle', { cx, cy: 0, r: R, class: 'grid-r' }));
+  });
+  rValues.forEach(r => {
+    const cx = r/(r+1), R = 1/(r+1);
+    svg.appendChild(svgEl('circle', { cx, cy: 0, r: R, class: 'grid-r major' }));
+    if (showLabels) {
+      const lx = (r-1)/(r+1) + 0.012;
+      const t = svgEl('text', { x: lx, y: 0.025, class: 'label-r', 'font-size': 0.04 });
+      t.textContent = r;
+      svg.appendChild(t);
+    }
+  });
+
+  // Reactance arcs: center (1, 1/x), radius 1/|x|. Clip to unit circle via clipPath
+  const defs = svgEl('defs');
+  const cp = svgEl('clipPath', { id: 'unitClip' });
+  cp.appendChild(svgEl('circle', { cx: 0, cy: 0, r: 1 }));
+  defs.appendChild(cp);
+  svg.appendChild(defs);
+
+  const xValues = [0.2, 0.5, 1, 2, 5];
+  const xMinor  = [0.1, 0.3, 0.4, 0.7, 1.5, 3, 10];
+  const drawArc = (x, major) => {
+    if (x === 0) return;
+    const cy = 1/x, R = 1/Math.abs(x);
+    const cls = 'grid-x' + (major ? ' major' : '');
+    const c = svgEl('circle', { cx: 1, cy, r: R, class: cls, 'clip-path': 'url(#unitClip)' });
+    svg.appendChild(c);
+  };
+  [...xMinor, ...xValues].forEach(x => { drawArc(x, xValues.includes(x)); drawArc(-x, xValues.includes(x)); });
+
+  if (showLabels) {
+    xValues.forEach(x => {
+      // Label endpoint of constant-x arc on outer circle: where r=0 → Γ at angle 2·atan(x)
+      const ang = 2 * Math.atan(x);
+      const lx = Math.cos(ang) * 1.06, ly = -Math.sin(ang) * 1.06;
+      const t = svgEl('text', { x: lx, y: ly + 0.015, class: 'label-x', 'font-size': 0.04, 'text-anchor': 'middle' });
+      t.textContent = '+j' + x;
+      svg.appendChild(t);
+      const t2 = svgEl('text', { x: lx, y: -ly + 0.025, class: 'label-x', 'font-size': 0.04, 'text-anchor': 'middle' });
+      t2.textContent = '−j' + x;
+      svg.appendChild(t2);
+    });
+    // Rightmost (open) and leftmost (short)
+    const opn = svgEl('text', { x: 1.06, y: 0.025, class: 'label-x', 'font-size': 0.04, 'text-anchor': 'start' });
+    opn.textContent = '∞';
+    svg.appendChild(opn);
+    const shr = svgEl('text', { x: -1.06, y: 0.025, class: 'label-x', 'font-size': 0.04, 'text-anchor': 'end' });
+    shr.textContent = '0';
+    svg.appendChild(shr);
+  }
+
+  // Horizontal axis
+  svg.appendChild(svgEl('line', { x1: -1, y1: 0, x2: 1, y2: 0, class: 'axis', 'stroke-width': 0.006 }));
+
+  // Admittance overlay: rotate 180° (mirror through origin)
+  if (showAdmit) {
+    const g = svgEl('g', { transform: 'rotate(180)', opacity: 0.45 });
+    rValues.forEach(r => {
+      const cx = r/(r+1), R = 1/(r+1);
+      g.appendChild(svgEl('circle', { cx, cy: 0, r: R, fill: 'none', stroke: '#10b981', 'stroke-width': 0.006, 'stroke-dasharray': '0.015 0.015' }));
+    });
+    [...xValues].forEach(x => {
+      [x, -x].forEach(xx => {
+        const cy = 1/xx, R = 1/Math.abs(xx);
+        g.appendChild(svgEl('circle', { cx: 1, cy, r: R, fill: 'none', stroke: '#10b981', 'stroke-width': 0.006, 'clip-path': 'url(#unitClip)', 'stroke-dasharray': '0.015 0.015' }));
+      });
+    });
+    svg.appendChild(g);
+  }
+
+  // Constant-VSWR circles per point
+  if (showVswr) {
+    points.forEach((p, i) => {
+      const r = computePoint(p, z0);
+      if (!isFinite(r.gMag) || r.gMag <= 0 || r.gMag >= 1) return;
+      svg.appendChild(svgEl('circle', { cx: 0, cy: 0, r: r.gMag, class: 'vswr-ring', stroke: COLORS[i % COLORS.length] }));
+    });
+  }
+
+  // Points
+  points.forEach((p, i) => {
+    const r = computePoint(p, z0);
+    const color = COLORS[i % COLORS.length];
+    let cx = r.gx, cy = -r.gy; // SVG y is inverted
+    if (!isFinite(cx) || !isFinite(cy)) { cx = 1; cy = 0; }
+    cx = Math.max(-1.02, Math.min(1.02, cx));
+    cy = Math.max(-1.02, Math.min(1.02, cy));
+    svg.appendChild(svgEl('circle', { cx, cy, r: 0.025, fill: color, class: 'point', stroke: '#fff', 'stroke-width': 0.006 }));
+    const lab = svgEl('text', { x: cx + 0.035, y: cy + 0.012, class: 'point-label', fill: color, 'font-size': 0.055 });
+    lab.textContent = p.label || ('P' + (i+1));
+    svg.appendChild(lab);
+  });
+}
+
+function renderSummary() {
+  const z0 = parseFloat($('z0').value) || 50;
+  const tbody = $('ptsTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  const tiles = [];
+  points.forEach((p, i) => {
+    const r = computePoint(p, z0);
+    const color = COLORS[i % COLORS.length];
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="swatch-cell" style="background:${color}"></span>${esc(p.label || ('P' + (i+1)))}</td>
+      <td>${fmt(r.R)} ${signed(r.X, 'j')}</td>
+      <td>${fmt(r.G_mS)} ${signed(r.B_mS, 'j')}</td>
+      <td>${fmt(r.gMag, 3)}</td>
+      <td>${fmt(r.gPh, 2)}°</td>
+      <td>${r.vswr === Infinity ? '∞' : fmt(r.vswr, 3)}</td>
+      <td>${fmt(r.rlDb, 2)}</td>
+      <td>${r.mlDb === Infinity ? '∞' : fmt(r.mlDb, 3)}</td>
+    `;
+    tbody.appendChild(tr);
+    if (i === 0) {
+      tiles.push(`<div class="tile ${r.vswr<2?'ok':r.vswr>3?'bad':''}"><div class="k">VSWR (P1)</div><div class="v">${r.vswr === Infinity ? '∞' : fmt(r.vswr, 3)}</div></div>`);
+      tiles.push(`<div class="tile"><div class="k">Return Loss (P1)</div><div class="v">${fmt(r.rlDb, 2)} dB</div></div>`);
+      tiles.push(`<div class="tile"><div class="k">Mismatch Loss (P1)</div><div class="v">${r.mlDb === Infinity ? '∞' : fmt(r.mlDb, 3)} dB</div></div>`);
+      tiles.push(`<div class="tile"><div class="k">|Γ| (P1)</div><div class="v">${fmt(r.gMag, 4)}</div></div>`);
+    }
+  });
+  $('summary').innerHTML = tiles.join('');
+}
+
+function esc(s){ return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+function fmt(n, d=2) {
+  if (!isFinite(n)) return '∞';
+  if (Math.abs(n) >= 1e6 || (n !== 0 && Math.abs(n) < 1e-3)) return n.toExponential(d);
+  return n.toFixed(d).replace(/\.?0+$/, m => m.includes('.') ? '' : m);
+}
+function signed(n, prefix) {
+  if (!isFinite(n)) return '+ j∞';
+  const s = n >= 0 ? '+' : '−';
+  return `${s} ${prefix}${fmt(Math.abs(n))}`;
+}
+
+function rebuildPtList() {
+  const list = $('ptList');
+  list.innerHTML = '';
+  const labels = mode === 'z' ? ['R (Ω)', 'X (Ω)'] : mode === 'y' ? ['G (mS)', 'B (mS)'] : ['|Γ|', '∠ (°)'];
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'pt-row';
+  hdr.style.fontSize = '.68rem';
+  hdr.style.color = 'var(--muted)';
+  hdr.style.textTransform = 'uppercase';
+  hdr.style.letterSpacing = '.04em';
+  hdr.innerHTML = `<div></div><div>${labels[0]}</div><div>${labels[1]}</div><div></div>`;
+  list.appendChild(hdr);
+  points.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'pt-row';
+    const color = COLORS[i % COLORS.length];
+    row.innerHTML = `
+      <div class="swatch" style="background:${color}"></div>
+      <input type="number" step="any" value="${p.a}" data-i="${i}" data-k="a">
+      <input type="number" step="any" value="${p.b}" data-i="${i}" data-k="b">
+      <button data-rm="${i}" title="Remove">×</button>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const i = +e.target.dataset.i, k = e.target.dataset.k;
+      points[i][k] = parseFloat(e.target.value);
+      if (!isFinite(points[i][k])) points[i][k] = 0;
+      render();
+    });
+  });
+  list.querySelectorAll('button[data-rm]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const i = +e.target.dataset.rm;
+      points.splice(i, 1);
+      if (points.length === 0) points.push({ a: 50, b: 0, label: 'A' });
+      rebuildPtList(); render();
+    });
+  });
+}
+
+function render() { drawChart(); renderSummary(); }
+
+// Event wiring
+$('z0Sel').addEventListener('change', e => {
+  if (e.target.value !== 'custom') $('z0').value = e.target.value;
+  render();
+});
+$('z0').addEventListener('input', () => { $('z0Sel').value = 'custom'; render(); });
+['showVswr','showAdmit','showLabels'].forEach(id => $(id).addEventListener('change', render));
+$('modeSeg').addEventListener('click', e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mode = e.target.dataset.m;
+  $('modeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b === e.target));
+  // Reset values to mode-appropriate defaults
+  points = points.map((p, i) => {
+    if (mode === 'z') return { a: [50,100,25][i%3], b: [0,50,-30][i%3], label: p.label };
+    if (mode === 'y') return { a: [20,8,15][i%3], b: [0,-4,18][i%3], label: p.label };
+    return { a: [0,0.3,0.5][i%3], b: [0,45,-90][i%3], label: p.label };
+  });
+  rebuildPtList(); render();
+});
+$('addPt').addEventListener('click', () => {
+  const lbl = String.fromCharCode(65 + points.length);
+  const defs = mode === 'z' ? { a: 50, b: 0 } : mode === 'y' ? { a: 20, b: 0 } : { a: 0.3, b: 0 };
+  points.push({ ...defs, label: lbl });
+  rebuildPtList(); render();
+});
+$('clearPts').addEventListener('click', () => {
+  points = [{ a: mode === 'z' ? 50 : mode === 'y' ? 20 : 0, b: 0, label: 'A' }];
+  rebuildPtList(); render();
+});
+$('examplesBtn').addEventListener('click', () => {
+  mode = 'z';
+  $('modeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === 'z'));
+  points = [
+    { a: 50, b: 0, label: 'Match' },
+    { a: 100, b: 100, label: 'Ind' },
+    { a: 25, b: -75, label: 'Cap' },
+    { a: 0, b: 0, label: 'Short' },
+    { a: 1e9, b: 0, label: 'Open' },
+  ];
+  rebuildPtList(); render();
+});
+$('exportSvg').addEventListener('click', () => {
+  const svg = $('smith').cloneNode(true);
+  svg.setAttribute('xmlns', SVG_NS);
+  // Inline a minimal style block
+  const styleEl = svgEl('style');
+  styleEl.textContent = `
+    .grid-r,.grid-x{fill:none;stroke:#cbd5e1;stroke-width:0.006}
+    .grid-r.major,.grid-x.major{stroke:#64748b;stroke-width:0.009;opacity:.55}
+    .axis{stroke:#475569}
+    .label-r,.label-x{font-family:monospace;fill:#64748b}
+    .point-label{font-family:monospace;font-weight:600}
+    .vswr-ring{fill:none;stroke-dasharray:.018 .018;stroke-width:.008}
+  `;
+  svg.insertBefore(styleEl, svg.firstChild);
+  // Replace var() colors that won't render outside the page
+  svg.querySelectorAll('[fill="var(--bg)"]').forEach(el => el.setAttribute('fill','#fff'));
+  svg.querySelectorAll('[stroke="var(--muted)"]').forEach(el => el.setAttribute('stroke','#475569'));
+  const txt = new XMLSerializer().serializeToString(svg);
+  const blob = new Blob([txt], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'smith-chart.svg';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+rebuildPtList(); render();
+</script>
+</body>
+</html>
