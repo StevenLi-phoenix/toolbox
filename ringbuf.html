@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circular Buffer (Ring Buffer) Visualizer — Free Online Tool</title>
+<meta name="description" content="Interactive ring buffer visualizer — enqueue and dequeue values, watch head and tail wrap around, choose overwrite-on-full or reject-on-full policy, and see the C-style pointer arithmetic explained step by step.">
+<meta name="keywords" content="circular buffer, ring buffer, fifo, queue, overwrite, dequeue, embedded, lock-free, spsc, head tail">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ringbuf.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .toolbar input, .toolbar select {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .88rem;
+  }
+  .toolbar input[type=number] { width: 80px; }
+  .ring-wrap { display: flex; justify-content: center; padding: 20px 0; }
+  svg#ring { max-width: 100%; height: auto; }
+  .arr-view { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; font-family: var(--mono); font-size: .82rem; justify-content: center; }
+  .arr-cell {
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); min-width: 44px; text-align: center; position: relative;
+  }
+  .arr-cell.empty { background: repeating-linear-gradient(45deg, #fafafa, #fafafa 4px, #f0f0f0 4px, #f0f0f0 8px); color: var(--muted); }
+  .arr-cell.head { border-color: #2563eb; border-width: 2px; }
+  .arr-cell.tail { border-color: #16a34a; border-width: 2px; }
+  .arr-cell.headtail { background: linear-gradient(135deg, #dbeafe 50%, #dcfce7 50%); border-color: #6b21a8; border-width: 2px; }
+  .arr-cell .lbl { position: absolute; top: -18px; left: 0; right: 0; font-size: .7rem; font-family: var(--mono); font-weight: 700; }
+  .arr-cell.head .lbl { color: #2563eb; }
+  .arr-cell.tail .lbl { color: #16a34a; }
+  .arr-cell.headtail .lbl { color: #6b21a8; }
+  .arr-cell .idx { display: block; font-size: .65rem; color: var(--muted); }
+  .kv { display: flex; gap: 12px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-top: 10px; }
+  .kv b { color: var(--text); font-family: var(--mono); }
+  .log-view { max-height: 220px; overflow: auto; font-family: var(--mono); font-size: .78rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; }
+  .log-view div { padding: 2px 0; border-bottom: 1px dashed var(--border); }
+  .log-view div:last-child { border-bottom: none; }
+  .log-view .err { color: var(--error); }
+  .log-view .warn { color: var(--warning); }
+  .log-view .ok { color: var(--success); }
+  pre.code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 12px; font-family: var(--mono); font-size: .82rem; overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Ring Buffer Visualizer</h1>
+<p class="subtitle">A circular buffer stores a fixed number of items in a wrap-around array using two indices: <code>head</code> (next read) and <code>tail</code> (next write). Push wraps at capacity, and full/empty are told apart by tracking count (or a bit).</p>
+
+<div class="card">
+  <div class="toolbar">
+    <label style="font-size:.82rem;color:var(--muted)">Capacity</label>
+    <input type="number" id="cap" value="8" min="2" max="16" onchange="resize()">
+    <label style="font-size:.82rem;color:var(--muted)">On full</label>
+    <select id="policy" onchange="log('policy changed to '+this.value)">
+      <option value="reject">Reject (return false)</option>
+      <option value="overwrite">Overwrite oldest</option>
+    </select>
+    <input id="val" type="number" placeholder="value">
+    <button onclick="enqueue()">Push</button>
+    <button onclick="dequeue()">Pop</button>
+    <button onclick="peek()">Peek</button>
+    <button onclick="reset()">Clear</button>
+  </div>
+
+  <div class="ring-wrap"><svg id="ring" width="380" height="380" viewBox="-190 -190 380 380"></svg></div>
+
+  <div class="kv">
+    <span>Size <b id="sz">0</b></span>
+    <span>Capacity <b id="cp">8</b></span>
+    <span>Head <b id="hd">0</b></span>
+    <span>Tail <b id="tl">0</b></span>
+    <span>Free <b id="fr">8</b></span>
+    <span>State <b id="st">empty</b></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Linear array view</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:14px">Same storage, laid flat. <span style="color:#2563eb;font-weight:700">H</span> = head (next pop), <span style="color:#16a34a;font-weight:700">T</span> = tail (next push).</p>
+  <div id="arr" class="arr-view"></div>
+</div>
+
+<div class="card">
+  <h2>Event log</h2>
+  <div id="log" class="log-view"></div>
+</div>
+
+<div class="card">
+  <h2>Canonical C implementation</h2>
+  <pre class="code">typedef struct {
+    int   *buf;
+    size_t cap, head, tail, size;
+} rb_t;
+
+bool rb_push(rb_t *r, int v) {
+    if (r-&gt;size == r-&gt;cap) return false;  /* or overwrite: rb_pop() */
+    r-&gt;buf[r-&gt;tail] = v;
+    r-&gt;tail = (r-&gt;tail + 1) % r-&gt;cap;
+    r-&gt;size++;
+    return true;
+}
+
+bool rb_pop(rb_t *r, int *out) {
+    if (r-&gt;size == 0) return false;
+    *out = r-&gt;buf[r-&gt;head];
+    r-&gt;head = (r-&gt;head + 1) % r-&gt;cap;
+    r-&gt;size--;
+    return true;
+}</pre>
+</div>
+
+<div class="card">
+  <h2>When you'd use one</h2>
+  <div style="font-size:.9rem;line-height:1.7">
+    <p>Fixed-capacity FIFOs show up in producer/consumer pipelines, embedded serial I/O, ring loggers ("last N events"), lock-free SPSC queues, and audio/DSP block processing. The wrap-around trick means no data copying on pop and no heap allocations at runtime.</p>
+    <p>The classic gotcha: distinguishing full from empty when <code>head == tail</code>. Fixes: keep a separate size, keep one slot unused (waste 1 of N), or use unmasked read/write indices modulo <code>2·cap</code>.</p>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let cap = 8, head = 0, tail = 0, size = 0;
+let buf = new Array(cap).fill(null);
+let lastOp = null; // {kind, idx}
+let opCounter = 0;
+
+function log(msg, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = msg;
+  $('log').prepend(d);
+}
+function resize() {
+  cap = Math.max(2, Math.min(16, parseInt($('cap').value)||8));
+  $('cap').value = cap;
+  buf = new Array(cap).fill(null);
+  head = tail = size = 0;
+  lastOp = null;
+  log(`resized to capacity ${cap}, buffer cleared.`);
+  render();
+}
+function reset() {
+  buf.fill(null); head = tail = size = 0; lastOp = null;
+  log('cleared.');
+  render();
+}
+function enqueue() {
+  const v = parseInt($('val').value);
+  if (isNaN(v)) { log('enter an integer first.', 'err'); return; }
+  if (size === cap) {
+    if ($('policy').value === 'reject') { log(`push(${v}) → rejected, buffer full.`, 'err'); return; }
+    // overwrite oldest
+    log(`push(${v}) with overwrite: buf[${tail}] ← ${v}, drop old ${buf[tail]} at head=${head}.`, 'warn');
+    buf[tail] = v;
+    lastOp = {kind:'push', idx:tail};
+    tail = (tail + 1) % cap;
+    head = tail; // head advances too when overwriting
+  } else {
+    buf[tail] = v;
+    log(`push(${v}) → buf[${tail}] ← ${v}, tail = (${tail}+1) mod ${cap} = ${(tail+1)%cap}.`, 'ok');
+    lastOp = {kind:'push', idx:tail};
+    tail = (tail + 1) % cap;
+    size++;
+  }
+  render();
+}
+function dequeue() {
+  if (size === 0) { log('pop → underflow, buffer empty.', 'err'); return; }
+  const v = buf[head];
+  const at = head;
+  buf[head] = null;
+  log(`pop → ${v} from buf[${head}], head = (${head}+1) mod ${cap} = ${(head+1)%cap}.`, 'ok');
+  head = (head + 1) % cap;
+  size--;
+  lastOp = {kind:'pop', idx:at, val:v};
+  render();
+}
+function peek() {
+  if (size === 0) { log('peek → empty.', 'err'); return; }
+  log(`peek → ${buf[head]} (at index ${head}).`);
+  lastOp = {kind:'peek', idx:head};
+  render();
+}
+
+function render() {
+  $('sz').textContent = size;
+  $('cp').textContent = cap;
+  $('hd').textContent = head;
+  $('tl').textContent = tail;
+  $('fr').textContent = cap - size;
+  $('st').textContent = size === 0 ? 'empty' : size === cap ? 'full' : 'partial';
+
+  // ring svg
+  const svg = $('ring');
+  svg.innerHTML = '';
+  const R = 140, r = 42;
+  const isFull = size === cap;
+  for (let i = 0; i < cap; i++) {
+    const angle = -Math.PI/2 + (2 * Math.PI * i) / cap;
+    const x = R * Math.cos(angle);
+    const y = R * Math.sin(angle);
+    const filled = buf[i] !== null;
+    const isHead = i === head && size > 0;
+    const isTail = i === tail && !isFull;
+    let fill = filled ? '#f5f5f5' : '#fff';
+    let stroke = '#111';
+    let sw = 1.5;
+    if (isHead && isTail) { stroke = '#6b21a8'; sw = 2.5; }
+    else if (isHead) { stroke = '#2563eb'; sw = 2.5; }
+    else if (isTail) { stroke = '#16a34a'; sw = 2.5; }
+    if (lastOp && lastOp.idx === i) fill = lastOp.kind === 'push' ? '#dcfce7' : '#fee2e2';
+    svg.innerHTML += `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+    const txt = filled ? buf[i] : '·';
+    svg.innerHTML += `<text x="${x}" y="${y+6}" text-anchor="middle" font-family="var(--mono)" font-size="18" fill="#111" font-weight="600">${txt}</text>`;
+    // label positioning outside
+    const lx = (R + r + 14) * Math.cos(angle);
+    const ly = (R + r + 14) * Math.sin(angle);
+    svg.innerHTML += `<text x="${lx}" y="${ly+4}" text-anchor="middle" font-family="var(--mono)" font-size="11" fill="#666">${i}</text>`;
+    // head/tail marker arrow
+    if (isHead) {
+      const mx = (R - r - 10) * Math.cos(angle);
+      const my = (R - r - 10) * Math.sin(angle);
+      svg.innerHTML += `<text x="${mx}" y="${my+4}" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="700" fill="#2563eb">H</text>`;
+    }
+    if (isTail && !isHead) {
+      const mx = (R - r - 10) * Math.cos(angle);
+      const my = (R - r - 10) * Math.sin(angle);
+      svg.innerHTML += `<text x="${mx}" y="${my+4}" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="700" fill="#16a34a">T</text>`;
+    }
+    if (isHead && isTail) {
+      const mx = (R - r - 10) * Math.cos(angle);
+      const my = (R - r - 10) * Math.sin(angle);
+      svg.innerHTML += `<text x="${mx}" y="${my+4}" text-anchor="middle" font-family="var(--mono)" font-size="11" font-weight="700" fill="#6b21a8">H/T</text>`;
+    }
+  }
+  // linear array
+  const av = $('arr');
+  av.innerHTML = buf.map((v, i) => {
+    let cls = 'arr-cell';
+    if (v === null) cls += ' empty';
+    const isHead = i === head && size > 0;
+    const isTail = i === tail && !isFull;
+    let lbl = '';
+    if (isHead && isTail) { cls += ' headtail'; lbl = '<span class="lbl">H+T</span>'; }
+    else if (isHead) { cls += ' head'; lbl = '<span class="lbl">H</span>'; }
+    else if (isTail) { cls += ' tail'; lbl = '<span class="lbl">T</span>'; }
+    return `<div class="${cls}">${lbl}<span class="idx">${i}</span>${v === null ? '·' : v}</div>`;
+  }).join('');
+}
+
+log('initialized empty ring buffer, capacity 8.');
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPU Scheduling Simulator — Free Online Tool</title>
+<meta name="description" content="Visualize CPU scheduling algorithms — FCFS, SJF, SRTF, Round Robin, and Priority — with an interactive Gantt chart and per-process turnaround, waiting, and response times.">
+<meta name="keywords" content="cpu scheduling, gantt chart, fcfs, sjf, srtf, round robin, priority scheduling, os scheduler, turnaround time, waiting time">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cpusched.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .algo-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .algo-row label { font-size: .82rem; color: var(--muted); }
+  select, input[type=number] {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .88rem;
+  }
+  table.proc { width: 100%; border-collapse: collapse; font-size: .88rem; font-family: var(--mono); }
+  table.proc th, table.proc td {
+    padding: 6px 8px; border: 1px solid var(--border); text-align: center;
+  }
+  table.proc th { background: var(--surface2); color: var(--muted); font-weight: 500; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  table.proc input { width: 60px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); font-family: var(--mono); font-size: .85rem; text-align: center; }
+  .gantt-wrap { overflow-x: auto; padding: 6px 0 14px; }
+  .gantt { display: flex; min-width: max-content; height: 44px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .gantt .seg {
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-family: var(--mono); font-size: .82rem; font-weight: 600;
+    border-right: 1px solid rgba(255,255,255,.35); position: relative; min-width: 24px;
+  }
+  .gantt .seg.idle { background: var(--surface2); color: var(--muted); font-weight: 400; }
+  .ticks { display: flex; min-width: max-content; font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-top: 2px; }
+  .ticks span { border-left: 1px solid var(--border); padding: 2px 0 0 3px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: .78rem; font-family: var(--mono); color: var(--muted); }
+  .badges b { color: var(--text); }
+  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
+  .metric { padding: 10px; border: 1px solid var(--border); border-radius: 4px; text-align: center; }
+  .metric .n { font-size: 1.3rem; font-family: var(--mono); font-weight: 700; }
+  .metric .l { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  @media (max-width: 720px) {
+    .metric-grid { grid-template-columns: repeat(2, 1fr); }
+    table.proc { font-size: .75rem; }
+    table.proc input { width: 44px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CPU Scheduling Simulator</h1>
+<p class="subtitle">Compare classic CPU scheduling algorithms side by side. Edit any process (arrival, burst, priority), pick an algorithm, and watch the Gantt chart update — with per-process turnaround, waiting, and response times.</p>
+
+<div class="card">
+  <div class="algo-row">
+    <label for="algo">Algorithm</label>
+    <select id="algo" onchange="recalc()">
+      <option value="fcfs">FCFS (First-Come, First-Served)</option>
+      <option value="sjf">SJF (Shortest Job First, non-preemptive)</option>
+      <option value="srtf">SRTF (Shortest Remaining Time, preemptive)</option>
+      <option value="rr">Round Robin</option>
+      <option value="prio">Priority (non-preemptive)</option>
+      <option value="priop">Priority (preemptive)</option>
+    </select>
+    <label for="quantum">Quantum (RR)</label>
+    <input type="number" id="quantum" value="2" min="1" max="20" onchange="recalc()">
+    <label style="margin-left:8px"><input type="checkbox" id="loprio" checked onchange="recalc()"> Lower # = higher priority</label>
+  </div>
+
+  <table class="proc" id="tbl">
+    <thead>
+      <tr><th>PID</th><th>Arrival</th><th>Burst</th><th>Priority</th><th></th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="row-actions">
+    <button onclick="addProc()">+ Add process</button>
+    <button onclick="loadSample('classic')">Sample: classic 4-job</button>
+    <button onclick="loadSample('mixed')">Sample: mixed arrivals</button>
+    <button onclick="loadSample('prio')">Sample: priority</button>
+    <button onclick="reset()">Reset</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Gantt chart</h2>
+  <div id="gantt-wrap" class="gantt-wrap">
+    <div id="gantt" class="gantt"></div>
+    <div id="ticks" class="ticks"></div>
+  </div>
+  <div id="badges" class="badges"></div>
+</div>
+
+<div class="card">
+  <h2>Per-process metrics</h2>
+  <table class="proc" id="metrics">
+    <thead>
+      <tr><th>PID</th><th>Start</th><th>Finish</th><th>Turnaround</th><th>Waiting</th><th>Response</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div class="metric-grid">
+    <div class="metric"><div class="n" id="avgTat">0</div><div class="l">Avg Turnaround</div></div>
+    <div class="metric"><div class="n" id="avgWait">0</div><div class="l">Avg Waiting</div></div>
+    <div class="metric"><div class="n" id="avgResp">0</div><div class="l">Avg Response</div></div>
+    <div class="metric"><div class="n" id="totalTime">0</div><div class="l">Total Time</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About the algorithms</h2>
+  <div style="font-size:.9rem;line-height:1.7;color:var(--text)">
+    <p><b>FCFS</b> runs each process to completion in arrival order — simple but convoys short jobs behind long ones.</p>
+    <p><b>SJF</b> always picks the ready process with the shortest burst next. Provably optimal average waiting time but requires knowing burst lengths and can starve long jobs.</p>
+    <p><b>SRTF</b> is preemptive SJF — if a newly arrived process has a shorter remaining time than the running one, the running one is preempted.</p>
+    <p><b>Round Robin</b> gives each process a fixed time quantum; when it expires the process goes back to the tail of the ready queue. Fair, low response time, but context-switch overhead grows as the quantum shrinks.</p>
+    <p><b>Priority</b> picks the highest-priority ready process. The preemptive variant reschedules whenever a higher-priority process arrives. Both risk starving low-priority tasks without aging.</p>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const PALETTE = ['#2563eb','#dc2626','#16a34a','#ea580c','#7c3aed','#0891b2','#db2777','#65a30d','#a16207','#4338ca'];
+let procs = [];
+
+function loadSample(kind) {
+  if (kind === 'classic') procs = [
+    {name:'P1', arrival:0, burst:8, priority:3},
+    {name:'P2', arrival:1, burst:4, priority:1},
+    {name:'P3', arrival:2, burst:9, priority:4},
+    {name:'P4', arrival:3, burst:5, priority:2},
+  ];
+  else if (kind === 'mixed') procs = [
+    {name:'P1', arrival:0, burst:5, priority:2},
+    {name:'P2', arrival:2, burst:3, priority:1},
+    {name:'P3', arrival:4, burst:8, priority:3},
+    {name:'P4', arrival:6, burst:2, priority:2},
+    {name:'P5', arrival:7, burst:4, priority:1},
+  ];
+  else if (kind === 'prio') procs = [
+    {name:'P1', arrival:0, burst:10, priority:3},
+    {name:'P2', arrival:1, burst:1, priority:1},
+    {name:'P3', arrival:2, burst:2, priority:4},
+    {name:'P4', arrival:3, burst:1, priority:5},
+    {name:'P5', arrival:4, burst:5, priority:2},
+  ];
+  drawTable(); recalc();
+}
+function reset() { procs = []; drawTable(); recalc(); }
+function addProc() {
+  const n = procs.length + 1;
+  procs.push({name:'P'+n, arrival:0, burst:1, priority:1});
+  drawTable(); recalc();
+}
+function delProc(i) { procs.splice(i, 1); drawTable(); recalc(); }
+function updateField(i, field, val) {
+  procs[i][field] = field === 'name' ? val : Math.max(0, parseInt(val)||0);
+  if (field === 'burst') procs[i][field] = Math.max(1, procs[i][field]);
+  recalc();
+}
+
+function drawTable() {
+  const body = $('tbl').querySelector('tbody');
+  body.innerHTML = procs.map((p,i) => `
+    <tr>
+      <td style="color:${PALETTE[i%PALETTE.length]};font-weight:700">${p.name}</td>
+      <td><input value="${p.arrival}" oninput="updateField(${i},'arrival',this.value)"></td>
+      <td><input value="${p.burst}" oninput="updateField(${i},'burst',this.value)"></td>
+      <td><input value="${p.priority}" oninput="updateField(${i},'priority',this.value)"></td>
+      <td><button class="btn-sm" onclick="delProc(${i})">×</button></td>
+    </tr>
+  `).join('');
+}
+
+function schedule() {
+  const algo = $('algo').value;
+  const q = Math.max(1, parseInt($('quantum').value)||1);
+  const lowIsHigh = $('loprio').checked;
+  const jobs = procs.map((p,i) => ({...p, idx:i, remain:p.burst, start:-1, finish:-1}));
+  if (!jobs.length) return {segments:[], jobs};
+  const segments = [];
+  let t = 0, done = 0;
+
+  function priorityKey(p) { return lowIsHigh ? p.priority : -p.priority; }
+
+  if (algo === 'fcfs') {
+    jobs.sort((a,b) => a.arrival - b.arrival || a.idx - b.idx);
+    for (const j of jobs) {
+      if (t < j.arrival) { segments.push({name:'idle', from:t, to:j.arrival}); t = j.arrival; }
+      j.start = t;
+      segments.push({name:j.name, idx:j.idx, from:t, to:t+j.burst});
+      t += j.burst; j.finish = t;
+    }
+  } else if (algo === 'sjf' || algo === 'prio') {
+    while (done < jobs.length) {
+      const ready = jobs.filter(j => j.finish < 0 && j.arrival <= t);
+      if (!ready.length) {
+        const nextArr = Math.min(...jobs.filter(j => j.finish < 0).map(j => j.arrival));
+        segments.push({name:'idle', from:t, to:nextArr}); t = nextArr; continue;
+      }
+      ready.sort((a,b) => {
+        const k = algo === 'sjf' ? a.burst - b.burst : priorityKey(a) - priorityKey(b);
+        return k || a.arrival - b.arrival || a.idx - b.idx;
+      });
+      const j = ready[0];
+      j.start = t;
+      segments.push({name:j.name, idx:j.idx, from:t, to:t+j.burst});
+      t += j.burst; j.finish = t; done++;
+    }
+  } else if (algo === 'srtf' || algo === 'priop') {
+    while (done < jobs.length) {
+      const ready = jobs.filter(j => j.remain > 0 && j.arrival <= t);
+      if (!ready.length) {
+        const nextArr = Math.min(...jobs.filter(j => j.remain > 0).map(j => j.arrival));
+        segments.push({name:'idle', from:t, to:nextArr}); t = nextArr; continue;
+      }
+      ready.sort((a,b) => {
+        const k = algo === 'srtf' ? a.remain - b.remain : priorityKey(a) - priorityKey(b);
+        return k || a.arrival - b.arrival || a.idx - b.idx;
+      });
+      const j = ready[0];
+      if (j.start < 0) j.start = t;
+      // run for 1 tick or until a higher-priority job arrives
+      let run = 1;
+      const futureArr = jobs.filter(o => o.remain > 0 && o.arrival > t).map(o => o.arrival);
+      const nextArr = futureArr.length ? Math.min(...futureArr) : Infinity;
+      run = Math.min(j.remain, nextArr - t);
+      if (run < 1) run = 1;
+      const last = segments[segments.length-1];
+      if (last && last.name === j.name && last.to === t) last.to = t + run;
+      else segments.push({name:j.name, idx:j.idx, from:t, to:t+run});
+      t += run; j.remain -= run;
+      if (j.remain === 0) { j.finish = t; done++; }
+    }
+  } else if (algo === 'rr') {
+    const queue = [];
+    const arrivals = [...jobs].sort((a,b) => a.arrival - b.arrival || a.idx - b.idx);
+    let arrIdx = 0;
+    while (done < jobs.length) {
+      while (arrIdx < arrivals.length && arrivals[arrIdx].arrival <= t) queue.push(arrivals[arrIdx++]);
+      if (!queue.length) {
+        const nextArr = arrivals[arrIdx].arrival;
+        segments.push({name:'idle', from:t, to:nextArr}); t = nextArr; continue;
+      }
+      const j = queue.shift();
+      if (j.start < 0) j.start = t;
+      const run = Math.min(q, j.remain);
+      const last = segments[segments.length-1];
+      if (last && last.name === j.name && last.to === t) last.to = t + run;
+      else segments.push({name:j.name, idx:j.idx, from:t, to:t+run});
+      t += run; j.remain -= run;
+      while (arrIdx < arrivals.length && arrivals[arrIdx].arrival <= t) queue.push(arrivals[arrIdx++]);
+      if (j.remain > 0) queue.push(j);
+      else { j.finish = t; done++; }
+    }
+  }
+  return {segments, jobs};
+}
+
+function recalc() {
+  const {segments, jobs} = schedule();
+  const totalT = segments.length ? segments[segments.length-1].to : 0;
+  const gantt = $('gantt'), ticks = $('ticks');
+  gantt.innerHTML = ''; ticks.innerHTML = '';
+  const unit = totalT > 0 ? Math.max(28, Math.min(60, 900 / totalT)) : 40;
+  for (const s of segments) {
+    const w = (s.to - s.from) * unit;
+    const div = document.createElement('div');
+    div.className = 'seg' + (s.name === 'idle' ? ' idle' : '');
+    div.style.width = w + 'px';
+    div.style.background = s.name === 'idle' ? '' : PALETTE[s.idx % PALETTE.length];
+    div.textContent = s.name;
+    div.title = `${s.name}: ${s.from} → ${s.to}`;
+    gantt.appendChild(div);
+  }
+  if (segments.length) {
+    const tickPts = new Set([0]);
+    segments.forEach(s => { tickPts.add(s.from); tickPts.add(s.to); });
+    const pts = [...tickPts].sort((a,b) => a-b);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const span = document.createElement('span');
+      span.style.width = ((pts[i+1] - pts[i]) * unit) + 'px';
+      span.textContent = pts[i];
+      ticks.appendChild(span);
+    }
+    const last = document.createElement('span');
+    last.textContent = pts[pts.length-1]; last.style.paddingLeft = '3px';
+    ticks.appendChild(last);
+  }
+
+  // metrics
+  const mb = $('metrics').querySelector('tbody');
+  const finishedJobs = jobs.filter(j => j.finish >= 0);
+  mb.innerHTML = finishedJobs.map(j => {
+    const tat = j.finish - j.arrival;
+    const wait = tat - j.burst;
+    const resp = j.start - j.arrival;
+    return `<tr>
+      <td style="color:${PALETTE[j.idx%PALETTE.length]};font-weight:700">${j.name}</td>
+      <td>${j.start}</td><td>${j.finish}</td><td>${tat}</td><td>${wait}</td><td>${resp}</td>
+    </tr>`;
+  }).join('');
+  const avg = arr => arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2) : '0';
+  const tats = finishedJobs.map(j => j.finish - j.arrival);
+  const waits = finishedJobs.map(j => j.finish - j.arrival - j.burst);
+  const resps = finishedJobs.map(j => j.start - j.arrival);
+  $('avgTat').textContent = avg(tats);
+  $('avgWait').textContent = avg(waits);
+  $('avgResp').textContent = avg(resps);
+  $('totalTime').textContent = totalT;
+
+  const idle = segments.filter(s => s.name === 'idle').reduce((a,s) => a + (s.to - s.from), 0);
+  const util = totalT ? (100 * (totalT - idle) / totalT).toFixed(1) : '0';
+  $('badges').innerHTML = `<span>CPU utilization <b>${util}%</b></span><span>Idle <b>${idle}</b></span><span>Context switches <b>${Math.max(0, segments.filter(s=>s.name!=='idle').length - 1)}</b></span>`;
+}
+
+loadSample('classic');
+</script>
+</body>
+</html>
