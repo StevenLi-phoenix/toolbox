@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skip List Visualizer — Free Online Tool</title>
+<meta name="description" content="Insert, delete, and search keys in a live probabilistic skip list. Watch the express-lane pointers grow as coin flips promote nodes, see the O(log n) search path zig-zag down and right, and inspect the expected-vs-actual tower height distribution.">
+<meta name="keywords" content="skip list, probabilistic data structure, ordered set, express lane, visualizer, log n search, redis sorted set, data structure">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/skiplist.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; font-size: .88rem; }
+  .controls input[type=number], .controls input[type=text] {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=number] { width: 100px; }
+  .controls input[type=text] { width: 260px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls label { color: var(--muted); }
+  .controls input[type=range] { width: 140px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; max-height: 560px; padding: 8px; }
+  svg.sl { display: block; min-width: 100%; }
+  .node rect { stroke: var(--border); stroke-width: 1.4; fill: var(--surface2); rx: 4; ry: 4; }
+  .node text { font-family: var(--mono); font-size: 12px; fill: var(--text); text-anchor: middle; dominant-baseline: central; pointer-events: none; font-weight: 600; }
+  .node.head rect { fill: var(--surface); stroke: var(--muted); }
+  .node.head text { fill: var(--muted); font-size: 10px; }
+  .node.tail rect { fill: var(--surface); stroke: var(--muted); }
+  .node.tail text { fill: var(--muted); font-size: 12px; }
+  .node.found rect { fill: rgba(40, 180, 99, .3); stroke: var(--success); stroke-width: 2.4; }
+  .node.inserted rect { fill: rgba(241, 196, 15, .32); stroke: var(--warning); stroke-width: 2.4; }
+  .node.path rect { fill: rgba(99, 102, 241, .22); stroke: var(--accent); stroke-width: 2; }
+  .edge { stroke: var(--border); stroke-width: 1.3; fill: none; }
+  .edge.walk { stroke: var(--accent); stroke-width: 2.4; }
+  .edge.arrowhead { fill: var(--border); }
+  .edge.walk-head { fill: var(--accent); }
+  .lvl-lbl { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .dist { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .dist h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .dist .bar-row { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: .78rem; padding: 2px 0; }
+  .dist .bar-row .lbl { width: 44px; color: var(--muted); text-align: right; }
+  .dist .bar-track { flex: 1; height: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; position: relative; }
+  .dist .bar-fill { height: 100%; background: var(--accent); }
+  .dist .bar-exp { position: absolute; top: 0; height: 100%; width: 2px; background: var(--warning); }
+  .dist .val { width: 34px; text-align: right; color: var(--text); }
+  .log { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 260px; overflow-y: auto; }
+  .log h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .log .row { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .log .row.hit { color: var(--success); }
+  .log .row.walk { color: var(--accent); }
+  .log .row.op { color: var(--warning); font-weight: 600; }
+  .log .row.dim { color: var(--muted); }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 4px; border: 1.4px solid var(--border); }
+  .legend .sw.p { background: rgba(99, 102, 241, .22); border-color: var(--accent); }
+  .legend .sw.f { background: rgba(40, 180, 99, .3); border-color: var(--success); }
+  .legend .sw.i { background: rgba(241, 196, 15, .32); border-color: var(--warning); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Skip List Visualizer</h1>
+<p class="subtitle">A <strong>skip list</strong> keeps a sorted linked list <em>and</em> a stack of sparser express lanes on top. Each inserted key climbs one extra level for every heads flip, so about half the keys have height 1, a quarter have height 2, an eighth have height 3, and so on — giving expected <code>O(log n)</code> search that beats a plain linked list without needing the rotations of a balanced tree. Redis, LevelDB's MemTable, and Java's <code>ConcurrentSkipListMap</code> all ship one.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Key</label>
+    <input type="number" id="keyInput" placeholder="key" autocomplete="off">
+    <button class="primary" onclick="insertKey()">Insert</button>
+    <button onclick="deleteKey()">Delete</button>
+    <button onclick="searchKey()">Search</button>
+    <input type="text" id="bulk" placeholder="comma list e.g. 3,7,10,14,21,32,50">
+    <button onclick="bulkInsert()">Bulk insert</button>
+    <button onclick="randomSeq()">🎲 Random 12</button>
+    <button onclick="clearAll()">Clear</button>
+  </div>
+  <div class="controls">
+    <label>Promotion probability p</label>
+    <input type="range" id="pRange" min="10" max="90" value="50" oninput="onPChange()">
+    <span id="pVal" style="font-family:var(--mono);font-size:.85rem;color:var(--text)">0.50</span>
+    <span style="color:var(--muted);font-size:.8rem;margin-left:6px">— set before inserting; existing tower heights aren't retroactively resampled.</span>
+  </div>
+  <div class="layout">
+    <div class="svg-wrap" id="svgWrap"><svg class="sl" id="svg" viewBox="0 0 800 400" preserveAspectRatio="xMinYMin meet"><defs>
+      <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="edge arrowhead" d="M0,0 L8,4 L0,8 Z"/></marker>
+      <marker id="ahw" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="edge walk-head" d="M0,0 L8,4 L0,8 Z"/></marker>
+    </defs></svg></div>
+    <div>
+      <div class="stats">
+        <h3>Skip list stats</h3>
+        <div class="stat-row"><span>Keys stored</span><span class="v" id="sN">0</span></div>
+        <div class="stat-row"><span>Max level</span><span class="v" id="sMaxLvl">0</span></div>
+        <div class="stat-row"><span>Node pointers</span><span class="v" id="sPtrs">0</span></div>
+        <div class="stat-row"><span>Total forward links</span><span class="v" id="sLinks">0</span></div>
+        <div class="stat-row"><span>Last op cost (hops)</span><span class="v" id="sHops">—</span></div>
+        <div class="stat-row"><span>Expected log_{1/p} n</span><span class="v" id="sExp">—</span></div>
+      </div>
+      <div class="dist">
+        <h3>Tower height distribution</h3>
+        <div id="distRows"></div>
+        <p style="font-size:.72rem;color:var(--muted);margin:6px 0 0">Yellow tick = geometric expectation <code>n · p^(h-1) · (1 − p)</code>.</p>
+      </div>
+      <div class="log">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+      <p class="legend">
+        <span class="sw p"></span> visited on search path &nbsp;
+        <span class="sw f"></span> match &nbsp;
+        <span class="sw i"></span> just inserted
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why skip lists?</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    A sorted linked list gives <em>O(n)</em> search — no way to binary-chop into pointer chases. A skip list bolts on <em>express lanes</em>: level 1 is the base list, level 2 links roughly every second node, level 3 every fourth, and so on. On lookup you start at the top-left header and repeatedly step right while the next key stays ≤ target, dropping down whenever the next key overshoots. Because each node's height is a fresh <code>Geometric(1 − p)</code> draw with p usually 1/2, the expected number of hops is <code>log_{1/p} n</code> — the same asymptotic as a balanced tree but with no rotations, no colour bits, no rebalancing math. Redis' sorted sets and ZooKeeper's snapshot index both use skip lists because concurrent writers get much simpler lock-free updates than a red-black tree can offer.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const NEG_INF = -Infinity, POS_INF = Infinity;
+const MAX_LEVEL_CAP = 12;
+
+// Node: { key, height, next: [level0..level(height-1)] }
+let head, tail, maxLevel, N;
+let promoP = 0.5;
+let highlight = { path: new Set(), found: null, inserted: null };
+let logRows = [];
+let lastHops = null;
+
+function init() {
+  N = 0;
+  maxLevel = 1;
+  head = { key: NEG_INF, height: MAX_LEVEL_CAP, next: [], id: 'H', flag: 'head' };
+  tail = { key: POS_INF, height: MAX_LEVEL_CAP, next: [], id: 'T', flag: 'tail' };
+  for (let i = 0; i < MAX_LEVEL_CAP; i++) head.next[i] = tail;
+}
+
+function randomLevel() {
+  let lvl = 1;
+  while (Math.random() < promoP && lvl < MAX_LEVEL_CAP) lvl++;
+  return lvl;
+}
+
+function findPreds(key) {
+  const preds = new Array(MAX_LEVEL_CAP).fill(null);
+  const path = [];
+  let cur = head; let hops = 0;
+  for (let i = maxLevel - 1; i >= 0; i--) {
+    while (cur.next[i] && cur.next[i].key < key) { cur = cur.next[i]; hops++; path.push(cur); }
+    preds[i] = cur;
+  }
+  return { preds, path, hops };
+}
+
+function insertKey() {
+  const k = parseInt($('keyInput').value);
+  if (!Number.isFinite(k)) return;
+  const { preds, path, hops } = findPreds(k);
+  const cur = preds[0].next[0];
+  if (cur && cur.key === k) {
+    logRows = [{t: `insert(${k}) — already present`, cls: 'dim'}];
+    highlight = { path: new Set(path), found: cur, inserted: null };
+    lastHops = hops;
+    renderAll(); $('keyInput').value = '';
+    return;
+  }
+  const h = randomLevel();
+  const node = { key: k, height: h, next: [] };
+  for (let i = 0; i < h; i++) {
+    node.next[i] = preds[i] ? preds[i].next[i] : tail;
+    if (preds[i]) preds[i].next[i] = node;
+  }
+  if (h > maxLevel) {
+    // higher levels: link head → node → tail directly for new levels
+    for (let i = maxLevel; i < h; i++) {
+      node.next[i] = head.next[i];
+      head.next[i] = node;
+    }
+    maxLevel = h;
+  }
+  N++;
+  highlight = { path: new Set(path), found: null, inserted: node };
+  lastHops = hops;
+  logRows = [
+    {t: `insert(${k}) — hops = ${hops}`, cls: 'op'},
+    {t: `coin flips → height ${h}`, cls: 'walk'},
+  ];
+  $('keyInput').value = '';
+  renderAll();
+}
+
+function deleteKey() {
+  const k = parseInt($('keyInput').value);
+  if (!Number.isFinite(k)) return;
+  const { preds, path, hops } = findPreds(k);
+  const target = preds[0].next[0];
+  if (!target || target.key !== k) {
+    highlight = { path: new Set(path), found: null, inserted: null };
+    lastHops = hops;
+    logRows = [{t: `delete(${k}) — not found (hops = ${hops})`, cls: 'dim'}];
+    renderAll(); $('keyInput').value = '';
+    return;
+  }
+  for (let i = 0; i < target.height; i++) {
+    if (preds[i]) preds[i].next[i] = target.next[i];
+  }
+  N--;
+  // shrink maxLevel if top layers are now empty
+  while (maxLevel > 1 && head.next[maxLevel - 1] === tail) maxLevel--;
+  highlight = { path: new Set(path), found: null, inserted: null };
+  lastHops = hops;
+  logRows = [{t: `delete(${k}) — removed after ${hops} hops`, cls: 'op'}];
+  $('keyInput').value = '';
+  renderAll();
+}
+
+function searchKey() {
+  const k = parseInt($('keyInput').value);
+  if (!Number.isFinite(k)) return;
+  const { preds, path, hops } = findPreds(k);
+  const target = preds[0].next[0];
+  const hit = target && target.key === k ? target : null;
+  highlight = { path: new Set(path), found: hit, inserted: null };
+  lastHops = hops;
+  logRows = [
+    {t: `search(${k}) — ${hops} hops`, cls: 'op'},
+    {t: hit ? `→ FOUND at height ${hit.height}` : '→ not present', cls: hit ? 'hit' : 'dim'}
+  ];
+  renderAll();
+}
+
+function bulkInsert() {
+  const raw = $('bulk').value.trim();
+  if (!raw) return;
+  const ks = raw.split(/[\s,;]+/).filter(Boolean).map(Number).filter(Number.isFinite);
+  for (const k of ks) {
+    $('keyInput').value = k;
+    insertKey();
+  }
+  $('bulk').value = '';
+}
+
+function randomSeq() {
+  clearAll();
+  const seen = new Set();
+  while (seen.size < 12) seen.add(Math.floor(Math.random() * 99) + 1);
+  for (const k of seen) {
+    $('keyInput').value = k;
+    insertKey();
+  }
+}
+
+function clearAll() {
+  init(); highlight = { path: new Set(), found: null, inserted: null };
+  logRows = []; lastHops = null; renderAll();
+}
+
+function onPChange() {
+  promoP = parseInt($('pRange').value) / 100;
+  $('pVal').textContent = promoP.toFixed(2);
+  renderStats();
+}
+
+function walkAll() {
+  const out = [];
+  let cur = head.next[0];
+  while (cur !== tail) { out.push(cur); cur = cur.next[0]; }
+  return out;
+}
+
+function renderLog() {
+  const el = $('logRows');
+  el.innerHTML = '';
+  logRows.forEach(r => {
+    const d = document.createElement('div');
+    d.className = 'row ' + (r.cls || '');
+    d.textContent = r.t;
+    el.appendChild(d);
+  });
+}
+
+function renderStats() {
+  $('sN').textContent = N;
+  $('sMaxLvl').textContent = maxLevel;
+  const nodes = walkAll();
+  const ptrs = nodes.reduce((a, n) => a + n.height, 0);
+  $('sPtrs').textContent = ptrs;
+  $('sLinks').textContent = ptrs;
+  $('sHops').textContent = lastHops == null ? '—' : lastHops;
+  const exp = N > 0 && promoP < 1 ? (Math.log(N) / Math.log(1 / promoP)).toFixed(2) : '—';
+  $('sExp').textContent = exp;
+
+  // distribution
+  const counts = new Array(MAX_LEVEL_CAP + 1).fill(0);
+  nodes.forEach(n => counts[n.height]++);
+  const maxCount = Math.max(1, ...counts);
+  const dist = $('distRows');
+  dist.innerHTML = '';
+  let shownMax = 1;
+  for (let h = MAX_LEVEL_CAP; h >= 1; h--) if (counts[h] > 0) { shownMax = h; break; }
+  shownMax = Math.max(shownMax, maxLevel);
+  for (let h = 1; h <= shownMax; h++) {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    const c = counts[h];
+    const expected = N * Math.pow(promoP, h - 1) * (1 - promoP);
+    const pct = (c / maxCount) * 100;
+    const expPct = Math.min(100, (expected / maxCount) * 100);
+    row.innerHTML = `<span class="lbl">h=${h}</span><div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div><div class="bar-exp" style="left:${expPct}%"></div></div><span class="val">${c}</span>`;
+    dist.appendChild(row);
+  }
+}
+
+function renderAll() { renderTree(); renderLog(); renderStats(); }
+
+function renderTree() {
+  const nodes = walkAll();
+  const svg = $('svg');
+  // Preserve defs
+  const defs = svg.querySelector('defs');
+  svg.innerHTML = '';
+  svg.appendChild(defs);
+  const nodeW = 46, nodeH = 26, xGap = 22, xPad = 60, yPad = 18, rowH = 34;
+  const numLevels = Math.max(1, maxLevel);
+  const totalW = xPad * 2 + (nodes.length + 2) * (nodeW + xGap);
+  const totalH = yPad * 2 + numLevels * rowH + 20;
+  svg.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+  svg.style.minWidth = `${Math.max(totalW, 400)}px`;
+
+  const cols = [head, ...nodes, tail];
+  const xOf = i => xPad + i * (nodeW + xGap);
+  const yOfLevel = (lvl) => yPad + (numLevels - 1 - lvl) * rowH;
+
+  // Level labels
+  for (let l = 0; l < numLevels; l++) {
+    const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    lbl.setAttribute('class', 'lvl-lbl');
+    lbl.setAttribute('x', 6);
+    lbl.setAttribute('y', yOfLevel(l) + nodeH / 2);
+    lbl.setAttribute('dominant-baseline', 'central');
+    lbl.textContent = `L${l + 1}`;
+    svg.appendChild(lbl);
+  }
+
+  // Edges: for each column node c, for each level l < node.height, draw arrow from c to c.next[l]
+  const idxOf = new Map();
+  cols.forEach((n, i) => idxOf.set(n, i));
+  const walkSet = highlight.path;
+  for (let ci = 0; ci < cols.length - 1; ci++) {
+    const src = cols[ci];
+    const srcHeight = src === head ? numLevels : src.height;
+    for (let l = 0; l < srcHeight; l++) {
+      let nxt = src.next[l] || tail;
+      // Snap nxt to some node in cols
+      if (!idxOf.has(nxt)) nxt = tail;
+      const nIdx = idxOf.get(nxt);
+      if (nIdx <= ci) continue;
+      const y = yOfLevel(l) + nodeH / 2;
+      const x1 = xOf(ci) + nodeW;
+      const x2 = xOf(nIdx);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      const walked = walkSet.has(src) && (nxt === (highlight.found || highlight.inserted) || walkSet.has(nxt) || nxt.key >= (highlight.found?.key ?? highlight.inserted?.key ?? Infinity));
+      line.setAttribute('x1', x1); line.setAttribute('x2', x2 - 2);
+      line.setAttribute('y1', y); line.setAttribute('y2', y);
+      line.setAttribute('class', 'edge' + (walkSet.has(src) && walkSet.has(nxt) ? ' walk' : ''));
+      line.setAttribute('marker-end', walkSet.has(src) && walkSet.has(nxt) ? 'url(#ahw)' : 'url(#ah)');
+      svg.appendChild(line);
+    }
+  }
+
+  // Nodes
+  for (let ci = 0; ci < cols.length; ci++) {
+    const n = cols[ci];
+    const height = n === head || n === tail ? numLevels : n.height;
+    for (let l = 0; l < height; l++) {
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      let cls = 'node';
+      if (n === head) cls += ' head';
+      else if (n === tail) cls += ' tail';
+      else {
+        if (highlight.path.has(n)) cls += ' path';
+        if (highlight.found === n) cls += ' found';
+        if (highlight.inserted === n) cls += ' inserted';
+      }
+      g.setAttribute('class', cls);
+      g.setAttribute('transform', `translate(${xOf(ci)},${yOfLevel(l)})`);
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', 0); rect.setAttribute('y', 0);
+      rect.setAttribute('width', nodeW); rect.setAttribute('height', nodeH);
+      rect.setAttribute('rx', 4);
+      g.appendChild(rect);
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', nodeW / 2); t.setAttribute('y', nodeH / 2);
+      t.textContent = n === head ? '−∞' : n === tail ? '+∞' : n.key;
+      g.appendChild(t);
+      svg.appendChild(g);
+    }
+  }
+}
+
+init();
+onPChange();
+renderAll();
+// Seed with a small sample
+['3','7','10','14','21','32','50'].forEach(k => { $('keyInput').value = k; insertKey(); });
+</script>
+</body>
+</html>

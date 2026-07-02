@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chi-Square Test Calculator — Free Online Tool</title>
+<meta name="description" content="Run Pearson's chi-square goodness-of-fit and independence tests entirely in your browser. Paste an observed/expected table or a contingency matrix, get χ², degrees of freedom, p-value, critical value, Cramér's V and Yates' correction — with per-cell residual heat map.">
+<meta name="keywords" content="chi square test, chi-square calculator, goodness of fit, contingency table, cramers v, yates correction, p value, hypothesis test, statistics">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/chisquare.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .mode-row { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .mode-row button {
+    padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .mode-row button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .grid-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid-row { grid-template-columns: 1fr; } }
+  textarea.mat {
+    width: 100%; min-height: 160px; padding: 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .88rem; resize: vertical;
+  }
+  .opts { display: flex; gap: 14px; flex-wrap: wrap; margin: 10px 0 14px; font-size: .85rem; color: var(--muted); }
+  .opts label { display: inline-flex; align-items: center; gap: 6px; }
+  .opts input[type=number] {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono);
+    font-size: .85rem; width: 70px;
+  }
+  table.mat { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .82rem; margin-top: 10px; }
+  table.mat th, table.mat td {
+    padding: 6px 8px; border: 1px solid var(--border); text-align: right;
+  }
+  table.mat th { background: var(--surface2); color: var(--muted); font-weight: 500; }
+  table.mat td.rl { text-align: left; color: var(--muted); }
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+  @media (max-width: 720px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } }
+  .metric { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+  .metric .n { font-size: 1.3rem; font-family: var(--mono); font-weight: 700; color: var(--text); }
+  .metric .l { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 3px; }
+  .verdict { padding: 12px 16px; border-radius: var(--radius); font-size: .92rem; margin-top: 14px; font-weight: 600; }
+  .verdict.reject { background: rgba(40, 180, 99, .12); color: #166534; border: 1px solid rgba(40, 180, 99, .3); }
+  .verdict.accept { background: rgba(241, 196, 15, .12); color: #92400e; border: 1px solid rgba(241, 196, 15, .3); }
+  .heat td { position: relative; }
+  .heat td.cell {
+    background: var(--surface); color: var(--text);
+  }
+  .cell .obs { font-weight: 700; }
+  .cell .exp { color: var(--muted); font-size: .74rem; }
+  .cell .res { font-size: .72rem; }
+  .err { color: var(--error); padding: 10px; background: rgba(231, 76, 60, .12); border-radius: var(--radius); font-size: .85rem; margin-top: 10px; }
+  details.hint { margin-top: 10px; font-size: .82rem; color: var(--muted); }
+  details.hint summary { cursor: pointer; color: var(--accent); }
+  details.hint pre { background: var(--surface2); padding: 8px 12px; border-radius: var(--radius); font-size: .8rem; overflow-x: auto; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Chi-Square Test Calculator</h1>
+<p class="subtitle">Run Pearson's <strong>χ²</strong> test end-to-end in your browser. Pick <em>goodness of fit</em> when you have a single row of observed counts against a theoretical distribution, or <em>independence</em> when you have an r×c contingency table. Get χ², degrees of freedom, the p-value, critical value at your α, Cramér's V, and a per-cell standardised-residual heat map.</p>
+
+<div class="card">
+  <div class="mode-row">
+    <button id="mGof" class="active" onclick="setMode('gof')">Goodness of fit</button>
+    <button id="mInd" onclick="setMode('ind')">Independence (contingency)</button>
+  </div>
+
+  <div id="paneGof">
+    <label style="font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Observed (space or comma separated)</label>
+    <textarea class="mat" id="gofObs" spellcheck="false">18 22 25 15 20</textarea>
+    <label style="font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:10px;display:block">Expected — leave blank for a uniform distribution, or supply counts or proportions (proportions get rescaled to the observed total).</label>
+    <textarea class="mat" id="gofExp" spellcheck="false"></textarea>
+  </div>
+
+  <div id="paneInd" style="display:none">
+    <label style="font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Contingency table (rows = groups, columns = categories, space/tab/comma separated)</label>
+    <textarea class="mat" id="indMat" spellcheck="false">30 15 55
+20 25 55
+10 30 60</textarea>
+  </div>
+
+  <div class="opts">
+    <label>α <input type="number" id="alpha" value="0.05" step="0.005" min="0.0001" max="0.5"></label>
+    <label><input type="checkbox" id="yates"> Yates' continuity correction (2×2 only)</label>
+    <label id="ddofWrap" style="display:none">Extra parameters estimated <input type="number" id="ddof" value="0" min="0" max="20"></label>
+  </div>
+
+  <button class="primary" style="padding:9px 18px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:var(--radius);cursor:pointer;font-size:.9rem" onclick="run()">Run test</button>
+  <button style="padding:9px 14px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:var(--radius);cursor:pointer;font-size:.9rem;margin-left:6px" onclick="loadSample()">Load a sample</button>
+
+  <div id="err" style="display:none"></div>
+  <div id="result" style="display:none">
+    <div class="metric-grid">
+      <div class="metric"><div class="n" id="rChi">—</div><div class="l">χ²</div></div>
+      <div class="metric"><div class="n" id="rDf">—</div><div class="l">df</div></div>
+      <div class="metric"><div class="n" id="rP">—</div><div class="l">p-value</div></div>
+      <div class="metric"><div class="n" id="rCrit">—</div><div class="l">critical χ²</div></div>
+    </div>
+    <div class="metric-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="metric"><div class="n" id="rN">—</div><div class="l">total n</div></div>
+      <div class="metric"><div class="n" id="rV">—</div><div class="l">Cramér's V / φ</div></div>
+      <div class="metric"><div class="n" id="rMinExp">—</div><div class="l">min expected</div></div>
+    </div>
+    <div id="verdict" class="verdict"></div>
+
+    <h3 style="margin-top:18px;font-size:.95rem">Per-cell breakdown</h3>
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:6px">
+      Each cell shows <b>observed</b>, then <em>(expected)</em>, then the <span style="color:var(--accent)">standardised residual</span>
+      <code>(O − E) / √E</code>. Cells shaded red have <code>|r| ≥ 2</code> — those pull the χ² statistic hardest.
+    </p>
+    <div style="overflow-x:auto"><table class="mat heat" id="tblCells"></table></div>
+
+    <details class="hint">
+      <summary>What the numbers mean</summary>
+      <pre id="expl"></pre>
+    </details>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Quick reference</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    <strong>Goodness of fit</strong> asks whether one categorical variable follows a claimed distribution. Roll a die 100 times, count each face, and test against expected = 100/6 per face. Degrees of freedom = <code>k − 1 − p</code> where <code>k</code> is the number of bins and <code>p</code> is the number of distribution parameters you estimated from the data (set the "Extra parameters estimated" field to <code>p</code>).
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    <strong>Independence</strong> asks whether two categorical variables move together in an <code>r×c</code> contingency table. Expected count in cell (i, j) = <code>rowSum_i × colSum_j / n</code>. Degrees of freedom = <code>(r − 1)(c − 1)</code>.
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    <strong>Effect size.</strong> Cramér's V = <code>√(χ² / (n · min(r − 1, c − 1)))</code> and is bounded by 0…1. For a 2×2 table it collapses to the phi (φ) coefficient. A significant p-value with a tiny V (&lt; 0.05) means <em>a real but tiny effect</em> — big samples make trivial associations pass. Yates' correction subtracts ½ from each |O − E| in a 2×2 table before squaring; it's conservative and mostly used when any expected cell drops below 5.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = 'gof';
+
+function setMode(m) {
+  mode = m;
+  $('mGof').classList.toggle('active', m === 'gof');
+  $('mInd').classList.toggle('active', m === 'ind');
+  $('paneGof').style.display = m === 'gof' ? '' : 'none';
+  $('paneInd').style.display = m === 'ind' ? '' : 'none';
+  $('ddofWrap').style.display = m === 'gof' ? 'inline-flex' : 'none';
+  $('yates').parentElement.style.display = m === 'ind' ? 'inline-flex' : 'none';
+  $('result').style.display = 'none';
+  $('err').style.display = 'none';
+}
+
+function parseRow(s) {
+  return s.trim().split(/[\s,;]+/).filter(Boolean).map(Number);
+}
+function parseMatrix(s) {
+  const rows = s.trim().split(/\n+/).map(r => parseRow(r)).filter(r => r.length);
+  if (!rows.length) return null;
+  const cols = rows[0].length;
+  if (rows.some(r => r.length !== cols)) return null;
+  return rows;
+}
+
+// --- Chi-square distribution CDF via regularised lower incomplete gamma -----
+function logGamma(x) {
+  const c = [76.18009172947146,-86.50532032941677,24.01409824083091,
+             -1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let t = x, y = x, ser = 1.000000000190015;
+  const tmp1 = t + 5.5, tmp = tmp1 - (t + 0.5) * Math.log(tmp1);
+  for (let j = 0; j < 6; j++) { y += 1; ser += c[j] / y; }
+  return -tmp + Math.log(2.5066282746310005 * ser / x);
+}
+// P(a,x) — regularised lower incomplete gamma
+function gammap(a, x) {
+  if (x < 0 || a <= 0) return NaN;
+  if (x === 0) return 0;
+  if (x < a + 1) {
+    // series
+    let ap = a, sum = 1 / a, del = sum;
+    for (let n = 1; n < 200; n++) {
+      ap += 1; del *= x / ap; sum += del;
+      if (Math.abs(del) < Math.abs(sum) * 1e-15) break;
+    }
+    return sum * Math.exp(-x + a * Math.log(x) - logGamma(a));
+  } else {
+    // continued fraction (Q), then 1 - Q
+    let b = x + 1 - a, c = 1e300, d = 1 / b, h = d;
+    for (let i = 1; i < 200; i++) {
+      const an = -i * (i - a);
+      b += 2;
+      d = an * d + b; if (Math.abs(d) < 1e-300) d = 1e-300;
+      c = b + an / c; if (Math.abs(c) < 1e-300) c = 1e-300;
+      d = 1 / d;
+      const del = d * c; h *= del;
+      if (Math.abs(del - 1) < 1e-15) break;
+    }
+    const q = Math.exp(-x + a * Math.log(x) - logGamma(a)) * h;
+    return 1 - q;
+  }
+}
+function chi2Cdf(x, k) { return gammap(k / 2, x / 2); }
+function chi2SF(x, k) { return 1 - chi2Cdf(x, k); }
+// inverse via bisection for α (upper-tail critical value)
+function chi2Inv(p, k) {
+  // find x such that chi2Cdf(x, k) = p
+  let lo = 0, hi = Math.max(50, k * 5);
+  while (chi2Cdf(hi, k) < p) { hi *= 2; if (hi > 1e9) break; }
+  for (let i = 0; i < 200; i++) {
+    const mid = 0.5 * (lo + hi);
+    if (chi2Cdf(mid, k) < p) lo = mid; else hi = mid;
+    if (hi - lo < 1e-10) break;
+  }
+  return 0.5 * (lo + hi);
+}
+
+function fmt(x, d = 4) {
+  if (!isFinite(x)) return '—';
+  if (Math.abs(x) >= 10000) return x.toExponential(3);
+  if (Math.abs(x) < 0.0001 && x !== 0) return x.toExponential(3);
+  return Number(x.toFixed(d)).toString();
+}
+
+function loadSample() {
+  if (mode === 'gof') {
+    $('gofObs').value = '18 22 25 15 20';
+    $('gofExp').value = '';
+  } else {
+    $('indMat').value = '30 15 55\n20 25 55\n10 30 60';
+  }
+  run();
+}
+
+function showErr(msg) {
+  const el = $('err');
+  el.className = 'err';
+  el.textContent = msg;
+  el.style.display = '';
+  $('result').style.display = 'none';
+}
+
+function run() {
+  $('err').style.display = 'none';
+  const alpha = parseFloat($('alpha').value);
+  if (!(alpha > 0 && alpha < 1)) return showErr('α must be between 0 and 1.');
+
+  if (mode === 'gof') runGof(alpha);
+  else runInd(alpha);
+}
+
+function runGof(alpha) {
+  const obs = parseRow($('gofObs').value);
+  if (obs.length < 2) return showErr('Need at least 2 observed bins.');
+  if (obs.some(v => !isFinite(v) || v < 0)) return showErr('Observed counts must be non-negative numbers.');
+  const N = obs.reduce((a, b) => a + b, 0);
+  if (N <= 0) return showErr('Observed counts sum to zero.');
+
+  let exp;
+  const rawExp = $('gofExp').value.trim();
+  if (!rawExp) {
+    exp = obs.map(_ => N / obs.length);
+  } else {
+    exp = parseRow($('gofExp').value);
+    if (exp.length !== obs.length) return showErr('Observed and expected must have the same length.');
+    if (exp.some(v => !isFinite(v) || v <= 0)) return showErr('Expected must be positive.');
+    const eSum = exp.reduce((a, b) => a + b, 0);
+    // Interpret as proportions if it looks like one (sums close to 1)
+    if (Math.abs(eSum - 1) < 0.02) exp = exp.map(v => v * N);
+    else if (Math.abs(eSum - N) > 0.5) exp = exp.map(v => v * N / eSum);
+  }
+  const ddof = Math.max(0, parseInt($('ddof').value) || 0);
+  const df = obs.length - 1 - ddof;
+  if (df < 1) return showErr('Degrees of freedom must be ≥ 1 (reduce extra-parameters or add bins).');
+
+  const cells = obs.map((o, i) => {
+    const e = exp[i];
+    const r = (o - e) / Math.sqrt(e);
+    return { o, e, r, chi: (o - e) * (o - e) / e };
+  });
+  const chi = cells.reduce((a, c) => a + c.chi, 0);
+  const p = chi2SF(chi, df);
+  const crit = chi2Inv(1 - alpha, df);
+  const minExp = Math.min(...exp);
+  const V = Math.sqrt(chi / (N * (obs.length - 1)));
+
+  renderResult({
+    chi, df, p, crit, alpha, N, V, minExp,
+    labelV: obs.length === 2 ? 'φ (phi)' : 'Cramér\'s V',
+    cells: [cells],
+    kind: 'gof',
+    yates: false,
+    r: 1, c: obs.length
+  });
+}
+
+function runInd(alpha) {
+  const M = parseMatrix($('indMat').value);
+  if (!M) return showErr('Matrix rows must be non-empty and equal in length.');
+  const r = M.length, c = M[0].length;
+  if (r < 2 || c < 2) return showErr('Contingency table must be at least 2×2.');
+  if (M.flat().some(v => !isFinite(v) || v < 0)) return showErr('Cells must be non-negative numbers.');
+  const rowSum = M.map(row => row.reduce((a, b) => a + b, 0));
+  const colSum = M[0].map((_, j) => M.reduce((a, row) => a + row[j], 0));
+  const N = rowSum.reduce((a, b) => a + b, 0);
+  if (N <= 0) return showErr('Matrix sums to zero.');
+  const yates = $('yates').checked && r === 2 && c === 2;
+
+  const cells = M.map((row, i) => row.map((o, j) => {
+    const e = rowSum[i] * colSum[j] / N;
+    let diff = o - e;
+    if (yates) diff = Math.sign(diff) * Math.max(0, Math.abs(diff) - 0.5);
+    const chi = e > 0 ? diff * diff / e : 0;
+    const res = e > 0 ? (o - e) / Math.sqrt(e) : 0;
+    return { o, e, r: res, chi };
+  }));
+  const chi = cells.flat().reduce((a, c) => a + c.chi, 0);
+  const df = (r - 1) * (c - 1);
+  const p = chi2SF(chi, df);
+  const crit = chi2Inv(1 - alpha, df);
+  const minExp = Math.min(...cells.flat().map(c => c.e));
+  const V = Math.sqrt(chi / (N * Math.min(r - 1, c - 1)));
+
+  renderResult({
+    chi, df, p, crit, alpha, N, V, minExp,
+    labelV: r === 2 && c === 2 ? 'φ (phi)' : 'Cramér\'s V',
+    cells, kind: 'ind', yates, r, c
+  });
+}
+
+function renderResult(res) {
+  $('rChi').textContent = fmt(res.chi, 4);
+  $('rDf').textContent = res.df;
+  $('rP').textContent = res.p < 1e-6 ? res.p.toExponential(3) : fmt(res.p, 6);
+  $('rCrit').textContent = fmt(res.crit, 4);
+  $('rN').textContent = fmt(res.N, 0);
+  $('rV').textContent = fmt(res.V, 4);
+  $('rMinExp').textContent = fmt(res.minExp, 3);
+  document.querySelector('#rV').nextElementSibling.textContent = res.labelV;
+
+  const v = $('verdict');
+  if (res.p < res.alpha) {
+    v.className = 'verdict reject';
+    v.innerHTML = `Reject H₀ at α = ${res.alpha}. p = ${$('rP').textContent} &lt; ${res.alpha}, and χ² = ${fmt(res.chi, 3)} &gt; critical ${fmt(res.crit, 3)}. The observed counts differ from what H₀ predicts.`;
+  } else {
+    v.className = 'verdict accept';
+    v.innerHTML = `Fail to reject H₀ at α = ${res.alpha}. p = ${$('rP').textContent} ≥ ${res.alpha}, and χ² = ${fmt(res.chi, 3)} ≤ critical ${fmt(res.crit, 3)}. The observed counts are compatible with H₀.`;
+  }
+
+  // Cell table
+  const tbl = $('tblCells');
+  tbl.innerHTML = '';
+  const cells = res.cells;
+  const R = cells.length, C = cells[0].length;
+  // Header row for independence: category numbers
+  if (res.kind === 'ind') {
+    const head = document.createElement('tr');
+    head.innerHTML = '<th></th>' + Array.from({length: C}, (_, j) => `<th>C${j+1}</th>`).join('') + '<th>row Σ</th>';
+    tbl.appendChild(head);
+  } else {
+    const head = document.createElement('tr');
+    head.innerHTML = Array.from({length: C}, (_, j) => `<th>bin ${j+1}</th>`).join('');
+    tbl.appendChild(head);
+  }
+  for (let i = 0; i < R; i++) {
+    const tr = document.createElement('tr');
+    if (res.kind === 'ind') tr.innerHTML = `<td class="rl">R${i+1}</td>`;
+    let rowSum = 0;
+    for (let j = 0; j < C; j++) {
+      const c = cells[i][j]; rowSum += c.o;
+      const mag = Math.min(1, Math.abs(c.r) / 3);
+      const color = c.r > 0 ? `rgba(231,76,60,${(0.08 + 0.35 * mag).toFixed(2)})` : `rgba(52,152,219,${(0.08 + 0.35 * mag).toFixed(2)})`;
+      const td = document.createElement('td');
+      td.className = 'cell';
+      td.style.background = color;
+      td.innerHTML = `<div class="obs">${fmt(c.o, 3)}</div><div class="exp">(${fmt(c.e, 2)})</div><div class="res">r = ${fmt(c.r, 2)}</div>`;
+      tr.appendChild(td);
+    }
+    if (res.kind === 'ind') tr.innerHTML += `<td>${fmt(rowSum, 0)}</td>`;
+    tbl.appendChild(tr);
+  }
+
+  // Explanation
+  const expl = res.kind === 'gof'
+    ? `χ² = Σ (O − E)² / E over ${cells[0].length} bins\n`
+      + `df = k − 1 − p_extra = ${cells[0].length} − 1 − ${cells[0].length - 1 - res.df} = ${res.df}\n`
+      + `p = P(χ²_${res.df} ≥ ${fmt(res.chi, 3)}) = ${$('rP').textContent}\n`
+      + `Critical χ² at α = ${res.alpha}: ${fmt(res.crit, 3)}\n`
+      + `${res.labelV} = √(χ² / (n × (k − 1))) = ${fmt(res.V, 4)}\n`
+      + `Minimum expected cell: ${fmt(res.minExp, 3)}${res.minExp < 5 ? ' — Cochran\'s rule of thumb (≥ 5) is violated; the χ² approximation may be inaccurate.' : ''}`
+    : `χ² = Σᵢⱼ (Oᵢⱼ − Eᵢⱼ)² / Eᵢⱼ  where Eᵢⱼ = rowᵢ × colⱼ / n\n`
+      + `df = (r − 1)(c − 1) = (${res.r} − 1)(${res.c} − 1) = ${res.df}\n`
+      + `p = P(χ²_${res.df} ≥ ${fmt(res.chi, 3)}) = ${$('rP').textContent}\n`
+      + `Critical χ² at α = ${res.alpha}: ${fmt(res.crit, 3)}\n`
+      + `${res.labelV} = √(χ² / (n × min(r − 1, c − 1))) = ${fmt(res.V, 4)}\n`
+      + `${res.yates ? 'Yates\' correction applied (|O − E| replaced by max(0, |O − E| − 0.5)).\n' : ''}`
+      + `Minimum expected cell: ${fmt(res.minExp, 3)}${res.minExp < 5 ? ' — Cochran\'s rule of thumb (≥ 5) is violated; the χ² approximation may be inaccurate.' : ''}`;
+  $('expl').textContent = expl;
+
+  $('result').style.display = '';
+}
+
+setMode('gof');
+run();
+</script>
+</body>
+</html>

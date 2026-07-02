@@ -258,6 +258,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [Segment Tree Visualizer](segmenttree.html) | Build a segment tree over any integer array and pick an aggregate — sum, min, max, gcd, or xor. Run a range query and watch which internal nodes light up green (contribute) or blue (walked into); run a point update and watch the O(log n) yellow chain of re-aggregated ancestors climb back to the root. |
+| [Skip List Visualizer](skiplist.html) | Insert, delete, and search keys in a live probabilistic skip list — coin flips promote towers, express-lane pointers grow, and the O(log n) search path zig-zags right-and-down from the header. Adjustable promotion probability p, tower height histogram vs the geometric expectation, and per-op hop counter. |
 | [CPU Scheduling Simulator](cpusched.html) | Compare FCFS, SJF, SRTF, Round Robin, and priority (preemptive and non-preemptive) scheduling on the same process set. Edit arrival, burst, and priority per PID, pick a quantum for RR, and get a color-coded Gantt chart plus per-process start / finish / turnaround / waiting / response times and CPU utilization. |
 | [Binary Heap Visualizer](heap.html) | Insert, extract-root, peek, or bulk-heapify a min or max binary heap and watch every sift-up and sift-down step both on the tree and on the backing array — with parent/child index arithmetic (`2i+1`, `2i+2`) called out at each swap. Includes a Floyd O(n) build-heap demo and a heap-sort playthrough. |
 | [Ring Buffer Visualizer](ringbuf.html) | Push, pop, or peek on a fixed-capacity circular buffer and watch the head / tail indices wrap modulo capacity. Pick reject-on-full or overwrite-oldest policy, see the ring and linear array views update in lock-step, and read a canonical C implementation for reference. |
@@ -384,6 +386,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Chi-Square Test Calculator](chisquare.html) | Run Pearson's χ² *goodness-of-fit* and *independence* tests without leaving the browser. Paste observed counts (with optional expected proportions) or an r×c contingency matrix, pick α, tick Yates' correction for 2×2, and get χ², df, p-value, critical value, Cramér's V / φ, plus a per-cell standardised-residual heat map to see which cells drive the statistic. |
 | [Pareto Chart Builder](pareto.html) | Find the vital few — paste `category, count` rows and instantly get a sorted bar chart with an orange cumulative-percentage line, configurable 80% threshold, vital-few highlight, and SVG / PNG / TSV export. Built-in examples for bug causes, latency sources, support tickets, and defect types. |
 | [SWOT & TOWS Analysis Builder](swot.html) | Lay out Strengths, Weaknesses, Opportunities, and Threats; drag to reorder; weight each item 1–5; and auto-derive the four TOWS strategy quadrants (SO grow, WO improve, ST defend, WT survive). Posture verdict (S−W vs O−T), Markdown / JSON / PNG export, auto-saves to local storage. |
 | [RACI Matrix Builder](raci.html) | Build a RACI / RASCI responsibility matrix for tasks and stakeholders — assign Responsible, Accountable, Consulted, Informed (and optional Support), validate that every row has exactly one Accountable, flag overloaded owners, and export as Markdown, CSV, HTML, or JSON. |
