@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kaprekar's Routine Visualizer — Free Online Tool</title>
+<meta name="description" content="Run Kaprekar's routine on any starting integer and watch it fall into the Kaprekar constant — 6174 for 4-digit numbers, 495 for 3-digit. Sort digits descending minus ascending, iterate, and see how many steps it takes to converge.">
+<meta name="keywords" content="kaprekar constant, kaprekar routine, 6174, 495, digit sort, recreational mathematics, number theory, iterated function">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/kaprekar.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; font-size: .88rem; }
+  .controls input, .controls select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=number] { width: 100px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls label { color: var(--muted); }
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px; margin-bottom: 14px;
+  }
+  .summary .tile {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .summary .tile .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .summary .tile .value { font-family: var(--mono); font-size: 1.1rem; margin-top: 3px; color: var(--text); }
+  .summary .tile.hit .value { color: var(--success); }
+  .summary .tile.warn .value { color: var(--warning); }
+  table.steps {
+    width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .86rem;
+  }
+  table.steps th, table.steps td {
+    padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right;
+  }
+  table.steps th {
+    background: var(--surface2); color: var(--muted); font-weight: 600;
+    text-transform: uppercase; font-size: .72rem; letter-spacing: .04em;
+  }
+  table.steps td.step { text-align: center; color: var(--muted); }
+  table.steps tr.fixed td { background: rgba(40, 180, 99, .12); color: var(--success); font-weight: 700; }
+  table.steps tr.repdigit td { background: rgba(231, 76, 60, .12); color: var(--error); }
+  .digits { display: inline-flex; gap: 2px; justify-content: flex-end; }
+  .digits .d {
+    width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 3px;
+    font-family: var(--mono); font-size: .82rem;
+  }
+  .digits.hi .d { background: rgba(241, 196, 15, .18); }
+  .digits.lo .d { background: rgba(99, 102, 241, .18); }
+  .legend { font-size: .78rem; color: var(--muted); line-height: 1.6; margin-top: 10px; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 4px; border: 1px solid var(--border); }
+  .legend .sw.hi { background: rgba(40, 180, 99, .3); border-color: var(--success); }
+  .legend .sw.warn { background: rgba(231, 76, 60, .18); border-color: var(--error); }
+  .legend .sw.step { background: rgba(241, 196, 15, .28); border-color: var(--warning); }
+  .fact { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .fact code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Kaprekar's Routine</h1>
+<p class="subtitle"><strong>Kaprekar's routine</strong> takes any non-repdigit number, rearranges its digits into the largest and smallest values, subtracts them, and repeats. For 4-digit inputs the sequence always locks onto <code>6174</code> in at most seven steps — the <em>Kaprekar constant</em>. For 3 digits it locks onto <code>495</code>. Longer widths fall into cycles instead of a single fixed point.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Number</label>
+    <input type="number" id="nIn" value="1729" min="0">
+    <label>Width</label>
+    <select id="wIn">
+      <option value="0">auto</option>
+      <option value="3">3-digit (→ 495)</option>
+      <option value="4" selected>4-digit (→ 6174)</option>
+      <option value="5">5-digit</option>
+      <option value="6">6-digit</option>
+      <option value="7">7-digit</option>
+      <option value="8">8-digit</option>
+    </select>
+    <button class="primary" onclick="run()">Run</button>
+    <button onclick="random()">🎲 Random</button>
+    <button onclick="setV(6589)">6589</button>
+    <button onclick="setV(3141)">3141</button>
+    <button onclick="setV(2025)">2025</button>
+    <button onclick="setV(100)">100</button>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div class="legend">
+    <span class="sw hi"></span>fixed point reached &middot;
+    <span class="sw warn"></span>repdigit (routine yields 0) &middot;
+    <span class="sw step"></span>descending digits &nbsp;&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:rgba(99,102,241,.28);border:1px solid var(--accent);vertical-align:middle;margin-right:4px"></span>ascending digits
+  </div>
+</div>
+
+<div class="card">
+  <h2>Iteration Trace</h2>
+  <div style="overflow-x:auto">
+    <table class="steps" id="steps">
+      <thead><tr><th>#</th><th>largest</th><th>&minus;</th><th>smallest</th><th>=</th><th>next</th></tr></thead>
+      <tbody id="stepsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About the Constant</h2>
+  <p class="fact">
+    Indian mathematician <strong>D. R. Kaprekar</strong> noticed in 1949 that this simple operation on 4-digit numbers always terminates at <code>6174</code>. The proof is finite — there are only 8,991 four-digit inputs (skipping repdigits like <code>1111</code>) and every one of them reaches <code>6174</code> in at most seven iterations. Once there, the routine stays: <code>7641 &minus; 1467 = 6174</code>. The 3-digit analogue is <code>495</code>; wider inputs enter cycles of length 2 to 14 instead of a single fixed point. Kaprekar's other famous discoveries — <em>Kaprekar numbers</em>, <em>Harshad numbers</em>, and the <em>self-numbers</em> — remain staples of recreational number theory.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function padDigits(n, width) {
+  return String(n).padStart(width, '0');
+}
+
+function kaprekarStep(n, width) {
+  const s = padDigits(n, width);
+  const digits = s.split('');
+  const desc = [...digits].sort((a, b) => b - a).join('');
+  const asc  = [...digits].sort((a, b) => a - b).join('');
+  const hi = parseInt(desc, 10);
+  const lo = parseInt(asc, 10);
+  return { hi, lo, desc, asc, next: hi - lo, isRepdigit: new Set(digits).size === 1 };
+}
+
+function pickWidth(n, selected) {
+  if (selected > 0) return selected;
+  return Math.max(3, String(Math.max(0, n)).length);
+}
+
+function fixedPointFor(w) {
+  if (w === 3) return 495;
+  if (w === 4) return 6174;
+  return null;
+}
+
+function digitsHtml(str, cls) {
+  return '<span class="digits ' + cls + '">' + str.split('').map(d => '<span class="d">' + d + '</span>').join('') + '</span>';
+}
+
+function run() {
+  const nRaw = parseInt($('nIn').value, 10);
+  if (!Number.isFinite(nRaw) || nRaw < 0) return;
+  const w = pickWidth(nRaw, parseInt($('wIn').value, 10));
+  const cap = Math.pow(10, w) - 1;
+  if (nRaw > cap) {
+    $('nIn').value = cap;
+    return run();
+  }
+  const target = fixedPointFor(w);
+  const seen = new Map();
+  const rows = [];
+  let n = nRaw;
+  let step = 0;
+  let reachedFixed = false;
+  let cycleStart = -1;
+  const MAX = 60;
+
+  while (step < MAX) {
+    const key = n;
+    if (seen.has(key)) {
+      cycleStart = seen.get(key);
+      break;
+    }
+    seen.set(key, step);
+    const s = kaprekarStep(n, w);
+    rows.push({ step, n, ...s });
+    if (s.isRepdigit) break;
+    if (s.next === n) { reachedFixed = true; break; }
+    n = s.next;
+    step++;
+  }
+
+  const body = $('stepsBody');
+  body.innerHTML = '';
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    let cls = '';
+    if (r.isRepdigit) cls = 'repdigit';
+    else if (i === rows.length - 1 && reachedFixed) cls = 'fixed';
+    tr.className = cls;
+    tr.innerHTML =
+      '<td class="step">' + r.step + '</td>' +
+      '<td>' + digitsHtml(r.desc, 'hi') + ' <span style="color:var(--muted);margin-left:6px">' + r.hi + '</span></td>' +
+      '<td style="color:var(--muted)">&minus;</td>' +
+      '<td>' + digitsHtml(r.asc, 'lo') + ' <span style="color:var(--muted);margin-left:6px">' + r.lo + '</span></td>' +
+      '<td style="color:var(--muted)">=</td>' +
+      '<td><strong>' + padDigits(r.next, w) + '</strong></td>';
+    body.appendChild(tr);
+  });
+
+  const summary = $('summary');
+  const stepsCount = rows.length;
+  const last = rows[rows.length - 1];
+  let outcome = '', outcomeCls = '';
+  if (last && last.isRepdigit) {
+    outcome = 'repdigit → 0';
+    outcomeCls = 'warn';
+  } else if (reachedFixed) {
+    outcome = 'fixed at ' + padDigits(last.next, w);
+    outcomeCls = 'hit';
+  } else if (cycleStart >= 0) {
+    outcome = 'cycle len ' + (stepsCount - cycleStart);
+    outcomeCls = '';
+  } else {
+    outcome = 'aborted (>' + MAX + ')';
+    outcomeCls = 'warn';
+  }
+
+  const targetStr = target ? padDigits(target, w) : '— (cycle)';
+  const matchesTarget = reachedFixed && target && last.next === target;
+  summary.innerHTML =
+    tile('start', padDigits(nRaw, w)) +
+    tile('width', w + ' digits') +
+    tile('steps', stepsCount) +
+    tile('outcome', outcome, outcomeCls) +
+    tile('constant for w=' + w, targetStr, matchesTarget ? 'hit' : '');
+}
+
+function tile(label, value, cls) {
+  return '<div class="tile ' + (cls || '') + '"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>';
+}
+
+function random() {
+  const w = pickWidth(0, parseInt($('wIn').value, 10)) || 4;
+  const lo = Math.pow(10, w - 1);
+  const hi = Math.pow(10, w) - 1;
+  let v;
+  do { v = lo + Math.floor(Math.random() * (hi - lo + 1)); }
+  while (new Set(String(v)).size === 1);
+  $('nIn').value = v;
+  run();
+}
+
+function setV(v) {
+  $('nIn').value = v;
+  const w = String(v).length;
+  $('wIn').value = w >= 3 && w <= 8 ? w : 0;
+  run();
+}
+
+run();
+</script>
+</body>
+</html>
