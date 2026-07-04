@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A* Pathfinding Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch A*, Dijkstra, BFS, and Greedy Best-First race on the same grid. Paint walls and weighted terrain, drag the start and goal, and see the open set, closed set, and f/g/h scores update as the frontier expands.">
+<meta name="keywords" content="a star, astar visualizer, dijkstra, bfs, greedy best first, pathfinding, grid search, heuristic, manhattan, chebyshev, euclidean">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/astar.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+  .ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .ctrl-row label { font-size: .82rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  input[type="number"] { width: 70px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); }
+  input[type="range"] { width: 140px; accent-color: var(--accent, #2563eb); }
+  select { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--sans); }
+  button.btn { padding: 7px 14px; font-size: .82rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); cursor: pointer; color: var(--text); font-weight: 600; }
+  button.btn.primary { background: var(--accent, #2563eb); color: white; border-color: var(--accent, #2563eb); }
+  button.btn:hover:not(:disabled) { border-color: var(--accent, #2563eb); }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+  .paint-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .paint-btns .pb { padding: 6px 10px; font-size: .76rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); cursor: pointer; color: var(--text); display: inline-flex; align-items: center; gap: 6px; }
+  .paint-btns .pb.active { background: var(--accent, #2563eb); color: white; border-color: var(--accent, #2563eb); }
+  .paint-btns .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,.2); }
+  .stage { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; overflow: auto; }
+  svg.grid { display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .cell { stroke: var(--border); stroke-width: .5; }
+  .cell.wall { fill: #1f2937; }
+  .cell.start { fill: #16a34a; }
+  .cell.goal { fill: #dc2626; }
+  .cell.open { fill: rgba(37,99,235,.35); }
+  .cell.closed { fill: rgba(147,51,234,.35); }
+  .cell.path { fill: #fbbf24; }
+  .cell.weight-2 { fill: #fde68a; }
+  .cell.weight-5 { fill: #f59e0b; }
+  .cell.weight-9 { fill: #b45309; }
+  .cell.current { stroke: #2563eb; stroke-width: 2; }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .stat { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-family: var(--mono); font-weight: 700; font-size: 1rem; }
+  .stat .v.win { color: var(--success, #16a34a); }
+  .stat .v.fail { color: var(--error, #dc2626); }
+  .compare { max-height: 240px; overflow-y: auto; font-family: var(--mono); font-size: .78rem; margin-top: 8px; }
+  .compare table { width: 100%; border-collapse: collapse; }
+  .compare th, .compare td { padding: 5px 6px; text-align: right; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  .compare th { text-align: left; color: var(--muted); text-transform: uppercase; font-size: .68rem; letter-spacing: .04em; }
+  .compare td:first-child { text-align: left; }
+  .compare tr.best { background: rgba(22,163,74,.08); }
+  .banner { padding: 8px 10px; border-radius: var(--radius); font-weight: 700; margin-top: 8px; display: none; }
+  .banner.show { display: block; }
+  .banner.win { background: rgba(22,163,74,.12); border: 1px solid rgba(22,163,74,.4); color: var(--success, #16a34a); }
+  .banner.fail { background: rgba(220,38,38,.12); border: 1px solid rgba(220,38,38,.4); color: var(--error, #dc2626); }
+  .weight-legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: .72rem; color: var(--muted); margin-top: 8px; font-family: var(--mono); }
+  .weight-legend .sw { display: inline-flex; align-items: center; gap: 4px; }
+  .weight-legend .sq { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,.2); }
+  @media (max-width: 900px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🧭 A* Pathfinding Visualizer</h1>
+<p class="subtitle">Watch <strong>A*</strong>, <strong>Dijkstra</strong>, <strong>BFS</strong>, and <strong>Greedy Best-First</strong> search the same grid — one cell per step. Paint walls, sprinkle in weighted terrain (mud costs more), pick a heuristic (Manhattan / Chebyshev / Euclidean / Octile), then race all four to see which explores fewer cells and which finds a truly optimal path.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Grid</h2>
+    <div class="ctrl-row">
+      <label>rows <input type="number" id="rows" value="20" min="5" max="60"></label>
+      <label>cols <input type="number" id="cols" value="32" min="5" max="80"></label>
+      <label>algorithm
+        <select id="algo">
+          <option value="astar" selected>A*</option>
+          <option value="dijkstra">Dijkstra</option>
+          <option value="bfs">BFS</option>
+          <option value="greedy">Greedy Best-First</option>
+        </select>
+      </label>
+      <label>heuristic
+        <select id="heur">
+          <option value="manhattan" selected>Manhattan</option>
+          <option value="chebyshev">Chebyshev</option>
+          <option value="euclidean">Euclidean</option>
+          <option value="octile">Octile</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="diag"> 8-way (diagonals)</label>
+    </div>
+    <div class="ctrl-row">
+      <label>speed <input type="range" id="speed" min="1" max="100" value="80"></label>
+      <button class="btn primary" id="btnRun" onclick="startRun()">▶ Search</button>
+      <button class="btn" id="btnPause" onclick="togglePause()" disabled>⏸ Pause</button>
+      <button class="btn" id="btnStep" onclick="stepRun()">Step</button>
+      <button class="btn" id="btnClear" onclick="clearSearch()">Clear search</button>
+      <button class="btn" id="btnReset" onclick="reset()">↺ Reset walls</button>
+      <button class="btn" onclick="randomWalls()">Random walls</button>
+      <button class="btn" onclick="mazeGen()">Recursive maze</button>
+      <button class="btn" onclick="compareAll()">Race all four</button>
+    </div>
+    <div class="paint-btns" id="paintBtns">
+      <span class="pb active" data-mode="wall"><span class="sw" style="background:#1f2937"></span>Wall</span>
+      <span class="pb" data-mode="erase"><span class="sw" style="background:var(--surface)"></span>Erase</span>
+      <span class="pb" data-mode="start"><span class="sw" style="background:#16a34a"></span>Start</span>
+      <span class="pb" data-mode="goal"><span class="sw" style="background:#dc2626"></span>Goal</span>
+      <span class="pb" data-mode="w2"><span class="sw" style="background:#fde68a"></span>Mud (w=2)</span>
+      <span class="pb" data-mode="w5"><span class="sw" style="background:#f59e0b"></span>Sand (w=5)</span>
+      <span class="pb" data-mode="w9"><span class="sw" style="background:#b45309"></span>Swamp (w=9)</span>
+    </div>
+    <div class="stage" id="stage">
+      <svg id="grid" class="grid"></svg>
+    </div>
+    <div id="banner" class="banner"></div>
+    <div class="weight-legend">
+      <span class="sw"><span class="sq" style="background:rgba(37,99,235,.35)"></span>open set (frontier)</span>
+      <span class="sw"><span class="sq" style="background:rgba(147,51,234,.35)"></span>closed set (visited)</span>
+      <span class="sw"><span class="sq" style="background:#fbbf24"></span>final path</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Stats</h2>
+    <div class="stats-grid">
+      <div class="stat"><div class="k">Cells expanded</div><div class="v" id="sExp">0</div></div>
+      <div class="stat"><div class="k">Open set size</div><div class="v" id="sOpen">0</div></div>
+      <div class="stat"><div class="k">Path length</div><div class="v" id="sLen">—</div></div>
+      <div class="stat"><div class="k">Path cost</div><div class="v" id="sCost">—</div></div>
+    </div>
+    <h2 style="margin-top:12px">Race all four</h2>
+    <div class="compare" id="compare">
+      <p style="color:var(--muted);font-size:.82rem">Click <em>Race all four</em> above to run every algorithm on the current grid without animation and compare expansions vs path cost.</p>
+    </div>
+    <p style="font-size:.75rem;color:var(--muted);margin-top:8px">A* is optimal iff the heuristic is admissible (never over-estimates true remaining cost). Manhattan is admissible for 4-way; Octile for 8-way; Euclidean is always admissible. Greedy skips <em>g</em>-cost entirely — fast but can return a much longer path.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>The algorithms in one sentence each</h2>
+  <p><strong>BFS</strong> — expands cells in <em>FIFO</em> order, so the first time it reaches the goal is guaranteed to be a fewest-hops path (ignores terrain weights).</p>
+  <p><strong>Dijkstra</strong> — expands the unvisited cell with lowest <code>g</code> (cost from start). Optimal for any non-negative weights. Same as A* with <code>h = 0</code>.</p>
+  <p><strong>Greedy Best-First</strong> — expands the cell with lowest <code>h</code> (heuristic to goal). Fast, but ignores accumulated cost, so its path can be arbitrarily bad.</p>
+  <p><strong>A*</strong> — expands the cell with lowest <code>f = g + h</code>. If <code>h</code> is admissible, the returned path is optimal; if additionally consistent, no cell needs to be re-opened.</p>
+</div>
+
+</div>
+
+<footer>
+  Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+let ROWS = 20, COLS = 32;
+let CELL = 20;
+let grid;         // 2D array; 0=empty, -1=wall, 1=start, 2=goal, or {w: number} for weighted
+let start = {r: 5, c: 3}, goal = {r: 14, c: 26};
+let paintMode = 'wall';
+let mouseDown = false;
+let running = false, paused = false, stopReq = false;
+let stateOpen = null, stateClosed = null, stateFrom = null, statePath = null, stateCurrent = null, stateG = null;
+let expandedCount = 0;
+
+// ---------- min-heap on numeric priority ----------
+class Heap {
+  constructor() { this.a = []; }
+  push(pri, item) { this.a.push({pri, item}); this._up(this.a.length - 1); }
+  pop() { if (!this.a.length) return null; const t = this.a[0]; const l = this.a.pop(); if (this.a.length) { this.a[0] = l; this._dn(0); } return t.item; }
+  size() { return this.a.length; }
+  _up(i) { while (i > 0) { const p = (i - 1) >> 1; if (this.a[p].pri > this.a[i].pri) { [this.a[p], this.a[i]] = [this.a[i], this.a[p]]; i = p; } else break; } }
+  _dn(i) { const n = this.a.length; while (true) { const l = i*2+1, r = i*2+2; let m = i; if (l < n && this.a[l].pri < this.a[m].pri) m = l; if (r < n && this.a[r].pri < this.a[m].pri) m = r; if (m !== i) { [this.a[m], this.a[i]] = [this.a[i], this.a[m]]; i = m; } else break; } }
+}
+
+function makeGrid() {
+  grid = [];
+  for (let r = 0; r < ROWS; r++) { const row = []; for (let c = 0; c < COLS; c++) row.push(0); grid.push(row); }
+  if (start.r >= ROWS) start.r = 0;
+  if (start.c >= COLS) start.c = 0;
+  if (goal.r >= ROWS) goal.r = ROWS - 1;
+  if (goal.c >= COLS) goal.c = COLS - 1;
+}
+
+function cellCost(r, c) {
+  const v = grid[r][c];
+  if (v === -1) return Infinity;
+  if (v === 0 || v === 1 || v === 2) return 1;
+  return v; // weighted (2, 5, 9)
+}
+
+function heuristic(r, c) {
+  const dr = Math.abs(r - goal.r), dc = Math.abs(c - goal.c);
+  switch (document.getElementById('heur').value) {
+    case 'chebyshev': return Math.max(dr, dc);
+    case 'euclidean': return Math.hypot(dr, dc);
+    case 'octile': { const F = Math.SQRT2 - 1; return (dr > dc) ? dr + F * dc : dc + F * dr; }
+    default: return dr + dc;
+  }
+}
+
+function neighbors(r, c) {
+  const diag = document.getElementById('diag').checked;
+  const out = [];
+  const dirs4 = [[-1,0],[1,0],[0,-1],[0,1]];
+  const dirs8 = [...dirs4, [-1,-1],[-1,1],[1,-1],[1,1]];
+  for (const [dr, dc] of diag ? dirs8 : dirs4) {
+    const nr = r + dr, nc = c + dc;
+    if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+    if (grid[nr][nc] === -1) continue;
+    if (diag && dr !== 0 && dc !== 0) {
+      if (grid[r + dr][c] === -1 && grid[r][c + dc] === -1) continue;
+    }
+    const step = (dr !== 0 && dc !== 0) ? Math.SQRT2 : 1;
+    out.push({r: nr, c: nc, step});
+  }
+  return out;
+}
+
+// ---------- rendering ----------
+function fitGrid() {
+  const stage = document.getElementById('stage');
+  const avail = stage.clientWidth - 20;
+  CELL = Math.max(10, Math.min(28, Math.floor(avail / COLS)));
+  const svg = document.getElementById('grid');
+  svg.setAttribute('width', CELL * COLS);
+  svg.setAttribute('height', CELL * ROWS);
+  svg.setAttribute('viewBox', `0 0 ${CELL*COLS} ${CELL*ROWS}`);
+}
+function render() {
+  const svg = document.getElementById('grid');
+  fitGrid();
+  let out = '';
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    let cls = 'cell';
+    const v = grid[r][c];
+    if (v === -1) cls += ' wall';
+    else if (v === 2) cls += ' weight-2';
+    else if (v === 5) cls += ' weight-5';
+    else if (v === 9) cls += ' weight-9';
+    if (statePath && statePath.has(r * COLS + c)) cls += ' path';
+    else if (stateClosed && stateClosed.has(r * COLS + c)) cls += ' closed';
+    else if (stateOpen && stateOpen.has(r * COLS + c)) cls += ' open';
+    if (r === start.r && c === start.c) cls += ' start';
+    if (r === goal.r && c === goal.c) cls += ' goal';
+    if (stateCurrent && stateCurrent.r === r && stateCurrent.c === c) cls += ' current';
+    out += `<rect class="${cls}" data-r="${r}" data-c="${c}" x="${c*CELL}" y="${r*CELL}" width="${CELL}" height="${CELL}"/>`;
+  }
+  svg.innerHTML = out;
+  updateStats();
+}
+function updateStats() {
+  document.getElementById('sExp').textContent = expandedCount;
+  document.getElementById('sOpen').textContent = stateOpen ? stateOpen.size : 0;
+}
+
+// ---------- search core (generator-style) ----------
+function* search(algo) {
+  const openHeap = new Heap();
+  const openSet = new Set();
+  const closed = new Set();
+  const g = new Map();
+  const from = new Map();
+  const skey = start.r * COLS + start.c;
+  g.set(skey, 0);
+  const h0 = heuristic(start.r, start.c);
+  openHeap.push(pri(algo, 0, h0), {r: start.r, c: start.c});
+  openSet.add(skey);
+  stateOpen = openSet; stateClosed = closed; stateFrom = from; stateG = g; statePath = null; stateCurrent = null;
+  expandedCount = 0;
+  while (openHeap.size()) {
+    const cur = openHeap.pop();
+    const ck = cur.r * COLS + cur.c;
+    if (closed.has(ck)) continue;
+    openSet.delete(ck);
+    closed.add(ck);
+    stateCurrent = cur;
+    expandedCount++;
+    if (cur.r === goal.r && cur.c === goal.c) {
+      // reconstruct
+      const path = new Set();
+      let k = ck; while (k !== undefined) { path.add(k); k = from.get(k); }
+      statePath = path;
+      const cost = g.get(ck);
+      const length = pathLen(path);
+      yield {done: true, cost, length};
+      return;
+    }
+    for (const nb of neighbors(cur.r, cur.c)) {
+      const nk = nb.r * COLS + nb.c;
+      if (closed.has(nk)) continue;
+      const stepCost = cellCost(nb.r, nb.c) * nb.step;
+      const tg = (g.get(ck) || 0) + stepCost;
+      if (tg < (g.get(nk) ?? Infinity)) {
+        g.set(nk, tg);
+        from.set(nk, ck);
+        const h = heuristic(nb.r, nb.c);
+        openHeap.push(pri(algo, tg, h), {r: nb.r, c: nb.c});
+        openSet.add(nk);
+      }
+    }
+    yield {done: false};
+  }
+  yield {done: true, unreachable: true};
+}
+function pri(algo, g, h) {
+  switch (algo) {
+    case 'bfs': return g;
+    case 'dijkstra': return g;
+    case 'greedy': return h;
+    default: return g + h;
+  }
+}
+function pathLen(pathSet) {
+  return pathSet.size - 1;
+}
+
+// ---------- run controllers ----------
+let iter = null;
+function newSearch() {
+  iter = search(document.getElementById('algo').value);
+  clearBanner();
+}
+async function startRun() {
+  if (running) return;
+  clearSearch();
+  newSearch();
+  running = true; stopReq = false; paused = false;
+  toggleButtons(true);
+  while (true) {
+    if (stopReq) break;
+    while (paused && !stopReq) await sleep(60);
+    const nxt = iter.next();
+    if (nxt.done || nxt.value.done) {
+      render();
+      if (nxt.value?.unreachable) showBanner('No path — goal is unreachable.', 'fail');
+      else if (nxt.value?.done) {
+        const c = nxt.value.cost, l = nxt.value.length;
+        document.getElementById('sLen').textContent = l;
+        document.getElementById('sCost').textContent = c.toFixed(2);
+        showBanner(`✓ Path found — ${l} steps, cost ${c.toFixed(2)}, expanded ${expandedCount} cells.`, 'win');
+      }
+      break;
+    }
+    render();
+    await sleep(delay());
+  }
+  running = false;
+  toggleButtons(false);
+}
+function stepRun() {
+  if (running) return;
+  if (!iter) newSearch();
+  const nxt = iter.next();
+  if (nxt.done || nxt.value.done) {
+    render();
+    if (nxt.value?.unreachable) showBanner('No path — goal is unreachable.', 'fail');
+    else if (nxt.value?.done) {
+      const c = nxt.value.cost, l = nxt.value.length;
+      document.getElementById('sLen').textContent = l;
+      document.getElementById('sCost').textContent = c.toFixed(2);
+      showBanner(`✓ Path found — ${l} steps, cost ${c.toFixed(2)}, expanded ${expandedCount} cells.`, 'win');
+    }
+    iter = null;
+    return;
+  }
+  render();
+}
+function togglePause() {
+  paused = !paused;
+  document.getElementById('btnPause').textContent = paused ? '▶ Resume' : '⏸ Pause';
+}
+function toggleButtons(runState) {
+  document.getElementById('btnRun').disabled = runState;
+  document.getElementById('btnStep').disabled = runState;
+  document.getElementById('btnPause').disabled = !runState;
+}
+function clearSearch() {
+  stopReq = true; running = false; paused = false;
+  stateOpen = null; stateClosed = null; stateFrom = null; statePath = null; stateCurrent = null; stateG = null;
+  expandedCount = 0;
+  iter = null;
+  clearBanner();
+  document.getElementById('sLen').textContent = '—';
+  document.getElementById('sCost').textContent = '—';
+  document.getElementById('btnPause').textContent = '⏸ Pause';
+  render();
+}
+function reset() {
+  clearSearch();
+  makeGrid();
+  start = {r: Math.floor(ROWS * .3), c: Math.floor(COLS * .15)};
+  goal = {r: Math.floor(ROWS * .7), c: Math.floor(COLS * .82)};
+  render();
+}
+function randomWalls() {
+  clearSearch();
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    if ((r === start.r && c === start.c) || (r === goal.r && c === goal.c)) continue;
+    if (Math.random() < 0.28) grid[r][c] = -1;
+    else if (Math.random() < 0.08) grid[r][c] = [2,5,9][Math.floor(Math.random()*3)];
+    else grid[r][c] = 0;
+  }
+  render();
+}
+function mazeGen() {
+  clearSearch();
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) grid[r][c] = -1;
+  function carve(r, c) {
+    grid[r][c] = 0;
+    const dirs = [[-2,0],[2,0],[0,-2],[0,2]];
+    for (let i = dirs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [dirs[i], dirs[j]] = [dirs[j], dirs[i]]; }
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr, nc = c + dc;
+      if (nr > 0 && nr < ROWS - 1 && nc > 0 && nc < COLS - 1 && grid[nr][nc] === -1) {
+        grid[r + dr / 2][c + dc / 2] = 0;
+        carve(nr, nc);
+      }
+    }
+  }
+  carve(1, 1);
+  start = {r: 1, c: 1};
+  goal = {r: (ROWS % 2 === 0 ? ROWS - 2 : ROWS - 2), c: (COLS % 2 === 0 ? COLS - 2 : COLS - 2)};
+  grid[start.r][start.c] = 0;
+  grid[goal.r][goal.c] = 0;
+  render();
+}
+async function compareAll() {
+  const el = document.getElementById('compare');
+  el.innerHTML = '<p style="color:var(--muted);font-size:.82rem">Running…</p>';
+  const results = [];
+  const algos = [
+    {k: 'astar', name: 'A*'},
+    {k: 'dijkstra', name: 'Dijkstra'},
+    {k: 'bfs', name: 'BFS'},
+    {k: 'greedy', name: 'Greedy'},
+  ];
+  for (const a of algos) {
+    const it = search(a.k);
+    let last = null;
+    while (true) {
+      const step = it.next();
+      if (step.done) { last = null; break; }
+      if (step.value.done) { last = step.value; break; }
+    }
+    results.push({algo: a.name, expanded: expandedCount, cost: last?.cost ?? null, length: last?.length ?? null, ok: last && !last.unreachable});
+  }
+  const minCost = Math.min(...results.filter(r => r.ok).map(r => r.cost));
+  const minExp = Math.min(...results.filter(r => r.ok).map(r => r.expanded));
+  el.innerHTML = '<table><thead><tr><th>Algorithm</th><th>Expanded</th><th>Cost</th><th>Steps</th></tr></thead><tbody>' +
+    results.map(r => {
+      if (!r.ok) return `<tr><td>${r.algo}</td><td colspan="3" style="color:var(--error, #dc2626);text-align:left">unreachable</td></tr>`;
+      const cls = (r.cost === minCost && r.expanded === minExp) ? 'best' : '';
+      return `<tr class="${cls}"><td>${r.algo}</td><td${r.expanded === minExp ? ' style="color:var(--success, #16a34a);font-weight:700"' : ''}>${r.expanded}</td><td${r.cost === minCost ? ' style="color:var(--success, #16a34a);font-weight:700"' : ''}>${r.cost.toFixed(2)}</td><td>${r.length}</td></tr>`;
+    }).join('') + '</tbody></table><p style="font-size:.72rem;color:var(--muted);margin-top:6px">Green = best in column. Bold row = strictly dominates (fewest expansions <em>and</em> lowest cost).</p>';
+  // restore the visual search
+  clearSearch();
+}
+
+function showBanner(text, cls) {
+  const b = document.getElementById('banner');
+  b.className = 'banner show ' + cls;
+  b.textContent = text;
+}
+function clearBanner() { document.getElementById('banner').className = 'banner'; }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function delay() { const s = parseInt(document.getElementById('speed').value, 10); return Math.max(0, 100 - s); }
+
+// ---------- painting ----------
+function setPaintMode(m) {
+  paintMode = m;
+  document.querySelectorAll('#paintBtns .pb').forEach(el => el.classList.toggle('active', el.dataset.mode === m));
+}
+function paintAt(r, c) {
+  if (r === start.r && c === start.c && paintMode !== 'start') return;
+  if (r === goal.r && c === goal.c && paintMode !== 'goal') return;
+  switch (paintMode) {
+    case 'wall': grid[r][c] = -1; break;
+    case 'erase': grid[r][c] = 0; break;
+    case 'w2': grid[r][c] = 2; break;
+    case 'w5': grid[r][c] = 5; break;
+    case 'w9': grid[r][c] = 9; break;
+    case 'start': if (grid[r][c] !== -1) start = {r, c}; break;
+    case 'goal': if (grid[r][c] !== -1) goal = {r, c}; break;
+  }
+  render();
+}
+
+function bindEvents() {
+  const svg = document.getElementById('grid');
+  svg.addEventListener('mousedown', e => {
+    mouseDown = true;
+    const t = e.target;
+    if (t.dataset && t.dataset.r !== undefined) paintAt(+t.dataset.r, +t.dataset.c);
+  });
+  svg.addEventListener('mouseover', e => {
+    if (!mouseDown) return;
+    const t = e.target;
+    if (t.dataset && t.dataset.r !== undefined) paintAt(+t.dataset.r, +t.dataset.c);
+  });
+  window.addEventListener('mouseup', () => mouseDown = false);
+  svg.addEventListener('touchstart', e => {
+    const el = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+    if (el && el.dataset && el.dataset.r !== undefined) { paintAt(+el.dataset.r, +el.dataset.c); e.preventDefault(); }
+  }, {passive: false});
+  svg.addEventListener('touchmove', e => {
+    const el = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+    if (el && el.dataset && el.dataset.r !== undefined) { paintAt(+el.dataset.r, +el.dataset.c); e.preventDefault(); }
+  }, {passive: false});
+  document.querySelectorAll('#paintBtns .pb').forEach(el => el.addEventListener('click', () => setPaintMode(el.dataset.mode)));
+  document.getElementById('rows').addEventListener('change', e => { ROWS = Math.max(5, Math.min(60, +e.target.value || 20)); e.target.value = ROWS; reset(); });
+  document.getElementById('cols').addEventListener('change', e => { COLS = Math.max(5, Math.min(80, +e.target.value || 32)); e.target.value = COLS; reset(); });
+  document.getElementById('algo').addEventListener('change', clearSearch);
+  document.getElementById('heur').addEventListener('change', clearSearch);
+  document.getElementById('diag').addEventListener('change', clearSearch);
+  window.addEventListener('resize', () => render());
+}
+
+bindEvents();
+reset();
+</script>
+</body>
+</html>

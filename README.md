@@ -258,6 +258,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Numerical Integration Playground](numint.html) | Approximate `∫ₐᵇ f(x) dx` with Left / Right Riemann, Midpoint, Trapezoid, Simpson's 1/3, and Simpson's 3/8 side-by-side — with a live plot of the panels being summed and a log-log convergence chart showing each rule's empirical order (O(h), O(h²), O(h⁴)). |
+| [Tower of Hanoi Visualizer](hanoi.html) | Watch the classical recursive solve unroll into the minimum `2ⁿ − 1` moves, or grab a disk yourself and race the optimal solver. Step, pause, rewind, and read the full `hanoi(n, src→tgt via aux)` recursion trace side-by-side. |
+| [A* Pathfinding Visualizer](astar.html) | Race A*, Dijkstra, BFS, and Greedy Best-First on the same grid — paint walls and weighted terrain, pick a heuristic (Manhattan / Chebyshev / Euclidean / Octile), toggle 8-way movement, and compare cells expanded vs path cost across all four algorithms on the same map. |
 | [Kaprekar's Routine Visualizer](kaprekar.html) | Sort a number's digits descending and ascending, subtract, repeat — and watch it fall into the Kaprekar constant 6174 for 4 digits or 495 for 3 digits in at most seven steps. Handles 3- to 8-digit inputs and flags cycles that longer widths get stuck in. |
 | [KMP String Matching Visualizer](kmp.html) | Step through the Knuth-Morris-Pratt algorithm — first the failure function `lps[]` is built for the pattern, then the search runs against the text with every comparison, mismatch fallback, and match highlighted on a single strip in O(n + m) time. |
 | [Runge-Kutta 4 ODE Solver](rk4.html) | Solve `dy/dx = f(x, y)` initial-value problems with classical RK4, then compare against Euler and Heun on the same plot. Inspect the four kᵢ slopes at every step, supply an optional exact solution, and see max &#124;error&#124; at a glance. |

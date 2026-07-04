@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tower of Hanoi Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch the classic Tower of Hanoi solve itself in the minimum 2ⁿ−1 moves, or drag the disks yourself and race the optimal solver. Step, pause, rewind, and read the recursion trace side-by-side.">
+<meta name="keywords" content="tower of hanoi, hanoi visualizer, recursion visualizer, disk puzzle, 2n minus 1, hanoi solver">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hanoi.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+  .ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .ctrl-row label { font-size: .82rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  input[type="number"] { width: 70px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); }
+  input[type="range"] { width: 140px; accent-color: var(--accent, #2563eb); }
+  button.btn { padding: 7px 14px; font-size: .82rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); cursor: pointer; color: var(--text); font-weight: 600; }
+  button.btn.primary { background: var(--accent, #2563eb); color: white; border-color: var(--accent, #2563eb); }
+  button.btn:hover:not(:disabled) { border-color: var(--accent, #2563eb); }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+  .stage { position: relative; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-top: 4px; overflow: hidden; }
+  svg.pegs { width: 100%; height: 300px; display: block; }
+  .peg-labels { display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; color: var(--muted); font-family: var(--mono); font-size: .82rem; margin-top: 4px; }
+  .peg-labels div.active { color: var(--accent, #2563eb); font-weight: 700; }
+  .peg-labels div.hover { color: var(--warning, #f59e0b); }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .stat { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-family: var(--mono); font-weight: 700; font-size: 1.02rem; }
+  .stat .v.win { color: var(--success, #16a34a); }
+  .stat .v.over { color: var(--warning, #f59e0b); }
+  .log { max-height: 340px; overflow-y: auto; font-family: var(--mono); font-size: .76rem; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .log .l { padding: 1px 0; }
+  .log .l.now { background: rgba(37,99,235,.15); border-radius: 3px; padding: 1px 4px; color: var(--accent, #2563eb); font-weight: 700; }
+  .log .l.rec { color: var(--muted); }
+  .log .l.mv { color: var(--text); }
+  .log .l.done { color: var(--success, #16a34a); }
+  .disk { rx: 8; ry: 8; stroke: rgba(0,0,0,.35); stroke-width: .6; cursor: grab; transition: filter .12s; }
+  .disk.dragging { cursor: grabbing; filter: brightness(1.2) drop-shadow(0 6px 8px rgba(0,0,0,.4)); }
+  .disk.grabbed { filter: brightness(1.1) drop-shadow(0 4px 6px rgba(0,0,0,.35)); }
+  .peg-hit { fill: transparent; cursor: pointer; }
+  .peg-hit:hover ~ .peg-hi, .peg-hi.hover { opacity: 1; }
+  .peg-hi { opacity: 0; fill: rgba(37,99,235,.14); transition: opacity .12s; }
+  .peg-hi.legal { opacity: 1; fill: rgba(22,163,74,.14); }
+  .peg-hi.illegal { opacity: 1; fill: rgba(220,38,38,.14); }
+  .rings-legend { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+  .rings-legend .sw { display: inline-flex; align-items: center; gap: 4px; }
+  .rings-legend .sq { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,.2); }
+  .banner { padding: 8px 10px; background: rgba(22,163,74,.12); border: 1px solid rgba(22,163,74,.4); border-radius: var(--radius); color: var(--success, #16a34a); font-weight: 700; margin-top: 10px; display: none; }
+  .banner.show { display: block; }
+  @media (max-width: 900px) { .grid-two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🗼 Tower of Hanoi Visualizer</h1>
+<p class="subtitle">Move all <em>n</em> disks from peg A to peg C — one disk at a time, never a bigger disk on a smaller one. Watch the recursion unroll into the classical <code>2ⁿ − 1</code> moves, or grab a disk yourself and race the optimal solver. Trace panel shows the recursive call structure exactly as <code>hanoi(n, A→C via B)</code> expands.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Tower</h2>
+    <div class="ctrl-row">
+      <label>disks <input type="number" id="n" value="5" min="1" max="12"></label>
+      <label>speed <input type="range" id="speed" min="1" max="100" value="60"></label>
+      <button class="btn primary" id="btnSolve" onclick="startSolve()">▶ Solve</button>
+      <button class="btn" id="btnPause" onclick="togglePause()" disabled>⏸ Pause</button>
+      <button class="btn" id="btnStep" onclick="stepOnce()">Step</button>
+      <button class="btn" id="btnBack" onclick="stepBack()">↶ Back</button>
+      <button class="btn" id="btnReset" onclick="reset()">↺ Reset</button>
+    </div>
+    <div class="stage">
+      <svg id="pegs" class="pegs" viewBox="0 0 600 300"></svg>
+    </div>
+    <div class="peg-labels" id="pegLabels"><div data-p="0">A (source)</div><div data-p="1">B (auxiliary)</div><div data-p="2">C (target)</div></div>
+    <div class="stats-grid">
+      <div class="stat"><div class="k">Moves</div><div class="v" id="sMoves">0</div></div>
+      <div class="stat"><div class="k">Optimal 2ⁿ−1</div><div class="v" id="sOpt">31</div></div>
+      <div class="stat"><div class="k">Excess over optimal</div><div class="v" id="sExcess">0</div></div>
+      <div class="stat"><div class="k">Est. wall-clock @1 disk/s</div><div class="v" id="sTime">31 s</div></div>
+    </div>
+    <div id="win" class="banner"></div>
+    <div class="rings-legend" id="ringsLeg"></div>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:8px">Play manually: click a peg to grab its top disk, click another peg to drop it. Illegal drops (larger on smaller) are refused and don't count as moves. The counter only advances on legal placements.</p>
+  </div>
+
+  <div class="card">
+    <h2>Recursion trace</h2>
+    <div class="log" id="log"></div>
+    <p style="font-size:.75rem;color:var(--muted);margin-top:6px">The classical recursion is <code>hanoi(n, src, tgt, aux) = hanoi(n−1, src, aux, tgt); move(src→tgt); hanoi(n−1, aux, tgt, src)</code>. Every leaf is one physical disk move. Highlighted line = the move just executed.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why 2ⁿ − 1 is optimal</h2>
+  <p>Let <em>T(n)</em> be the number of moves to shuttle <em>n</em> disks from source to target. The recursion is <code>T(n) = 2·T(n−1) + 1</code>, with <em>T</em>(1) = 1. Unrolling: <em>T(n) = 2ⁿ − 1</em>. No strategy does better — the largest disk must move at least once, and to free it, the top <em>n</em>−1 disks must first be parked on the auxiliary peg (T(n−1) moves), then re-stacked on the target (another T(n−1) moves).</p>
+  <p>For <em>n</em> = 64 (the mythical Brahma temple version) the priests need 2⁶⁴ − 1 = 18 446 744 073 709 551 615 moves. At one move per second that's ~585 billion years — many times the age of the universe.</p>
+  <p><strong>Frame-Stewart</strong> for four pegs conjectures roughly <em>O(2^(√(2n)))</em> — dramatically fewer moves — but this playground sticks to the classical three-peg rules.</p>
+</div>
+
+</div>
+
+<footer>
+  Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const COLORS = ['#dc2626','#ea580c','#eab308','#65a30d','#16a34a','#0d9488','#0284c7','#2563eb','#6366f1','#9333ea','#c026d3','#db2777'];
+let N = 5;
+let pegs = [[], [], []];   // each peg is a stack; top = last element (disk sizes 1..N)
+let history = [];          // sequence of {from, to, disk}
+let cursor = 0;            // number of moves currently applied (from history)
+let solutionMoves = [];    // the full optimal plan when solve pressed
+let solutionTrace = [];    // per-move trace text (rec calls & moves)
+let running = false, paused = false, stopReq = false;
+let grabPeg = -1;          // -1 = none grabbed; else peg index
+let lastMove = null;
+
+function initState() {
+  pegs = [[], [], []];
+  for (let d = N; d >= 1; d--) pegs[0].push(d);
+  history = []; cursor = 0; solutionMoves = []; solutionTrace = [];
+  lastMove = null; grabPeg = -1;
+}
+
+function buildRecursionPlan(n, src, tgt, aux, depth, out) {
+  const indent = '  '.repeat(depth);
+  out.trace.push({t: 'rec', text: `${indent}hanoi(${n}, ${lbl(src)}→${lbl(tgt)}, via ${lbl(aux)})`, moveIdx: -1});
+  if (n === 0) return;
+  buildRecursionPlan(n - 1, src, aux, tgt, depth + 1, out);
+  const mi = out.moves.length;
+  out.moves.push({from: src, to: tgt, disk: n});
+  out.trace.push({t: 'mv', text: `${indent}  move disk ${n}: ${lbl(src)}→${lbl(tgt)}`, moveIdx: mi});
+  buildRecursionPlan(n - 1, aux, tgt, src, depth + 1, out);
+}
+
+function lbl(i) { return ['A','B','C'][i]; }
+
+function updateStats() {
+  const opt = (1 << N) - 1;
+  document.getElementById('sMoves').textContent = cursor;
+  document.getElementById('sOpt').textContent = opt.toLocaleString();
+  const ex = cursor - opt;
+  const exEl = document.getElementById('sExcess');
+  exEl.textContent = ex >= 0 ? '+' + ex : ex;
+  exEl.classList.toggle('over', ex > 0);
+  exEl.classList.toggle('win', ex === 0 && solved());
+  const s = opt;
+  const time = s < 60 ? s + ' s' : s < 3600 ? (s/60).toFixed(1) + ' min' : s < 86400 ? (s/3600).toFixed(1) + ' hr' : s < 31536000 ? (s/86400).toFixed(1) + ' d' : (s/31536000).toExponential(2) + ' yr';
+  document.getElementById('sTime').textContent = time;
+}
+
+function solved() { return pegs[2].length === N; }
+
+function checkWin() {
+  const winEl = document.getElementById('win');
+  if (solved()) {
+    const opt = (1 << N) - 1;
+    if (cursor === opt) {
+      winEl.textContent = '🏆 Solved in the optimal ' + opt + ' moves!';
+    } else {
+      winEl.textContent = '✓ Solved in ' + cursor + ' moves — optimal is ' + opt + ' (excess ' + (cursor - opt) + ').';
+    }
+    winEl.classList.add('show');
+  } else {
+    winEl.classList.remove('show');
+  }
+}
+
+function renderPegs() {
+  const svg = document.getElementById('pegs');
+  const W = 600, H = 300;
+  const base = H - 30;
+  const pegX = [100, 300, 500];
+  const pegH = 180;
+  const diskH = Math.min(20, (pegH - 10) / Math.max(1, N));
+  const diskUnit = Math.min(40, (280 - 40) / Math.max(1, N));
+  let out = '';
+  out += `<rect x="20" y="${base}" width="${W-40}" height="6" rx="3" fill="var(--border)"/>`;
+  for (let p = 0; p < 3; p++) {
+    out += `<rect x="${pegX[p]-2}" y="${base-pegH}" width="4" height="${pegH}" fill="var(--border)"/>`;
+    out += `<rect class="peg-hit" data-peg="${p}" x="${pegX[p]-90}" y="${base-pegH-30}" width="180" height="${pegH+30}" />`;
+    let hl = '';
+    if (grabPeg === p) hl = 'grabbed';
+    out += `<rect class="peg-hi ${hl}" data-hi="${p}" x="${pegX[p]-90}" y="${base-pegH-30}" width="180" height="${pegH+30}" rx="8"/>`;
+  }
+  for (let p = 0; p < 3; p++) {
+    for (let i = 0; i < pegs[p].length; i++) {
+      const d = pegs[p][i];
+      const w = 40 + d * diskUnit;
+      const x = pegX[p] - w / 2;
+      const isTop = i === pegs[p].length - 1;
+      const grabbed = grabPeg === p && isTop;
+      const y = grabbed ? base - pegH - 24 : base - (i + 1) * diskH;
+      const c = COLORS[(d - 1) % COLORS.length];
+      out += `<rect class="disk ${grabbed ? 'grabbed' : ''}" data-peg="${p}" data-idx="${i}" x="${x}" y="${y}" width="${w}" height="${diskH - 2}" rx="6" ry="6" fill="${c}"/>`;
+      if (diskH >= 12) out += `<text x="${pegX[p]}" y="${y + diskH/2 + 3}" text-anchor="middle" font-size="10" font-family="var(--mono)" fill="white" font-weight="700" pointer-events="none">${d}</text>`;
+    }
+  }
+  const labels = ['A','B','C'];
+  for (let p = 0; p < 3; p++) {
+    out += `<text x="${pegX[p]}" y="${base + 24}" text-anchor="middle" font-size="12" font-family="var(--mono)" fill="var(--muted)">${labels[p]}</text>`;
+  }
+  svg.innerHTML = out;
+  svg.querySelectorAll('.peg-hit').forEach(el => {
+    el.addEventListener('click', () => onPegClick(parseInt(el.dataset.peg, 10)));
+  });
+  svg.querySelectorAll('.disk').forEach(el => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); onPegClick(parseInt(el.dataset.peg, 10)); });
+  });
+  updatePegLabels();
+}
+
+function updatePegLabels() {
+  document.querySelectorAll('#pegLabels div').forEach(el => {
+    const p = parseInt(el.dataset.p, 10);
+    el.classList.toggle('active', p === grabPeg);
+  });
+}
+
+function renderLegend() {
+  const el = document.getElementById('ringsLeg');
+  let out = '';
+  for (let d = 1; d <= N; d++) out += `<span class="sw"><span class="sq" style="background:${COLORS[(d-1)%COLORS.length]}"></span>disk ${d}</span>`;
+  el.innerHTML = out;
+}
+
+function renderLog() {
+  const el = document.getElementById('log');
+  el.innerHTML = solutionTrace.map(t => {
+    const now = t.moveIdx === cursor - 1 && t.t === 'mv';
+    return `<div class="l ${t.t} ${now ? 'now' : ''}">${escapeHtml(t.text)}</div>`;
+  }).join('');
+  const nowEl = el.querySelector('.l.now');
+  if (nowEl) nowEl.scrollIntoView({block: 'center'});
+}
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function onPegClick(p) {
+  if (running) return;
+  if (grabPeg === -1) {
+    if (pegs[p].length === 0) return;
+    grabPeg = p;
+    renderPegs();
+    return;
+  }
+  if (grabPeg === p) {
+    grabPeg = -1; renderPegs(); return;
+  }
+  const from = grabPeg, to = p;
+  const disk = pegs[from][pegs[from].length - 1];
+  const top = pegs[to][pegs[to].length - 1];
+  if (top !== undefined && top < disk) {
+    // illegal
+    flashPeg(to, 'illegal');
+    grabPeg = -1; renderPegs(); return;
+  }
+  pegs[from].pop(); pegs[to].push(disk);
+  // trim any redo history if we were mid-way
+  history.length = cursor;
+  history.push({from, to, disk});
+  cursor++;
+  lastMove = {from, to, disk};
+  grabPeg = -1;
+  renderPegs(); updateStats(); checkWin();
+}
+
+function flashPeg(p, cls) {
+  const svg = document.getElementById('pegs');
+  const el = svg.querySelector(`.peg-hi[data-hi="${p}"]`);
+  if (!el) return;
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 400);
+}
+
+function applyMoveForward() {
+  if (cursor >= history.length) return false;
+  const m = history[cursor];
+  pegs[m.from].pop(); pegs[m.to].push(m.disk);
+  cursor++;
+  lastMove = m;
+  return true;
+}
+function applyMoveBackward() {
+  if (cursor <= 0) return false;
+  cursor--;
+  const m = history[cursor];
+  pegs[m.to].pop(); pegs[m.from].push(m.disk);
+  lastMove = null;
+  return true;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function delay() { const s = parseInt(document.getElementById('speed').value, 10); return Math.max(15, 500 - s * 4.5); }
+
+async function startSolve() {
+  if (running) return;
+  reset();
+  const plan = { moves: [], trace: [] };
+  buildRecursionPlan(N, 0, 2, 1, 0, plan);
+  history = plan.moves.slice();
+  solutionMoves = plan.moves.slice();
+  solutionTrace = plan.trace.slice();
+  cursor = 0;
+  renderLog();
+  running = true; stopReq = false; paused = false;
+  document.getElementById('btnSolve').disabled = true;
+  document.getElementById('btnStep').disabled = true;
+  document.getElementById('btnBack').disabled = true;
+  document.getElementById('btnPause').disabled = false;
+  while (cursor < history.length && !stopReq) {
+    while (paused && !stopReq) await sleep(60);
+    applyMoveForward();
+    renderPegs(); renderLog(); updateStats();
+    await sleep(delay());
+  }
+  running = false;
+  document.getElementById('btnSolve').disabled = false;
+  document.getElementById('btnStep').disabled = false;
+  document.getElementById('btnBack').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnPause').textContent = '⏸ Pause';
+  checkWin();
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('btnPause').textContent = paused ? '▶ Resume' : '⏸ Pause';
+}
+
+function stepOnce() {
+  if (running) return;
+  if (!solutionMoves.length) {
+    const plan = { moves: [], trace: [] };
+    buildRecursionPlan(N, 0, 2, 1, 0, plan);
+    history = plan.moves.slice();
+    solutionMoves = plan.moves.slice();
+    solutionTrace = plan.trace.slice();
+    cursor = 0;
+    renderLog();
+  }
+  if (cursor < history.length) {
+    applyMoveForward();
+    renderPegs(); renderLog(); updateStats(); checkWin();
+  }
+}
+
+function stepBack() {
+  if (running) return;
+  if (applyMoveBackward()) {
+    renderPegs(); renderLog(); updateStats(); checkWin();
+  }
+}
+
+function reset() {
+  stopReq = true; running = false; paused = false;
+  initState();
+  renderPegs(); renderLegend(); renderLog(); updateStats();
+  document.getElementById('win').classList.remove('show');
+  document.getElementById('btnSolve').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnStep').disabled = false;
+  document.getElementById('btnBack').disabled = false;
+  document.getElementById('btnPause').textContent = '⏸ Pause';
+}
+
+document.getElementById('n').addEventListener('change', e => {
+  const v = Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 5));
+  e.target.value = v;
+  N = v;
+  reset();
+});
+
+reset();
+</script>
+</body>
+</html>

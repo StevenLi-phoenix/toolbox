@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Numerical Integration Playground — Free Online Tool</title>
+<meta name="description" content="Compute a definite integral six different ways — Left / Right Riemann, Midpoint, Trapezoid, Simpson's 1/3, and Simpson's 3/8 — with side-by-side error convergence and a live plot of the panels.">
+<meta name="keywords" content="numerical integration, simpson rule, trapezoid rule, riemann sum, midpoint rule, quadrature calculator, definite integral">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/numint.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .ctrl-row label { font-size: .82rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  input[type="text"], input[type="number"] { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; }
+  input[type="text"] { width: 220px; }
+  input[type="number"] { width: 80px; }
+  select { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--sans); }
+  button.btn { padding: 7px 14px; font-size: .82rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); cursor: pointer; color: var(--text); font-weight: 600; }
+  button.btn.primary { background: var(--accent, #2563eb); color: white; border-color: var(--accent, #2563eb); }
+  button.btn:hover:not(:disabled) { border-color: var(--accent, #2563eb); }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  .preset { padding: 4px 8px; font-size: .75rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); cursor: pointer; color: var(--text); font-family: var(--mono); }
+  .preset:hover { border-color: var(--accent, #2563eb); }
+  svg.plot { width: 100%; height: auto; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+  table.results { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 8px; }
+  table.results th, table.results td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  table.results th { text-align: left; color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .72rem; letter-spacing: .04em; }
+  table.results td:first-child { text-align: left; font-family: var(--sans); font-weight: 600; }
+  .method-row.best { background: rgba(22, 163, 74, .08); }
+  .err-cell { color: var(--muted); }
+  .err-cell.tiny { color: var(--success, #16a34a); font-weight: 700; }
+  .err-cell.bad { color: var(--error, #dc2626); }
+  .stat { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 6px; }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-family: var(--mono); font-weight: 700; font-size: 1rem; }
+  .conv-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: .78rem; margin-top: 6px; }
+  .conv-legend .item { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+  .conv-legend .swatch { width: 14px; height: 3px; display: inline-block; border-radius: 2px; }
+  .err { color: var(--error, #dc2626); font-size: .82rem; margin: 6px 0; }
+  code.k { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-size: .78rem; }
+  @media (max-width: 800px) { .grid-two { grid-template-columns: 1fr; } input[type="text"] { width: 100%; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>∫ Numerical Integration Playground</h1>
+<p class="subtitle">Approximate <code>∫ₐᵇ f(x) dx</code> with six classic quadrature rules — Left / Right Riemann, Midpoint, Trapezoid, Simpson's 1/3, and Simpson's 3/8 — then watch each rule's error shrink as you double the panel count. The plot shows the actual rectangles, trapezoids, or parabolic strips being summed.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Function & interval</h2>
+    <div class="ctrl-row">
+      <label>f(x) = <input type="text" id="fexpr" value="sin(x)"></label>
+    </div>
+    <div class="ctrl-row">
+      <label>a <input type="number" id="a" value="0" step="any"></label>
+      <label>b <input type="number" id="b" value="3.14159265358979" step="any"></label>
+      <label>n <input type="number" id="n" value="8" min="1" max="10000"></label>
+      <label>method
+        <select id="method">
+          <option value="left">Left Riemann</option>
+          <option value="right">Right Riemann</option>
+          <option value="mid" selected>Midpoint</option>
+          <option value="trap">Trapezoid</option>
+          <option value="simp13">Simpson's 1/3</option>
+          <option value="simp38">Simpson's 3/8</option>
+        </select>
+      </label>
+    </div>
+    <div class="ctrl-row">
+      <button class="btn primary" onclick="compute()">▶ Compute</button>
+      <label>exact (optional) <input type="number" id="exact" step="any" placeholder="known ∫"></label>
+    </div>
+    <div class="presets">
+      <span class="preset" onclick="preset('sin(x)', 0, Math.PI, 2)">sin, 0→π, exact=2</span>
+      <span class="preset" onclick="preset('x^2', 0, 1, 1/3)">x², 0→1, 1/3</span>
+      <span class="preset" onclick="preset('exp(-x^2)', -2, 2, 1.7641627815380805)">e^(-x²), −2→2</span>
+      <span class="preset" onclick="preset('1/(1+x^2)', 0, 1, Math.PI/4)">1/(1+x²), 0→1, π/4</span>
+      <span class="preset" onclick="preset('sqrt(1-x^2)', -1, 1, Math.PI/2)">√(1−x²), −1→1, π/2</span>
+      <span class="preset" onclick="preset('log(x)', 1, Math.E, 1)">ln x, 1→e, 1</span>
+      <span class="preset" onclick="preset('cos(x)^2', 0, Math.PI, Math.PI/2)">cos²x, 0→π, π/2</span>
+      <span class="preset" onclick="preset('1/x', 1, 2, Math.log(2))">1/x, 1→2, ln 2</span>
+    </div>
+    <div id="err" class="err" style="display:none"></div>
+    <svg id="plot" class="plot" viewBox="0 0 480 300"></svg>
+  </div>
+
+  <div class="card">
+    <h2>All six methods</h2>
+    <div class="stat">
+      <div class="k">Approximation (selected method)</div>
+      <div class="v" id="approxV">—</div>
+    </div>
+    <div class="stat">
+      <div class="k">Signed error vs exact</div>
+      <div class="v" id="errV">—</div>
+    </div>
+    <table class="results">
+      <thead><tr><th>Method</th><th>Result</th><th>|Error|</th><th>Order</th></tr></thead>
+      <tbody id="tbl"></tbody>
+    </table>
+    <p style="font-size:.75rem;color:var(--muted);margin-top:6px">Simpson's 1/3 needs even n; Simpson's 3/8 needs n divisible by 3. The row for the currently selected method is highlighted.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Error convergence — |error| vs n</h2>
+  <svg id="conv" class="plot" viewBox="0 0 900 320"></svg>
+  <div class="conv-legend">
+    <span class="item"><span class="swatch" style="background:#dc2626"></span>Left</span>
+    <span class="item"><span class="swatch" style="background:#f97316"></span>Right</span>
+    <span class="item"><span class="swatch" style="background:#eab308"></span>Midpoint</span>
+    <span class="item"><span class="swatch" style="background:#2563eb"></span>Trapezoid</span>
+    <span class="item"><span class="swatch" style="background:#16a34a"></span>Simpson 1/3</span>
+    <span class="item"><span class="swatch" style="background:#9333ea"></span>Simpson 3/8</span>
+  </div>
+  <p style="font-size:.78rem;color:var(--muted);margin-top:8px">Log-log axes. The slope of each line is the empirical order of convergence — <code class="k">−1</code> for Left/Right, <code class="k">−2</code> for Midpoint and Trapezoid, <code class="k">−4</code> for both Simpson rules on smooth integrands. Requires an exact reference value.</p>
+</div>
+
+<div class="card">
+  <h2>The rules</h2>
+  <p><strong>Left / Right Riemann.</strong> Sample <code>f</code> at the left (or right) endpoint of each of <em>n</em> equal-width panels, sum the rectangle areas. Error <em>O(h)</em> where <em>h = (b−a)/n</em>.</p>
+  <p><strong>Midpoint.</strong> Sample at each panel's midpoint. Second-order accurate — error <em>O(h²)</em> — and often the best of the low-order rules for smooth <code>f</code>.</p>
+  <p><strong>Trapezoid.</strong> Replace each panel by the trapezoid joining the two endpoints. Also <em>O(h²)</em>, but the midpoint rule beats it by a factor of two on convex or concave <code>f</code>.</p>
+  <p><strong>Simpson's 1/3.</strong> Fit a parabola through every triple of consecutive samples (needs even <em>n</em>). Exact for cubics, <em>O(h⁴)</em> on smooth <code>f</code>. Coefficients <code>1 4 2 4 2 … 4 1</code>.</p>
+  <p><strong>Simpson's 3/8.</strong> Fit a cubic through every quadruple of consecutive samples (needs <em>n</em> divisible by 3). Also <em>O(h⁴)</em>. Coefficients <code>1 3 3 2 3 3 2 … 3 3 1</code>.</p>
+  <p style="font-size:.85rem;color:var(--muted)">Supported operators: <code class="k">+ − * / ^</code> and functions <code class="k">sin cos tan asin acos atan sinh cosh tanh exp log log2 log10 sqrt cbrt abs sign floor ceil round</code>. Constants <code class="k">pi</code> and <code class="k">e</code>. Use <code class="k">x</code> as the variable.</p>
+</div>
+
+</div>
+
+<footer>
+  Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+// ---------- expression parser ----------
+function tokenize(src) {
+  const toks = [];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === ' ' || c === '\t') { i++; continue; }
+    if (/[0-9.]/.test(c)) {
+      let j = i;
+      while (j < src.length && /[0-9.eE+\-]/.test(src[j])) {
+        if ((src[j] === '+' || src[j] === '-') && src[j-1] !== 'e' && src[j-1] !== 'E') break;
+        j++;
+      }
+      toks.push({t: 'num', v: parseFloat(src.slice(i, j))});
+      i = j; continue;
+    }
+    if (/[a-zA-Z_]/.test(c)) {
+      let j = i;
+      while (j < src.length && /[a-zA-Z0-9_]/.test(src[j])) j++;
+      toks.push({t: 'id', v: src.slice(i, j)});
+      i = j; continue;
+    }
+    if ('+-*/^(),'.includes(c)) { toks.push({t: 'op', v: c}); i++; continue; }
+    throw new Error('Unexpected character: ' + c);
+  }
+  return toks;
+}
+function parseExpr(src) {
+  const toks = tokenize(src);
+  let p = 0;
+  const peek = () => toks[p];
+  const eat = (t, v) => { const k = toks[p]; if (!k || k.t !== t || (v !== undefined && k.v !== v)) throw new Error('Expected ' + (v || t)); p++; return k; };
+  function E() { let a = T(); while (peek() && peek().t === 'op' && (peek().v === '+' || peek().v === '-')) { const op = eat('op').v; const b = T(); a = {op, a, b}; } return a; }
+  function T() { let a = U(); while (peek() && peek().t === 'op' && (peek().v === '*' || peek().v === '/')) { const op = eat('op').v; const b = U(); a = {op, a, b}; } return a; }
+  function U() { if (peek() && peek().t === 'op' && peek().v === '-') { eat('op', '-'); return {op: 'neg', a: U()}; } if (peek() && peek().t === 'op' && peek().v === '+') { eat('op', '+'); return U(); } return P(); }
+  function P() { let a = A(); if (peek() && peek().t === 'op' && peek().v === '^') { eat('op', '^'); const b = U(); return {op: '^', a, b}; } return a; }
+  function A() {
+    const k = peek(); if (!k) throw new Error('Unexpected end');
+    if (k.t === 'num') { p++; return {op: 'num', v: k.v}; }
+    if (k.t === 'op' && k.v === '(') { p++; const e = E(); eat('op', ')'); return e; }
+    if (k.t === 'id') {
+      p++;
+      if (peek() && peek().t === 'op' && peek().v === '(') {
+        p++; const args = [E()];
+        while (peek() && peek().t === 'op' && peek().v === ',') { p++; args.push(E()); }
+        eat('op', ')');
+        return {op: 'call', name: k.v, args};
+      }
+      return {op: 'var', v: k.v};
+    }
+    throw new Error('Unexpected token: ' + JSON.stringify(k));
+  }
+  const ast = E();
+  if (p !== toks.length) throw new Error('Trailing input');
+  return ast;
+}
+const CONSTS = { pi: Math.PI, e: Math.E };
+const FUNS = {
+  sin: Math.sin, cos: Math.cos, tan: Math.tan,
+  asin: Math.asin, acos: Math.acos, atan: Math.atan, atan2: Math.atan2,
+  sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
+  exp: Math.exp, log: Math.log, ln: Math.log, log2: Math.log2, log10: Math.log10,
+  sqrt: Math.sqrt, cbrt: Math.cbrt, abs: Math.abs, sign: Math.sign,
+  floor: Math.floor, ceil: Math.ceil, round: Math.round, pow: Math.pow, max: Math.max, min: Math.min,
+};
+function evalAst(node, x) {
+  switch (node.op) {
+    case 'num': return node.v;
+    case 'var':
+      if (node.v === 'x') return x;
+      if (node.v in CONSTS) return CONSTS[node.v];
+      throw new Error('Unknown variable: ' + node.v);
+    case 'neg': return -evalAst(node.a, x);
+    case '+': return evalAst(node.a, x) + evalAst(node.b, x);
+    case '-': return evalAst(node.a, x) - evalAst(node.b, x);
+    case '*': return evalAst(node.a, x) * evalAst(node.b, x);
+    case '/': return evalAst(node.a, x) / evalAst(node.b, x);
+    case '^': return Math.pow(evalAst(node.a, x), evalAst(node.b, x));
+    case 'call': {
+      const f = FUNS[node.name];
+      if (!f) throw new Error('Unknown function: ' + node.name);
+      return f(...node.args.map(a => evalAst(a, x)));
+    }
+  }
+}
+function makeF(src) {
+  const ast = parseExpr(src);
+  return (x) => evalAst(ast, x);
+}
+
+// ---------- quadrature ----------
+function leftRiemann(f, a, b, n) { const h = (b - a) / n; let s = 0; for (let i = 0; i < n; i++) s += f(a + i * h); return s * h; }
+function rightRiemann(f, a, b, n) { const h = (b - a) / n; let s = 0; for (let i = 1; i <= n; i++) s += f(a + i * h); return s * h; }
+function midpoint(f, a, b, n) { const h = (b - a) / n; let s = 0; for (let i = 0; i < n; i++) s += f(a + (i + 0.5) * h); return s * h; }
+function trapezoid(f, a, b, n) { const h = (b - a) / n; let s = 0.5 * (f(a) + f(b)); for (let i = 1; i < n; i++) s += f(a + i * h); return s * h; }
+function simpson13(f, a, b, n) {
+  if (n % 2 !== 0) return NaN;
+  const h = (b - a) / n; let s = f(a) + f(b);
+  for (let i = 1; i < n; i++) s += (i % 2 ? 4 : 2) * f(a + i * h);
+  return s * h / 3;
+}
+function simpson38(f, a, b, n) {
+  if (n % 3 !== 0) return NaN;
+  const h = (b - a) / n; let s = f(a) + f(b);
+  for (let i = 1; i < n; i++) s += (i % 3 === 0 ? 2 : 3) * f(a + i * h);
+  return s * 3 * h / 8;
+}
+const METHODS = {
+  left: {name: 'Left Riemann', fn: leftRiemann, order: 1, color: '#dc2626'},
+  right: {name: 'Right Riemann', fn: rightRiemann, order: 1, color: '#f97316'},
+  mid: {name: 'Midpoint', fn: midpoint, order: 2, color: '#eab308'},
+  trap: {name: 'Trapezoid', fn: trapezoid, order: 2, color: '#2563eb'},
+  simp13: {name: 'Simpson 1/3', fn: simpson13, order: 4, color: '#16a34a'},
+  simp38: {name: 'Simpson 3/8', fn: simpson38, order: 4, color: '#9333ea'},
+};
+
+// ---------- plotting ----------
+function plotPanels(f, a, b, n, method) {
+  const svg = document.getElementById('plot');
+  const W = 480, H = 300, padL = 40, padR = 10, padT = 12, padB = 26;
+  const nsamp = 400;
+  let ymin = Infinity, ymax = -Infinity;
+  const curve = [];
+  for (let i = 0; i <= nsamp; i++) {
+    const x = a + (b - a) * i / nsamp;
+    const y = f(x);
+    if (isFinite(y)) { curve.push([x, y]); if (y < ymin) ymin = y; if (y > ymax) ymax = y; }
+  }
+  // include panel samples for scale
+  const h = (b - a) / n;
+  const samps = [];
+  for (let i = 0; i <= n; i++) samps.push(a + i * h);
+  if (method === 'mid') for (let i = 0; i < n; i++) samps.push(a + (i + 0.5) * h);
+  for (const x of samps) { const y = f(x); if (isFinite(y)) { if (y < ymin) ymin = y; if (y > ymax) ymax = y; } }
+  if (!isFinite(ymin)) ymin = -1;
+  if (!isFinite(ymax)) ymax = 1;
+  if (ymax === ymin) { ymax += 1; ymin -= 1; }
+  const yPad = (ymax - ymin) * 0.1; ymin -= yPad; ymax += yPad;
+  if (ymin > 0) ymin = 0;
+  if (ymax < 0) ymax = 0;
+  const sx = (x) => padL + (x - a) / (b - a) * (W - padL - padR);
+  const sy = (y) => padT + (ymax - y) / (ymax - ymin) * (H - padT - padB);
+  let out = '';
+  // grid + axes
+  out += `<rect x="${padL}" y="${padT}" width="${W-padL-padR}" height="${H-padT-padB}" fill="none" stroke="var(--border)" />`;
+  const y0 = sy(0);
+  if (y0 >= padT && y0 <= H - padB) out += `<line x1="${padL}" y1="${y0}" x2="${W-padR}" y2="${y0}" stroke="var(--muted)" stroke-width="1" />`;
+  // panels
+  const panelColor = 'rgba(37,99,235,.25)';
+  const panelStroke = 'rgba(37,99,235,.85)';
+  if (method === 'left') {
+    for (let i = 0; i < n; i++) {
+      const x0 = a + i * h, x1 = x0 + h, yv = f(x0);
+      out += `<rect x="${sx(x0)}" y="${sy(Math.max(yv,0))}" width="${sx(x1)-sx(x0)}" height="${Math.abs(sy(yv)-sy(0))}" fill="${panelColor}" stroke="${panelStroke}"/>`;
+    }
+  } else if (method === 'right') {
+    for (let i = 0; i < n; i++) {
+      const x0 = a + i * h, x1 = x0 + h, yv = f(x1);
+      out += `<rect x="${sx(x0)}" y="${sy(Math.max(yv,0))}" width="${sx(x1)-sx(x0)}" height="${Math.abs(sy(yv)-sy(0))}" fill="${panelColor}" stroke="${panelStroke}"/>`;
+    }
+  } else if (method === 'mid') {
+    for (let i = 0; i < n; i++) {
+      const x0 = a + i * h, x1 = x0 + h, yv = f(x0 + 0.5 * h);
+      out += `<rect x="${sx(x0)}" y="${sy(Math.max(yv,0))}" width="${sx(x1)-sx(x0)}" height="${Math.abs(sy(yv)-sy(0))}" fill="${panelColor}" stroke="${panelStroke}"/>`;
+    }
+  } else if (method === 'trap') {
+    for (let i = 0; i < n; i++) {
+      const x0 = a + i * h, x1 = x0 + h, y0v = f(x0), y1v = f(x1);
+      out += `<polygon points="${sx(x0)},${sy(0)} ${sx(x0)},${sy(y0v)} ${sx(x1)},${sy(y1v)} ${sx(x1)},${sy(0)}" fill="${panelColor}" stroke="${panelStroke}"/>`;
+    }
+  } else if (method === 'simp13') {
+    for (let i = 0; i < n; i += 2) {
+      const x0 = a + i * h, x1 = x0 + h, x2 = x0 + 2 * h;
+      if (x2 > b + 1e-9) break;
+      const y0v = f(x0), y1v = f(x1), y2v = f(x2);
+      let d = '';
+      const steps = 24;
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const xk = x0 + t * (x2 - x0);
+        const u = (xk - x0) / (2 * h);
+        const L0 = (1 - u) * (1 - 2*u), L1 = 4 * u * (1 - u), L2 = u * (2*u - 1);
+        const yk = L0 * y0v + L1 * y1v + L2 * y2v;
+        d += (k === 0 ? 'M' : 'L') + sx(xk) + ',' + sy(yk) + ' ';
+      }
+      d += 'L' + sx(x2) + ',' + sy(0) + ' L' + sx(x0) + ',' + sy(0) + ' Z';
+      out += `<path d="${d}" fill="${panelColor}" stroke="${panelStroke}"/>`;
+    }
+  } else if (method === 'simp38') {
+    for (let i = 0; i < n; i += 3) {
+      const x0 = a + i * h, x1 = x0 + h, x2 = x0 + 2 * h, x3 = x0 + 3 * h;
+      if (x3 > b + 1e-9) break;
+      const y0v = f(x0), y1v = f(x1), y2v = f(x2), y3v = f(x3);
+      let d = '';
+      const steps = 30;
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const u = t;
+        const L0 = -(9/2) * (u - 1/3) * (u - 2/3) * (u - 1);
+        const L1 = (27/2) * u * (u - 2/3) * (u - 1);
+        const L2 = -(27/2) * u * (u - 1/3) * (u - 1);
+        const L3 = (9/2) * u * (u - 1/3) * (u - 2/3);
+        const xk = x0 + t * (x3 - x0);
+        const yk = L0 * y0v + L1 * y1v + L2 * y2v + L3 * y3v;
+        d += (k === 0 ? 'M' : 'L') + sx(xk) + ',' + sy(yk) + ' ';
+      }
+      d += 'L' + sx(x3) + ',' + sy(0) + ' L' + sx(x0) + ',' + sy(0) + ' Z';
+      out += `<path d="${d}" fill="${panelColor}" stroke="${panelStroke}"/>`;
+    }
+  }
+  // curve
+  let cd = '';
+  for (let i = 0; i < curve.length; i++) {
+    const [x, y] = curve[i];
+    cd += (i === 0 ? 'M' : 'L') + sx(x) + ',' + sy(y) + ' ';
+  }
+  out += `<path d="${cd}" fill="none" stroke="var(--text)" stroke-width="1.6"/>`;
+  // sample dots
+  for (let i = 0; i <= n; i++) {
+    const x = a + i * h;
+    const y = f(x);
+    if (isFinite(y)) out += `<circle cx="${sx(x)}" cy="${sy(y)}" r="2" fill="var(--accent, #2563eb)"/>`;
+  }
+  // axis labels
+  const fmt = (v) => Math.abs(v) < 1e-3 || Math.abs(v) >= 1e4 ? v.toExponential(2) : (+v.toFixed(4)).toString();
+  out += `<text x="${padL}" y="${H-6}" font-size="10" fill="var(--muted)" font-family="var(--mono)">${fmt(a)}</text>`;
+  out += `<text x="${W-padR}" y="${H-6}" font-size="10" text-anchor="end" fill="var(--muted)" font-family="var(--mono)">${fmt(b)}</text>`;
+  out += `<text x="${padL-4}" y="${padT+8}" font-size="10" text-anchor="end" fill="var(--muted)" font-family="var(--mono)">${fmt(ymax)}</text>`;
+  out += `<text x="${padL-4}" y="${H-padB}" font-size="10" text-anchor="end" fill="var(--muted)" font-family="var(--mono)">${fmt(ymin)}</text>`;
+  svg.innerHTML = out;
+}
+
+function plotConvergence(f, a, b, exact) {
+  const svg = document.getElementById('conv');
+  const W = 900, H = 320, padL = 60, padR = 20, padT = 12, padB = 40;
+  const ns = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
+  const series = {};
+  for (const k of Object.keys(METHODS)) series[k] = [];
+  for (const n of ns) {
+    for (const [k, m] of Object.entries(METHODS)) {
+      let nn = n;
+      if (k === 'simp13' && nn % 2 !== 0) nn++;
+      if (k === 'simp38' && nn % 3 !== 0) nn = Math.ceil(nn / 3) * 3;
+      const v = m.fn(f, a, b, nn);
+      const err = Math.abs(v - exact);
+      if (isFinite(err) && err > 0) series[k].push([nn, err]);
+    }
+  }
+  const allPts = Object.values(series).flat();
+  if (!allPts.length) { svg.innerHTML = ''; return; }
+  const xs = allPts.map(p => Math.log10(p[0]));
+  const ys = allPts.map(p => Math.log10(p[1]));
+  const xmin = Math.min(...xs), xmax = Math.max(...xs);
+  let ymin = Math.min(...ys), ymax = Math.max(...ys);
+  if (ymax === ymin) ymax = ymin + 1;
+  const sx = (lx) => padL + (lx - xmin) / (xmax - xmin) * (W - padL - padR);
+  const sy = (ly) => padT + (ymax - ly) / (ymax - ymin) * (H - padT - padB);
+  let out = `<rect x="${padL}" y="${padT}" width="${W-padL-padR}" height="${H-padT-padB}" fill="none" stroke="var(--border)"/>`;
+  // grid
+  for (let i = Math.ceil(xmin); i <= Math.floor(xmax); i++) {
+    const gx = sx(i);
+    out += `<line x1="${gx}" y1="${padT}" x2="${gx}" y2="${H-padB}" stroke="var(--border)" stroke-dasharray="2,3"/>`;
+    out += `<text x="${gx}" y="${H-padB+14}" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="var(--mono)">10^${i}</text>`;
+  }
+  for (let i = Math.ceil(ymin); i <= Math.floor(ymax); i++) {
+    const gy = sy(i);
+    out += `<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="var(--border)" stroke-dasharray="2,3"/>`;
+    out += `<text x="${padL-6}" y="${gy+3}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="var(--mono)">10^${i}</text>`;
+  }
+  out += `<text x="${(padL+W-padR)/2}" y="${H-4}" text-anchor="middle" font-size="11" fill="var(--muted)">n (log scale)</text>`;
+  out += `<text x="14" y="${(padT+H-padB)/2}" text-anchor="middle" font-size="11" fill="var(--muted)" transform="rotate(-90 14 ${(padT+H-padB)/2})">|error| (log scale)</text>`;
+  for (const [k, m] of Object.entries(METHODS)) {
+    const pts = series[k];
+    if (!pts.length) continue;
+    let d = '';
+    pts.forEach((p, i) => { d += (i === 0 ? 'M' : 'L') + sx(Math.log10(p[0])) + ',' + sy(Math.log10(p[1])) + ' '; });
+    out += `<path d="${d}" fill="none" stroke="${m.color}" stroke-width="2"/>`;
+    for (const p of pts) out += `<circle cx="${sx(Math.log10(p[0]))}" cy="${sy(Math.log10(p[1]))}" r="2.5" fill="${m.color}"/>`;
+  }
+  svg.innerHTML = out;
+}
+
+function fmt(x) {
+  if (!isFinite(x)) return isNaN(x) ? 'NaN' : (x < 0 ? '−∞' : '∞');
+  if (Math.abs(x) < 1e-14) return '0';
+  if (Math.abs(x) >= 1e6 || Math.abs(x) < 1e-4) return x.toExponential(8);
+  return x.toPrecision(12).replace(/\.?0+$/, '');
+}
+function fmtErr(x) {
+  if (!isFinite(x)) return isNaN(x) ? 'NaN' : '∞';
+  if (x === 0) return '0';
+  return x.toExponential(2);
+}
+
+function compute() {
+  const errEl = document.getElementById('err');
+  errEl.style.display = 'none';
+  const src = document.getElementById('fexpr').value;
+  const a = parseFloat(document.getElementById('a').value);
+  const b = parseFloat(document.getElementById('b').value);
+  const n = parseInt(document.getElementById('n').value, 10);
+  const method = document.getElementById('method').value;
+  const exactStr = document.getElementById('exact').value.trim();
+  const exact = exactStr === '' ? NaN : parseFloat(exactStr);
+  if (!isFinite(a) || !isFinite(b) || a >= b) { errEl.textContent = 'Need a < b, both finite.'; errEl.style.display = 'block'; return; }
+  if (!(n >= 1) || n > 10000) { errEl.textContent = 'n must be between 1 and 10000.'; errEl.style.display = 'block'; return; }
+  let f;
+  try { f = makeF(src); f(a); } catch (e) { errEl.textContent = 'Parse error: ' + e.message; errEl.style.display = 'block'; return; }
+
+  const tbl = document.getElementById('tbl');
+  const rows = [];
+  for (const [k, m] of Object.entries(METHODS)) {
+    let nn = n;
+    let note = '';
+    if (k === 'simp13' && nn % 2 !== 0) { nn++; note = ` (n=${nn})`; }
+    if (k === 'simp38' && nn % 3 !== 0) { nn = Math.ceil(nn / 3) * 3; note = ` (n=${nn})`; }
+    const v = m.fn(f, a, b, nn);
+    const err = isFinite(exact) ? Math.abs(v - exact) : NaN;
+    rows.push({k, name: m.name + note, v, err, order: m.order});
+  }
+  const bestErr = Math.min(...rows.map(r => isFinite(r.err) ? r.err : Infinity));
+  tbl.innerHTML = rows.map(r => {
+    const cls = r.k === method ? 'method-row best' : 'method-row';
+    let errClass = 'err-cell';
+    let errStr = '—';
+    if (isFinite(r.err)) {
+      errStr = fmtErr(r.err);
+      if (r.err === bestErr && bestErr > 0) errClass += ' tiny';
+      else if (r.err > (isFinite(exact) ? Math.abs(exact) : 1) * 0.1) errClass += ' bad';
+    }
+    return `<tr class="${cls}"><td>${r.name}</td><td>${fmt(r.v)}</td><td class="${errClass}">${errStr}</td><td>O(h^${r.order})</td></tr>`;
+  }).join('');
+
+  const sel = rows.find(r => r.k === method);
+  document.getElementById('approxV').textContent = fmt(sel.v);
+  document.getElementById('errV').textContent = isFinite(sel.err) ? (sel.v > exact ? '+' : (sel.v < exact ? '−' : '')) + fmtErr(sel.err) : '(no exact value)';
+
+  plotPanels(f, a, b, n, method);
+  if (isFinite(exact)) plotConvergence(f, a, b, exact);
+  else document.getElementById('conv').innerHTML = '<text x="450" y="160" text-anchor="middle" font-size="13" fill="var(--muted)">Provide an exact value to see convergence.</text>';
+}
+
+function preset(f, a, b, exact) {
+  document.getElementById('fexpr').value = f;
+  document.getElementById('a').value = a;
+  document.getElementById('b').value = b;
+  document.getElementById('exact').value = exact;
+  compute();
+}
+
+document.getElementById('fexpr').addEventListener('keydown', e => { if (e.key === 'Enter') compute(); });
+document.getElementById('a').addEventListener('change', compute);
+document.getElementById('b').addEventListener('change', compute);
+document.getElementById('n').addEventListener('change', compute);
+document.getElementById('method').addEventListener('change', compute);
+document.getElementById('exact').addEventListener('change', compute);
+
+compute();
+</script>
+</body>
+</html>
