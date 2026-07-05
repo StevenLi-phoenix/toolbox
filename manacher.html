@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manacher's Longest Palindrome Visualizer — Free Online Tool</title>
+<meta name="description" content="Find every palindromic substring of any string in linear O(n) time using Manacher's algorithm. Watch the transformed string, per-center radius array, the sliding [C, R] mirror window, and every palindrome sorted by length.">
+<meta name="keywords" content="manacher, longest palindromic substring, palindrome algorithm, linear time palindrome, mirror trick, algorithm visualizer, radius array, palindrome center">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/manacher.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; font-size: .88rem; }
+  .controls input, .controls select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=text] { min-width: 260px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .controls label { color: var(--muted); }
+  .strip {
+    display: grid; grid-auto-flow: column; gap: 2px; padding: 4px 0;
+    font-family: var(--mono); font-size: .82rem; overflow-x: auto;
+  }
+  .strip .col { display: flex; flex-direction: column; align-items: center; min-width: 26px; }
+  .strip .col .idx { font-size: .62rem; color: var(--muted); }
+  .strip .col .ch {
+    padding: 5px 6px; border: 1px solid var(--border); border-radius: 3px;
+    background: var(--surface); min-width: 16px; text-align: center;
+  }
+  .strip .col .pv {
+    padding: 3px 5px; margin-top: 3px; font-size: .72rem; color: var(--muted);
+    min-width: 16px; text-align: center; border: 1px dashed transparent;
+  }
+  .strip .col.sentinel .ch { background: var(--surface2); color: var(--muted); }
+  .strip .col.gap .ch { background: var(--surface2); color: var(--muted); opacity: .8; }
+  .strip .col.i-cur .ch { background: rgba(241, 196, 15, .3); border-color: var(--warning); }
+  .strip .col.i-cur .pv { color: var(--text); border-color: var(--warning); border-style: solid; background: rgba(241, 196, 15, .16); }
+  .strip .col.set .pv { color: var(--text); border-color: var(--border); background: var(--surface2); border-style: solid; }
+  .strip .col.center .ch { background: rgba(99, 102, 241, .28); border-color: var(--accent); }
+  .strip .col.mirror .ch { background: rgba(155, 89, 182, .28); border-color: #9b59b6; }
+  .strip .col.window .ch { box-shadow: inset 0 -3px 0 var(--accent); }
+  .strip .col.best .ch { background: rgba(40, 180, 99, .3); border-color: var(--success); font-weight: 700; }
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin: 12px 0;
+  }
+  .summary .tile {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .summary .tile .l { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .summary .tile .v { font-family: var(--mono); font-size: 1.05rem; margin-top: 3px; color: var(--text); word-break: break-all; }
+  .summary .tile.best .v { color: var(--success); }
+  .log {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2); max-height: 240px; overflow-y: auto; margin-top: 10px;
+  }
+  .log h3 { margin: 0 0 6px; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .log .r { font-family: var(--mono); font-size: .8rem; padding: 2px 0; }
+  .log .r.step { color: var(--accent); }
+  .log .r.hit { color: var(--success); }
+  .log .r.copy { color: var(--warning); }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  .marker { font-family: var(--mono); font-size: .82rem; color: var(--muted); padding: 2px 0 6px; }
+  .pal-list {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 6px; font-family: var(--mono); font-size: .82rem;
+  }
+  .pal-list .item {
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .pal-list .item.top { border-color: var(--success); background: rgba(40, 180, 99, .12); }
+  .pal-list .item .len { color: var(--muted); font-size: .72rem; }
+  .pal-list .item .txt { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Manacher's Longest Palindrome Visualizer</h1>
+<p class="subtitle"><strong>Manacher's algorithm</strong> finds every palindromic substring of a string in <code>O(n)</code> time. The trick: interleave the string with a sentinel (say <code>#</code>) so odd- and even-length palindromes both become odd; then track a rightmost <code>[C, R]</code> palindrome and mirror already-computed radii into new ones. Watch each center as it's decided.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Input</label>
+    <input type="text" id="text" value="babcbabcbaccba" spellcheck="false">
+    <label>Sentinel</label>
+    <input type="text" id="sen" value="#" maxlength="1" style="width:60px">
+    <button class="primary" onclick="reset()">Reset</button>
+    <button id="btnStep" onclick="step()">Step ▶</button>
+    <button id="btnRun" onclick="runToEnd()">Run to end ⏭</button>
+    <label style="margin-left:auto"><input type="checkbox" id="caseSens" checked onchange="reset()"> case-sensitive</label>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div class="marker" id="marker"></div>
+  <div class="strip" id="strip"></div>
+  <p style="font-size:.78rem;color:var(--muted);margin:8px 0 0">
+    Each column's small dashed cell is <code>p[i]</code> — the palindrome radius around that center in the transformed string. The palindrome length in the original string is exactly <code>p[i]</code>.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Trace</h2>
+  <div class="log" id="log">
+    <h3>Steps</h3>
+    <div id="logBody"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Palindromes found &nbsp;<span style="font-size:.75rem;color:var(--muted);font-weight:400">(unique, sorted by length)</span></h2>
+  <div class="pal-list" id="palList"></div>
+</div>
+
+<div class="card">
+  <h2>How Manacher works</h2>
+  <p class="about">
+    A palindrome centered on a single char (odd) has a different structure than one centered between two chars (even). Manacher unifies them by first transforming <code>abba</code> into <code>#a#b#b#a#</code>: now <em>every</em> center is a character in the transformed string, and the palindrome radius <code>p[i]</code> around center <code>i</code> equals the palindrome length in the original.
+  </p>
+  <p class="about">
+    Maintain <code>C</code> and <code>R</code>: the center and right edge of the rightmost palindrome discovered so far. For each new index <code>i</code>:
+  </p>
+  <ul class="about" style="margin:0 0 10px 22px">
+    <li>If <code>i &lt; R</code>: the mirror of <code>i</code> across <code>C</code> is <code>mirror = 2C − i</code>. Copy <code>p[i] = min(p[mirror], R − i)</code> — a free lower bound.</li>
+    <li>Then extend naively while <code>T[i − p[i] − 1] === T[i + p[i] + 1]</code>.</li>
+    <li>If <code>i + p[i] &gt; R</code>: update <code>C = i, R = i + p[i]</code> — the window pushed right.</li>
+  </ul>
+  <p class="about">
+    The right edge <code>R</code> only moves forward, and every char comparison after the copy either extends <code>R</code> or fails once — so total work is <code>O(n)</code>. That's exponentially faster than the "check every center" quadratic and asymptotically optimal for the longest-palindromic-substring problem. Manacher's result also feeds into palindromic-tree constructions and eertree suffix links.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let raw = '';
+let T = '';  // transformed
+let p = [];  // radii
+let state = null;
+let sentinel = '#';
+
+function normalize(s) { return $('caseSens').checked ? s : s.toLowerCase(); }
+
+function reset() {
+  raw = normalize($('text').value);
+  sentinel = $('sen').value || '#';
+  if (sentinel.length !== 1) sentinel = '#';
+  if (raw.includes(sentinel)) {
+    // pick fallback that isn't in input
+    const alts = ['#','|','','','~','§','¤'];
+    sentinel = alts.find(c => !raw.includes(c)) || sentinel;
+    $('sen').value = sentinel;
+  }
+  T = sentinel;
+  for (const ch of raw) T += ch + sentinel;
+  p = new Array(T.length).fill(0);
+  state = {
+    i: 1, C: 0, R: 0,
+    step: 'pick',
+    comparisons: 0,
+    bestI: -1, bestLen: 0,
+    done: T.length <= 1,
+  };
+  $('btnStep').disabled = state.done;
+  $('btnRun').disabled  = state.done;
+  $('logBody').innerHTML = '';
+  renderStrip();
+  updateSummary();
+  updateMarker();
+  renderPalList();
+}
+
+function step() {
+  if (!state || state.done) return;
+  const i = state.i;
+  if (i >= T.length - 1) {  // last cell is sentinel; p[T.length-1] = 0 trivially
+    state.i = T.length;
+    state.done = true;
+    log('done — best palindrome length ' + state.bestLen + (state.bestLen > 0 ? ' at T[' + state.bestI + ']' : ''), 'hit');
+    $('btnStep').disabled = true; $('btnRun').disabled = true;
+    renderStrip(); updateSummary(); updateMarker(); renderPalList();
+    return;
+  }
+  let { C, R } = state;
+  let init = 0;
+  if (i < R) {
+    const mirror = 2 * C - i;
+    init = Math.min(p[mirror], R - i);
+    log('i=' + i + ' < R=' + R + ' → mirror ' + mirror + ', p[' + mirror + ']=' + p[mirror] + ', copy min(' + p[mirror] + ', ' + (R - i) + ') = ' + init, 'copy');
+  } else {
+    log('i=' + i + ' ≥ R=' + R + ' → start naive', 'step');
+  }
+  p[i] = init;
+  let cmp = 0;
+  while (i - p[i] - 1 >= 0 && i + p[i] + 1 < T.length && T[i - p[i] - 1] === T[i + p[i] + 1]) {
+    p[i]++; cmp++;
+  }
+  state.comparisons += cmp + 1;
+  if (cmp > 0) log('  extended by ' + cmp + '  → p[' + i + '] = ' + p[i], 'step');
+  else         log('  no extension → p[' + i + '] = ' + p[i], 'step');
+  if (i + p[i] > R) {
+    C = i; R = i + p[i];
+    log('  updated [C, R] = [' + C + ', ' + R + ']', 'step');
+  }
+  state.C = C; state.R = R;
+  if (p[i] > state.bestLen) {
+    state.bestLen = p[i]; state.bestI = i;
+    log('  ★ new best palindrome: length ' + p[i], 'hit');
+  }
+  state.i = i + 1;
+  renderStrip(); updateSummary(); updateMarker(); renderPalList();
+}
+
+function runToEnd() {
+  let guard = T.length * 4 + 20;
+  while (state && !state.done && guard-- > 0) step();
+}
+
+function renderStrip() {
+  const box = $('strip');
+  const cur = state ? state.i : -1;
+  const parts = [];
+  for (let k = 0; k < T.length; k++) {
+    let cls = 'col';
+    if (T[k] === sentinel) cls += ' gap';
+    if (cur === k) cls += ' i-cur';
+    if (state && state.C === k && state.R > 0) cls += ' center';
+    if (state && cur >= 0 && cur < T.length && k === 2 * state.C - cur && cur < state.R) cls += ' mirror';
+    if (state && state.R > 0 && k >= 2 * state.C - state.R && k <= state.R && k >= 0 && k < T.length) cls += ' window';
+    if (state && state.bestI >= 0 && k >= state.bestI - state.bestLen && k <= state.bestI + state.bestLen) cls += ' best';
+    const isSet = state && k < cur;
+    if (isSet) cls += ' set';
+    const pVal = isSet ? p[k] : '';
+    parts.push('<div class="' + cls + '">' +
+      '<div class="idx">' + k + '</div>' +
+      '<div class="ch">' + escapeCh(T[k] || '') + '</div>' +
+      '<div class="pv">' + pVal + '</div>' +
+      '</div>');
+  }
+  box.innerHTML = parts.join('');
+}
+
+function escapeCh(ch) {
+  if (ch === ' ') return '␣';
+  if (ch === '\t') return '⇥';
+  if (ch === '\n') return '↵';
+  return ch.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+function updateSummary() {
+  let bestStr = '';
+  if (state && state.bestI >= 0) {
+    bestStr = originalSubstring(state.bestI, state.bestLen);
+  }
+  $('summary').innerHTML =
+    '<div class="tile"><div class="l">|input|</div><div class="v">' + raw.length + '</div></div>' +
+    '<div class="tile"><div class="l">|T| = 2n+1</div><div class="v">' + T.length + '</div></div>' +
+    '<div class="tile"><div class="l">comparisons</div><div class="v">' + (state ? state.comparisons : 0) + '</div></div>' +
+    '<div class="tile best"><div class="l">longest palindrome</div><div class="v">' + (bestStr ? escapeCh(bestStr) + ' &nbsp;(len ' + state.bestLen + ')' : '—') + '</div></div>' +
+    '<div class="tile"><div class="l">state</div><div class="v">' + (state && state.done ? 'done' : 'building') + '</div></div>';
+}
+
+function updateMarker() {
+  if (!state) { $('marker').textContent = ''; return; }
+  const i = Math.min(state.i, T.length);
+  const mirror = state.C * 2 - state.i;
+  $('marker').textContent = 'i=' + i + '   C=' + state.C + '   R=' + state.R +
+    '   mirror=' + (i < state.R ? mirror : '—') +
+    (state.done ? '   ✓ done' : '');
+}
+
+// Convert a transformed-string center i with radius p[i] into the original substring.
+function originalSubstring(i, radius) {
+  const lo = i - radius, hi = i + radius;
+  let out = '';
+  for (let k = lo; k <= hi; k++) {
+    if (T[k] !== sentinel) out += T[k];
+  }
+  return out;
+}
+
+function renderPalList() {
+  const box = $('palList');
+  if (!state) { box.innerHTML = ''; return; }
+  const seen = new Map();  // substr -> length
+  for (let i = 1; i < T.length - 1; i++) {
+    if (i >= state.i) break;
+    if (p[i] === 0) continue;
+    const s = originalSubstring(i, p[i]);
+    if (s.length >= 2 && !seen.has(s)) seen.set(s, s.length);
+  }
+  const arr = [...seen.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  if (arr.length === 0) { box.innerHTML = '<div style="color:var(--muted);font-size:.85rem">— none found yet —</div>'; return; }
+  const top = arr[0][1];
+  box.innerHTML = arr.slice(0, 200).map(([s, l]) =>
+    '<div class="item' + (l === top ? ' top' : '') + '"><div class="len">length ' + l + '</div><div class="txt">' + escapeCh(s) + '</div></div>'
+  ).join('');
+}
+
+function log(msg, cls) {
+  const b = $('logBody');
+  const div = document.createElement('div');
+  div.className = 'r ' + (cls || '');
+  div.textContent = msg;
+  b.appendChild(div);
+  b.parentElement.scrollTop = b.parentElement.scrollHeight;
+}
+
+reset();
+</script>
+</body>
+</html>

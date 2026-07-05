@@ -258,6 +258,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Fenwick Tree (BIT) Visualizer](fenwick.html) | Build a Binary Indexed Tree from any array and watch prefix-sum queries, point updates, and range queries walk the tree in `O(log n)`. Every node highlights its exact `(i − lowbit(i), i]` range and traces the `i ± lowbit(i)` walk cell-by-cell. |
+| [Z-Algorithm String Matching](zalgo.html) | Watch the Z-function get built one character at a time and see how the `[L, R]` mirror window copies already-computed radii to skip comparisons. Concatenate `pattern$text`, and any `Z[k]` equal to `|pattern|` is an exact-match hit — all in linear `O(n + m)` time. |
+| [Manacher's Longest Palindrome](manacher.html) | Find every palindromic substring of a string in linear `O(n)` time using Manacher's algorithm. See the sentinel-interleaved transform, per-center radius array `p[i]`, and the sliding `[C, R]` mirror window feed the longest-palindrome result live. |
 | [Numerical Integration Playground](numint.html) | Approximate `∫ₐᵇ f(x) dx` with Left / Right Riemann, Midpoint, Trapezoid, Simpson's 1/3, and Simpson's 3/8 side-by-side — with a live plot of the panels being summed and a log-log convergence chart showing each rule's empirical order (O(h), O(h²), O(h⁴)). |
 | [Tower of Hanoi Visualizer](hanoi.html) | Watch the classical recursive solve unroll into the minimum `2ⁿ − 1` moves, or grab a disk yourself and race the optimal solver. Step, pause, rewind, and read the full `hanoi(n, src→tgt via aux)` recursion trace side-by-side. |
 | [A* Pathfinding Visualizer](astar.html) | Race A*, Dijkstra, BFS, and Greedy Best-First on the same grid — paint walls and weighted terrain, pick a heuristic (Manhattan / Chebyshev / Euclidean / Octile), toggle 8-way movement, and compare cells expanded vs path cost across all four algorithms on the same map. |

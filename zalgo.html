@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Z-Algorithm String Matching Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch the Z-function get built one character at a time and see how the [L, R] window skips comparisons. Concatenate pattern$text, and any Z-value equal to the pattern length is an exact-match hit — all in linear O(n + m) time.">
+<meta name="keywords" content="z algorithm, z function, z array, string matching, pattern matching, linear time, l r window, algorithm visualizer, substring search, exact match">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/zalgo.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; font-size: .88rem; }
+  .controls input, .controls select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=text] { min-width: 220px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .controls label { color: var(--muted); }
+  .strip {
+    display: grid; grid-auto-flow: column; gap: 3px; padding: 4px 0;
+    font-family: var(--mono); font-size: .88rem; overflow-x: auto;
+  }
+  .strip .col { display: flex; flex-direction: column; align-items: center; min-width: 32px; }
+  .strip .col .idx { font-size: .68rem; color: var(--muted); }
+  .strip .col .ch {
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); min-width: 20px; text-align: center;
+  }
+  .strip .col .zv {
+    padding: 4px 6px; margin-top: 3px;
+    font-size: .78rem; color: var(--muted); min-width: 20px; text-align: center;
+    border: 1px dashed transparent;
+  }
+  .strip .col.pat .ch { background: rgba(99, 102, 241, .16); border-color: var(--accent); }
+  .strip .col.sep .ch { background: var(--surface2); color: var(--muted); }
+  .strip .col.set .zv { color: var(--text); border-color: var(--border); background: var(--surface2); border-style: solid; }
+  .strip .col.i-cur .ch { background: rgba(241, 196, 15, .3); border-color: var(--warning); }
+  .strip .col.i-cur .zv { border-color: var(--warning); border-style: solid; background: rgba(241, 196, 15, .16); color: var(--text); }
+  .strip .col.window .ch { box-shadow: inset 0 -3px 0 var(--accent); }
+  .strip .col.match .ch { background: rgba(40, 180, 99, .3); border-color: var(--success); color: var(--success); font-weight: 700; }
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin: 12px 0;
+  }
+  .summary .tile {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .summary .tile .l { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .summary .tile .v { font-family: var(--mono); font-size: 1.1rem; margin-top: 3px; color: var(--text); }
+  .log {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2); max-height: 260px; overflow-y: auto; margin-top: 10px;
+  }
+  .log h3 { margin: 0 0 6px; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .log .r { font-family: var(--mono); font-size: .8rem; padding: 2px 0; }
+  .log .r.step { color: var(--accent); }
+  .log .r.hit { color: var(--success); }
+  .log .r.copy { color: var(--warning); }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  .marker { font-family: var(--mono); font-size: .82rem; color: var(--muted); padding: 2px 0 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Z-Algorithm String Matching Visualizer</h1>
+<p class="subtitle">The <strong>Z-array</strong> of a string <code>S</code> stores, for each index <code>i</code>, the length of the longest substring starting at <code>i</code> that matches a prefix of <code>S</code>. Compute it once over the concatenation <code>pattern + $ + text</code> and every <code>Z[k]</code> equal to <code>|pattern|</code> marks a match — in linear time, with no failure function.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Text</label>
+    <input type="text" id="text" value="abxabcabcabyabcabc" spellcheck="false">
+    <label>Pattern</label>
+    <input type="text" id="pat" value="abcab" spellcheck="false">
+    <label>Separator</label>
+    <input type="text" id="sep" value="$" maxlength="1" style="width:60px">
+    <button class="primary" onclick="reset()">Reset</button>
+    <button id="btnStep" onclick="step()">Step ▶</button>
+    <button id="btnRun" onclick="runToEnd()">Run to end ⏭</button>
+    <label style="margin-left:auto"><input type="checkbox" id="caseSens" checked onchange="reset()"> case-sensitive</label>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div class="marker" id="marker"></div>
+  <div class="strip" id="strip"></div>
+</div>
+
+<div class="card">
+  <h2>Trace</h2>
+  <div class="log" id="log">
+    <h3>Steps</h3>
+    <div id="logBody"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How Z works</h2>
+  <p class="about">
+    Think of <em>the deepest prefix-match window we've ever seen so far</em>. Maintain <code>[L, R]</code>, the rightmost interval such that <code>S[L..R]</code> equals <code>S[0..R−L]</code>. For each new index <code>i</code>:
+  </p>
+  <ul class="about" style="margin:0 0 10px 22px">
+    <li>If <code>i &gt; R</code>: no help. Compare from scratch — <code>Z[i]</code> = how far <code>S[i..]</code> matches <code>S[0..]</code>. If <code>Z[i] &gt; 0</code>, update <code>[L, R] = [i, i + Z[i] − 1]</code>.</li>
+    <li>If <code>i ≤ R</code>: reflect <code>i</code> into the prefix window. Let <code>k = i − L</code>. Copy <code>Z[k]</code> if it stays inside <code>[L, R]</code>; otherwise clamp to <code>R − i + 1</code> and extend by naive comparison past <code>R</code>. Update <code>[L, R]</code> if the match reached past <code>R</code>.</li>
+  </ul>
+  <p class="about">
+    Amortised, the pointer <code>R</code> can only move forward, so the whole build costs <code>O(|S|)</code>. Concatenate <code>pattern + $ + text</code> (where <code>$</code> is a character neither string contains) and any position <code>k</code> in the concatenation with <code>Z[k] == |pattern|</code> means a full match — its position in the original text is <code>k − |pattern| − 1</code>. Z-functions also underpin the suffix-array DC3 construction, the failure function of Aho-Corasick, and several palindromic-tree tricks.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = '';           // pattern + sep + text
+let z = [];           // Z-array
+let n = 0, m = 0;     // pattern length, text length
+let sepChar = '$';
+let state = null;
+
+function normalize(s) { return $('caseSens').checked ? s : s.toLowerCase(); }
+
+function reset() {
+  const text = normalize($('text').value);
+  const pat  = normalize($('pat').value);
+  sepChar    = $('sep').value || '$';
+  if (sepChar.length !== 1) sepChar = '$';
+  m = pat.length;
+  n = text.length;
+  S = pat + sepChar + text;
+  z = new Array(S.length).fill(0);
+  z[0] = S.length; // convention: Z[0] = length of S
+  state = {
+    i: 1, L: 0, R: 0,
+    step: 'pick',         // 'pick' | 'inner' | 'update' | 'done'
+    matches: [],
+    comparisons: 0,
+    events: [],
+  };
+  $('btnStep').disabled = S.length <= 1;
+  $('btnRun').disabled  = S.length <= 1;
+  $('logBody').innerHTML = '';
+  renderStrip();
+  updateSummary();
+  updateMarker();
+}
+
+function inBounds(i) { return i >= 0 && i < S.length; }
+
+function step() {
+  if (!state || state.step === 'done') return;
+  if (state.i >= S.length) {
+    state.step = 'done';
+    log('done — Z-array complete, ' + state.matches.length + ' match' + (state.matches.length === 1 ? '' : 'es'), 'hit');
+    renderStrip(); updateSummary(); updateMarker();
+    $('btnStep').disabled = true; $('btnRun').disabled = true;
+    return;
+  }
+  const i = state.i;
+  let { L, R } = state;
+  let k, base;
+  if (i > R) {
+    k = 0; base = 0;
+    log('i=' + i + ' > R=' + R + ' → naive from scratch', 'step');
+  } else {
+    const ref = i - L;
+    if (z[ref] < R - i + 1) {
+      z[i] = z[ref];
+      log('i=' + i + ' ≤ R=' + R + ', reflect k=i−L=' + ref + ', Z[' + ref + ']=' + z[ref] + ' fits inside [L,R] → Z[' + i + ']=' + z[i] + '  (no compares)', 'copy');
+      finalizeIndex(i, L, R);
+      return;
+    } else {
+      base = R - i + 1;
+      k = base;
+      log('i=' + i + ' ≤ R=' + R + ', reflect k=' + ref + ', Z[' + ref + ']=' + z[ref] + ' would exceed the window → start at ' + base + ' and extend', 'copy');
+    }
+  }
+  // extend by naive compare
+  let cmp = 0;
+  while (i + k < S.length && S[k] === S[i + k]) { k++; cmp++; }
+  state.comparisons += cmp + (i + k < S.length ? 1 : 0);
+  z[i] = k;
+  log('  compared ' + cmp + ' char' + (cmp === 1 ? '' : 's') + '; Z[' + i + '] = ' + k, 'step');
+  if (k > 0 && i + k - 1 > R) {
+    L = i; R = i + k - 1;
+    log('  updated [L, R] = [' + L + ', ' + R + ']', 'step');
+  }
+  finalizeIndex(i, L, R);
+}
+
+function finalizeIndex(i, L, R) {
+  state.L = L; state.R = R;
+  if (i > m && z[i] >= m) {  // full pattern match in the text half
+    const pos = i - m - 1;
+    if (!state.matches.includes(pos)) {
+      state.matches.push(pos);
+      log('  ★ match at text index ' + pos, 'hit');
+    }
+  }
+  state.i = i + 1;
+  renderStrip();
+  updateSummary();
+  updateMarker();
+}
+
+function runToEnd() {
+  let guard = S.length * 4 + 20;
+  while (state && state.step !== 'done' && guard-- > 0) step();
+}
+
+function renderStrip() {
+  const box = $('strip');
+  const cur = state ? state.i : -1;
+  const L = state ? state.L : 0, R = state ? state.R : 0;
+  const parts = [];
+  for (let k = 0; k < S.length; k++) {
+    let cls = 'col';
+    if (k < m) cls += ' pat';
+    else if (k === m) cls += ' sep';
+    if (cur === k) cls += ' i-cur';
+    if (state && k >= L && k <= R && R > 0) cls += ' window';
+    const isSet = k === 0 || (state && k < cur);
+    if (isSet) cls += ' set';
+    if (isSet && k > m && z[k] >= m && m > 0) cls += ' match';
+    const zVal = isSet ? z[k] : '';
+    parts.push('<div class="' + cls + '">' +
+      '<div class="idx">' + k + '</div>' +
+      '<div class="ch">' + escapeCh(S[k] || '') + '</div>' +
+      '<div class="zv">' + zVal + '</div>' +
+      '</div>');
+  }
+  box.innerHTML = parts.join('');
+}
+
+function escapeCh(ch) {
+  if (ch === ' ') return '␣';
+  if (ch === '\t') return '⇥';
+  if (ch === '\n') return '↵';
+  return ch.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+function updateSummary() {
+  const done = state && state.step === 'done';
+  $('summary').innerHTML =
+    '<div class="tile"><div class="l">|pattern| m</div><div class="v">' + m + '</div></div>' +
+    '<div class="tile"><div class="l">|text| n</div><div class="v">' + n + '</div></div>' +
+    '<div class="tile"><div class="l">|S| = m+1+n</div><div class="v">' + S.length + '</div></div>' +
+    '<div class="tile"><div class="l">comparisons</div><div class="v">' + (state ? state.comparisons : 0) + '</div></div>' +
+    '<div class="tile"><div class="l">matches</div><div class="v">' + (state ? state.matches.length : 0) + '</div></div>' +
+    '<div class="tile"><div class="l">state</div><div class="v">' + (done ? 'done' : 'building') + '</div></div>';
+}
+
+function updateMarker() {
+  if (!state) { $('marker').textContent = ''; return; }
+  const i = Math.min(state.i, S.length);
+  $('marker').textContent = 'i=' + i + '   L=' + state.L + '   R=' + state.R +
+    '   window size=' + Math.max(0, state.R - state.L + 1) +
+    (state.step === 'done' ? '   ✓ done' : '');
+}
+
+function log(msg, cls) {
+  const b = $('logBody');
+  const div = document.createElement('div');
+  div.className = 'r ' + (cls || '');
+  div.textContent = msg;
+  b.appendChild(div);
+  b.parentElement.scrollTop = b.parentElement.scrollHeight;
+}
+
+reset();
+</script>
+</body>
+</html>
