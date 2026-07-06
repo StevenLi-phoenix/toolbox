@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>k-means Clustering Visualizer — Free Online Tool</title>
+<meta name="description" content="Interactive k-means: paint 2D points, pick k, seed centroids (Forgy / Random / k-means++), then step through the assign/update loop. Watch WCSS drop, Voronoi cells recalculate, and clusters converge — plus a live elbow curve to pick k.">
+<meta name="keywords" content="k-means, clustering, unsupervised, visualizer, kmeans++, forgy, elbow method, WCSS, inertia, Voronoi, machine learning, data science">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/kmeans.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: .88rem; }
+  .controls input[type=number], .controls select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=number] { width: 70px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls label { color: var(--muted); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .canvas-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); position: relative; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 460px; cursor: crosshair; }
+  .canvas-wrap .mode { position: absolute; top: 6px; left: 8px; font-family: var(--mono); font-size: .72rem; color: var(--muted); background: var(--surface2); padding: 3px 6px; border-radius: 3px; }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .elbow { margin-top: 12px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .elbow h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .elbow canvas { height: 130px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+  .cluster-list { margin-top: 12px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .cluster-list h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .cluster-list .row { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: .78rem; padding: 2px 0; }
+  .cluster-list .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
+  .log { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 180px; overflow-y: auto; }
+  .log h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .log .row { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .log .row.op { color: var(--warning); font-weight: 600; }
+  .log .row.hit { color: var(--success); }
+  .log .row.walk { color: var(--accent); }
+  .log .row.miss { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>k-means Clustering Visualizer</h1>
+<p class="subtitle"><strong>k-means</strong> alternates <em>assign</em> — every point picks its nearest centroid — and <em>update</em> — every centroid moves to its cluster's mean — until nothing changes. It's greedy and gets stuck in local minima, so the initialization matters: <em>Forgy</em> picks k random points, <em>k-means++</em> spreads seeds by squared distance to reduce bad starts. Click below to paint your own points, then step through the Lloyd iterations.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>k</label>
+    <input type="number" id="k" min="1" max="10" value="3">
+    <label>Init</label>
+    <select id="init">
+      <option value="kpp">k-means++</option>
+      <option value="forgy">Forgy (random points)</option>
+      <option value="rand">Random within bounds</option>
+    </select>
+    <button class="primary" onclick="initCentroids()">Seed centroids</button>
+    <button class="primary" onclick="step()">Step iteration</button>
+    <button onclick="runAll()">Run to convergence</button>
+    <button onclick="autoRun()" id="autoBtn">▶ Auto</button>
+    <button onclick="clearPoints()">Clear points</button>
+  </div>
+  <div class="controls">
+    <label>Add points:</label>
+    <select id="brush">
+      <option value="single">single click</option>
+      <option value="blob">5-pt gaussian blob on click</option>
+    </select>
+    <button onclick="genRandom(60)">🎲 60 random</button>
+    <button onclick="genBlobs()">🎲 4 Gaussian blobs</button>
+    <button onclick="genRings()">🎲 Concentric rings (hard case)</button>
+    <button onclick="runElbow()">Run elbow (k = 1…8)</button>
+  </div>
+  <div class="layout">
+    <div>
+      <div class="canvas-wrap">
+        <canvas id="cv"></canvas>
+        <div class="mode" id="modeLbl">click canvas to add points</div>
+      </div>
+      <p style="font-size:.78rem;color:var(--muted);margin-top:6px">Colored regions = Voronoi cells for the current centroids. Circle × = centroid.</p>
+    </div>
+    <div>
+      <div class="stats">
+        <h3>Run stats</h3>
+        <div class="stat-row"><span>Points n</span><span class="v" id="sN">0</span></div>
+        <div class="stat-row"><span>Iteration</span><span class="v" id="sIt">0</span></div>
+        <div class="stat-row"><span>WCSS (inertia)</span><span class="v" id="sInertia">—</span></div>
+        <div class="stat-row"><span>Δ centroid (max)</span><span class="v" id="sDelta">—</span></div>
+        <div class="stat-row"><span>Reassignments</span><span class="v" id="sReassign">—</span></div>
+        <div class="stat-row"><span>Silhouette (approx)</span><span class="v" id="sSil">—</span></div>
+      </div>
+      <div class="cluster-list">
+        <h3>Clusters</h3>
+        <div id="clist"></div>
+      </div>
+      <div class="elbow">
+        <h3>Elbow curve — WCSS vs k</h3>
+        <canvas id="elbowCv"></canvas>
+      </div>
+      <div class="log">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why k-means++ matters</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Plain Forgy picks k data points uniformly at random, which occasionally lumps two seeds into the same true cluster — the algorithm converges to a local minimum that splits one cluster while merging two others. <strong>k-means++</strong> seeds the first centroid uniformly, then each subsequent seed is drawn with probability proportional to <code>D(x)²</code>, where <code>D(x)</code> is the distance from <code>x</code> to the nearest already-picked seed. This guarantees an expected <code>O(log k)</code> approximation to the optimal WCSS, and in practice cuts iterations roughly in half. Try both on the "concentric rings" preset — k-means simply can't cluster non-convex shapes no matter how you seed it, which is why you'd reach for DBSCAN or spectral clustering instead.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+const elbowCv = $('elbowCv'), ectx = elbowCv.getContext('2d');
+let W = 0, H = 0;
+const COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#14b8a6'];
+
+let points = [];
+let centroids = [];
+let iter = 0, inertia = null, lastDelta = null, lastReassign = null;
+let logRows = [];
+let autoTimer = null;
+let elbowData = null;
+
+function resize() {
+  const rect = cv.getBoundingClientRect();
+  cv.width = rect.width * devicePixelRatio;
+  cv.height = rect.height * devicePixelRatio;
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  W = rect.width; H = rect.height;
+  const er = elbowCv.getBoundingClientRect();
+  elbowCv.width = er.width * devicePixelRatio;
+  elbowCv.height = er.height * devicePixelRatio;
+  ectx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  render();
+}
+window.addEventListener('resize', resize);
+
+cv.addEventListener('click', (e) => {
+  const rect = cv.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  const brush = $('brush').value;
+  if (brush === 'blob') {
+    for (let i = 0; i < 5; i++) {
+      const px = x + gauss() * 14, py = y + gauss() * 14;
+      if (px >= 0 && px < W && py >= 0 && py < H) points.push({ x: px, y: py, c: -1 });
+    }
+  } else {
+    points.push({ x, y, c: -1 });
+  }
+  centroids = []; iter = 0; inertia = null; lastDelta = null; lastReassign = null;
+  render(); updateStats();
+});
+
+function gauss() {
+  const u = Math.random(), v = Math.random();
+  return Math.sqrt(-2 * Math.log(u || 1e-9)) * Math.cos(2 * Math.PI * v);
+}
+
+function clearPoints() {
+  points = []; centroids = []; iter = 0; inertia = null;
+  logRows = [{t: 'cleared', cls: 'miss'}];
+  render(); updateStats();
+}
+
+function genRandom(n) {
+  clearPoints();
+  for (let i = 0; i < n; i++) points.push({ x: 30 + Math.random() * (W - 60), y: 30 + Math.random() * (H - 60), c: -1 });
+  render(); updateStats();
+}
+function genBlobs() {
+  clearPoints();
+  const centers = [[W*0.3, H*0.3],[W*0.7,H*0.3],[W*0.3,H*0.7],[W*0.7,H*0.7]];
+  for (const [cx,cy] of centers) {
+    for (let i = 0; i < 25; i++) {
+      const x = cx + gauss() * 26, y = cy + gauss() * 26;
+      if (x > 0 && x < W && y > 0 && y < H) points.push({ x, y, c: -1 });
+    }
+  }
+  render(); updateStats();
+}
+function genRings() {
+  clearPoints();
+  const cx = W/2, cy = H/2;
+  for (const r of [40, 100, 170]) {
+    const n = Math.round(r * 0.9);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 2 * Math.PI;
+      const rr = r + gauss() * 4;
+      points.push({ x: cx + rr * Math.cos(a), y: cy + rr * Math.sin(a), c: -1 });
+    }
+  }
+  render(); updateStats();
+}
+
+function initCentroids() {
+  const k = parseInt($('k').value);
+  const mode = $('init').value;
+  if (!points.length) return;
+  centroids = [];
+  if (mode === 'forgy') {
+    const idx = new Set();
+    while (idx.size < Math.min(k, points.length)) idx.add(Math.floor(Math.random() * points.length));
+    for (const i of idx) centroids.push({ x: points[i].x, y: points[i].y });
+  } else if (mode === 'rand') {
+    for (let i = 0; i < k; i++) centroids.push({ x: 30 + Math.random() * (W - 60), y: 30 + Math.random() * (H - 60) });
+  } else { // kpp
+    centroids.push({ x: points[Math.floor(Math.random() * points.length)].x, y: points[Math.floor(Math.random() * points.length)].y });
+    while (centroids.length < k) {
+      const dists = points.map(p => {
+        let best = Infinity;
+        for (const c of centroids) { const dx = p.x - c.x, dy = p.y - c.y; const d = dx*dx + dy*dy; if (d < best) best = d; }
+        return best;
+      });
+      const sum = dists.reduce((a,b)=>a+b,0);
+      if (sum === 0) { centroids.push({ x: points[0].x, y: points[0].y }); continue; }
+      let r = Math.random() * sum;
+      let picked = 0;
+      for (let i = 0; i < dists.length; i++) { r -= dists[i]; if (r <= 0) { picked = i; break; } }
+      centroids.push({ x: points[picked].x, y: points[picked].y });
+    }
+  }
+  iter = 0; inertia = null; lastDelta = null; lastReassign = null;
+  for (const p of points) p.c = -1;
+  logRows = [{t: `seed ${mode} — k=${k} centroids placed`, cls: 'op'}];
+  render(); updateStats();
+}
+
+function assign() {
+  let changed = 0;
+  let total = 0;
+  for (const p of points) {
+    let best = -1, bestD = Infinity;
+    for (let i = 0; i < centroids.length; i++) {
+      const dx = p.x - centroids[i].x, dy = p.y - centroids[i].y;
+      const d = dx*dx + dy*dy;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    if (best !== p.c) { changed++; p.c = best; }
+    total += bestD;
+  }
+  return { changed, total };
+}
+
+function update() {
+  const sums = centroids.map(_ => ({ x: 0, y: 0, n: 0 }));
+  for (const p of points) if (p.c >= 0) { sums[p.c].x += p.x; sums[p.c].y += p.y; sums[p.c].n++; }
+  let maxDelta = 0;
+  for (let i = 0; i < centroids.length; i++) {
+    if (sums[i].n === 0) continue;
+    const nx = sums[i].x / sums[i].n, ny = sums[i].y / sums[i].n;
+    const d = Math.hypot(nx - centroids[i].x, ny - centroids[i].y);
+    if (d > maxDelta) maxDelta = d;
+    centroids[i].x = nx; centroids[i].y = ny;
+  }
+  return maxDelta;
+}
+
+function step() {
+  if (!centroids.length) initCentroids();
+  if (!centroids.length) return;
+  const a = assign();
+  const d = update();
+  iter++;
+  inertia = a.total; lastDelta = d; lastReassign = a.changed;
+  logRows = [{t: `iter ${iter} — WCSS=${a.total.toFixed(1)}, Δ=${d.toFixed(2)}, reassign=${a.changed}`, cls: a.changed === 0 ? 'hit' : 'op'}].concat(logRows);
+  render(); updateStats();
+  return a.changed === 0;
+}
+
+function runAll() {
+  if (!centroids.length) initCentroids();
+  for (let i = 0; i < 60; i++) if (step()) break;
+}
+
+function autoRun() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; $('autoBtn').textContent = '▶ Auto'; return; }
+  if (!centroids.length) initCentroids();
+  $('autoBtn').textContent = '■ Stop';
+  autoTimer = setInterval(() => {
+    const done = step();
+    if (done) { clearInterval(autoTimer); autoTimer = null; $('autoBtn').textContent = '▶ Auto'; }
+  }, 400);
+}
+
+function silhouetteApprox() {
+  if (points.length < 4 || centroids.length < 2) return null;
+  const clusters = centroids.map(_ => []);
+  for (const p of points) if (p.c >= 0) clusters[p.c].push(p);
+  let sum = 0, cnt = 0;
+  for (const p of points) {
+    if (p.c < 0) continue;
+    const own = clusters[p.c];
+    if (own.length < 2) continue;
+    let a = 0;
+    for (const q of own) if (q !== p) a += Math.hypot(p.x - q.x, p.y - q.y);
+    a /= (own.length - 1);
+    let b = Infinity;
+    for (let i = 0; i < clusters.length; i++) {
+      if (i === p.c || !clusters[i].length) continue;
+      let d = 0;
+      for (const q of clusters[i]) d += Math.hypot(p.x - q.x, p.y - q.y);
+      d /= clusters[i].length;
+      if (d < b) b = d;
+    }
+    if (!Number.isFinite(b)) continue;
+    sum += (b - a) / Math.max(a, b);
+    cnt++;
+  }
+  return cnt ? sum / cnt : null;
+}
+
+function runElbow() {
+  if (points.length < 8) return;
+  const wcss = [];
+  const originalK = $('k').value;
+  for (let k = 1; k <= Math.min(8, points.length); k++) {
+    let best = Infinity;
+    for (let trial = 0; trial < 3; trial++) {
+      $('k').value = k;
+      $('init').value = 'kpp';
+      initCentroids();
+      for (let it = 0; it < 40; it++) if (step()) break;
+      if (inertia != null && inertia < best) best = inertia;
+    }
+    wcss.push({ k, w: best });
+  }
+  elbowData = wcss;
+  $('k').value = originalK;
+  render(); updateStats();
+}
+
+function render() {
+  ctx.fillStyle = 'transparent';
+  ctx.clearRect(0, 0, W, H);
+  if (centroids.length) {
+    const img = ctx.createImageData(Math.floor(W), Math.floor(H));
+    for (let y = 0; y < img.height; y += 3) {
+      for (let x = 0; x < img.width; x += 3) {
+        let best = -1, bestD = Infinity;
+        for (let i = 0; i < centroids.length; i++) {
+          const dx = x - centroids[i].x, dy = y - centroids[i].y;
+          const d = dx*dx + dy*dy;
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        const col = hexToRgb(COLORS[best % COLORS.length]);
+        for (let dy = 0; dy < 3 && y + dy < img.height; dy++) {
+          for (let dx = 0; dx < 3 && x + dx < img.width; dx++) {
+            const idx = ((y + dy) * img.width + (x + dx)) * 4;
+            img.data[idx] = col.r; img.data[idx + 1] = col.g; img.data[idx + 2] = col.b; img.data[idx + 3] = 22;
+          }
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  for (const p of points) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = p.c >= 0 ? COLORS[p.c % COLORS.length] : '#94a3b8';
+    ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  for (let i = 0; i < centroids.length; i++) {
+    const c = centroids[i];
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 10, 0, Math.PI * 2);
+    ctx.strokeStyle = COLORS[i % COLORS.length]; ctx.lineWidth = 2.4; ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(c.x - 6, c.y - 6); ctx.lineTo(c.x + 6, c.y + 6);
+    ctx.moveTo(c.x + 6, c.y - 6); ctx.lineTo(c.x - 6, c.y + 6);
+    ctx.stroke();
+  }
+  renderElbow();
+  renderClusterList();
+  renderLog();
+}
+
+function renderElbow() {
+  const w = elbowCv.getBoundingClientRect().width, h = elbowCv.getBoundingClientRect().height;
+  ectx.clearRect(0, 0, w, h);
+  if (!elbowData || !elbowData.length) {
+    ectx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted') || '#888';
+    ectx.font = '11px monospace';
+    ectx.fillText('click "Run elbow" to plot WCSS vs k', 8, h / 2);
+    return;
+  }
+  const pad = 24;
+  const maxW = Math.max(...elbowData.map(d => d.w));
+  const minW = Math.min(...elbowData.map(d => d.w));
+  const kMax = Math.max(...elbowData.map(d => d.k));
+  const xOf = k => pad + ((k - 1) / (kMax - 1 || 1)) * (w - pad * 1.5);
+  const yOf = v => pad + (1 - (v - minW) / (maxW - minW || 1)) * (h - pad * 2);
+  ectx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--border') || '#333';
+  ectx.beginPath(); ectx.moveTo(pad, pad); ectx.lineTo(pad, h - pad); ectx.lineTo(w - pad/2, h - pad); ectx.stroke();
+  ectx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--accent') || '#6366f1';
+  ectx.lineWidth = 2; ectx.beginPath();
+  elbowData.forEach((d, i) => { const x = xOf(d.k), y = yOf(d.w); if (i === 0) ectx.moveTo(x,y); else ectx.lineTo(x,y); });
+  ectx.stroke();
+  ectx.fillStyle = getComputedStyle(document.body).getPropertyValue('--accent') || '#6366f1';
+  ectx.font = '10px monospace';
+  for (const d of elbowData) {
+    const x = xOf(d.k), y = yOf(d.w);
+    ectx.beginPath(); ectx.arc(x, y, 3, 0, Math.PI * 2); ectx.fill();
+    ectx.fillText(`k=${d.k}`, x - 10, h - 6);
+  }
+}
+
+function renderClusterList() {
+  const el = $('clist'); el.innerHTML = '';
+  const counts = new Array(centroids.length).fill(0);
+  for (const p of points) if (p.c >= 0) counts[p.c]++;
+  for (let i = 0; i < centroids.length; i++) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<span class="sw" style="background:${COLORS[i % COLORS.length]}"></span> C${i}: ${counts[i]} pts &nbsp;·&nbsp; (${centroids[i].x.toFixed(0)}, ${centroids[i].y.toFixed(0)})`;
+    el.appendChild(row);
+  }
+}
+
+function renderLog() {
+  const el = $('logRows'); el.innerHTML = '';
+  logRows.slice(0, 40).forEach(r => {
+    const d = document.createElement('div'); d.className = 'row ' + (r.cls || '');
+    d.textContent = r.t; el.appendChild(d);
+  });
+}
+
+function updateStats() {
+  $('sN').textContent = points.length;
+  $('sIt').textContent = iter;
+  $('sInertia').textContent = inertia == null ? '—' : inertia.toFixed(1);
+  $('sDelta').textContent = lastDelta == null ? '—' : lastDelta.toFixed(2);
+  $('sReassign').textContent = lastReassign == null ? '—' : lastReassign;
+  const s = silhouetteApprox();
+  $('sSil').textContent = s == null ? '—' : s.toFixed(3);
+}
+
+function hexToRgb(hex) {
+  const m = hex.replace('#','').match(/.{2}/g);
+  return { r: parseInt(m[0], 16), g: parseInt(m[1], 16), b: parseInt(m[2], 16) };
+}
+
+resize();
+genBlobs();
+initCentroids();
+runAll();
+</script>
+</body>
+</html>

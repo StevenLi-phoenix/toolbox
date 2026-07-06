@@ -258,6 +258,9 @@
 
 | Tool | Description |
 |------|-------------|
+| [Union-Find (Disjoint Set) Visualizer](unionfind.html) | Build a disjoint-set forest live. Run makeSet, union, and find operations, watch union-by-rank flatten trees, see path compression collapse chains in a single find, and track the near-constant `O(α(n))` amortized cost. Toggle each optimization to compare tree shape. |
+| [Bellman-Ford Shortest Path Visualizer](bellmanford.html) | Run Bellman-Ford on any weighted directed graph — negative edges welcome. Watch distance/predecessor tables tighten across \|V\|−1 relaxation passes, detect negative cycles on pass \|V\|, and trace the exact edges relaxed at each step. Includes currency-arbitrage and negative-cycle demos. |
+| [k-means Clustering Visualizer](kmeans.html) | Interactive k-means: paint 2D points, pick k, seed centroids (Forgy / Random / k-means++), then step through the assign/update Lloyd loop. Watch WCSS drop, Voronoi cells recalculate, clusters converge — plus a live elbow curve over k = 1…8 to help pick k. |
 | [Fenwick Tree (BIT) Visualizer](fenwick.html) | Build a Binary Indexed Tree from any array and watch prefix-sum queries, point updates, and range queries walk the tree in `O(log n)`. Every node highlights its exact `(i − lowbit(i), i]` range and traces the `i ± lowbit(i)` walk cell-by-cell. |
 | [Z-Algorithm String Matching](zalgo.html) | Watch the Z-function get built one character at a time and see how the `[L, R]` mirror window copies already-computed radii to skip comparisons. Concatenate `pattern$text`, and any `Z[k]` equal to `|pattern|` is an exact-match hit — all in linear `O(n + m)` time. |
 | [Manacher's Longest Palindrome](manacher.html) | Find every palindromic substring of a string in linear `O(n)` time using Manacher's algorithm. See the sentinel-interleaved transform, per-center radius array `p[i]`, and the sliding `[C, R]` mirror window feed the longest-palindrome result live. |

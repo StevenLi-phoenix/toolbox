@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bellman-Ford Shortest Path Visualizer — Free Online Tool</title>
+<meta name="description" content="Run Bellman-Ford on any weighted directed graph — negative edges welcome. Watch the distance/predecessor tables tighten across |V|−1 relaxation passes, detect negative cycles on pass |V|, and trace the exact edges that get relaxed at every step.">
+<meta name="keywords" content="bellman ford, shortest path, negative edges, negative cycle, relaxation, dynamic programming, graph algorithm, visualizer, currency arbitrage, distance vector routing">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bellmanford.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: .88rem; }
+  .controls input[type=number], .controls input[type=text], .controls textarea {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=number] { width: 70px; }
+  .controls input[type=text] { width: 200px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls label { color: var(--muted); }
+  .edges-input { width: 100%; min-height: 78px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; resize: vertical; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; max-height: 520px; padding: 8px; }
+  svg.bf { display: block; min-width: 100%; }
+  .node circle { stroke: var(--border); stroke-width: 1.5; fill: var(--surface2); }
+  .node text.k { font-family: var(--mono); font-size: 13px; fill: var(--text); text-anchor: middle; dominant-baseline: central; pointer-events: none; font-weight: 700; }
+  .node text.d { font-family: var(--mono); font-size: 10px; fill: var(--muted); text-anchor: middle; }
+  .node.src circle { fill: rgba(99, 102, 241, .3); stroke: var(--accent); stroke-width: 2.4; }
+  .node.updated circle { fill: rgba(241, 196, 15, .35); stroke: var(--warning); stroke-width: 2.4; }
+  .node.reached circle { fill: rgba(40, 180, 99, .18); stroke: var(--success); }
+  .node.cycle circle { fill: rgba(230, 92, 92, .35); stroke: var(--error); stroke-width: 2.4; }
+  .edge { stroke: var(--border); stroke-width: 1.4; fill: none; }
+  .edge.relaxed { stroke: var(--warning); stroke-width: 2.4; }
+  .edge.tree { stroke: var(--success); stroke-width: 2.4; }
+  .edge.cyc { stroke: var(--error); stroke-width: 2.4; stroke-dasharray: 4 3; }
+  .edge.arrowhead { fill: var(--border); }
+  .edge.arrow-relax { fill: var(--warning); }
+  .edge.arrow-tree { fill: var(--success); }
+  .edge.arrow-cyc { fill: var(--error); }
+  .elabel { font-family: var(--mono); font-size: 11px; fill: var(--muted); pointer-events: none; }
+  .elabel.neg { fill: var(--error); font-weight: 700; }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .dist-table { margin-top: 12px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .dist-table h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .dist-table table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .78rem; }
+  .dist-table th, .dist-table td { padding: 3px 6px; text-align: center; border-bottom: 1px solid var(--border); }
+  .dist-table th { color: var(--muted); font-weight: 500; }
+  .dist-table td.upd { background: rgba(241, 196, 15, .16); color: var(--warning); font-weight: 700; }
+  .log { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 220px; overflow-y: auto; }
+  .log h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .log .row { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .log .row.op { color: var(--warning); font-weight: 600; }
+  .log .row.hit { color: var(--success); }
+  .log .row.miss { color: var(--muted); }
+  .log .row.err { color: var(--error); font-weight: 700; }
+  .log .row.walk { color: var(--accent); }
+  .banner { padding: 10px 12px; border-radius: var(--radius); font-size: .88rem; margin-top: 10px; }
+  .banner.ok { background: rgba(40, 180, 99, .12); border: 1px solid var(--success); color: var(--success); }
+  .banner.err { background: rgba(230, 92, 92, .12); border: 1px solid var(--error); color: var(--error); }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 999px; vertical-align: middle; margin-right: 4px; border: 1.4px solid var(--border); }
+  .legend .sw.s { background: rgba(99, 102, 241, .3); border-color: var(--accent); }
+  .legend .sw.u { background: rgba(241, 196, 15, .35); border-color: var(--warning); }
+  .legend .sw.r { background: rgba(40, 180, 99, .18); border-color: var(--success); }
+  .legend .sw.c { background: rgba(230, 92, 92, .35); border-color: var(--error); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Bellman-Ford Shortest Path Visualizer</h1>
+<p class="subtitle"><strong>Bellman-Ford</strong> handles what Dijkstra can't: <em>negative edge weights</em>. It relaxes every edge <code>|V|−1</code> times, guaranteeing the shortest path distances converge, then does one more pass — if anything still improves, a negative-weight cycle exists. That's why RIP, EIGRP, and every currency-arbitrage detector run Bellman-Ford instead of Dijkstra.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Source</label>
+    <input type="number" id="src" min="0" value="1">
+    <button class="primary" onclick="runAll()">Run all passes</button>
+    <button onclick="stepOne()">Step 1 pass</button>
+    <button onclick="reset()">Reset</button>
+    <button onclick="loadNeg()">Load negative-cycle demo</button>
+    <button onclick="loadFx()">Load currency arbitrage demo</button>
+  </div>
+  <div class="controls" style="align-items:flex-start;flex-direction:column;gap:4px">
+    <label>Edges — one <code>u v w</code> per line (weights may be negative):</label>
+    <textarea class="edges-input" id="edgesIn">1 2 4
+1 3 5
+2 3 -3
+3 4 4
+2 4 2
+4 5 -1
+3 5 6</textarea>
+  </div>
+  <div class="layout">
+    <div class="svg-wrap" id="svgWrap"><svg class="bf" id="svg" viewBox="0 0 800 400" preserveAspectRatio="xMinYMin meet"><defs>
+      <marker id="ah" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path class="edge arrowhead" d="M0,0 L8,4 L0,8 Z"/></marker>
+      <marker id="ahr" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path class="edge arrow-relax" d="M0,0 L8,4 L0,8 Z"/></marker>
+      <marker id="aht" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path class="edge arrow-tree" d="M0,0 L8,4 L0,8 Z"/></marker>
+      <marker id="ahc" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path class="edge arrow-cyc" d="M0,0 L8,4 L0,8 Z"/></marker>
+    </defs></svg></div>
+    <div>
+      <div id="banner"></div>
+      <div class="stats">
+        <h3>Run stats</h3>
+        <div class="stat-row"><span>Vertices |V|</span><span class="v" id="sV">0</span></div>
+        <div class="stat-row"><span>Edges |E|</span><span class="v" id="sE">0</span></div>
+        <div class="stat-row"><span>Passes done</span><span class="v" id="sP">0</span></div>
+        <div class="stat-row"><span>Relaxations</span><span class="v" id="sR">0</span></div>
+        <div class="stat-row"><span>Reached vertices</span><span class="v" id="sReach">0</span></div>
+      </div>
+      <div class="dist-table">
+        <h3>Distance & predecessor</h3>
+        <div id="distTbl"></div>
+      </div>
+      <div class="log">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+      <p class="legend">
+        <span class="sw s"></span> source &nbsp;
+        <span class="sw u"></span> updated this pass &nbsp;
+        <span class="sw r"></span> reached &nbsp;
+        <span class="sw c"></span> in negative cycle
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How the algorithm certifies "no more improvements possible"</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    A shortest path in a graph with n vertices uses at most <code>n − 1</code> edges (any longer walk would repeat a vertex and could be shortened). Bellman-Ford relaxes <em>every</em> edge in each pass, so after <code>k</code> passes every shortest path of length ≤ <code>k</code> is correct. After <code>n − 1</code> passes, every possible shortest path is correct. Now do one more pass: if any distance still improves, the "path" got longer than <code>n − 1</code> edges — the only way is a cycle whose sum of weights is negative, letting you shave off arbitrarily more by looping. The final loop finds and highlights any vertex on such a cycle so you can trace the arbitrage / routing loop. Complexity: <code>O(|V| · |E|)</code>.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const INF = Infinity;
+let vertices = [], edges = [], src = 1;
+let dist = {}, pred = {}, updatedNodes = new Set(), lastRelaxed = new Set(), cycleNodes = new Set(), cycleEdges = new Set();
+let pass = 0, totalRelax = 0, negCycle = false;
+let logRows = [];
+
+function parseEdges() {
+  edges = [];
+  const seen = new Set();
+  const lines = $('edgesIn').value.split('\n').map(l => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const m = line.match(/^(-?\d+)\s+(-?\d+)\s+(-?\d+(\.\d+)?)$/);
+    if (!m) continue;
+    const u = parseInt(m[1]), v = parseInt(m[2]), w = parseFloat(m[3]);
+    if (!Number.isFinite(u) || !Number.isFinite(v) || !Number.isFinite(w)) continue;
+    seen.add(u); seen.add(v);
+    edges.push({ u, v, w });
+  }
+  vertices = [...seen].sort((a, b) => a - b);
+}
+
+function reset() {
+  parseEdges();
+  src = parseInt($('src').value);
+  if (!vertices.includes(src) && vertices.length) src = vertices[0];
+  dist = {}; pred = {};
+  for (const v of vertices) { dist[v] = INF; pred[v] = null; }
+  if (vertices.includes(src)) dist[src] = 0;
+  pass = 0; totalRelax = 0; negCycle = false;
+  updatedNodes = new Set(); lastRelaxed = new Set(); cycleNodes = new Set(); cycleEdges = new Set();
+  logRows = [{t: `reset — source=${src}, |V|=${vertices.length}, |E|=${edges.length}`, cls: 'op'}];
+  $('banner').innerHTML = '';
+  renderAll();
+}
+
+function stepOne() {
+  if (!vertices.length) return;
+  if (pass >= vertices.length) {
+    logRows.unshift({t: 'already ran negative-cycle check', cls: 'miss'});
+    renderAll(); return;
+  }
+  updatedNodes = new Set(); lastRelaxed = new Set();
+  let changed = 0;
+  for (const {u, v, w} of edges) {
+    if (dist[u] === INF) continue;
+    const nd = dist[u] + w;
+    if (nd < dist[v] - 1e-9) {
+      if (pass === vertices.length - 1) {
+        cycleNodes.add(v);
+        cycleEdges.add(`${u}->${v}`);
+        negCycle = true;
+      } else {
+        dist[v] = nd; pred[v] = u;
+        updatedNodes.add(v);
+      }
+      lastRelaxed.add(`${u}->${v}`);
+      changed++;
+    }
+  }
+  pass++; totalRelax += changed;
+  const passLabel = pass === vertices.length ? 'neg-cycle check pass' : `pass ${pass}/${vertices.length - 1}`;
+  if (pass === vertices.length && changed > 0) {
+    logRows = [{t: `${passLabel} — ${changed} edges still relax → NEGATIVE CYCLE detected`, cls: 'err'}].concat(logRows);
+    traceCycle();
+    $('banner').innerHTML = '<div class="banner err">Negative-weight cycle detected — shortest paths undefined for cycle-reachable vertices.</div>';
+  } else if (changed === 0) {
+    logRows = [{t: `${passLabel} — no changes; converged early`, cls: 'hit'}].concat(logRows);
+    if (pass === vertices.length) $('banner').innerHTML = '<div class="banner ok">Converged. No negative cycle. Distances are optimal.</div>';
+  } else {
+    logRows = [{t: `${passLabel} — ${changed} relaxation${changed === 1 ? '' : 's'}`, cls: 'op'}].concat(logRows);
+  }
+  renderAll();
+}
+
+function runAll() {
+  reset();
+  while (pass < vertices.length && !negCycle) stepOne();
+  if (!negCycle && pass < vertices.length) stepOne();
+}
+
+function traceCycle() {
+  const targetSet = new Set(cycleNodes);
+  for (const v of [...targetSet]) {
+    let cur = v;
+    for (let i = 0; i < vertices.length; i++) {
+      if (pred[cur] == null) break;
+      cur = pred[cur];
+    }
+    const start = cur, seen = new Set();
+    while (cur != null && !seen.has(cur)) {
+      seen.add(cur); cycleNodes.add(cur);
+      const p = pred[cur];
+      if (p != null) cycleEdges.add(`${p}->${cur}`);
+      cur = p;
+    }
+  }
+}
+
+function renderStats() {
+  $('sV').textContent = vertices.length;
+  $('sE').textContent = edges.length;
+  $('sP').textContent = pass;
+  $('sR').textContent = totalRelax;
+  let reached = 0;
+  for (const v of vertices) if (dist[v] !== INF) reached++;
+  $('sReach').textContent = reached;
+}
+
+function renderTable() {
+  const rows = ['<table><thead><tr><th>v</th><th>dist</th><th>pred</th></tr></thead><tbody>'];
+  for (const v of vertices) {
+    const d = dist[v] === INF ? '∞' : dist[v];
+    const p = pred[v] == null ? '—' : pred[v];
+    const cls = updatedNodes.has(v) ? ' class="upd"' : '';
+    rows.push(`<tr><td>${v}</td><td${cls}>${d}</td><td>${p}</td></tr>`);
+  }
+  rows.push('</tbody></table>');
+  $('distTbl').innerHTML = rows.join('');
+}
+
+function renderLog() {
+  const el = $('logRows'); el.innerHTML = '';
+  logRows.slice(0, 60).forEach(r => {
+    const d = document.createElement('div');
+    d.className = 'row ' + (r.cls || '');
+    d.textContent = r.t;
+    el.appendChild(d);
+  });
+}
+
+function renderGraph() {
+  const svg = $('svg');
+  const defs = svg.querySelector('defs');
+  svg.innerHTML = '';
+  svg.appendChild(defs);
+  if (!vertices.length) { svg.setAttribute('viewBox', '0 0 400 200'); return; }
+
+  const cx = 380, cy = 220, R = 160, nodeR = 20;
+  const positions = new Map();
+  const N = vertices.length;
+  for (let i = 0; i < N; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / N;
+    positions.set(vertices[i], { x: cx + R * Math.cos(angle), y: cy + R * Math.sin(angle) });
+  }
+  svg.setAttribute('viewBox', `0 0 ${cx * 2} ${cy * 2 - 60}`);
+  svg.style.minWidth = `${cx * 2}px`;
+
+  const pairSeen = new Map();
+  for (const e of edges) {
+    const key = `${Math.min(e.u, e.v)}-${Math.max(e.u, e.v)}`;
+    pairSeen.set(key, (pairSeen.get(key) || 0) + 1);
+  }
+  const drawn = new Map();
+  for (const e of edges) {
+    const a = positions.get(e.u), b = positions.get(e.v);
+    if (!a || !b) continue;
+    const key = `${Math.min(e.u, e.v)}-${Math.max(e.u, e.v)}`;
+    const total = pairSeen.get(key);
+    const idx = drawn.get(key) || 0; drawn.set(key, idx + 1);
+    const bidir = total > 1;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const sx = a.x + ux * nodeR, sy = a.y + uy * nodeR;
+    const ex = b.x - ux * nodeR, ey = b.y - uy * nodeR;
+
+    const eid = `${e.u}->${e.v}`;
+    let cls = 'edge', marker = 'url(#ah)';
+    const treeEdge = pred[e.v] === e.u && dist[e.v] === dist[e.u] + e.w && dist[e.u] !== INF;
+    if (cycleEdges.has(eid)) { cls += ' cyc'; marker = 'url(#ahc)'; }
+    else if (lastRelaxed.has(eid)) { cls += ' relaxed'; marker = 'url(#ahr)'; }
+    else if (treeEdge) { cls += ' tree'; marker = 'url(#aht)'; }
+
+    if (bidir) {
+      const nx = -uy, ny = ux;
+      const off = 14 * (idx === 0 ? 1 : -1);
+      const mx = (sx + ex) / 2 + nx * off, my = (sy + ey) / 2 + ny * off;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M${sx},${sy} Q${mx},${my} ${ex},${ey}`);
+      path.setAttribute('class', cls); path.setAttribute('marker-end', marker);
+      svg.appendChild(path);
+      const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lbl.setAttribute('class', 'elabel' + (e.w < 0 ? ' neg' : ''));
+      lbl.setAttribute('x', mx); lbl.setAttribute('y', my - 4);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.textContent = e.w;
+      svg.appendChild(lbl);
+    } else {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', sx); line.setAttribute('y1', sy);
+      line.setAttribute('x2', ex); line.setAttribute('y2', ey);
+      line.setAttribute('class', cls); line.setAttribute('marker-end', marker);
+      svg.appendChild(line);
+      const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lbl.setAttribute('class', 'elabel' + (e.w < 0 ? ' neg' : ''));
+      const nx = -uy, ny = ux;
+      lbl.setAttribute('x', (sx + ex) / 2 + nx * 8);
+      lbl.setAttribute('y', (sy + ey) / 2 + ny * 8);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.textContent = e.w;
+      svg.appendChild(lbl);
+    }
+  }
+
+  for (const v of vertices) {
+    const p = positions.get(v);
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    let cls = 'node';
+    if (v === src) cls += ' src';
+    else if (dist[v] !== INF) cls += ' reached';
+    if (updatedNodes.has(v)) cls += ' updated';
+    if (cycleNodes.has(v)) cls += ' cycle';
+    g.setAttribute('class', cls);
+    g.setAttribute('transform', `translate(${p.x},${p.y})`);
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('r', nodeR);
+    g.appendChild(c);
+    const k = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    k.setAttribute('class', 'k'); k.setAttribute('y', -2); k.textContent = v;
+    g.appendChild(k);
+    const d = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    d.setAttribute('class', 'd'); d.setAttribute('y', 12);
+    d.textContent = dist[v] === INF ? '∞' : `d=${dist[v]}`;
+    g.appendChild(d);
+    svg.appendChild(g);
+  }
+}
+
+function renderAll() { renderGraph(); renderTable(); renderStats(); renderLog(); }
+
+function loadNeg() {
+  $('edgesIn').value = '1 2 1\n2 3 -1\n3 4 -1\n4 2 -1\n1 5 3';
+  $('src').value = 1;
+  reset();
+}
+function loadFx() {
+  // negative-log currency graph — negative cycle = arbitrage opportunity
+  $('edgesIn').value = '1 2 -0.10\n2 3 -0.20\n3 1 -0.05\n1 4 -0.30\n4 3 -0.10';
+  $('src').value = 1;
+  reset();
+}
+
+reset();
+</script>
+</body>
+</html>

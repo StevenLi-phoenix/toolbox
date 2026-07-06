@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Union-Find (Disjoint Set) Visualizer — Free Online Tool</title>
+<meta name="description" content="Build a union-find forest live. Run makeSet, union, and find operations, watch union-by-rank flatten trees, see path compression collapse chains in a single find, and track the near-constant O(α(n)) amortized cost.">
+<meta name="keywords" content="union find, disjoint set, DSU, path compression, union by rank, kruskal, connected components, visualizer, data structure, ackermann inverse">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/unionfind.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: .88rem; }
+  .controls input[type=number], .controls input[type=text] {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=number] { width: 80px; }
+  .controls input[type=text] { width: 220px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls label { color: var(--muted); }
+  .controls label.chk { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; max-height: 560px; padding: 8px; }
+  svg.uf { display: block; min-width: 100%; }
+  .node circle { stroke: var(--border); stroke-width: 1.5; fill: var(--surface2); }
+  .node text.k { font-family: var(--mono); font-size: 13px; fill: var(--text); text-anchor: middle; dominant-baseline: central; pointer-events: none; font-weight: 700; }
+  .node text.r { font-family: var(--mono); font-size: 10px; fill: var(--muted); text-anchor: middle; }
+  .node.root circle { fill: rgba(99, 102, 241, .28); stroke: var(--accent); stroke-width: 2.2; }
+  .node.touched circle { fill: rgba(241, 196, 15, .35); stroke: var(--warning); stroke-width: 2.2; }
+  .node.merged circle { fill: rgba(40, 180, 99, .3); stroke: var(--success); stroke-width: 2.2; }
+  .edge { stroke: var(--border); stroke-width: 1.4; fill: none; }
+  .edge.walk { stroke: var(--warning); stroke-width: 2.4; stroke-dasharray: 4 3; }
+  .edge.new { stroke: var(--success); stroke-width: 2.4; }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .log { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 280px; overflow-y: auto; }
+  .log h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .log .row { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .log .row.op { color: var(--warning); font-weight: 600; }
+  .log .row.hit { color: var(--success); }
+  .log .row.miss { color: var(--muted); }
+  .log .row.walk { color: var(--accent); }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 999px; vertical-align: middle; margin-right: 4px; border: 1.4px solid var(--border); }
+  .legend .sw.r { background: rgba(99, 102, 241, .28); border-color: var(--accent); }
+  .legend .sw.t { background: rgba(241, 196, 15, .35); border-color: var(--warning); }
+  .legend .sw.m { background: rgba(40, 180, 99, .3); border-color: var(--success); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Union-Find (Disjoint Set) Visualizer</h1>
+<p class="subtitle">A <strong>disjoint-set</strong> forest keeps a partition of items into components using one parent pointer per node. <code>find(x)</code> walks up to the root; <code>union(a, b)</code> attaches one root under the other. With <em>union by rank</em> plus <em>path compression</em>, the amortized cost per operation drops to <code>O(α(n))</code> — the inverse Ackermann function, which is under 5 for every conceivable input. Every Kruskal MST, every connectivity check, every UnionFind-on-Leetcode uses this exact structure.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>n</label>
+    <input type="number" id="nInput" min="1" max="60" value="12">
+    <button class="primary" onclick="resetForest()">Reset makeSet(1…n)</button>
+    <label>Union</label>
+    <input type="number" id="uA" min="1" placeholder="a">
+    <input type="number" id="uB" min="1" placeholder="b">
+    <button class="primary" onclick="doUnion()">union(a, b)</button>
+    <label>Find</label>
+    <input type="number" id="fX" min="1" placeholder="x">
+    <button onclick="doFind()">find(x)</button>
+    <input type="text" id="bulk" placeholder="edges: 1-2, 3-4, 2-3">
+    <button onclick="bulkUnion()">Bulk union</button>
+    <button onclick="randomEdges()">🎲 Random 6 edges</button>
+  </div>
+  <div class="controls">
+    <label class="chk"><input type="checkbox" id="chkRank" checked> union by rank</label>
+    <label class="chk"><input type="checkbox" id="chkCompress" checked> path compression</label>
+    <span style="color:var(--muted);font-size:.8rem">Toggle to see how each optimization changes tree shape.</span>
+  </div>
+  <div class="layout">
+    <div class="svg-wrap" id="svgWrap"><svg class="uf" id="svg" viewBox="0 0 800 400" preserveAspectRatio="xMinYMin meet"></svg></div>
+    <div>
+      <div class="stats">
+        <h3>Forest stats</h3>
+        <div class="stat-row"><span>Nodes n</span><span class="v" id="sN">0</span></div>
+        <div class="stat-row"><span>Components</span><span class="v" id="sC">0</span></div>
+        <div class="stat-row"><span>Max tree height</span><span class="v" id="sH">0</span></div>
+        <div class="stat-row"><span>Sum of depths</span><span class="v" id="sSum">0</span></div>
+        <div class="stat-row"><span>Last op parent walks</span><span class="v" id="sHops">—</span></div>
+        <div class="stat-row"><span>α(n) upper bound</span><span class="v" id="sAlpha">—</span></div>
+      </div>
+      <div class="log">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+      <p class="legend">
+        <span class="sw r"></span> component root &nbsp;
+        <span class="sw t"></span> visited by find &nbsp;
+        <span class="sw m"></span> just-linked root
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>The two optimizations</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    <strong>Union by rank</strong> hangs the shorter tree under the taller so the combined tree grows in height only when both had equal rank — worst-case height <code>O(log n)</code>. <strong>Path compression</strong> re-points every node visited during a <code>find</code> directly at the root, so the second find on the same chain is O(1). Alone, each gives <code>O(log n)</code> amortized; together, they achieve <code>O(α(n))</code>, where α is Tarjan's inverse Ackermann — for n up to <code>2<sup>65536</sup></code>, α(n) ≤ 4. Toggle the checkboxes above and re-run the same sequence: without union-by-rank you can build long <em>degenerate</em> chains, then a single <code>find</code> with compression turned on flattens the whole thing in one shot.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let parent = [], rank_ = [], size_ = [];
+let n = 0;
+let highlight = { touched: new Set(), merged: new Set() };
+let logRows = [];
+let lastHops = null;
+
+function resetForest() {
+  n = Math.max(1, Math.min(60, parseInt($('nInput').value) || 12));
+  parent = new Array(n + 1); rank_ = new Array(n + 1); size_ = new Array(n + 1);
+  for (let i = 1; i <= n; i++) { parent[i] = i; rank_[i] = 0; size_[i] = 1; }
+  highlight = { touched: new Set(), merged: new Set() };
+  logRows = [{t: `makeSet(1…${n}) — ${n} singletons`, cls: 'op'}];
+  lastHops = null;
+  renderAll();
+}
+
+function findRoot(x, compress, walk) {
+  let hops = 0;
+  const path = [];
+  let cur = x;
+  while (parent[cur] !== cur) { path.push(cur); cur = parent[cur]; hops++; }
+  path.push(cur);
+  if (walk) path.forEach(p => highlight.touched.add(p));
+  if (compress) for (const p of path) parent[p] = cur;
+  return { root: cur, hops, path };
+}
+
+function doUnion() {
+  const a = parseInt($('uA').value), b = parseInt($('uB').value);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a < 1 || b < 1 || a > n || b > n) return;
+  const useCompress = $('chkCompress').checked, useRank = $('chkRank').checked;
+  highlight = { touched: new Set(), merged: new Set() };
+  const fa = findRoot(a, useCompress, true);
+  const fb = findRoot(b, useCompress, true);
+  logRows = [{t: `union(${a}, ${b})`, cls: 'op'},
+             {t: `  find(${a}) → root=${fa.root} (${fa.hops} hops)`, cls: 'walk'},
+             {t: `  find(${b}) → root=${fb.root} (${fb.hops} hops)`, cls: 'walk'}];
+  if (fa.root === fb.root) {
+    logRows.push({t: '  → already in same set, no-op', cls: 'miss'});
+    lastHops = fa.hops + fb.hops;
+    renderAll(); return;
+  }
+  let child, root;
+  if (useRank) {
+    if (rank_[fa.root] < rank_[fb.root]) { child = fa.root; root = fb.root; }
+    else if (rank_[fa.root] > rank_[fb.root]) { child = fb.root; root = fa.root; }
+    else { child = fb.root; root = fa.root; rank_[root]++; }
+  } else {
+    child = fb.root; root = fa.root;
+  }
+  parent[child] = root;
+  size_[root] += size_[child];
+  highlight.merged.add(child); highlight.merged.add(root);
+  logRows.push({t: `  → link ${child} → ${root} (rank ${rank_[root]}, size ${size_[root]})`, cls: 'hit'});
+  lastHops = fa.hops + fb.hops;
+  renderAll();
+}
+
+function doFind() {
+  const x = parseInt($('fX').value);
+  if (!Number.isFinite(x) || x < 1 || x > n) return;
+  highlight = { touched: new Set(), merged: new Set() };
+  const useCompress = $('chkCompress').checked;
+  const r = findRoot(x, useCompress, true);
+  logRows = [{t: `find(${x}) — ${r.hops} hops`, cls: 'op'},
+             {t: `  path: ${r.path.join(' → ')}`, cls: 'walk'},
+             {t: `  → root=${r.root}${useCompress ? ' (compressed)' : ''}`, cls: 'hit'}];
+  lastHops = r.hops;
+  renderAll();
+}
+
+function bulkUnion() {
+  const raw = $('bulk').value.trim();
+  if (!raw) return;
+  const edges = raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+  for (const e of edges) {
+    const m = e.match(/^(\d+)\s*[-\s]+\s*(\d+)$/);
+    if (!m) continue;
+    $('uA').value = m[1]; $('uB').value = m[2];
+    doUnion();
+  }
+  $('bulk').value = '';
+}
+
+function randomEdges() {
+  resetForest();
+  const edges = new Set();
+  while (edges.size < 6) {
+    const a = 1 + Math.floor(Math.random() * n);
+    const b = 1 + Math.floor(Math.random() * n);
+    if (a !== b) edges.add(a < b ? `${a}-${b}` : `${b}-${a}`);
+  }
+  $('bulk').value = [...edges].join(', ');
+  bulkUnion();
+}
+
+function countComponents() {
+  let c = 0;
+  for (let i = 1; i <= n; i++) if (parent[i] === i) c++;
+  return c;
+}
+
+function computeDepths() {
+  const d = new Array(n + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    let cur = i, hops = 0;
+    while (parent[cur] !== cur) { cur = parent[cur]; hops++; if (hops > n) break; }
+    d[i] = hops;
+  }
+  return d;
+}
+
+function renderLog() {
+  const el = $('logRows');
+  el.innerHTML = '';
+  logRows.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'row ' + (r.cls || '');
+    div.textContent = r.t;
+    el.appendChild(div);
+  });
+}
+
+function renderStats() {
+  $('sN').textContent = n;
+  $('sC').textContent = countComponents();
+  const d = computeDepths();
+  $('sH').textContent = Math.max(0, ...d);
+  $('sSum').textContent = d.reduce((a, b) => a + b, 0);
+  $('sHops').textContent = lastHops == null ? '—' : lastHops;
+  const alpha = n <= 2 ? 1 : n <= 4 ? 2 : n <= 16 ? 3 : 4;
+  $('sAlpha').textContent = alpha;
+}
+
+function renderTree() {
+  const svg = $('svg');
+  svg.innerHTML = '';
+  const roots = [];
+  for (let i = 1; i <= n; i++) if (parent[i] === i) roots.push(i);
+  const children = new Map();
+  for (let i = 1; i <= n; i++) children.set(i, []);
+  for (let i = 1; i <= n; i++) if (parent[i] !== i) children.get(parent[i]).push(i);
+
+  const nodeR = 16, xGap = 44, yGap = 60, xPad = 24, yPad = 24;
+  const positions = new Map();
+  let cursorX = 0;
+  function layout(node, depth) {
+    const kids = children.get(node);
+    if (kids.length === 0) {
+      const x = cursorX * xGap;
+      cursorX++;
+      positions.set(node, { x, y: depth * yGap });
+      return x;
+    }
+    const kidX = kids.map(k => layout(k, depth + 1));
+    const midX = (kidX[0] + kidX[kidX.length - 1]) / 2;
+    positions.set(node, { x: midX, y: depth * yGap });
+    return midX;
+  }
+  for (const r of roots) { layout(r, 0); cursorX++; }
+
+  let maxX = 0, maxY = 0;
+  for (const [, p] of positions) { if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y; }
+  const totalW = xPad * 2 + maxX + nodeR * 2;
+  const totalH = yPad * 2 + maxY + nodeR * 2 + 12;
+  svg.setAttribute('viewBox', `0 0 ${Math.max(totalW, 300)} ${Math.max(totalH, 120)}`);
+  svg.style.minWidth = `${Math.max(totalW, 300)}px`;
+
+  for (let i = 1; i <= n; i++) {
+    if (parent[i] === i) continue;
+    const a = positions.get(i), b = positions.get(parent[i]);
+    if (!a || !b) continue;
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', xPad + a.x + nodeR); line.setAttribute('y1', yPad + a.y + nodeR);
+    line.setAttribute('x2', xPad + b.x + nodeR); line.setAttribute('y2', yPad + b.y + nodeR);
+    let cls = 'edge';
+    if (highlight.touched.has(i) && highlight.touched.has(parent[i])) cls += ' walk';
+    if (highlight.merged.has(i) && highlight.merged.has(parent[i])) cls += ' new';
+    line.setAttribute('class', cls);
+    svg.appendChild(line);
+  }
+  for (let i = 1; i <= n; i++) {
+    const p = positions.get(i); if (!p) continue;
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    let cls = 'node';
+    if (parent[i] === i) cls += ' root';
+    if (highlight.touched.has(i)) cls += ' touched';
+    if (highlight.merged.has(i)) cls += ' merged';
+    g.setAttribute('class', cls);
+    g.setAttribute('transform', `translate(${xPad + p.x},${yPad + p.y})`);
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', nodeR); c.setAttribute('cy', nodeR); c.setAttribute('r', nodeR);
+    g.appendChild(c);
+    const k = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    k.setAttribute('class', 'k'); k.setAttribute('x', nodeR); k.setAttribute('y', nodeR);
+    k.textContent = i; g.appendChild(k);
+    if (parent[i] === i) {
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      r.setAttribute('class', 'r'); r.setAttribute('x', nodeR); r.setAttribute('y', nodeR * 2 + 12);
+      r.textContent = `rk=${rank_[i]} sz=${size_[i]}`;
+      g.appendChild(r);
+    }
+    svg.appendChild(g);
+  }
+}
+
+function renderAll() { renderTree(); renderLog(); renderStats(); }
+
+resetForest();
+$('uA').value = 1; $('uB').value = 2;
+$('fX').value = 1;
+$('bulk').value = '1-2, 3-4, 5-6, 1-3, 5-7, 7-9';
+bulkUnion();
+</script>
+</body>
+</html>
