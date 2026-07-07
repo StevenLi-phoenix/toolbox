@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boyer-Moore String Matching Visualizer — Free Online Tool</title>
+<meta name="description" content="Step through the Boyer-Moore string search algorithm. Watch the bad-character and good-suffix tables get precomputed, then trace right-to-left pattern comparisons with sub-linear O(n/m) best-case shifts against the text.">
+<meta name="keywords" content="boyer moore, string matching, bad character rule, good suffix rule, substring search, pattern matching, algorithm visualizer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/boyermoore.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; font-size: .88rem; }
+  .controls input, .controls select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=text] { min-width: 220px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .controls label { color: var(--muted); }
+  .strip { font-family: var(--mono); font-size: 1rem; overflow-x: auto; padding: 6px 0; white-space: nowrap; }
+  .strip .row { display: inline-flex; gap: 2px; }
+  .strip .cell {
+    width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 3px; background: var(--surface);
+    position: relative;
+  }
+  .strip .cell .idx { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: .62rem; color: var(--muted); }
+  .strip .cell.match { background: rgba(40, 180, 99, .3); border-color: var(--success); color: var(--success); font-weight: 700; }
+  .strip .cell.mismatch { background: rgba(231, 76, 60, .28); border-color: var(--error); color: var(--error); font-weight: 700; }
+  .strip .cell.compare { background: rgba(241, 196, 15, .3); border-color: var(--warning); }
+  .strip .cell.found { background: rgba(99, 102, 241, .28); border-color: var(--accent); font-weight: 700; }
+  .strip .cell.gap { border-style: dashed; opacity: .35; }
+  .marker { font-family: var(--mono); color: var(--muted); font-size: .78rem; padding-left: 4px; }
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin: 12px 0;
+  }
+  .summary .tile {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .summary .tile .l { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .summary .tile .v { font-family: var(--mono); font-size: 1.1rem; margin-top: 3px; color: var(--text); }
+  .tables { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 800px) { .tables { grid-template-columns: 1fr; } }
+  .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); padding: 10px; overflow-x: auto; }
+  .table-wrap h3 { margin: 0 0 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  table { border-collapse: collapse; font-family: var(--mono); font-size: .85rem; width: 100%; }
+  th, td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; }
+  th { background: var(--surface); color: var(--muted); font-weight: 600; }
+  td.hi { background: rgba(241, 196, 15, .28); font-weight: 700; }
+  .log {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2); max-height: 260px; overflow-y: auto; margin-top: 10px;
+  }
+  .log h3 { margin: 0 0 6px; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .log .r { font-family: var(--mono); font-size: .8rem; padding: 2px 0; }
+  .log .r.hit { color: var(--success); }
+  .log .r.miss { color: var(--error); }
+  .log .r.shift { color: var(--accent); }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Boyer-Moore String Matching Visualizer</h1>
+<p class="subtitle"><strong>Boyer-Moore</strong> scans the pattern <em>right to left</em>. Two precomputed shift rules — the <em>bad character</em> table and the <em>good suffix</em> table — let it skip large chunks of the text on a mismatch, delivering the famous sub-linear <code>O(n/m)</code> best case. Type a text and pattern, then step through the search.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Text</label>
+    <input type="text" id="text" value="HERE IS A SIMPLE EXAMPLE" spellcheck="false">
+    <label>Pattern</label>
+    <input type="text" id="pat" value="EXAMPLE" spellcheck="false">
+    <button class="primary" onclick="reset()">Build &amp; Reset</button>
+    <button id="btnStep" onclick="stepCompare()">Step ▶</button>
+    <button id="btnAlign" onclick="finishAlign()">Finish alignment ⏭</button>
+    <button id="btnAll" onclick="runToEnd()">Run to end ⏭⏭</button>
+    <label style="margin-left:auto"><input type="checkbox" id="caseSens" onchange="reset()"> case-sensitive</label>
+  </div>
+  <div class="summary" id="summary"></div>
+</div>
+
+<div class="card">
+  <h2>Precomputed Shift Tables</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin:0 0 8px">
+    The <strong>bad character</strong> rule uses the mismatched text character to shift the pattern past its rightmost occurrence in the pattern. The <strong>good suffix</strong> rule shifts based on the matched suffix's next occurrence (or its longest border). Boyer-Moore takes <code>max</code> of the two per mismatch.
+  </p>
+  <div class="tables">
+    <div class="table-wrap">
+      <h3>Bad character (rightmost position, −1 if absent)</h3>
+      <table id="bcTable"></table>
+    </div>
+    <div class="table-wrap">
+      <h3>Good suffix (shift by <code>gs[j]</code> after mismatch at pattern index <code>j</code>)</h3>
+      <table id="gsTable"></table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Search Trace</h2>
+  <div class="strip" id="textStrip"></div>
+  <div class="strip" id="patStrip"></div>
+  <div class="marker" id="marker"></div>
+  <div class="log" id="log">
+    <h3>Comparisons &amp; shifts</h3>
+    <div id="logBody"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About Boyer-Moore</h2>
+  <p class="about">
+    Published in 1977 by Robert S. Boyer and J Strother Moore, the algorithm's key insight is that comparing the pattern to the text <em>right to left</em> lets a single mismatch produce a much larger safe shift than left-to-right scanning ever could. The <strong>bad character</strong> heuristic, on a mismatch at pattern index <code>j</code> against text character <code>c</code>, aligns <code>c</code> with its rightmost occurrence in the pattern to the left of <code>j</code> — or shifts entirely past the current window if <code>c</code> doesn't appear. The <strong>good suffix</strong> heuristic accounts for the already-matched suffix: if that suffix recurs elsewhere in the pattern we align to it, otherwise we shift by the longest prefix that is also a suffix. The GNU <code>grep</code> command has used a Boyer-Moore variant for its literal-string path since the 1980s — its ability to skip <em>most</em> of the text is why <code>grep</code> feels so fast.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let state = null;
+
+function normalize(s) {
+  return $('caseSens').checked ? s : s.toUpperCase();
+}
+
+function badCharTable(pat) {
+  const m = pat.length;
+  const table = {};
+  for (let i = 0; i < m; i++) table[pat[i]] = i;
+  return table;
+}
+
+function goodSuffixTable(pat) {
+  const m = pat.length;
+  const shift = new Array(m + 1).fill(0);
+  const bpos = new Array(m + 1).fill(0);
+  let i = m, j = m + 1;
+  bpos[i] = j;
+  while (i > 0) {
+    while (j <= m && pat[i - 1] !== pat[j - 1]) {
+      if (shift[j] === 0) shift[j] = j - i;
+      j = bpos[j];
+    }
+    i--; j--;
+    bpos[i] = j;
+  }
+  j = bpos[0];
+  for (i = 0; i <= m; i++) {
+    if (shift[i] === 0) shift[i] = j;
+    if (i === j) j = bpos[j];
+  }
+  return shift;
+}
+
+function reset() {
+  const text = normalize($('text').value);
+  const pat  = normalize($('pat').value);
+  if (!pat) {
+    state = null;
+    $('bcTable').innerHTML = '';
+    $('gsTable').innerHTML = '';
+    $('textStrip').innerHTML = '';
+    $('patStrip').innerHTML = '';
+    $('marker').textContent = '';
+    $('logBody').innerHTML = '';
+    updateSummary(text.length, 0, 0, 0, false);
+    return;
+  }
+  const bc = badCharTable(pat);
+  const gs = goodSuffixTable(pat);
+  state = {
+    text, pat, bc, gs,
+    s: 0,
+    j: pat.length - 1,
+    comparisons: 0,
+    matches: [],
+    done: false,
+    lastCompare: null,
+  };
+  renderBc();
+  renderGs();
+  renderStrips();
+  $('logBody').innerHTML = '';
+  updateSummary(text.length, pat.length, 0, 0, false);
+  $('btnStep').disabled = false;
+  $('btnAlign').disabled = false;
+  $('btnAll').disabled = false;
+  log('start: pattern aligned at text index 0, comparing right-to-left', 'shift');
+}
+
+function renderBc() {
+  const t = $('bcTable');
+  const chars = Array.from(new Set(state.pat.split(''))).sort();
+  let html = '<tr><th>char</th>' + chars.map(c => '<th>' + escapeCh(c) + '</th>').join('') + '</tr>';
+  html += '<tr><td>rightmost i</td>' + chars.map(c => {
+    const v = state.bc[c] === undefined ? -1 : state.bc[c];
+    const hi = (state.lastCompare && state.lastCompare.type === 'mismatch' && state.lastCompare.textCh === c) ? ' class="hi"' : '';
+    return '<td' + hi + '>' + v + '</td>';
+  }).join('') + '</tr>';
+  t.innerHTML = html;
+}
+
+function renderGs() {
+  const t = $('gsTable');
+  const m = state.pat.length;
+  let head = '<tr><th>j</th>';
+  for (let i = 0; i <= m; i++) head += '<th>' + i + '</th>';
+  head += '</tr>';
+  let row = '<tr><td>gs[j]</td>';
+  for (let i = 0; i <= m; i++) {
+    const hi = (state.lastCompare && state.lastCompare.type === 'mismatch' && state.lastCompare.gsIndex === i) ? ' class="hi"' : '';
+    row += '<td' + hi + '>' + state.gs[i] + '</td>';
+  }
+  row += '</tr>';
+  t.innerHTML = head + row;
+}
+
+function renderStrips() {
+  const { text, pat, s, j, matches, done, lastCompare } = state;
+  const t = $('textStrip');
+  t.innerHTML = '<div class="row">' + text.split('').map((ch, k) => {
+    let cls = '';
+    if (matches.some(m => k >= m && k < m + pat.length)) cls = ' found';
+    else if (!done && lastCompare && k === lastCompare.textIdx) cls = lastCompare.type === 'match' ? ' match' : ' mismatch';
+    else if (!done && k >= s && k < s + pat.length && k > s + j) cls = ' match';
+    return '<span class="cell' + cls + '"><span class="idx">' + k + '</span>' + escapeCh(ch) + '</span>';
+  }).join('') + '</div>';
+
+  const p = $('patStrip');
+  const gaps = Array.from({ length: Math.max(0, s) }, () => '<span class="cell gap"></span>').join('');
+  p.innerHTML = '<div class="row">' + gaps + pat.split('').map((ch, k) => {
+    let cls = '';
+    if (!done && lastCompare && k === lastCompare.patIdx) cls = lastCompare.type === 'match' ? ' match' : ' mismatch';
+    else if (!done && k > j) cls = ' match';
+    else if (!done && k === j) cls = ' compare';
+    return '<span class="cell' + cls + '"><span class="idx">' + k + '</span>' + escapeCh(ch) + '</span>';
+  }).join('') + '</div>';
+
+  $('marker').textContent = 's=' + s + '  j=' + j + '  window=[' + s + ',' + (s + pat.length - 1) + ']  comparisons=' + state.comparisons + (state.done ? '  ✓ done' : '');
+}
+
+function escapeCh(ch) {
+  if (ch === ' ') return '␣';
+  if (ch === '\t') return '⇥';
+  if (ch === '\n') return '↵';
+  return ch.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+function updateSummary(n, m, comps, found, done) {
+  $('summary').innerHTML =
+    '<div class="tile"><div class="l">text length n</div><div class="v">' + n + '</div></div>' +
+    '<div class="tile"><div class="l">pattern length m</div><div class="v">' + m + '</div></div>' +
+    '<div class="tile"><div class="l">comparisons</div><div class="v">' + comps + '</div></div>' +
+    '<div class="tile"><div class="l">matches found</div><div class="v">' + found + '</div></div>' +
+    '<div class="tile"><div class="l">state</div><div class="v">' + (done ? 'done' : 'searching') + '</div></div>';
+}
+
+function stepCompare() {
+  if (!state || state.done) return;
+  const { text, pat, bc, gs } = state;
+  const n = text.length, m = pat.length;
+  if (state.s > n - m) {
+    state.done = true;
+    state.lastCompare = null;
+    renderStrips();
+    updateSummary(n, m, state.comparisons, state.matches.length, true);
+    log('done — ' + state.matches.length + ' match' + (state.matches.length === 1 ? '' : 'es'), 'shift');
+    return;
+  }
+  if (state.j < 0) {
+    const at = state.s;
+    state.matches.push(at);
+    log('match at text index ' + at, 'shift');
+    const shiftBy = gs[0];
+    state.s += shiftBy;
+    state.j = m - 1;
+    state.lastCompare = null;
+    log('shift by good-suffix gs[0] = ' + shiftBy + '  → s = ' + state.s, 'shift');
+    renderStrips(); renderBc(); renderGs();
+    updateSummary(n, m, state.comparisons, state.matches.length, false);
+    return;
+  }
+  state.comparisons++;
+  const textIdx = state.s + state.j;
+  const a = text[textIdx];
+  const b = pat[state.j];
+  if (a === b) {
+    state.lastCompare = { type: 'match', textIdx, patIdx: state.j };
+    log('cmp text[' + textIdx + ']=' + escapeCh(a) + ' == pat[' + state.j + ']=' + escapeCh(b) + '  ✓', 'hit');
+    state.j--;
+  } else {
+    state.lastCompare = { type: 'mismatch', textIdx, patIdx: state.j, textCh: a, gsIndex: state.j + 1 };
+    log('cmp text[' + textIdx + ']=' + escapeCh(a) + ' != pat[' + state.j + ']=' + escapeCh(b) + '  ✗', 'miss');
+    const bcRight = bc[a] === undefined ? -1 : bc[a];
+    const bcShift = Math.max(1, state.j - bcRight);
+    const gsShift = gs[state.j + 1];
+    const shiftBy = Math.max(bcShift, gsShift);
+    log('  bad-char shift = max(1, j − rightmost(' + escapeCh(a) + '))  = max(1, ' + state.j + ' − ' + bcRight + ') = ' + bcShift, 'shift');
+    log('  good-suffix shift = gs[' + (state.j + 1) + '] = ' + gsShift, 'shift');
+    log('  → shift by ' + shiftBy + ',  new s = ' + (state.s + shiftBy), 'shift');
+    state.s += shiftBy;
+    state.j = m - 1;
+  }
+  renderStrips(); renderBc(); renderGs();
+  updateSummary(n, m, state.comparisons, state.matches.length, false);
+}
+
+function finishAlign() {
+  if (!state || state.done) return;
+  const startS = state.s;
+  let guard = state.text.length * state.pat.length + 10;
+  while (state && !state.done && state.s === startS && guard-- > 0) {
+    stepCompare();
+  }
+}
+
+function runToEnd() {
+  if (!state) return;
+  let guard = state.text.length * state.pat.length + 10;
+  while (state && !state.done && guard-- > 0) stepCompare();
+}
+
+function log(msg, cls) {
+  const b = $('logBody');
+  const div = document.createElement('div');
+  div.className = 'r ' + (cls || '');
+  div.textContent = msg;
+  b.appendChild(div);
+  b.parentElement.scrollTop = b.parentElement.scrollHeight;
+}
+
+reset();
+</script>
+</body>
+</html>

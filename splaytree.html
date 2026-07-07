@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Splay Tree Visualizer — Free Online Tool</title>
+<meta name="description" content="Build a splay tree live. Insert, find, and delete keys, then watch every zig, zig-zig, and zig-zag rotation splay the accessed node to the root — the self-adjusting behaviour that gives splay trees their amortized O(log n) bound without storing any balance metadata.">
+<meta name="keywords" content="splay tree, self-adjusting BST, binary search tree, rotations, zig, zig-zig, zig-zag, amortized analysis, algorithm visualizer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/splaytree.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; font-size: .88rem; }
+  .controls input[type=number] {
+    width: 90px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono);
+  }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .controls label { color: var(--muted); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .canvas-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  svg { display: block; width: 100%; height: 480px; }
+  .node circle { fill: var(--surface); stroke: var(--border2); stroke-width: 1.5; }
+  .node.active circle { fill: rgba(241, 196, 15, .35); stroke: var(--warning); stroke-width: 2.5; }
+  .node.hit circle { fill: rgba(40, 180, 99, .35); stroke: var(--success); stroke-width: 2.5; }
+  .node.root circle { stroke: var(--accent); stroke-width: 2.5; }
+  .node text { font-family: var(--mono); font-size: 14px; text-anchor: middle; dominant-baseline: middle; fill: var(--text); }
+  line.edge { stroke: var(--border2); stroke-width: 1.4; }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .log { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 240px; overflow-y: auto; margin-top: 12px; }
+  .log h3 { margin: 0 0 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .log .r { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .log .r.op   { color: var(--warning); font-weight: 700; }
+  .log .r.walk { color: var(--accent); }
+  .log .r.rot  { color: var(--success); }
+  .log .r.miss { color: var(--error); }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Splay Tree Visualizer</h1>
+<p class="subtitle">A <strong>splay tree</strong> is a binary search tree with one twist: every accessed node is <em>splayed</em> to the root by a sequence of rotations. There's no colour, height, or rank stored on the nodes — the amortized <code>O(log n)</code> comes entirely from the access pattern. Insert some keys, then find or delete one and watch the zig / zig-zig / zig-zag chain unwind.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Key</label>
+    <input type="number" id="key" value="50">
+    <button class="primary" onclick="doInsert()">Insert</button>
+    <button onclick="doFind()">Find (splay)</button>
+    <button onclick="doDelete()">Delete</button>
+    <button onclick="doPredecessor()">Splay predecessor</button>
+    <button onclick="doSuccessor()">Splay successor</button>
+    <button onclick="clearTree()">Clear</button>
+    <button onclick="randomFill()">🎲 Fill 15 random</button>
+    <button onclick="sequentialFill()">↗ Insert 1..15 (worst-case shape)</button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="canvas-wrap"><svg id="svg" viewBox="0 0 900 480" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <div>
+    <div class="stats">
+      <h3>Tree stats</h3>
+      <div class="stat-row"><span>size</span><span class="v" id="stSize">0</span></div>
+      <div class="stat-row"><span>height</span><span class="v" id="stHeight">0</span></div>
+      <div class="stat-row"><span>root key</span><span class="v" id="stRoot">—</span></div>
+      <div class="stat-row"><span>last access depth</span><span class="v" id="stDepth">—</span></div>
+      <div class="stat-row"><span>total rotations</span><span class="v" id="stRots">0</span></div>
+    </div>
+    <div class="log" id="log">
+      <h3>Operation trace</h3>
+      <div id="logBody"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How splaying works</h2>
+  <p class="about">
+    Every operation — insert, find, delete — ends with a splay of the target node <code>x</code>. Working up from <code>x</code>, the algorithm applies one of three cases per pass:
+  </p>
+  <ul class="about" style="margin:0 0 10px 20px">
+    <li><strong>zig</strong> — <code>x</code>'s parent <code>p</code> is the root: rotate <code>x</code> up one level and stop.</li>
+    <li><strong>zig-zig</strong> — <code>x</code> and <code>p</code> are both left children (or both right): rotate <code>p</code> first, then <code>x</code>. This "double" case is what gives splay trees their good amortized bound.</li>
+    <li><strong>zig-zag</strong> — <code>x</code> is a right child of a left-child parent (or the mirror): rotate <code>x</code> twice, once around <code>p</code>, then around <code>p</code>'s parent.</li>
+  </ul>
+  <p class="about">
+    Because every access moves the touched node to the root, splay trees exhibit strong <em>working-set locality</em>: recently or frequently accessed items are near the root and cost <code>O(1)</code> to reach. Sleator and Tarjan proved they're within a constant factor of any BST for any access sequence — the famous <em>dynamic optimality conjecture</em>. Real users include the Linux kernel's <code>lib/klist.c</code>, GNU libavl, and some database B-tree page caches.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+class Node {
+  constructor(key) { this.key = key; this.left = null; this.right = null; this.parent = null; }
+}
+
+let root = null;
+let totalRots = 0;
+let lastAccessDepth = 0;
+let highlight = { active: new Set(), hit: null };
+
+function rotateRight(x) {
+  const y = x.left;
+  if (!y) return;
+  x.left = y.right;
+  if (y.right) y.right.parent = x;
+  y.right = x;
+  y.parent = x.parent;
+  if (x.parent) {
+    if (x.parent.left === x) x.parent.left = y;
+    else x.parent.right = y;
+  } else root = y;
+  x.parent = y;
+  totalRots++;
+}
+
+function rotateLeft(x) {
+  const y = x.right;
+  if (!y) return;
+  x.right = y.left;
+  if (y.left) y.left.parent = x;
+  y.left = x;
+  y.parent = x.parent;
+  if (x.parent) {
+    if (x.parent.left === x) x.parent.left = y;
+    else x.parent.right = y;
+  } else root = y;
+  x.parent = y;
+  totalRots++;
+}
+
+function splay(x) {
+  if (!x) return;
+  while (x.parent) {
+    const p = x.parent;
+    const g = p.parent;
+    if (!g) {
+      if (p.left === x) { log('  zig — right rotate at ' + p.key, 'rot'); rotateRight(p); }
+      else              { log('  zig — left rotate at '  + p.key, 'rot'); rotateLeft(p); }
+    } else if (p.left === x && g.left === p) {
+      log('  zig-zig — right rotate at ' + g.key + ', then at ' + p.key, 'rot');
+      rotateRight(g); rotateRight(p);
+    } else if (p.right === x && g.right === p) {
+      log('  zig-zig — left rotate at ' + g.key + ', then at ' + p.key, 'rot');
+      rotateLeft(g); rotateLeft(p);
+    } else if (p.right === x && g.left === p) {
+      log('  zig-zag — left rotate at ' + p.key + ', then right rotate at ' + g.key, 'rot');
+      rotateLeft(p); rotateRight(g);
+    } else {
+      log('  zig-zag — right rotate at ' + p.key + ', then left rotate at ' + g.key, 'rot');
+      rotateRight(p); rotateLeft(g);
+    }
+  }
+}
+
+function findNode(key) {
+  let cur = root, last = null, depth = 0;
+  while (cur) {
+    last = cur;
+    depth++;
+    highlight.active.add(cur.key);
+    log('  walk → ' + cur.key, 'walk');
+    if (key < cur.key) cur = cur.left;
+    else if (key > cur.key) cur = cur.right;
+    else { lastAccessDepth = depth; return { found: cur, last, depth }; }
+  }
+  lastAccessDepth = depth;
+  return { found: null, last, depth };
+}
+
+function doInsert() {
+  const key = parseInt($('key').value, 10);
+  if (Number.isNaN(key)) return;
+  highlight = { active: new Set(), hit: null };
+  log('INSERT ' + key, 'op');
+  if (!root) { root = new Node(key); highlight.hit = key; log('  tree empty — new root', 'walk'); render(); return; }
+  const { found, last } = findNode(key);
+  if (found) {
+    log('  duplicate — splaying existing node', 'walk');
+    splay(found);
+    highlight.hit = key;
+    render();
+    return;
+  }
+  const node = new Node(key);
+  node.parent = last;
+  if (key < last.key) last.left = node;
+  else last.right = node;
+  log('  attach as ' + (key < last.key ? 'left' : 'right') + ' child of ' + last.key, 'walk');
+  splay(node);
+  highlight.hit = key;
+  render();
+}
+
+function doFind() {
+  const key = parseInt($('key').value, 10);
+  if (Number.isNaN(key) || !root) return;
+  highlight = { active: new Set(), hit: null };
+  log('FIND ' + key, 'op');
+  const { found, last } = findNode(key);
+  if (found) { splay(found); highlight.hit = key; log('  hit — splayed to root', 'walk'); }
+  else       { splay(last);  highlight.hit = last.key; log('  miss — splaying last visited ' + last.key, 'miss'); }
+  render();
+}
+
+function doDelete() {
+  const key = parseInt($('key').value, 10);
+  if (Number.isNaN(key) || !root) return;
+  highlight = { active: new Set(), hit: null };
+  log('DELETE ' + key, 'op');
+  const { found } = findNode(key);
+  if (!found) { log('  key not present', 'miss'); render(); return; }
+  splay(found);
+  const L = root.left, R = root.right;
+  if (L) L.parent = null;
+  if (R) R.parent = null;
+  if (!L) { root = R; log('  no left subtree — right becomes root', 'walk'); render(); return; }
+  root = L;
+  let cur = root;
+  while (cur.right) cur = cur.right;
+  splay(cur);
+  root.right = R;
+  if (R) R.parent = root;
+  log('  split: joined R subtree under new root ' + root.key, 'walk');
+  render();
+}
+
+function doPredecessor() {
+  if (!root) return;
+  highlight = { active: new Set(), hit: null };
+  log('SPLAY PREDECESSOR of root=' + root.key, 'op');
+  if (!root.left) { log('  no left subtree', 'miss'); return; }
+  let cur = root.left;
+  while (cur.right) { highlight.active.add(cur.key); log('  walk → ' + cur.key, 'walk'); cur = cur.right; }
+  splay(cur);
+  highlight.hit = cur.key;
+  render();
+}
+
+function doSuccessor() {
+  if (!root) return;
+  highlight = { active: new Set(), hit: null };
+  log('SPLAY SUCCESSOR of root=' + root.key, 'op');
+  if (!root.right) { log('  no right subtree', 'miss'); return; }
+  let cur = root.right;
+  while (cur.left) { highlight.active.add(cur.key); log('  walk → ' + cur.key, 'walk'); cur = cur.left; }
+  splay(cur);
+  highlight.hit = cur.key;
+  render();
+}
+
+function clearTree() {
+  root = null; totalRots = 0; lastAccessDepth = 0;
+  highlight = { active: new Set(), hit: null };
+  log('CLEAR', 'op');
+  render();
+}
+
+function randomFill() {
+  clearTree();
+  const used = new Set();
+  while (used.size < 15) {
+    const k = Math.floor(Math.random() * 99) + 1;
+    if (used.has(k)) continue;
+    used.add(k);
+    $('key').value = k;
+    doInsert();
+  }
+}
+
+function sequentialFill() {
+  clearTree();
+  for (let k = 1; k <= 15; k++) {
+    $('key').value = k;
+    doInsert();
+  }
+}
+
+function size(n) { return n ? 1 + size(n.left) + size(n.right) : 0; }
+function height(n) { return n ? 1 + Math.max(height(n.left), height(n.right)) : 0; }
+
+function inorder(n, out) {
+  if (!n) return;
+  inorder(n.left, out);
+  out.push(n);
+  inorder(n.right, out);
+}
+
+function depthOf(n) {
+  let d = 0, c = n;
+  while (c.parent) { d++; c = c.parent; }
+  return d;
+}
+
+function layout(root, positions, w, h) {
+  const order = [];
+  inorder(root, order);
+  const H = height(root);
+  const gapX = order.length > 1 ? (w - 60) / (order.length - 1) : 0;
+  const gapY = H > 1 ? Math.min(60, (h - 60) / (H - 1)) : 0;
+  order.forEach((n, i) => {
+    positions.set(n, { x: 30 + i * gapX, y: 30 + depthOf(n) * gapY });
+  });
+}
+
+function render() {
+  const svg = $('svg');
+  svg.innerHTML = '';
+  $('stSize').textContent   = size(root);
+  $('stHeight').textContent = height(root);
+  $('stRoot').textContent   = root ? root.key : '—';
+  $('stDepth').textContent  = lastAccessDepth || '—';
+  $('stRots').textContent   = totalRots;
+  if (!root) return;
+  const positions = new Map();
+  const H = height(root);
+  const need = 30 + Math.max(H - 1, 0) * 60 + 40;
+  const svgH = Math.max(480, need);
+  svg.setAttribute('viewBox', '0 0 900 ' + svgH);
+  layout(root, positions, 900, svgH);
+  const svgNS = 'http://www.w3.org/2000/svg';
+  positions.forEach((pos, n) => {
+    if (n.left) {
+      const p2 = positions.get(n.left);
+      const line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', pos.x); line.setAttribute('y1', pos.y);
+      line.setAttribute('x2', p2.x);  line.setAttribute('y2', p2.y);
+      line.setAttribute('class', 'edge');
+      svg.appendChild(line);
+    }
+    if (n.right) {
+      const p2 = positions.get(n.right);
+      const line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', pos.x); line.setAttribute('y1', pos.y);
+      line.setAttribute('x2', p2.x);  line.setAttribute('y2', p2.y);
+      line.setAttribute('class', 'edge');
+      svg.appendChild(line);
+    }
+  });
+  positions.forEach((pos, n) => {
+    const g = document.createElementNS(svgNS, 'g');
+    let cls = 'node';
+    if (n === root) cls += ' root';
+    if (highlight.hit === n.key) cls += ' hit';
+    else if (highlight.active.has(n.key)) cls += ' active';
+    g.setAttribute('class', cls);
+    g.setAttribute('transform', 'translate(' + pos.x + ',' + pos.y + ')');
+    const c = document.createElementNS(svgNS, 'circle');
+    c.setAttribute('r', 18);
+    g.appendChild(c);
+    const t = document.createElementNS(svgNS, 'text');
+    t.textContent = n.key;
+    g.appendChild(t);
+    svg.appendChild(g);
+  });
+}
+
+function log(msg, cls) {
+  const b = $('logBody');
+  const div = document.createElement('div');
+  div.className = 'r ' + (cls || '');
+  div.textContent = msg;
+  b.appendChild(div);
+  b.parentElement.scrollTop = b.parentElement.scrollHeight;
+}
+
+[35, 15, 60, 8, 25, 75, 3, 12, 20, 30, 50, 80].forEach(k => {
+  $('key').value = k;
+  doInsert();
+});
+</script>
+</body>
+</html>

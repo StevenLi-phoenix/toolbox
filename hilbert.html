@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hilbert Curve Visualizer — Free Online Tool</title>
+<meta name="description" content="Draw the Hilbert space-filling curve at orders 1–8 and see how a 1-D index (the Hilbert distance) maps to a 2-D grid coordinate. Hover any cell to read (x, y) ↔ d, and see why nearby indices stay locally clustered — the property that powers Bing Maps quadkeys, R-tree packing, and DB spatial indexes.">
+<meta name="keywords" content="hilbert curve, space filling curve, spatial indexing, z-order curve, quadkey, morton, geohash, R-tree, visualization">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/hilbert.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; font-size: .88rem; }
+  .controls input[type=number] {
+    width: 70px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono);
+  }
+  .controls input[type=range] { width: 160px; accent-color: var(--accent); }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls label { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .canvas-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); position: relative; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 520px; cursor: crosshair; }
+  .side { display: flex; flex-direction: column; gap: 12px; }
+  .stats, .lookup { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3, .lookup h3 { margin: 0 0 8px; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .lookup .field { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; font-size: .85rem; }
+  .lookup input {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; width: 70px;
+  }
+  .lookup .result { font-family: var(--mono); font-size: .85rem; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: .78rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .legend .sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Hilbert Curve Visualizer</h1>
+<p class="subtitle">The <strong>Hilbert curve</strong> is a continuous fractal that visits every cell of a <code>2ⁿ × 2ⁿ</code> grid exactly once — and does it while keeping <em>neighbours in 1-D close in 2-D</em>. That's why spatial databases (PostGIS, SQLite R*-Tree, Bing Maps quadkeys, MongoDB geohash indexes) sort records along a Hilbert order: a range scan of consecutive rows on disk gives you a compact 2-D region, not a random splatter.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Order n <input type="range" id="order" min="1" max="8" value="4"></label>
+    <span id="orderLbl" style="font-family:var(--mono);min-width:34px">n=4</span>
+    <label>Grid: <span id="gridLbl" style="font-family:var(--mono)">16×16</span></label>
+    <label>Cells: <span id="cellsLbl" style="font-family:var(--mono)">256</span></label>
+    <label style="margin-left:auto"><input type="checkbox" id="showGrid" checked> grid</label>
+    <label><input type="checkbox" id="showIdx"> indices</label>
+    <label><input type="checkbox" id="rainbow" checked> rainbow</label>
+    <button class="primary" onclick="animate()">▶ Animate draw</button>
+    <button onclick="draw()">Redraw</button>
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:#f43f5e"></span>d = 0 (start)</span>
+    <span><span class="sw" style="background:#22c55e"></span>midway</span>
+    <span><span class="sw" style="background:#3b82f6"></span>end (d = N−1)</span>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="canvas-wrap">
+    <canvas id="cv" width="1000" height="1000"></canvas>
+  </div>
+  <div class="side">
+    <div class="stats">
+      <h3>Hovered cell</h3>
+      <div class="stat-row"><span>x, y</span><span class="v" id="hxy">—</span></div>
+      <div class="stat-row"><span>Hilbert distance d</span><span class="v" id="hd">—</span></div>
+      <div class="stat-row"><span>Row-major</span><span class="v" id="hrm">—</span></div>
+      <div class="stat-row"><span>Z-order (Morton)</span><span class="v" id="hz">—</span></div>
+    </div>
+    <div class="lookup">
+      <h3>d → (x, y)</h3>
+      <div class="field">
+        <label style="min-width:22px">d</label>
+        <input type="number" id="dInput" min="0" value="0" oninput="lookupD()">
+        <span class="result" id="dOut">(0, 0)</span>
+      </div>
+      <h3>(x, y) → d</h3>
+      <div class="field">
+        <label style="min-width:22px">x</label>
+        <input type="number" id="xInput" min="0" value="0" oninput="lookupXY()">
+        <label style="min-width:22px">y</label>
+        <input type="number" id="yInput" min="0" value="0" oninput="lookupXY()">
+        <span class="result" id="xyOut">d = 0</span>
+      </div>
+    </div>
+    <div class="stats">
+      <h3>Curve statistics</h3>
+      <div class="stat-row"><span>Total length (units)</span><span class="v" id="tot">255</span></div>
+      <div class="stat-row"><span>Bits per axis</span><span class="v" id="bits">4</span></div>
+      <div class="stat-row"><span>Bits per d</span><span class="v" id="bitsD">8</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How the mapping works</h2>
+  <p class="about">
+    Both directions use only bitwise operations. The order-<code>n</code> curve is defined recursively: the four <code>2×2</code> quadrants (bottom-left, top-left, top-right, bottom-right) are each an order-<code>n − 1</code> curve, with the bottom-left rotated one way and the bottom-right rotated the other so the four sub-curves stitch together into a single continuous path. The elegant Hamilton-Ross scheme reads two bits of <code>d</code> at a time from the most significant end, decides which quadrant, translates <code>(x, y)</code> into it, and rotates+reflects the local coordinate frame according to a compact lookup — the whole conversion is <code>O(n)</code> with no floating-point math. On this page every cell you see went through exactly that loop; hover any cell and the sidebar shows the same <code>d</code> that a spatial index would store.
+  </p>
+</div>
+<div class="card">
+  <h2>Why it's useful</h2>
+  <p class="about">
+    A geospatial query like <em>"return all points near (lat, lon) within R"</em> is a 2-D range query; disks and B-tree indexes love 1-D range queries. If the coordinates get flattened to a 1-D key that groups nearby 2-D points together, the range query becomes a small number of narrow 1-D scans. A raster Z-order (Morton) key is fast to compute but has ugly seams where nearby cells jump to distant keys; the Hilbert curve has <em>no seams</em> — every step moves to a 4-neighbour — so its clustering ratio is measurably tighter, at the cost of a slightly more complex mapping. Google S2, Bing Maps quadkeys, GeoWave, and PostgreSQL's Hilbert R-tree bulk-loader all use variants of this curve.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let order = 4, N = 16, points = [];
+let animTimer = null;
+
+function d2xy(n, d) {
+  let rx, ry, t = d, x = 0, y = 0;
+  for (let s = 1; s < n; s *= 2) {
+    rx = 1 & (t / 2);
+    ry = 1 & (t ^ rx);
+    if (ry === 0) {
+      if (rx === 1) { x = s - 1 - x; y = s - 1 - y; }
+      const tmp = x; x = y; y = tmp;
+    }
+    x += s * rx;
+    y += s * ry;
+    t = t >>> 2;
+  }
+  return [x, y];
+}
+
+function xy2d(n, x, y) {
+  let rx, ry, d = 0;
+  for (let s = n / 2; s > 0; s = Math.floor(s / 2)) {
+    rx = (x & s) > 0 ? 1 : 0;
+    ry = (y & s) > 0 ? 1 : 0;
+    d += s * s * ((3 * rx) ^ ry);
+    if (ry === 0) {
+      if (rx === 1) { x = s - 1 - x; y = s - 1 - y; }
+      const tmp = x; x = y; y = tmp;
+    }
+  }
+  return d;
+}
+
+function mortonEncode(x, y) {
+  let z = 0;
+  for (let i = 0; i < 16; i++) {
+    z |= ((x >> i) & 1) << (2 * i);
+    z |= ((y >> i) & 1) << (2 * i + 1);
+  }
+  return z >>> 0;
+}
+
+function rebuild() {
+  order = parseInt($('order').value, 10);
+  N = 1 << order;
+  points = new Array(N * N);
+  for (let d = 0; d < N * N; d++) points[d] = d2xy(N, d);
+  $('orderLbl').textContent = 'n=' + order;
+  $('gridLbl').textContent = N + '×' + N;
+  $('cellsLbl').textContent = (N * N).toLocaleString();
+  $('tot').textContent = (N * N - 1).toLocaleString();
+  $('bits').textContent = order;
+  $('bitsD').textContent = order * 2;
+  $('dInput').max = N * N - 1;
+  $('xInput').max = N - 1;
+  $('yInput').max = N - 1;
+  if ($('dInput').value > N * N - 1) $('dInput').value = 0;
+  if ($('xInput').value > N - 1) $('xInput').value = 0;
+  if ($('yInput').value > N - 1) $('yInput').value = 0;
+}
+
+function fitCanvas() {
+  const w = cv.clientWidth;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width  = w * dpr;
+  cv.height = w * dpr;
+  cv.style.height = w + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return w;
+}
+
+function hueForD(d, total) { return Math.round(360 * d / total); }
+
+function draw(uptoD) {
+  const w = fitCanvas();
+  const size = w;
+  const cell = size / N;
+  ctx.clearRect(0, 0, size, size);
+  if ($('showGrid').checked && N <= 128) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const p = i * cell;
+      ctx.moveTo(p, 0); ctx.lineTo(p, size);
+      ctx.moveTo(0, p); ctx.lineTo(size, p);
+    }
+    ctx.stroke();
+  }
+  const total = N * N;
+  const limit = Math.min(uptoD === undefined ? total : uptoD, total);
+  const rainbow = $('rainbow').checked;
+  ctx.lineWidth = Math.max(1, cell * 0.14);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let d = 1; d < limit; d++) {
+    const [x0, y0] = points[d - 1];
+    const [x1, y1] = points[d];
+    if (rainbow) ctx.strokeStyle = 'hsl(' + hueForD(d, total) + ',80%,50%)';
+    else ctx.strokeStyle = '#111';
+    ctx.beginPath();
+    ctx.moveTo((x0 + 0.5) * cell, size - (y0 + 0.5) * cell);
+    ctx.lineTo((x1 + 0.5) * cell, size - (y1 + 0.5) * cell);
+    ctx.stroke();
+  }
+  if (limit > 0) {
+    const [sx, sy] = points[0];
+    ctx.fillStyle = '#f43f5e';
+    ctx.beginPath();
+    ctx.arc((sx + 0.5) * cell, size - (sy + 0.5) * cell, cell * 0.24, 0, Math.PI * 2);
+    ctx.fill();
+    const [ex, ey] = points[Math.max(0, limit - 1)];
+    ctx.fillStyle = '#3b82f6';
+    ctx.beginPath();
+    ctx.arc((ex + 0.5) * cell, size - (ey + 0.5) * cell, cell * 0.24, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if ($('showIdx').checked && N <= 16) {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.font = Math.max(8, cell * 0.28) + 'px ' + 'ui-monospace, SFMono-Regular, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let d = 0; d < total; d++) {
+      const [x, y] = points[d];
+      ctx.fillText(d, (x + 0.5) * cell, size - (y + 0.5) * cell);
+    }
+  }
+}
+
+function animate() {
+  if (animTimer) { clearInterval(animTimer); animTimer = null; return; }
+  const total = N * N;
+  let d = 0;
+  const stepSize = Math.max(1, Math.floor(total / 240));
+  animTimer = setInterval(() => {
+    d = Math.min(total, d + stepSize);
+    draw(d);
+    if (d >= total) { clearInterval(animTimer); animTimer = null; }
+  }, 16);
+}
+
+cv.addEventListener('mousemove', ev => {
+  const rect = cv.getBoundingClientRect();
+  const size = rect.width;
+  const cell = size / N;
+  const x = Math.max(0, Math.min(N - 1, Math.floor((ev.clientX - rect.left) / cell)));
+  const yCanvas = Math.max(0, Math.min(N - 1, Math.floor((ev.clientY - rect.top) / cell)));
+  const y = N - 1 - yCanvas;
+  const d = xy2d(N, x, y);
+  $('hxy').textContent = '(' + x + ', ' + y + ')';
+  $('hd').textContent = d + '  /  ' + (N * N - 1);
+  $('hrm').textContent = (y * N + x);
+  $('hz').textContent = mortonEncode(x, y);
+});
+
+cv.addEventListener('mouseleave', () => {
+  $('hxy').textContent = $('hd').textContent = $('hrm').textContent = $('hz').textContent = '—';
+});
+
+function lookupD() {
+  const d = Math.max(0, Math.min(N * N - 1, parseInt($('dInput').value, 10) || 0));
+  const [x, y] = d2xy(N, d);
+  $('dOut').textContent = '(' + x + ', ' + y + ')';
+}
+
+function lookupXY() {
+  const x = Math.max(0, Math.min(N - 1, parseInt($('xInput').value, 10) || 0));
+  const y = Math.max(0, Math.min(N - 1, parseInt($('yInput').value, 10) || 0));
+  $('xyOut').textContent = 'd = ' + xy2d(N, x, y);
+}
+
+['order', 'showGrid', 'showIdx', 'rainbow'].forEach(id =>
+  $(id).addEventListener('input', () => { rebuild(); draw(); lookupD(); lookupXY(); }));
+
+window.addEventListener('resize', () => draw());
+
+rebuild();
+draw();
+lookupD();
+lookupXY();
+</script>
+</body>
+</html>
