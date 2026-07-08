@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reverse DNS (PTR) Record Builder — Free Online Tool</title>
+<meta name="description" content="Convert IPv4 or IPv6 addresses into the reversed lookup name used in DNS PTR records — .in-addr.arpa for v4 and .ip6.arpa (nibble form) for v6, plus BIND $ORIGIN blocks, subnet PTR zone names, and RFC 2317 classless delegation pointers.">
+<meta name="keywords" content="reverse dns, ptr record, in-addr.arpa, ip6.arpa, rdns, dns lookup, bind zone, classless delegation, rfc 2317, ipv6 nibble format">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/revdns.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .controls input, .controls select {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .95rem;
+  }
+  .controls input[type=text] { min-width: 300px; }
+  .controls label { color: var(--muted); font-size: .85rem; }
+  .out {
+    padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .92rem; margin-top: 10px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    overflow-x: auto; white-space: nowrap;
+  }
+  .out .v { color: var(--accent); font-weight: 600; }
+  .out button {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .78rem;
+    flex-shrink: 0;
+  }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 10px; }
+  .tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .tile .l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .tile .v { font-family: var(--mono); font-size: .95rem; margin-top: 3px; color: var(--text); word-break: break-all; }
+  .info { color: var(--muted); font-size: .82rem; margin-top: 6px; font-family: var(--mono); }
+  .info.err { color: var(--error); }
+  .zone {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; margin-top: 10px; font-family: var(--mono); font-size: .85rem;
+    white-space: pre; overflow-x: auto;
+  }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .presets button {
+    padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .78rem;
+  }
+  .presets button:hover { border-color: var(--accent); color: var(--accent); }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  h3.mini { margin: 12px 0 4px; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Reverse DNS (PTR) Builder</h1>
+<p class="subtitle">Type an <strong>IPv4</strong> or <strong>IPv6</strong> address (with an optional CIDR prefix) and get the reversed DNS name — <code>4.3.2.1.in-addr.arpa</code> for v4, and the fully-expanded <code>nibble.…ip6.arpa</code> form for v6. Includes the zone origin, a starter BIND PTR record, and the RFC 2317 classless delegation form for /25–/31 v4 zones.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>IP</label>
+    <input type="text" id="ip" value="203.0.113.42" spellcheck="false" autocomplete="off">
+    <label>Hostname (PTR target)</label>
+    <input type="text" id="host" value="mail.example.com." spellcheck="false" autocomplete="off">
+    <label>TTL</label>
+    <input type="number" id="ttl" value="3600" min="0" step="60" style="width:110px">
+  </div>
+  <div class="presets">
+    <button data-ex="8.8.8.8">8.8.8.8</button>
+    <button data-ex="1.1.1.1">1.1.1.1</button>
+    <button data-ex="192.0.2.128/26">192.0.2.128/26 (RFC 2317)</button>
+    <button data-ex="2001:db8::1">2001:db8::1</button>
+    <button data-ex="2001:4860:4860::8888">2001:4860:4860::8888</button>
+    <button data-ex="fe80::1%eth0">fe80::1%eth0</button>
+    <button data-ex="::1">::1</button>
+  </div>
+  <div class="info" id="info"></div>
+</div>
+
+<div class="card">
+  <h2>Reversed name</h2>
+  <div class="out">
+    <span>PTR&nbsp;name: <span class="v" id="ptrOut">…</span></span>
+    <button onclick="copyId('ptrOut')">Copy</button>
+  </div>
+  <div class="grid2" id="tiles"></div>
+</div>
+
+<div class="card">
+  <h2>Zone file snippet</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin:0 0 6px">
+    Drop this into the reverse zone that covers this address. The <code>$ORIGIN</code> line sets the zone tail so the PTR is written as the short host-part only.
+  </p>
+  <div class="zone" id="zone"></div>
+</div>
+
+<div class="card">
+  <h2>Why the reverse looks like that</h2>
+  <p class="about">
+    <strong>IPv4.</strong> The address <code>a.b.c.d</code> reverses to <code>d.c.b.a.in-addr.arpa</code>. The octets flip because DNS is read <em>most-specific first</em> — the same way you'd read <code>www.example.com</code> right-to-left when carving up delegation. Each octet stays a decimal integer; no zero-padding.<br><br>
+    <strong>IPv6.</strong> The 128-bit address is expanded to 32 hex nibbles, each nibble becomes its own label, and the order is fully reversed. <code>2001:db8::1</code> expands to <code>20010db8000000000000000000000001</code> and then reverses into 32 dotted labels ending in <code>ip6.arpa</code>. Uppercase is legal but the tool emits lowercase — matches RFC 3596 and every operator style guide.<br><br>
+    <strong>CIDR / zone origin.</strong> The zone that carries the PTR is the reverse name of the network. A /24 (v4) trims one label off the address; a /16 trims two. IPv6 zones trim one <em>nibble</em> label per 4 bits of prefix — a /48 has 12 nibbles left, so 12 labels before <code>ip6.arpa</code>.<br><br>
+    <strong>RFC 2317 classless delegation.</strong> ISPs sub-delegate ranges smaller than a /24 by using a dashed label: <code>&lt;first-host&gt;-&lt;prefix&gt;.&lt;C.B.A&gt;.in-addr.arpa</code>, then <code>CNAME</code>-ing every octet inside that range to the child zone. This tool emits the delegation zone name whenever your prefix is /25–/31.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function copyId(id) {
+  navigator.clipboard.writeText($(id).textContent).catch(() => {});
+}
+
+function parseInput(raw) {
+  raw = raw.trim();
+  if (!raw) return { err: 'enter an IP address' };
+  let scope = null;
+  let prefix = null;
+  const scopeMatch = raw.match(/%([^/]+)/);
+  if (scopeMatch) { scope = scopeMatch[1]; raw = raw.replace(/%[^/]+/, ''); }
+  const slash = raw.indexOf('/');
+  if (slash !== -1) {
+    prefix = +raw.slice(slash + 1);
+    raw = raw.slice(0, slash);
+  }
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(raw)) {
+    const parts = raw.split('.').map(x => +x);
+    if (parts.some(p => p < 0 || p > 255 || !Number.isInteger(p))) return { err: 'IPv4 octet must be 0–255' };
+    if (prefix != null && (prefix < 0 || prefix > 32)) return { err: 'IPv4 prefix must be 0–32' };
+    return { kind: 'v4', octets: parts, prefix, scope };
+  }
+  if (raw.includes(':')) {
+    const groups = expandV6(raw);
+    if (!groups) return { err: 'invalid IPv6 address' };
+    if (prefix != null && (prefix < 0 || prefix > 128)) return { err: 'IPv6 prefix must be 0–128' };
+    return { kind: 'v6', groups, prefix, scope };
+  }
+  return { err: 'unrecognised address' };
+}
+
+function expandV6(s) {
+  const parts = s.split('::');
+  if (parts.length > 2) return null;
+  const left = parts[0] === '' ? [] : parts[0].split(':');
+  const right = parts.length === 2 ? (parts[1] === '' ? [] : parts[1].split(':')) : null;
+  let all;
+  if (right === null) {
+    if (left.length !== 8) return null;
+    all = left;
+  } else {
+    const fill = 8 - left.length - right.length;
+    if (fill < 0) return null;
+    all = left.concat(Array(fill).fill('0'), right);
+  }
+  const out = [];
+  for (const g of all) {
+    if (!/^[0-9a-fA-F]{1,4}$/.test(g)) return null;
+    out.push(g.padStart(4, '0').toLowerCase());
+  }
+  return out;
+}
+
+function ptrV4(octets) {
+  return octets.slice().reverse().join('.') + '.in-addr.arpa.';
+}
+
+function ptrV6(groups) {
+  const hex = groups.join('');
+  const rev = hex.split('').reverse().join('.');
+  return rev + '.ip6.arpa.';
+}
+
+function zoneOriginV4(octets, prefix) {
+  const p = prefix == null ? 32 : prefix;
+  if (p >= 24) return octets[2] + '.' + octets[1] + '.' + octets[0] + '.in-addr.arpa.';
+  if (p >= 16) return octets[1] + '.' + octets[0] + '.in-addr.arpa.';
+  if (p >= 8)  return octets[0] + '.in-addr.arpa.';
+  return 'in-addr.arpa.';
+}
+
+function zoneOriginV6(groups, prefix) {
+  const p = prefix == null ? 128 : prefix;
+  const nibbles = Math.floor(p / 4);
+  const hex = groups.join('').slice(0, nibbles);
+  const rev = hex.split('').reverse().join('.');
+  return (rev ? rev + '.' : '') + 'ip6.arpa.';
+}
+
+function rfc2317Zone(octets, prefix) {
+  const first = octets[3] & (0xff << (32 - prefix) & 0xff);
+  return first + '-' + prefix + '.' + octets[2] + '.' + octets[1] + '.' + octets[0] + '.in-addr.arpa.';
+}
+
+function ptrShort(fullPtr, origin) {
+  if (fullPtr.endsWith('.' + origin)) return fullPtr.slice(0, -1 - origin.length);
+  if (fullPtr === origin) return '@';
+  return fullPtr;
+}
+
+function refresh() {
+  const info = $('info');
+  info.className = 'info';
+  info.textContent = '';
+  const parsed = parseInput($('ip').value);
+  if (parsed.err) {
+    info.className = 'info err';
+    info.textContent = parsed.err;
+    $('ptrOut').textContent = '—';
+    $('tiles').innerHTML = '';
+    $('zone').textContent = '';
+    return;
+  }
+  const host = ($('host').value || '').trim() || 'host.example.';
+  const hostOut = host.endsWith('.') ? host : host + '.';
+  const ttl = +$('ttl').value || 3600;
+
+  let ptr, origin, tiles = [], zone = '';
+  if (parsed.kind === 'v4') {
+    ptr = ptrV4(parsed.octets);
+    origin = zoneOriginV4(parsed.octets, parsed.prefix);
+    tiles.push(['family', 'IPv4']);
+    tiles.push(['canonical', parsed.octets.join('.')]);
+    if (parsed.prefix != null) tiles.push(['prefix', '/' + parsed.prefix]);
+    tiles.push(['zone origin', origin]);
+    tiles.push(['ptr owner', ptr]);
+    tiles.push(['ptr host-part', ptrShort(ptr, origin)]);
+    if (parsed.prefix != null && parsed.prefix >= 25 && parsed.prefix <= 31) {
+      const rz = rfc2317Zone(parsed.octets, parsed.prefix);
+      tiles.push(['RFC 2317 zone', rz]);
+    }
+    zone = '$ORIGIN ' + origin + '\n$TTL ' + ttl + '\n' +
+      ptrShort(ptr, origin) + '\tIN\tPTR\t' + hostOut;
+    if (parsed.prefix != null && parsed.prefix >= 25 && parsed.prefix <= 31) {
+      const rz = rfc2317Zone(parsed.octets, parsed.prefix);
+      zone += '\n\n; RFC 2317 classless-delegation glue on the parent /24:\n' +
+        parsed.octets[3] + '\tIN\tCNAME\t' + parsed.octets[3] + '.' + rz;
+    }
+  } else {
+    ptr = ptrV6(parsed.groups);
+    origin = zoneOriginV6(parsed.groups, parsed.prefix);
+    tiles.push(['family', 'IPv6']);
+    tiles.push(['canonical (expanded)', parsed.groups.join(':')]);
+    if (parsed.prefix != null) tiles.push(['prefix', '/' + parsed.prefix]);
+    if (parsed.scope) tiles.push(['scope zone', parsed.scope + ' (not encoded in DNS)']);
+    tiles.push(['zone origin', origin]);
+    tiles.push(['ptr owner', ptr]);
+    tiles.push(['ptr host-part', ptrShort(ptr, origin)]);
+    zone = '$ORIGIN ' + origin + '\n$TTL ' + ttl + '\n' +
+      ptrShort(ptr, origin) + '\tIN\tPTR\t' + hostOut;
+  }
+
+  $('ptrOut').textContent = ptr;
+  $('tiles').innerHTML = tiles.map(([l, v]) =>
+    '<div class="tile"><div class="l">' + l + '</div><div class="v">' + escapeHtml(v) + '</div></div>'
+  ).join('');
+  $('zone').textContent = zone;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.onclick = () => { $('ip').value = btn.dataset.ex; refresh(); };
+});
+['ip','host','ttl'].forEach(id => $(id).addEventListener('input', refresh));
+
+refresh();
+</script>
+</body>
+</html>

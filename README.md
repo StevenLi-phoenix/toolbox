@@ -46,6 +46,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS clamp() Fluid Value Builder](clamp.html) | Give me a value at two viewport widths and I'll fit `clamp(min, preferred, max)` — slope in `vw`, intercept in `rem`, live curve plot, and a viewport-slider preview. Presets for fluid H1, body, gap, radius, and button padding. |
 | [CSS :has() Selector Playground](cshas.html) | Type any `:has()` parent-selector expression and see exactly which elements in your HTML match — with live preview, ready-made recipes, generated CSS, and a Selectors 4 specificity breakdown. |
 | [CSS :nth-child Tester](nthchild.html) | Type an `an+b` formula and watch matched children highlight in real time. Switch between `:nth-child`, `:nth-of-type`, `:nth-last-child`, and `:nth-last-of-type`; mix child types to see how *of-type* changes the count; try Selectors 4's `of S` filter syntax. |
 | [CSS grid-template-areas Visual Builder](gridareas.html) | Paint named areas on a grid and get the matching `grid-template-areas` rule with rows aligned column-by-column, dot placeholders for empty cells, and automatic validation that every area is rectangular (anything else is illegal CSS). Live preview with Holy Grail / Dashboard / App Shell presets. |
@@ -207,6 +208,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Reverse DNS (PTR) Builder](revdns.html) | Turn any IPv4 or IPv6 address into its `in-addr.arpa` / `ip6.arpa` reversed lookup name, with zone origin picked from the CIDR prefix, a starter BIND `$ORIGIN` block, and the RFC 2317 classless-delegation form for /25–/31 sub-allocations. |
 | [Content-Type Parser & Builder](contenttype.html) | Split a media-type into `type`, `subtype`, structured-syntax suffix (`+json`, `+xml`, `+cbor`, …), and parameters per RFC 7231 / 6838 — flag charset on JSON, missing multipart boundary, misplaced `q=`, and identify the registration tree (standards / vendor / personal / private). Compose new headers with a parameter builder and generate WebKit / hex / base64 multipart boundaries. |
 | [RFC 7807 Problem+JSON Builder](problemjson.html) | Compose a spec-compliant `application/problem+json` error payload — the five standard members (`type`, `title`, `status`, `detail`, `instance`), the RFC 9457 `errors` array, and custom extension members — with a linter that flags missing fields, non-URI `type`, and bad JSON Pointers. Copy as JSON, full HTTP response, curl, fetch, or Spring `ProblemDetail`. |
 | [W3C Trace Context Decoder](tracecontext.html) | Parse `traceparent` and `tracestate` headers from OpenTelemetry, Jaeger, Zipkin, and AWS X-Ray — see the version, 128-bit trace-id, 64-bit span-id, and the sampled flag, validate against the spec, or generate a fresh header to inject into a curl request. |
@@ -258,6 +260,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Bit Struct / Packed Field Decoder](bitstruct.html) | Slice a hex, binary, decimal, or octal value into named bit fields — pick MSB-first or LSB-first packing, mark fields as signed or unsigned, and see every field's dec / hex / bin plus a colour-coded bit map. Presets for IPv4, TCP flags, ARM PSR, x86 CPUID, and RGBA8888. |
 | [Boyer-Moore String Matching Visualizer](boyermoore.html) | Step through the Boyer-Moore search — right-to-left pattern comparisons with two precomputed shift tables (bad character and good suffix). Watch each mismatch pick `max(bcShift, gsShift)` for jumps that push toward the sub-linear `O(n/m)` best case that makes `grep` fly. |
 | [Hilbert Curve Visualizer](hilbert.html) | Draw the Hilbert space-filling curve at orders 1–8 and see how a 1-D distance `d` maps to a 2-D grid coordinate. Hover any cell to read `(x, y) ↔ d`, contrast the Morton / row-major indexes, and see why PostGIS, Bing quadkeys, and R-tree bulk-loaders sort along it for tight range-scan clustering. |
 | [Splay Tree Visualizer](splaytree.html) | Insert, find, and delete keys in a live splay tree — every accessed node is splayed to the root by zig / zig-zig / zig-zag rotations. Watch the self-adjusting `O(log n)` amortized behaviour emerge with no stored balance metadata, and see the sequential-insert worst-case shape recover in one find. |
