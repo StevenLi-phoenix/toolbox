@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PostgreSQL Row Size Estimator — Free Online Tool</title>
+<meta name="description" content="Estimate the on-disk size of a PostgreSQL row from a column list — includes tuple header, null bitmap, alignment padding, TOAST thresholds, page fill and index overhead.">
+<meta name="keywords" content="postgres row size, postgresql tuple size, toast threshold, pg storage calculator, database sizing, table bloat">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pgrowsize.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.col-table{width:100%;border-collapse:collapse;font-size:.85rem;font-family:var(--mono)}
+.col-table th,.col-table td{padding:6px 8px;border:1px solid var(--border);text-align:left;vertical-align:middle}
+.col-table th{background:var(--surface);font-weight:600;font-size:.78rem}
+.col-table input,.col-table select{width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.82rem;box-sizing:border-box}
+.col-table td .bytes{color:var(--muted);font-size:.78rem;white-space:nowrap}
+.col-table td.actions{width:60px;text-align:center}
+.col-table td.actions button{padding:3px 8px;font-size:.75rem}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.preset-tag{padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:.78rem;cursor:pointer;background:var(--surface);font-family:var(--sans)}
+.preset-tag:hover{background:var(--surface2)}
+.result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.result-box{padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center}
+.result-box .value{font-family:var(--mono);font-size:1.35rem;font-weight:700;color:var(--accent)}
+.result-box .label{font-size:.78rem;color:var(--muted);margin-top:4px}
+.result-box .sub{font-size:.72rem;color:var(--muted);margin-top:4px;font-family:var(--mono)}
+.breakdown{font-family:var(--mono);font-size:.85rem;line-height:1.75}
+.breakdown .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--border)}
+.breakdown .row.total{font-weight:700;color:var(--accent);border-top:2px solid var(--border);padding-top:8px;margin-top:4px;border-bottom:none}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:.82rem;font-weight:600;color:var(--muted)}
+.fg input,.fg select{padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.9rem}
+.warn{padding:10px 12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:var(--radius);font-size:.85rem;color:#92400e;margin-top:10px}
+.ok{padding:10px 12px;background:#dcfce7;border:1px solid #86efac;border-radius:var(--radius);font-size:.85rem;color:#166534;margin-top:10px}
+.toast-chip{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:.72rem;font-family:var(--mono);background:var(--surface2);color:var(--muted)}
+.toast-chip.toasted{background:#fef3c7;color:#92400e}
+pre.cfg{font-family:var(--mono);font-size:.82rem;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);white-space:pre-wrap;overflow:auto;line-height:1.55}
+@media(max-width:768px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>PostgreSQL Row Size Estimator</h1>
+<p class="subtitle">Add columns, tick nullability, and get the on-heap tuple size — header, null bitmap, alignment padding, TOAST inlining threshold, plus rows-per-page and full-table footprint.</p>
+
+<div class="card">
+<h2>&#9889; Presets</h2>
+<div class="presets">
+<span class="preset-tag" onclick="applyPreset('users')">users</span>
+<span class="preset-tag" onclick="applyPreset('orders')">orders</span>
+<span class="preset-tag" onclick="applyPreset('events')">events (jsonb)</span>
+<span class="preset-tag" onclick="applyPreset('metrics')">metrics (numeric)</span>
+<span class="preset-tag" onclick="applyPreset('sessions')">sessions (uuid)</span>
+<span class="preset-tag" onclick="applyPreset('geo')">geo (postgis)</span>
+<span class="preset-tag" onclick="applyPreset('vector')">pgvector 1536</span>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128203; Columns</h2>
+<table class="col-table">
+<thead><tr><th style="width:26%">Name</th><th style="width:22%">Type</th><th style="width:14%">Length</th><th style="width:8%">Null?</th><th style="width:20%">Cost</th><th class="actions">Ops</th></tr></thead>
+<tbody id="cols"></tbody>
+</table>
+<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+<button onclick="addRow()">+ Add column</button>
+<button onclick="calc()">Recalculate</button>
+<button onclick="clearAll()">Clear</button>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128295; Table Settings</h2>
+<div class="grid2">
+<div class="fg"><label>Row count</label><input type="number" id="rowCount" value="1000000" min="0" step="1000" oninput="calc()"></div>
+<div class="fg"><label>fillfactor (%)</label><input type="number" id="fillfactor" value="100" min="10" max="100" step="5" oninput="calc()"></div>
+<div class="fg"><label>Page size (bytes)</label>
+  <select id="pageSize" onchange="calc()">
+    <option value="8192" selected>8192 (default)</option>
+    <option value="16384">16384</option>
+    <option value="32768">32768</option>
+  </select>
+</div>
+<div class="fg"><label>Include one B-tree index of PK?</label>
+  <select id="withIdx" onchange="calc()">
+    <option value="1" selected>Yes (+~28 bytes/row)</option>
+    <option value="0">No</option>
+  </select>
+</div>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128202; Estimated Size</h2>
+<div class="result-grid">
+<div class="result-box"><div class="value" id="rTuple">–</div><div class="label">Bytes per tuple</div><div class="sub" id="rTupleWithLp">–</div></div>
+<div class="result-box"><div class="value" id="rPerPage">–</div><div class="label">Rows per 8&nbsp;kB page</div><div class="sub" id="rPageUse">–</div></div>
+<div class="result-box"><div class="value" id="rHeap">–</div><div class="label">Heap size</div><div class="sub" id="rPages">–</div></div>
+<div class="result-box"><div class="value" id="rTotal">–</div><div class="label">Heap + PK index</div><div class="sub" id="rIdxSize">–</div></div>
+</div>
+
+<div class="breakdown" style="margin-top:14px">
+<div class="row"><span>Tuple header (t_hoff before columns)</span><span id="bHeader">–</span></div>
+<div class="row"><span>Null bitmap (round up to MAXALIGN)</span><span id="bNullMap">–</span></div>
+<div class="row"><span>Column payload (with per-column padding)</span><span id="bColumns">–</span></div>
+<div class="row"><span>Tuple padding to MAXALIGN (8B)</span><span id="bTuplePad">–</span></div>
+<div class="row"><span>Line pointer (ItemIdData per row)</span><span id="bLp">–</span></div>
+<div class="row total"><span>Effective on-page cost</span><span id="bEff">–</span></div>
+</div>
+
+<div id="warn"></div>
+</div>
+
+<div class="card">
+<h2>&#128220; CREATE TABLE preview</h2>
+<pre class="cfg" id="ddl">–</pre>
+</div>
+
+<div class="card">
+<h2>How the estimate is built</h2>
+<p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+Every heap tuple starts with a <strong>23-byte HeapTupleHeader</strong> (<code>t_xmin</code>, <code>t_xmax</code>, <code>t_cid</code>/<code>t_xvac</code>, <code>t_ctid</code>, <code>t_infomask2</code>, <code>t_infomask</code>, <code>t_hoff</code>). If any column is nullable, a <strong>null bitmap</strong> of <code>ceil(ncols/8)</code> bytes follows, and <code>t_hoff</code> is padded up to <strong>MAXALIGN (8)</strong>.
+</p>
+<p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+Each column has an <strong>alignment</strong> requirement (char=1, int2=2, int4/date=4, int8/timestamp/float8/oid/uuid=8, text/varchar/bytea/jsonb use <code>char</code> align for the varlena header but the 4-byte length word gives them de-facto 4-byte alignment). We pad the tuple offset up to the alignment of each column before adding its width. Variable-length types get a <strong>1-byte short header</strong> if the payload is ≤&nbsp;126&nbsp;bytes, otherwise a <strong>4-byte long header</strong>; if the whole tuple exceeds <code>TOAST_TUPLE_THRESHOLD</code> (~2 kB) the largest varlenas are compressed and/or moved out-of-line to the TOAST table.
+</p>
+<p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+Rows are stored inside 8&nbsp;kB pages. Each page has a 24-byte header, and each row also gets a <strong>4-byte line pointer</strong> at the top of the page. The estimator adds all of that plus a configurable <code>fillfactor</code>.
+</p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const TYPES = {
+  bool:       { align:1, fixed:1, hint:'1 B' },
+  char:       { align:1, fixed:1, hint:'1 B, use text' },
+  int2:       { align:2, fixed:2, hint:'2 B smallint' },
+  int4:       { align:4, fixed:4, hint:'4 B int' },
+  int8:       { align:8, fixed:8, hint:'8 B bigint' },
+  oid:        { align:4, fixed:4, hint:'4 B oid' },
+  float4:     { align:4, fixed:4, hint:'4 B real' },
+  float8:     { align:8, fixed:8, hint:'8 B double' },
+  numeric:    { align:2, varlena:true, hint:'2 B header + 2 B/digit-4' },
+  date:       { align:4, fixed:4, hint:'4 B date' },
+  time:       { align:8, fixed:8, hint:'8 B time' },
+  timestamp:  { align:8, fixed:8, hint:'8 B timestamp' },
+  timestamptz:{ align:8, fixed:8, hint:'8 B timestamptz' },
+  interval:   { align:8, fixed:16, hint:'16 B interval' },
+  uuid:       { align:8, fixed:16, hint:'16 B uuid' },
+  inet:       { align:4, fixed:16, hint:'up to 16 B + 4 hdr' },
+  macaddr:    { align:4, fixed:6, hint:'6 B mac' },
+  bytea:      { align:4, varlena:true, hint:'4 B hdr + payload' },
+  text:       { align:4, varlena:true, hint:'4 B hdr + UTF-8 bytes' },
+  varchar:    { align:4, varlena:true, hint:'4 B hdr + UTF-8 bytes' },
+  json:       { align:4, varlena:true, hint:'4 B hdr + text bytes' },
+  jsonb:      { align:4, varlena:true, hint:'4 B hdr + 1 B version + bin' },
+  xml:        { align:4, varlena:true, hint:'4 B hdr + xml bytes' },
+  point:      { align:8, fixed:16, hint:'16 B point' },
+  geometry:   { align:4, varlena:true, hint:'PostGIS varlena' },
+  vector:     { align:4, varlena:true, hint:'pgvector: 8 B hdr + 4 B/dim' },
+  tsvector:   { align:4, varlena:true, hint:'compressed lexemes' },
+};
+
+const HDR = 23;
+const MAXALIGN = 8;
+const PAGE_HDR = 24;
+const LP = 4;
+const PK_INDEX_PER_ROW = 28;
+const TOAST_THRESHOLD = 2032;
+
+function maxalign(n){ return Math.ceil(n / MAXALIGN) * MAXALIGN; }
+function align(offset, a){ return Math.ceil(offset / a) * a; }
+
+function varlenaSize(bytes){
+  if (bytes <= 126) return 1 + bytes;
+  return 4 + bytes;
+}
+
+function estimateColumnWidth(type, length){
+  const t = TYPES[type];
+  if (!t) return { width:0, align:1 };
+  if (t.fixed !== undefined) return { width:t.fixed, align:t.align };
+  if (type === 'numeric') {
+    const precision = Math.max(1, length | 0 || 12);
+    const digits = Math.ceil(precision / 4);
+    return { width: 8 + digits * 2, align: t.align };
+  }
+  if (type === 'vector') {
+    const dim = Math.max(1, length | 0 || 3);
+    const payload = 8 + dim * 4;
+    return { width: varlenaSize(payload), align: t.align };
+  }
+  const payload = Math.max(0, length | 0);
+  return { width: varlenaSize(payload), align: t.align };
+}
+
+let rows = [];
+let nextId = 1;
+
+const PRESETS = {
+  users: [
+    { name:'id', type:'int8', length:'', nullable:false },
+    { name:'email', type:'varchar', length:64, nullable:false },
+    { name:'display_name', type:'varchar', length:48, nullable:true },
+    { name:'password_hash', type:'text', length:60, nullable:false },
+    { name:'created_at', type:'timestamptz', length:'', nullable:false },
+    { name:'last_login_at', type:'timestamptz', length:'', nullable:true },
+    { name:'is_verified', type:'bool', length:'', nullable:false },
+  ],
+  orders: [
+    { name:'id', type:'int8', length:'', nullable:false },
+    { name:'user_id', type:'int8', length:'', nullable:false },
+    { name:'total_cents', type:'int8', length:'', nullable:false },
+    { name:'currency', type:'char', length:'', nullable:false },
+    { name:'status', type:'varchar', length:16, nullable:false },
+    { name:'placed_at', type:'timestamptz', length:'', nullable:false },
+    { name:'shipped_at', type:'timestamptz', length:'', nullable:true },
+    { name:'notes', type:'text', length:120, nullable:true },
+  ],
+  events: [
+    { name:'id', type:'uuid', length:'', nullable:false },
+    { name:'event_type', type:'varchar', length:24, nullable:false },
+    { name:'user_id', type:'int8', length:'', nullable:true },
+    { name:'occurred_at', type:'timestamptz', length:'', nullable:false },
+    { name:'payload', type:'jsonb', length:512, nullable:true },
+    { name:'ip', type:'inet', length:'', nullable:true },
+  ],
+  metrics: [
+    { name:'ts', type:'timestamptz', length:'', nullable:false },
+    { name:'sensor_id', type:'int4', length:'', nullable:false },
+    { name:'value', type:'float8', length:'', nullable:false },
+    { name:'error', type:'float4', length:'', nullable:true },
+    { name:'quality', type:'int2', length:'', nullable:false },
+  ],
+  sessions: [
+    { name:'id', type:'uuid', length:'', nullable:false },
+    { name:'user_id', type:'int8', length:'', nullable:false },
+    { name:'refresh_token', type:'text', length:64, nullable:false },
+    { name:'user_agent', type:'text', length:180, nullable:true },
+    { name:'ip', type:'inet', length:'', nullable:false },
+    { name:'expires_at', type:'timestamptz', length:'', nullable:false },
+  ],
+  geo: [
+    { name:'id', type:'int8', length:'', nullable:false },
+    { name:'name', type:'text', length:24, nullable:false },
+    { name:'geom', type:'geometry', length:96, nullable:false },
+    { name:'properties', type:'jsonb', length:220, nullable:true },
+  ],
+  vector: [
+    { name:'id', type:'int8', length:'', nullable:false },
+    { name:'chunk', type:'text', length:600, nullable:true },
+    { name:'embedding', type:'vector', length:1536, nullable:false },
+  ],
+};
+
+function applyPreset(k){
+  rows = PRESETS[k].map(r => ({ ...r, id: nextId++ }));
+  render();
+  calc();
+}
+
+function addRow(seed){
+  rows.push(seed || { id: nextId++, name: 'col_' + rows.length, type: 'int4', length: '', nullable: true });
+  render();
+  calc();
+}
+
+function delRow(id){
+  rows = rows.filter(r => r.id !== id);
+  render();
+  calc();
+}
+
+function clearAll(){ rows = []; render(); calc(); }
+
+function typeOptions(sel){
+  return Object.keys(TYPES).map(t => `<option value="${t}"${t===sel?' selected':''}>${t}</option>`).join('');
+}
+
+function needsLen(type){
+  const t = TYPES[type];
+  return t && (t.varlena || type === 'numeric');
+}
+
+function render(){
+  const tbody = $('cols');
+  tbody.innerHTML = '';
+  for (const r of rows) {
+    const t = TYPES[r.type];
+    const est = estimateColumnWidth(r.type, r.length);
+    const lenPlaceholder = r.type === 'numeric' ? 'precision (12)' : r.type === 'vector' ? 'dimensions (1536)' : 'payload bytes';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input value="${escapeAttr(r.name)}" oninput="updRow(${r.id}, 'name', this.value)"></td>
+      <td><select onchange="updRow(${r.id}, 'type', this.value)">${typeOptions(r.type)}</select></td>
+      <td>${needsLen(r.type)
+          ? `<input type="number" value="${r.length}" placeholder="${lenPlaceholder}" oninput="updRow(${r.id}, 'length', this.value)">`
+          : `<span class="bytes">${t.hint}</span>`}</td>
+      <td style="text-align:center"><input type="checkbox" ${r.nullable ? 'checked' : ''} onchange="updRow(${r.id}, 'nullable', this.checked)"></td>
+      <td><span class="bytes">${est.width} B, align ${est.align}</span></td>
+      <td class="actions"><button onclick="delRow(${r.id})">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function updRow(id, field, value){
+  const r = rows.find(x => x.id === id);
+  if (!r) return;
+  r[field] = field === 'length' ? value : value;
+  if (field === 'type') render();
+  calc();
+}
+
+function humanBytes(n){
+  if (!isFinite(n) || n <= 0) return '0 B';
+  const u = ['B','KB','MB','GB','TB','PB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(n >= 100 ? 0 : n >= 10 ? 1 : 2) + ' ' + u[i];
+}
+
+function escapeAttr(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function calc(){
+  const ncols = rows.length;
+  const anyNullable = rows.some(r => r.nullable);
+  const nullBitmap = anyNullable ? Math.ceil(ncols / 8) : 0;
+  const hoff = maxalign(HDR + nullBitmap);
+  let offset = hoff;
+  const perColBytes = [];
+  for (const r of rows) {
+    const est = estimateColumnWidth(r.type, r.length);
+    const padded = align(offset, est.align);
+    perColBytes.push({ col: r.name, size: est.width, padded: padded - offset });
+    offset = padded + est.width;
+  }
+  const tupleUnpadded = offset;
+  const tuplePadded = maxalign(tupleUnpadded);
+  const columnBytes = tuplePadded - hoff;
+
+  const pageSize = parseInt($('pageSize').value) || 8192;
+  const ff = Math.max(10, Math.min(100, parseInt($('fillfactor').value) || 100));
+  const rowCount = Math.max(0, parseInt($('rowCount').value) || 0);
+  const withIdx = $('withIdx').value === '1';
+
+  const eff = tuplePadded + LP;
+  const usable = (pageSize - PAGE_HDR) * ff / 100;
+  const rowsPerPage = Math.max(1, Math.floor(usable / eff));
+  const pages = Math.ceil(rowCount / rowsPerPage) || 0;
+  const heap = pages * pageSize;
+  const idx = withIdx ? Math.ceil(rowCount * PK_INDEX_PER_ROW / (pageSize - PAGE_HDR)) * pageSize : 0;
+  const total = heap + idx;
+
+  $('rTuple').textContent = tuplePadded + ' B';
+  $('rTupleWithLp').textContent = 'on-page cost: ' + eff + ' B';
+  $('rPerPage').textContent = rowsPerPage.toString();
+  $('rPageUse').textContent = (eff * rowsPerPage / pageSize * 100).toFixed(1) + '% of page';
+  $('rHeap').textContent = humanBytes(heap);
+  $('rPages').textContent = pages.toLocaleString() + ' pages';
+  $('rTotal').textContent = humanBytes(total);
+  $('rIdxSize').textContent = 'PK idx: ' + humanBytes(idx);
+
+  $('bHeader').textContent = HDR + ' B';
+  $('bNullMap').textContent = anyNullable ? nullBitmap + ' B (padded to ' + hoff + ')' : '0 B (no nullable cols)';
+  $('bColumns').textContent = columnBytes + ' B';
+  $('bTuplePad').textContent = (tuplePadded - tupleUnpadded) + ' B';
+  $('bLp').textContent = LP + ' B';
+  $('bEff').textContent = eff + ' B';
+
+  const warns = [];
+  if (tuplePadded > TOAST_THRESHOLD) {
+    warns.push(`⚠ Tuple (${tuplePadded} B) exceeds TOAST_TUPLE_THRESHOLD (${TOAST_THRESHOLD} B). Largest varlenas will be compressed and/or moved out-of-line — planner cost estimates and index-only scans are affected.`);
+  }
+  if (tuplePadded > pageSize - PAGE_HDR - LP) {
+    warns.push('⚠ Tuple exceeds a single page even after alignment — INSERT will always TOAST.');
+  }
+  if (rowsPerPage === 1) warns.push('⚠ Only 1 row per page — extremely wide tuples fragment heap I/O.');
+  const largestVarlenaFrac = rows.reduce((m, r) => {
+    const t = TYPES[r.type];
+    if (!t?.varlena) return m;
+    const est = estimateColumnWidth(r.type, r.length);
+    return Math.max(m, est.width / tuplePadded);
+  }, 0);
+  if (largestVarlenaFrac > 0.6) warns.push('ℹ One column dominates the tuple. Consider moving it to a side table if reads rarely need it.');
+  if (ncols === 0) warns.push('ℹ Add a column to see a size estimate.');
+  const box = $('warn');
+  if (warns.length) {
+    box.innerHTML = warns.map(w => `<div class="${w.startsWith('⚠') ? 'warn' : 'ok'}">${w}</div>`).join('');
+  } else {
+    box.innerHTML = '<div class="ok">✓ Tuple stays comfortably within the TOAST threshold.</div>';
+  }
+
+  const cols = rows.map(r => {
+    const t = r.type;
+    let sql = t;
+    if (t === 'varchar' && r.length) sql = `varchar(${r.length})`;
+    if (t === 'numeric' && r.length) sql = `numeric(${r.length})`;
+    if (t === 'vector' && r.length) sql = `vector(${r.length})`;
+    return `  ${r.name.padEnd(20)} ${sql}${r.nullable ? '' : ' NOT NULL'}`;
+  }).join(',\n');
+  $('ddl').textContent = `CREATE TABLE my_table (
+${cols || '  -- add columns above'}
+) WITH (fillfactor=${ff});
+-- estimated row: ${tuplePadded} B  ·  rows/page: ${rowsPerPage}  ·  heap for ${rowCount.toLocaleString()} rows: ${humanBytes(heap)}`;
+}
+
+applyPreset('users');
+</script>
+</body>
+</html>

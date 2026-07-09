@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prometheus Alert Rule Builder — Free Online Tool</title>
+<meta name="description" content="Compose a Prometheus alerting rule interactively — pick a template, tune the threshold and `for` window, add labels and annotations, and get a ready-to-paste rule group YAML.">
+<meta name="keywords" content="prometheus alert rule, alertmanager, alerting rule generator, promql alert, sre alerts">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/promalert.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:.82rem;font-weight:600;color:var(--muted)}
+.fg input,.fg select,.fg textarea{padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.88rem}
+.fg textarea{min-height:96px;resize:vertical;line-height:1.55}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.preset-tag{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:.78rem;cursor:pointer;background:var(--surface);font-family:var(--sans)}
+.preset-tag:hover{background:var(--surface2)}
+.preset-tag.on{background:color-mix(in srgb,var(--accent) 15%,var(--surface));border-color:var(--accent);color:var(--accent)}
+.kv-row{display:grid;grid-template-columns:1fr 2fr 40px;gap:8px;margin-bottom:6px;align-items:center}
+.kv-row input{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.85rem}
+.kv-row button{padding:5px 8px}
+pre.cfg{font-family:var(--mono);font-size:.85rem;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);white-space:pre;overflow:auto;line-height:1.55}
+.copy-btn{position:absolute;top:8px;right:8px;padding:4px 10px;font-size:.75rem}
+.cfg-wrap{position:relative}
+.chip{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:.72rem;background:var(--surface2);color:var(--muted);font-family:var(--mono);margin-right:4px}
+.chip.critical{background:#fee2e2;color:#991b1b}
+.chip.warning{background:#fef3c7;color:#92400e}
+.chip.info{background:#e0f2fe;color:#075985}
+.chip.page{background:#fce7f3;color:#9d174d}
+.severity-row{display:flex;gap:8px;flex-wrap:wrap}
+.severity-row button{padding:5px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);font-size:.82rem;cursor:pointer}
+.severity-row button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.explain{font-size:.85rem;color:var(--muted);line-height:1.55}
+.explain code{background:var(--surface2);padding:1px 5px;border-radius:3px;font-family:var(--mono)}
+.errbox{padding:10px 12px;background:#fee2e2;border:1px solid #f87171;border-radius:var(--radius);font-size:.82rem;color:#991b1b;margin-top:8px}
+.warn{padding:10px 12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:var(--radius);font-size:.85rem;color:#92400e;margin-top:10px}
+.ok{padding:10px 12px;background:#dcfce7;border:1px solid #86efac;border-radius:var(--radius);font-size:.85rem;color:#166534;margin-top:10px}
+@media(max-width:768px){.grid2{grid-template-columns:1fr}.kv-row{grid-template-columns:1fr 1fr 40px}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Prometheus Alert Rule Builder</h1>
+<p class="subtitle">Pick a common SRE alert template, tune the PromQL and thresholds, add routing labels and Alertmanager annotations, and copy a ready-to-paste <code>groups:</code> YAML block for <code>prometheus.yml</code> or a Kubernetes <code>PrometheusRule</code>.</p>
+
+<div class="card">
+<h2>&#9889; Template</h2>
+<div class="presets" id="tmplRow"></div>
+<p class="explain" id="tmplHint">Start from a template, then tweak.</p>
+</div>
+
+<div class="card">
+<h2>&#128295; Rule</h2>
+<div class="grid2">
+<div class="fg"><label>alert (CamelCase name)</label><input id="alertName" value="HighErrorRate" oninput="render()"></div>
+<div class="fg"><label>for (persistence window)</label><input id="forWindow" value="5m" oninput="render()"></div>
+</div>
+<div class="fg" style="margin-top:10px"><label>expr — PromQL expression</label><textarea id="expr">sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+/
+sum by (job) (rate(http_requests_total[5m])) &gt; 0.05</textarea></div>
+<div class="grid2" style="margin-top:10px">
+<div class="fg"><label>keep_firing_for (optional, since Prom 2.42)</label><input id="keep" placeholder="e.g. 10m" oninput="render()"></div>
+<div class="fg"><label>rule group name</label><input id="group" value="sli.rules" oninput="render()"></div>
+</div>
+</div>
+
+<div class="card">
+<h2>&#127991;&#65039; Labels — routing signal for Alertmanager</h2>
+<div style="margin-bottom:10px">
+<div class="severity-row" id="sevRow">
+<button data-sev="info" onclick="setSev(this)">info</button>
+<button data-sev="warning" class="on" onclick="setSev(this)">warning</button>
+<button data-sev="critical" onclick="setSev(this)">critical</button>
+<button data-sev="page" onclick="setSev(this)">page</button>
+</div>
+</div>
+<div id="labels"></div>
+<button onclick="addLabel()">+ Add label</button>
+</div>
+
+<div class="card">
+<h2>&#128172; Annotations — human context on the page</h2>
+<div id="annots"></div>
+<button onclick="addAnnot()">+ Add annotation</button>
+<p class="explain" style="margin-top:8px">Templates can use <code>{{ $labels.LABEL }}</code>, <code>{{ $value }}</code>, and the <code>humanize</code> family (<code>humanize</code>, <code>humanizePercentage</code>, <code>humanizeDuration</code>, <code>humanize1024</code>).</p>
+</div>
+
+<div class="card">
+<h2>&#128220; Rule YAML</h2>
+<div class="cfg-wrap">
+<button class="copy-btn" onclick="copyCfg()">Copy</button>
+<pre class="cfg" id="cfg">–</pre>
+</div>
+<div id="warn"></div>
+</div>
+
+<div class="card">
+<h2>&#9878;&#65039; Kubernetes PrometheusRule</h2>
+<div class="cfg-wrap">
+<button class="copy-btn" onclick="copyKube()">Copy</button>
+<pre class="cfg" id="kube">–</pre>
+</div>
+<p class="explain" style="margin-top:8px">Prometheus Operator manifest. The rule contents match the block above, plus a <code>PrometheusRule</code> wrapper with <code>role: alert-rules</code>, so the operator picks it up automatically.</p>
+</div>
+
+<div class="card">
+<h2>Notes</h2>
+<p class="explain">
+<strong>expr &amp; for.</strong> Prometheus evaluates <code>expr</code> at each interval. If it returns a non-empty vector, the alert enters <em>pending</em>, and after <code>for</code> keeps returning results it flips to <em>firing</em>. A short <code>for</code> catches transient spikes; too short means noisy pages.
+</p>
+<p class="explain">
+<strong>keep_firing_for.</strong> Since Prometheus 2.42, this delays resolution so a flapping series doesn't oscillate between firing and resolved. Reasonable defaults: <code>0m</code> (default), or <code>10m</code> for on-call pages you want stable.
+</p>
+<p class="explain">
+<strong>Labels vs. annotations.</strong> Labels form the alert identity and route the alert through Alertmanager (<code>severity: critical</code>, <code>team: platform</code>, …). Annotations are human context (<code>summary</code>, <code>description</code>, <code>runbook_url</code>, <code>dashboard_url</code>).
+</p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const TEMPLATES = {
+  errorrate: {
+    label:'HTTP 5xx > 5%', hint:'Errored request ratio per job (RED-method error rate).',
+    alert:'HighHTTPErrorRate', for:'5m', keep:'', group:'http.rules',
+    expr:`sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+/
+sum by (job) (rate(http_requests_total[5m])) > 0.05`,
+    severity:'critical',
+    labels:{ team:'platform' },
+    annots:{
+      summary:'{{ $labels.job }} error rate is above 5%',
+      description:'5xx error ratio for job {{ $labels.job }} is {{ $value | humanizePercentage }} over the last 5m.',
+      runbook_url:'https://runbooks.example.com/http-error-rate',
+    },
+  },
+  latency: {
+    label:'p95 latency > SLO', hint:'p95 request latency exceeds a fixed SLO for a bucket-histogram counter.',
+    alert:'SLOLatencyP95Breach', for:'10m', keep:'5m', group:'sli.rules',
+    expr:`histogram_quantile(0.95,
+  sum by (le, job) (rate(http_request_duration_seconds_bucket[5m]))
+) > 0.500`,
+    severity:'warning',
+    labels:{ slo:'latency-p95', team:'platform' },
+    annots:{
+      summary:'{{ $labels.job }} p95 latency > 500ms',
+      description:'p95 latency for {{ $labels.job }} is {{ $value | humanizeDuration }}.',
+      dashboard_url:'https://grafana.example.com/d/http-slo',
+    },
+  },
+  memory: {
+    label:'Node memory pressure', hint:'Node has <10% memory available for 15 minutes.',
+    alert:'NodeMemoryPressure', for:'15m', keep:'', group:'node.rules',
+    expr:`(node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 10`,
+    severity:'warning',
+    labels:{ team:'infra' },
+    annots:{
+      summary:'{{ $labels.instance }} has {{ $value | humanize }}% memory available',
+      description:'Available memory has been under 10% for 15 minutes on {{ $labels.instance }}.',
+    },
+  },
+  disk: {
+    label:'Filesystem 85% full & filling', hint:'Filesystem >85% and predicted to fill within 4h.',
+    alert:'FilesystemFillingUp', for:'30m', keep:'', group:'node.rules',
+    expr:`(node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes) * 100 < 15
+and
+predict_linear(node_filesystem_avail_bytes[6h], 4 * 3600) < 0`,
+    severity:'critical',
+    labels:{ team:'infra' },
+    annots:{
+      summary:'{{ $labels.mountpoint }} on {{ $labels.instance }} filling up',
+      description:'Filesystem {{ $labels.mountpoint }} is under 15% free and predicted to fill in 4h at current rate.',
+    },
+  },
+  restart: {
+    label:'Container restart loop', hint:'CrashLoopBackOff detection via kube-state-metrics.',
+    alert:'PodCrashLooping', for:'5m', keep:'', group:'kubernetes.rules',
+    expr:`rate(kube_pod_container_status_restarts_total[5m]) * 60 * 5 > 3`,
+    severity:'critical',
+    labels:{ team:'platform', page:'true' },
+    annots:{
+      summary:'Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash-looping',
+      description:'Container has restarted {{ $value }} times in the last 5 minutes.',
+    },
+  },
+  saturation: {
+    label:'CPU saturation', hint:'Node CPU utilisation > 90% for 10 minutes.',
+    alert:'NodeCPUSaturation', for:'10m', keep:'', group:'node.rules',
+    expr:`100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90`,
+    severity:'warning',
+    labels:{ team:'infra' },
+    annots:{
+      summary:'{{ $labels.instance }} CPU > 90%',
+      description:'CPU has been >90% for 10 minutes on {{ $labels.instance }} ({{ $value | humanize }}%).',
+    },
+  },
+  downed: {
+    label:'Target down', hint:'A scrape target has been down for 5 minutes.',
+    alert:'TargetDown', for:'5m', keep:'2m', group:'monitoring.rules',
+    expr:`up == 0`,
+    severity:'critical',
+    labels:{ team:'platform' },
+    annots:{
+      summary:'{{ $labels.job }} target down on {{ $labels.instance }}',
+      description:'The Prometheus scrape target has been unreachable for 5 minutes.',
+    },
+  },
+  budgetburn: {
+    label:'Multi-window error-budget burn', hint:'Google SRE fast-burn: 14.4× budget burn over 1h AND 6× over 6h.',
+    alert:'ErrorBudgetBurnFast', for:'2m', keep:'', group:'slo.rules',
+    expr:`(
+  sum(rate(http_requests_total{status=~"5.."}[1h])) / sum(rate(http_requests_total[1h])) > (14.4 * 0.001)
+  and
+  sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > (14.4 * 0.001)
+)`,
+    severity:'page',
+    labels:{ slo:'availability-99.9', team:'platform' },
+    annots:{
+      summary:'Fast error-budget burn on availability SLO',
+      description:'Consuming budget at 14.4× the sustainable rate — 2% of 30-day budget in 1h.',
+      runbook_url:'https://runbooks.example.com/slo-burn',
+    },
+  },
+};
+
+let sev = 'warning';
+let labels = [];
+let annots = [];
+
+function setSev(btn){
+  document.querySelectorAll('#sevRow button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  sev = btn.dataset.sev;
+  render();
+}
+
+function addLabel(k, v){
+  labels.push({ id: crypto.randomUUID?.() || String(Math.random()), key: k || '', value: v || '' });
+  renderLabels();
+  render();
+}
+function delLabel(id){ labels = labels.filter(l => l.id !== id); renderLabels(); render(); }
+
+function addAnnot(k, v){
+  annots.push({ id: crypto.randomUUID?.() || String(Math.random()), key: k || '', value: v || '' });
+  renderAnnots();
+  render();
+}
+function delAnnot(id){ annots = annots.filter(a => a.id !== id); renderAnnots(); render(); }
+
+function renderLabels(){
+  const box = $('labels');
+  box.innerHTML = '';
+  for (const l of labels) {
+    const row = document.createElement('div');
+    row.className = 'kv-row';
+    row.innerHTML = `
+      <input value="${escAttr(l.key)}" placeholder="team" oninput="updLabel('${l.id}','key',this.value)">
+      <input value="${escAttr(l.value)}" placeholder="platform" oninput="updLabel('${l.id}','value',this.value)">
+      <button onclick="delLabel('${l.id}')">✕</button>`;
+    box.appendChild(row);
+  }
+}
+function renderAnnots(){
+  const box = $('annots');
+  box.innerHTML = '';
+  for (const a of annots) {
+    const row = document.createElement('div');
+    row.className = 'kv-row';
+    row.innerHTML = `
+      <input value="${escAttr(a.key)}" placeholder="summary" oninput="updAnnot('${a.id}','key',this.value)">
+      <input value="${escAttr(a.value)}" placeholder="{{ $labels.job }} broke" oninput="updAnnot('${a.id}','value',this.value)">
+      <button onclick="delAnnot('${a.id}')">✕</button>`;
+    box.appendChild(row);
+  }
+}
+function updLabel(id, field, v){ const l = labels.find(x => x.id === id); if (l) { l[field] = v; render(); } }
+function updAnnot(id, field, v){ const a = annots.find(x => x.id === id); if (a) { a[field] = v; render(); } }
+
+function escAttr(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escYaml(s){
+  s = String(s);
+  if (s === '') return '""';
+  if (/[:#\-{}\[\],&*!|>%@`?]|^\s|\s$|^(true|false|null|yes|no|on|off)$/i.test(s) || /\d/.test(s[0])) {
+    return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  }
+  return s;
+}
+function indent(s, n){
+  const pad = ' '.repeat(n);
+  return s.split('\n').map(l => l ? pad + l : l).join('\n');
+}
+
+function pickTmpl(key){
+  document.querySelectorAll('#tmplRow .preset-tag').forEach(t => t.classList.toggle('on', t.dataset.k === key));
+  const t = TEMPLATES[key];
+  if (!t) return;
+  $('alertName').value = t.alert;
+  $('forWindow').value = t.for;
+  $('keep').value = t.keep;
+  $('group').value = t.group;
+  $('expr').value = t.expr;
+  sev = t.severity;
+  document.querySelectorAll('#sevRow button').forEach(b => b.classList.toggle('on', b.dataset.sev === sev));
+  labels = Object.entries(t.labels || {}).map(([k, v]) => ({ id: k, key: k, value: v }));
+  annots = Object.entries(t.annots || {}).map(([k, v]) => ({ id: k, key: k, value: v }));
+  renderLabels(); renderAnnots();
+  $('tmplHint').textContent = t.hint;
+  render();
+}
+
+function render(){
+  const alert = $('alertName').value.trim() || 'MyAlert';
+  const forW = $('forWindow').value.trim();
+  const keep = $('keep').value.trim();
+  const group = $('group').value.trim() || 'my.rules';
+  const expr = $('expr').value.replace(/\r/g, '').replace(/\s+$/g, '');
+
+  const allLabels = [ { key: 'severity', value: sev }, ...labels.filter(l => l.key && l.value) ];
+  const allAnnots = annots.filter(a => a.key && a.value);
+
+  let rule = `- alert: ${alert}\n`;
+  const exprLines = expr.split('\n');
+  if (exprLines.length === 1) rule += `  expr: ${escYaml(exprLines[0])}\n`;
+  else rule += `  expr: |\n${indent(expr, 4)}\n`;
+  if (forW) rule += `  for: ${forW}\n`;
+  if (keep) rule += `  keep_firing_for: ${keep}\n`;
+  if (allLabels.length) {
+    rule += `  labels:\n`;
+    for (const l of allLabels) rule += `    ${l.key}: ${escYaml(l.value)}\n`;
+  }
+  if (allAnnots.length) {
+    rule += `  annotations:\n`;
+    for (const a of allAnnots) {
+      const vLines = a.value.split('\n');
+      if (vLines.length === 1) rule += `    ${a.key}: ${escYaml(vLines[0])}\n`;
+      else rule += `    ${a.key}: |\n${indent(a.value, 6)}\n`;
+    }
+  }
+
+  const yaml = `groups:
+- name: ${group}
+  rules:
+${indent(rule, 2)}`;
+  $('cfg').textContent = yaml.trimEnd();
+
+  const kube = `apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ${group.replace(/\./g, '-')}
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+  - name: ${group}
+    rules:
+${indent(rule, 4)}`;
+  $('kube').textContent = kube.trimEnd();
+
+  const warns = [];
+  if (!forW) warns.push('ℹ No `for:` window set — the alert fires on the first evaluation. Consider at least 2m for anything you page on.');
+  if (/\brate\(.+?\[(\d+)s\]/.test(expr)) warns.push('ℹ `rate()` windows shorter than a minute rarely make sense with a default 15s scrape interval.');
+  if (sev === 'page' && !allAnnots.some(a => a.key === 'runbook_url')) warns.push('⚠ severity=page but no `runbook_url` annotation — add one so the on-call engineer has instructions.');
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(alert)) warns.push('⚠ alertname should be CamelCase (no spaces, no snake_case) to match the community convention.');
+  if (!expr.trim()) warns.push('⚠ Empty `expr:` — Prometheus will reject the rule.');
+  const box = $('warn');
+  if (warns.length) box.innerHTML = warns.map(w => `<div class="${w.startsWith('⚠') ? 'warn' : 'ok'}">${w}</div>`).join('');
+  else box.innerHTML = '<div class="ok">✓ Rule looks well-formed.</div>';
+}
+
+async function copyCfg(){ try { await navigator.clipboard.writeText($('cfg').textContent); } catch (e) {} }
+async function copyKube(){ try { await navigator.clipboard.writeText($('kube').textContent); } catch (e) {} }
+
+const tmplRow = $('tmplRow');
+for (const [k, t] of Object.entries(TEMPLATES)) {
+  const el = document.createElement('span');
+  el.className = 'preset-tag';
+  el.dataset.k = k;
+  el.textContent = t.label;
+  el.onclick = () => pickTmpl(k);
+  tmplRow.appendChild(el);
+}
+
+pickTmpl('errorrate');
+</script>
+</body>
+</html>

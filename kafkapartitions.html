@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kafka Partition &amp; Throughput Sizer — Free Online Tool</title>
+<meta name="description" content="Size a Kafka topic — recommend partition count from target throughput, estimate cluster storage per broker from retention &amp; replication, and preview producer batch settings.">
+<meta name="keywords" content="kafka partition calculator, kafka sizing, kafka storage, kafka throughput, kafka retention, cluster planning">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/kafkapartitions.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:.82rem;font-weight:600;color:var(--muted)}
+.fg input,.fg select{padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:.9rem}
+.result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:14px}
+.result-box{padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center}
+.result-box .value{font-family:var(--mono);font-size:1.35rem;font-weight:700;color:var(--accent)}
+.result-box .sub{font-size:.72rem;color:var(--muted);margin-top:4px}
+.result-box .label{font-size:.78rem;color:var(--muted);margin-top:4px}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.preset-tag{padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:.78rem;cursor:pointer;background:var(--surface);font-family:var(--sans)}
+.preset-tag:hover{background:var(--surface2)}
+.breakdown{font-family:var(--mono);font-size:.85rem;line-height:1.8}
+.breakdown .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--border)}
+.breakdown .row:last-child{border-bottom:none}
+.breakdown .total{font-weight:700;color:var(--accent);border-top:2px solid var(--border);padding-top:8px;margin-top:4px}
+.warn{padding:10px 12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:var(--radius);font-size:.85rem;color:#92400e;margin-top:10px}
+.ok{padding:10px 12px;background:#dcfce7;border:1px solid #86efac;border-radius:var(--radius);font-size:.85rem;color:#166534;margin-top:10px}
+.tbl{width:100%;border-collapse:collapse;font-size:.85rem;font-family:var(--mono);margin-top:10px}
+.tbl th,.tbl td{padding:8px 10px;border:1px solid var(--border);text-align:right}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl th{background:var(--surface);font-weight:600}
+pre.cfg{font-family:var(--mono);font-size:.82rem;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);white-space:pre-wrap;overflow:auto;line-height:1.55}
+@media(max-width:768px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Kafka Partition &amp; Throughput Sizer</h1>
+<p class="subtitle">Turn a target throughput and retention window into a partition count, cluster storage per broker, and a starter <code>topics</code> config for a new Kafka topic.</p>
+
+<div class="card">
+<h2>&#9889; Workload Presets</h2>
+<div class="presets">
+<span class="preset-tag" onclick="applyPreset('web')">Web click stream</span>
+<span class="preset-tag" onclick="applyPreset('iot')">IoT telemetry (small)</span>
+<span class="preset-tag" onclick="applyPreset('cdc')">Debezium CDC</span>
+<span class="preset-tag" onclick="applyPreset('logs')">App log shipping</span>
+<span class="preset-tag" onclick="applyPreset('metrics')">Metrics pipeline</span>
+<span class="preset-tag" onclick="applyPreset('video')">Video events</span>
+<span class="preset-tag" onclick="applyPreset('trades')">Trade ticks</span>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128200; Workload</h2>
+<div class="grid2">
+<div class="fg"><label>Peak producer rate (msg/s)</label><input type="number" id="rate" value="50000" min="0" step="1000" oninput="calc()"></div>
+<div class="fg"><label>Avg record size (bytes, incl. key + headers)</label><input type="number" id="avgSize" value="512" min="0" step="1" oninput="calc()"></div>
+<div class="fg"><label>Peak-to-average burst factor</label><input type="number" id="burst" value="2" min="1" step="0.1" oninput="calc()"></div>
+<div class="fg"><label>Consumer groups</label><input type="number" id="groups" value="2" min="1" step="1" oninput="calc()"></div>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128295; Broker &amp; Partition Assumptions</h2>
+<div class="grid2">
+<div class="fg"><label>Single-partition write ceiling (MB/s)</label><input type="number" id="partThroughput" value="10" min="0.1" step="0.5" oninput="calc()"></div>
+<div class="fg"><label>Single-consumer read ceiling (MB/s)</label><input type="number" id="consThroughput" value="20" min="0.1" step="0.5" oninput="calc()"></div>
+<div class="fg"><label>Replication factor</label><input type="number" id="rf" value="3" min="1" step="1" oninput="calc()"></div>
+<div class="fg"><label>Broker count</label><input type="number" id="brokers" value="6" min="1" step="1" oninput="calc()"></div>
+<div class="fg"><label>Retention</label><input type="number" id="retention" value="7" min="0" step="0.5" oninput="calc()"></div>
+<div class="fg"><label>Retention unit</label>
+<select id="retUnit" onchange="calc()">
+<option value="hours">hours</option>
+<option value="days" selected>days</option>
+<option value="weeks">weeks</option>
+</select></div>
+<div class="fg"><label>Compression ratio (1 = none, 0.3 = ~3&times;)</label><input type="number" id="compression" value="0.4" min="0.05" max="1" step="0.05" oninput="calc()"></div>
+<div class="fg"><label>On-disk overhead (index, .snapshot, %)</label><input type="number" id="overhead" value="10" min="0" step="1" oninput="calc()"></div>
+</div>
+<div id="warn"></div>
+</div>
+
+<div class="card">
+<h2>&#128202; Sizing Result</h2>
+<div class="result-grid">
+<div class="result-box"><div class="value" id="rPart">–</div><div class="label">Recommended partitions</div><div class="sub" id="rPartDetail">–</div></div>
+<div class="result-box"><div class="value" id="rTput">–</div><div class="label">Ingress throughput (MB/s)</div><div class="sub" id="rTputPeak">–</div></div>
+<div class="result-box"><div class="value" id="rStore">–</div><div class="label">Log per broker</div><div class="sub" id="rStoreCluster">–</div></div>
+<div class="result-box"><div class="value" id="rCons">–</div><div class="label">Max consumer parallelism</div><div class="sub" id="rConsGroups">–</div></div>
+</div>
+
+<div class="breakdown" style="margin-top:14px">
+<div class="row"><span>Uncompressed bytes/s</span><span id="bReqRaw">–</span></div>
+<div class="row"><span>Compressed bytes/s</span><span id="bReqComp">–</span></div>
+<div class="row"><span>Peak bytes/s (bursted)</span><span id="bPeak">–</span></div>
+<div class="row"><span>Retention seconds</span><span id="bRetSec">–</span></div>
+<div class="row"><span>Log size before replication</span><span id="bLogRaw">–</span></div>
+<div class="row"><span>&times; replication (RF)</span><span id="bLogRf">–</span></div>
+<div class="row"><span>&times; overhead</span><span id="bLogOver">–</span></div>
+<div class="row total"><span>Cluster on-disk footprint</span><span id="bLogTotal">–</span></div>
+</div>
+</div>
+
+<div class="card">
+<h2>&#128220; Config Snippet</h2>
+<pre class="cfg" id="cfg">–</pre>
+<p style="font-size:.78rem;color:var(--muted);margin-top:8px">
+Paste into a Terraform <code>confluentcloud_kafka_topic</code>, Strimzi <code>KafkaTopic</code>, or feed straight to <code>kafka-topics.sh --create</code>. Retention is emitted in ms as Kafka expects.
+</p>
+</div>
+
+<div class="card">
+<h2>&#128260; Throughput vs. Partitions</h2>
+<table class="tbl">
+<thead><tr><th>Partitions</th><th>Ingress ceiling (MB/s)</th><th>Egress ceiling (MB/s, per group)</th><th>Headroom vs. peak</th></tr></thead>
+<tbody id="tCurve"></tbody>
+</table>
+</div>
+
+<div class="card">
+<h2>Notes</h2>
+<p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+<strong>Rule of thumb.</strong> Confluent recommends <em>at most 4,000 partitions per broker</em> and <em>200,000 per cluster</em> for classic ZooKeeper-mode Kafka; KRaft mode raises the ceiling but the per-partition metadata cost is the same. Under-partitioning caps producer throughput; over-partitioning inflates end-to-end latency and controller work.
+</p>
+<p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+<strong>Storage.</strong> A partition is a sequence of segment files (<code>.log</code>, <code>.index</code>, <code>.timeindex</code>). Index &amp; snapshot files add ~5–15&nbsp;% depending on segment size and retention. Log compaction can shrink footprint drastically for keyed topics, but this tool assumes a plain time-retained log.
+</p>
+<p style="font-size:.85rem;color:var(--muted);line-height:1.55">
+<strong>Single-partition ceilings.</strong> The write ceiling depends on record size, disk IOPS, RF, and network. 10&nbsp;MB/s is a widely-cited safe number for RF=3 on SSD; you can push a partition harder with idempotent large-batch producers, but a hot partition remains the single biggest latency risk.
+</p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const PRESETS = {
+  web:    { rate:50000, avgSize:512, burst:3, groups:3, partThroughput:10, consThroughput:20, rf:3, brokers:6, retention:7, retUnit:'days', compression:0.4, overhead:10 },
+  iot:    { rate:200000, avgSize:96, burst:2, groups:2, partThroughput:8, consThroughput:15, rf:3, brokers:9, retention:3, retUnit:'days', compression:0.3, overhead:10 },
+  cdc:    { rate:8000, avgSize:1500, burst:4, groups:2, partThroughput:6, consThroughput:12, rf:3, brokers:4, retention:14, retUnit:'days', compression:0.35, overhead:12 },
+  logs:   { rate:120000, avgSize:800, burst:2, groups:4, partThroughput:10, consThroughput:20, rf:3, brokers:12, retention:5, retUnit:'days', compression:0.25, overhead:10 },
+  metrics:{ rate:500000, avgSize:180, burst:1.5, groups:2, partThroughput:12, consThroughput:25, rf:3, brokers:8, retention:1, retUnit:'days', compression:0.35, overhead:8 },
+  video:  { rate:2000, avgSize:4096, burst:5, groups:1, partThroughput:8, consThroughput:15, rf:3, brokers:5, retention:2, retUnit:'days', compression:0.9, overhead:8 },
+  trades: { rate:80000, avgSize:220, burst:6, groups:5, partThroughput:15, consThroughput:30, rf:3, brokers:7, retention:14, retUnit:'days', compression:0.45, overhead:10 },
+};
+
+function applyPreset(k){ const p = PRESETS[k]; for (const key in p) { const el = $(key); if (el) el.value = p[key]; } calc(); }
+
+function humanBytes(n){
+  if (!isFinite(n) || n <= 0) return '0 B';
+  const u = ['B','KB','MB','GB','TB','PB','EB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(n >= 100 ? 0 : n >= 10 ? 1 : 2) + ' ' + u[i];
+}
+function humanRate(bps){
+  const kb = bps / 1000;
+  if (kb < 1000) return kb.toFixed(1) + ' KB/s';
+  const mb = kb / 1000;
+  if (mb < 1000) return mb.toFixed(1) + ' MB/s';
+  return (mb / 1000).toFixed(2) + ' GB/s';
+}
+function humanCount(n){
+  if (n < 1000) return n.toString();
+  if (n < 1_000_000) return (n/1000).toFixed(1)+'k';
+  return (n/1_000_000).toFixed(2)+'M';
+}
+
+function retentionSeconds(){
+  const v = parseFloat($('retention').value) || 0;
+  const u = $('retUnit').value;
+  return u === 'hours' ? v * 3600 : u === 'weeks' ? v * 7 * 86400 : v * 86400;
+}
+
+function calc(){
+  const rate = Math.max(0, parseFloat($('rate').value) || 0);
+  const avgSize = Math.max(0, parseFloat($('avgSize').value) || 0);
+  const burst = Math.max(1, parseFloat($('burst').value) || 1);
+  const groups = Math.max(1, parseInt($('groups').value) || 1);
+  const partT = Math.max(0.1, parseFloat($('partThroughput').value) || 0.1) * 1_000_000;
+  const consT = Math.max(0.1, parseFloat($('consThroughput').value) || 0.1) * 1_000_000;
+  const rf = Math.max(1, parseInt($('rf').value) || 1);
+  const brokers = Math.max(1, parseInt($('brokers').value) || 1);
+  const retSec = retentionSeconds();
+  const comp = Math.min(1, Math.max(0.05, parseFloat($('compression').value) || 1));
+  const overhead = Math.max(0, parseFloat($('overhead').value) || 0) / 100;
+
+  const rawBps = rate * avgSize;
+  const compBps = rawBps * comp;
+  const peakBps = compBps * burst;
+
+  const partForIngress = Math.ceil(peakBps / partT);
+  const partForConsumer = Math.ceil(peakBps / consT);
+  const partForBrokerSpread = Math.max(1, brokers);
+  const recommended = Math.max(partForIngress, partForConsumer, partForBrokerSpread, 1);
+
+  const logRaw = compBps * retSec;
+  const logRf = logRaw * rf;
+  const logOver = logRf * (1 + overhead);
+  const logPerBroker = logOver / brokers;
+
+  $('rPart').textContent = recommended.toString();
+  $('rPartDetail').textContent = `≥${partForIngress} (ingress) · ≥${partForConsumer} (consumer)`;
+
+  $('rTput').textContent = (compBps / 1_000_000).toFixed(1);
+  $('rTputPeak').textContent = 'peak: ' + humanRate(peakBps);
+
+  $('rStore').textContent = humanBytes(logPerBroker);
+  $('rStoreCluster').textContent = 'cluster: ' + humanBytes(logOver);
+
+  const parallelism = Math.min(recommended, Math.floor(consT * recommended / peakBps) || recommended);
+  $('rCons').textContent = recommended.toString();
+  $('rConsGroups').textContent = `${groups} groups × up to ${recommended} consumers each`;
+
+  $('bReqRaw').textContent = humanRate(rawBps);
+  $('bReqComp').textContent = humanRate(compBps);
+  $('bPeak').textContent = humanRate(peakBps);
+  $('bRetSec').textContent = retSec.toLocaleString() + ' s';
+  $('bLogRaw').textContent = humanBytes(logRaw);
+  $('bLogRf').textContent = humanBytes(logRf);
+  $('bLogOver').textContent = humanBytes(logOver);
+  $('bLogTotal').textContent = humanBytes(logOver) + ' (' + humanBytes(logPerBroker) + '/broker)';
+
+  const warns = [];
+  if (recommended / brokers > 4000) warns.push(`⚠ ${recommended} partitions on ${brokers} brokers ≈ ${Math.ceil(recommended/brokers)} per broker — above Confluent's 4,000/broker soft limit.`);
+  if (recommended > 200000) warns.push('⚠ Above the classic 200k partitions-per-cluster ceiling; use KRaft mode.');
+  if (rawBps > 1_000_000_000) warns.push('⚠ >1 GB/s uncompressed — validate NIC and disk headroom on brokers.');
+  if (recommended < brokers) warns.push('ℹ Fewer partitions than brokers — you cannot leverage every broker as a leader.');
+  if (compBps > brokers * 200 * 1_000_000) warns.push('⚠ Compressed ingress exceeds ~200 MB/s per broker — the bottleneck is likely disk / RF replication traffic.');
+  const box = $('warn');
+  if (warns.length) {
+    box.innerHTML = warns.map(w => `<div class="${w.startsWith('⚠') ? 'warn' : 'ok'}">${w}</div>`).join('');
+  } else {
+    box.innerHTML = '<div class="ok">✓ Sizing fits within the standard Kafka guardrails.</div>';
+  }
+
+  const retMs = retSec * 1000;
+  $('cfg').textContent = `# kafka-topics.sh --create
+bin/kafka-topics.sh --bootstrap-server $BROKERS \\
+  --create --topic my-topic \\
+  --partitions ${recommended} \\
+  --replication-factor ${rf} \\
+  --config retention.ms=${retMs} \\
+  --config compression.type=zstd \\
+  --config min.insync.replicas=${Math.max(1, rf - 1)}
+
+# Strimzi KafkaTopic
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: my-topic
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  partitions: ${recommended}
+  replicas: ${rf}
+  config:
+    retention.ms: ${retMs}
+    compression.type: zstd
+    min.insync.replicas: ${Math.max(1, rf - 1)}
+    segment.bytes: 1073741824`;
+
+  const curve = $('tCurve');
+  curve.innerHTML = '';
+  const anchors = [
+    Math.max(1, Math.floor(recommended / 4)),
+    Math.max(2, Math.floor(recommended / 2)),
+    recommended,
+    Math.ceil(recommended * 1.5),
+    Math.ceil(recommended * 2),
+  ];
+  const uniq = [...new Set(anchors)].sort((a, b) => a - b);
+  for (const p of uniq) {
+    const inC = (p * partT) / 1_000_000;
+    const outC = (p * consT) / 1_000_000;
+    const peak = peakBps / 1_000_000;
+    const head = ((p * partT - peakBps) / peakBps) * 100;
+    const tr = document.createElement('tr');
+    if (p === recommended) tr.style.background = 'var(--surface)';
+    tr.innerHTML = `<td>${p}</td><td>${inC.toFixed(1)}</td><td>${outC.toFixed(1)}</td><td>${head >= 0 ? '+' : ''}${head.toFixed(0)}%</td>`;
+    curve.appendChild(tr);
+  }
+}
+
+calc();
+</script>
+</body>
+</html>
