@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chinese Remainder Theorem Solver — Free Online Tool</title>
+<meta name="description" content="Solve systems of simultaneous linear congruences x ≡ aᵢ (mod mᵢ). Handles both coprime moduli (classic CRT) and the generalized non-coprime case via consistency check. Uses BigInt so it works on RSA-scale numbers.">
+<meta name="keywords" content="chinese remainder theorem, crt, modular arithmetic, congruences, rsa, number theory, extended euclidean, modular inverse">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/crt.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea {
+    width: 100%; min-height: 140px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .95rem; box-sizing: border-box; resize: vertical;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .banner {
+    margin-top: 10px; padding: 10px 14px; border-radius: var(--radius);
+    font-weight: 600; font-size: .88rem;
+  }
+  .banner.ok { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .banner.bad { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .banner.warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .results { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 14px; }
+  .stat {
+    padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2);
+  }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-family: var(--mono); font-size: 1.15rem; font-weight: 700; color: var(--text); margin-top: 6px; word-break: break-all; }
+  .stat.accent .v { color: var(--accent); }
+
+  .steps {
+    font-family: var(--mono); font-size: .85rem; background: var(--surface2);
+    padding: 12px; border-radius: var(--radius); border: 1px solid var(--border);
+    max-height: 380px; overflow: auto; white-space: pre-wrap; margin-top: 8px; line-height: 1.5;
+  }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .presets button {
+    font-size: .78rem; padding: 4px 10px; border: 1px solid var(--border);
+    background: var(--surface); border-radius: 12px; color: var(--text);
+    cursor: pointer; font-family: var(--mono);
+  }
+  .presets button:hover { background: var(--surface2); }
+  @media (max-width: 768px) { .results { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🔗 Chinese Remainder Theorem</h1>
+<p class="subtitle">Given a system of simultaneous congruences <code>x ≡ a₁ (mod m₁), x ≡ a₂ (mod m₂), …</code>, find the unique solution <code>x</code> modulo <code>lcm(m₁, m₂, …)</code> if one exists. Handles both the classic coprime case and the generalized non-coprime case (Gauss's extension), and uses <code>BigInt</code> so it survives RSA-sized numbers.</p>
+
+<div class="card">
+  <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:6px;">
+    One congruence per line: <code>x ≡ a (mod m)</code> or the short forms <code>a mod m</code>, <code>a % m</code>, <code>a m</code>. Negative <code>a</code> is fine.
+  </label>
+  <textarea id="input" spellcheck="false">x ≡ 2 (mod 3)
+x ≡ 3 (mod 5)
+x ≡ 2 (mod 7)</textarea>
+  <div id="banner" class="banner ok">enter above</div>
+  <div class="presets">
+    <button data-preset="x ≡ 2 (mod 3)&#10;x ≡ 3 (mod 5)&#10;x ≡ 2 (mod 7)">Sun-Tzu (105)</button>
+    <button data-preset="x ≡ 1 (mod 4)&#10;x ≡ 4 (mod 9)&#10;x ≡ 3 (mod 25)">4·9·25 coprime</button>
+    <button data-preset="x ≡ 3 (mod 6)&#10;x ≡ 5 (mod 8)">Non-coprime, solvable</button>
+    <button data-preset="x ≡ 2 (mod 6)&#10;x ≡ 5 (mod 8)">Non-coprime, no solution</button>
+    <button data-preset="x ≡ 1 (mod 2)&#10;x ≡ 2 (mod 3)&#10;x ≡ 3 (mod 5)&#10;x ≡ 4 (mod 7)&#10;x ≡ 5 (mod 11)">5-prime chain</button>
+    <button data-preset="x ≡ 12345678901234567 (mod 100000000000007)&#10;x ≡ 98765432109876543 (mod 100000000000031)">BigInt sample</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="results">
+    <div class="stat accent"><div class="k">Solution x (smallest non-negative)</div><div class="v" id="outX">—</div></div>
+    <div class="stat"><div class="k">Modulus M = lcm(mᵢ)</div><div class="v" id="outM">—</div></div>
+  </div>
+  <p style="font-size:.82rem;color:var(--muted);margin-top:10px;">
+    The full solution set is <code>x, x + M, x + 2M, …</code> — every integer congruent to the shown value mod <code>M</code>.
+  </p>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1rem;margin-bottom:8px;">Step-by-Step Derivation</h2>
+  <div id="steps" class="steps">Solving…</div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1rem;margin-bottom:8px;">Why the theorem matters</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6">
+    First stated in the 3rd-century <em>Sunzi Suanjing</em> ("There are certain things whose number is unknown. If we count them by threes, we have two left over…"), the Chinese Remainder Theorem tells you that if the moduli are pairwise coprime, exactly one residue class modulo their product satisfies all the congruences. Modern uses: RSA-CRT decryption is up to 4× faster than plain modular exponentiation by working modulo the two primes separately; error-correcting codes use CRT to reconstruct residues from redundant checks; interpolation algorithms (Karatsuba, FFT-based multiplication) piggyback on the same reconstruction trick.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function absB(x) { return x < 0n ? -x : x; }
+
+function extGcd(a, b) {
+  if (b === 0n) return { g: a, x: 1n, y: 0n };
+  const r = extGcd(b, a % b);
+  return { g: r.g, x: r.y, y: r.x - (a / b) * r.y };
+}
+
+function modInv(a, m) {
+  const { g, x } = extGcd(((a % m) + m) % m, m);
+  if (g !== 1n) return null;
+  return ((x % m) + m) % m;
+}
+
+function mmod(a, m) { return ((a % m) + m) % m; }
+
+function parseLine(line) {
+  line = line.trim();
+  if (!line || line.startsWith('#') || line.startsWith('//')) return null;
+  let m;
+  m = line.match(/^x\s*[≡=]\s*(-?\d+)\s*[\(]?\s*mod\s+(\d+)\s*\)?$/i);
+  if (m) return [BigInt(m[1]), BigInt(m[2])];
+  m = line.match(/^(-?\d+)\s*mod\s+(\d+)$/i);
+  if (m) return [BigInt(m[1]), BigInt(m[2])];
+  m = line.match(/^(-?\d+)\s*%\s*(\d+)$/);
+  if (m) return [BigInt(m[1]), BigInt(m[2])];
+  m = line.match(/^(-?\d+)[\s,;]+(\d+)$/);
+  if (m) return [BigInt(m[1]), BigInt(m[2])];
+  throw new Error(`Can't parse: "${line}"`);
+}
+
+function combine(a1, m1, a2, m2, steps) {
+  const { g, x } = extGcd(m1, m2);
+  const diff = a2 - a1;
+  if (diff % g !== 0n) {
+    steps.push(`  ✗ diff (a₂ − a₁) = ${diff} is not divisible by gcd(m₁, m₂) = ${g} → NO SOLUTION.`);
+    return null;
+  }
+  const lcm = (m1 / g) * m2;
+  const k = mmod((x * (diff / g)) % (m2 / g), m2 / g);
+  const a = mmod(a1 + m1 * k, lcm);
+  steps.push(`  gcd(${m1}, ${m2}) = ${g}    (${diff} / ${g} = ${diff / g})`);
+  steps.push(`  lcm = ${lcm}`);
+  steps.push(`  merged: x ≡ ${a} (mod ${lcm})`);
+  return [a, lcm];
+}
+
+function solve(pairs) {
+  const steps = [];
+  if (pairs.length === 0) throw new Error('Add at least one congruence.');
+  for (const [a, m] of pairs) if (m <= 0n) throw new Error(`Modulus must be positive (got ${m}).`);
+
+  let a = mmod(pairs[0][0], pairs[0][1]);
+  let m = pairs[0][1];
+  steps.push(`start: x ≡ ${a} (mod ${m})`);
+
+  for (let i = 1; i < pairs.length; i++) {
+    const [ai, mi] = [mmod(pairs[i][0], pairs[i][1]), pairs[i][1]];
+    steps.push(`merge with x ≡ ${ai} (mod ${mi}):`);
+    const merged = combine(a, m, ai, mi, steps);
+    if (merged === null) return { ok:false, steps };
+    [a, m] = merged;
+  }
+  return { ok:true, x: a, M: m, steps };
+}
+
+function render() {
+  const lines = $('input').value.split(/\r?\n/);
+  let pairs;
+  try {
+    pairs = lines.map(parseLine).filter(Boolean);
+  } catch (e) {
+    $('banner').className = 'banner bad';
+    $('banner').textContent = '✗ ' + e.message;
+    $('outX').textContent = '—';
+    $('outM').textContent = '—';
+    $('steps').textContent = '';
+    return;
+  }
+  if (pairs.length === 0) {
+    $('banner').className = 'banner warn';
+    $('banner').textContent = '⚠ Enter at least one congruence.';
+    $('outX').textContent = '—';
+    $('outM').textContent = '—';
+    $('steps').textContent = '';
+    return;
+  }
+
+  let result;
+  try { result = solve(pairs); }
+  catch (e) {
+    $('banner').className = 'banner bad';
+    $('banner').textContent = '✗ ' + e.message;
+    return;
+  }
+
+  $('steps').textContent = result.steps.join('\n');
+  if (!result.ok) {
+    $('banner').className = 'banner bad';
+    $('banner').textContent = '✗ No solution — congruences are inconsistent.';
+    $('outX').textContent = 'none';
+    $('outM').textContent = '—';
+    return;
+  }
+
+  const coprime = pairs.every(([, mi], i) => pairs.slice(i+1).every(([, mj]) => extGcd(mi, mj).g === 1n));
+  $('banner').className = 'banner ok';
+  $('banner').textContent = coprime
+    ? `✓ Unique solution mod product-of-moduli (moduli are pairwise coprime — classic CRT applies).`
+    : `✓ Unique solution mod lcm (moduli share factors; used the generalized CRT / Gauss form).`;
+  $('outX').textContent = result.x.toString();
+  $('outM').textContent = result.M.toString();
+}
+
+$('input').addEventListener('input', render);
+document.querySelectorAll('.presets button').forEach(b =>
+  b.addEventListener('click', () => { $('input').value = b.dataset.preset; render(); }));
+render();
+</script>
+</body>
+</html>

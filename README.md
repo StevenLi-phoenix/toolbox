@@ -175,6 +175,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Chinese Remainder Theorem Solver](crt.html) | Solve simultaneous linear congruences `x ≡ aᵢ (mod mᵢ)` — handles the classic coprime case and Gauss's generalized non-coprime case, with full extended-Euclidean derivation and `BigInt` arithmetic that survives RSA-sized moduli. |
 | [CRC Multi-Polynomial Calculator](crcmulti.html) | Compute 18 standard CRC checksums in one pass — CRC-8 (SMBus, MAXIM, ROHC, CDMA2000), CRC-16 (ARC, CCITT-FALSE, KERMIT, MODBUS, USB, XMODEM, GENIBUS, MCRF4XX), CRC-32 (IEEE 802.3, BZIP2, MPEG-2, POSIX, Castagnoli, JAMCRC). ASCII or hex input, full Rocksoft parameter display (poly, init, refIn/Out, xorOut). |
 | [Bitcoin Address Validator](btcaddress.html) | Validate Bitcoin addresses across every format — Legacy `1…` (P2PKH), Script `3…` (P2SH), Native SegWit `bc1q…` (P2WPKH/P2WSH), and Taproot `bc1p…` (P2TR Bech32m). Decodes the version byte, witness program, HRP, checksum, and recognises testnet, regtest, signet, and Litecoin variants. |
 | [MurmurHash3 Calculator](murmurhash.html) | Hash any string with Austin Appleby's MurmurHash3 — 32-bit and 128-bit (x86 and x64) variants, configurable seed, hex / decimal / base36 outputs, shard-bucket modulus, and reference vectors that match Python's `mmh3`, Guava, and Cassandra. |
@@ -260,6 +261,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [VIN Decoder & Validator](vindecoder.html) | Break down a 17-character Vehicle Identification Number — WMI (region + manufacturer), VDS, VIS, plant, and serial — plus the ISO 3779 position-9 check digit with full weighted-sum table. Decodes model year using the 30-year rollover rule (position 7 disambiguates pre-/post-2010). |
 | [Kafka Partition & Throughput Sizer](kafkapartitions.html) | Turn a target throughput and retention window into a partition count, per-broker log footprint, and a starter `kafka-topics.sh` / Strimzi `KafkaTopic` config. Peak-vs-average burst, replication factor, compression ratio, on-disk overhead, single-partition write ceilings — all live, plus a warn box flagging >4k partitions/broker or a hot-partition risk. |
 | [PostgreSQL Row Size Estimator](pgrowsize.html) | Add columns, tick nullability, and see the on-heap tuple size — 23-byte header, null bitmap, per-column MAXALIGN padding, TOAST-threshold check, rows-per-page at any `fillfactor`, and heap + PK-index footprint for a target row count. Presets for users, orders, jsonb events, pgvector 1536-dim tables, and PostGIS geometry. |
 | [Prometheus Alert Rule Builder](promalert.html) | Pick a common SRE alert template (error rate, p95 latency, memory pressure, filesystem-fill prediction, crash-loop, CPU saturation, target-down, multi-window budget burn), tune `expr`, `for`, `keep_firing_for`, add routing labels and Alertmanager annotations, and copy a ready-to-paste `groups:` YAML block or a Kubernetes `PrometheusRule`. |
@@ -441,6 +443,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [APR ⇄ APY Converter](aprapy.html) | Convert between nominal APR and effective APY across any compounding frequency — annual, semi-annual, quarterly, monthly, bi-weekly, weekly, daily, and continuous — with a live per-frequency comparison table and an N-year balance projector. |
 | [One-Rep Max (1RM) Calculator](onerm.html) | Estimate your true 1RM from any sub-maximal set using all seven classic regression formulas (Epley, Brzycki, Lander, Lombardi, O'Conner, Mayhew, Wathen) plus their averaged consensus. Full training-percentage table from 50 % warmup through 100 % tested max to 105 % overload with target reps, plus an RPE / RIR cheat sheet of working loads for 1, 3, 5, and 8-rep targets. |
 | [Hijri ⇄ Gregorian Converter](hijri.html) | Convert dates between the Islamic (Hijri AH) and Gregorian calendars in either direction using the tabular Kuwaiti / Umm al-Qura type-IIc 30-year leap cycle (epoch 1 Muḥarram 1 AH = 19 July 622 CE, Friday). Get the weekday in Arabic and English, day-of-year, year length (354 / 355), Julian Day Number, and a month-grid view that overlays each system on the other. Includes Ramaḍān, ʿĪd al-Fiṭr, ʿĪd al-Aḍḥā, Mawlid, ʿĀshūrāʾ, and Hajj key-date lookups. |
 | [Business Days Calculator](businessdays.html) | Count business days between two dates, or add / subtract working days from a reference date for SLA &amp; deadline planning. Customizable weekend pattern (Sat/Sun, Fri/Sat for GCC, Sun-only, none), built-in US federal / UK bank / EU common holiday calendars (with Easter math), and a per-month calendar view that colors business days, weekends, and holidays. |

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VIN Decoder & Validator — Free Online Tool</title>
+<meta name="description" content="Decode a 17-character Vehicle Identification Number (VIN). Breaks out WMI (manufacturer / region), VDS, VIS, model year, plant, serial, and validates the ISO 3779 check digit position 9.">
+<meta name="keywords" content="vin decoder, vin validator, vehicle identification number, wmi, model year, check digit, iso 3779, iso 3780">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/vindecoder.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .vin-input {
+    width: 100%; box-sizing: border-box;
+    padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: 1.35rem; letter-spacing: .18em;
+    text-align: center; text-transform: uppercase;
+  }
+  .vin-input:focus { outline: none; border-color: var(--accent); }
+  .banner {
+    margin-top: 12px; padding: 12px 14px; border-radius: var(--radius);
+    font-weight: 600; font-size: .9rem; text-align: center;
+  }
+  .banner.ok { background: #ecfdf5; color: var(--success); border: 1px solid #bbf7d0; }
+  .banner.bad { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .banner.warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+
+  .glyphs { display: grid; grid-template-columns: repeat(17, 1fr); gap: 4px; margin-top: 16px; }
+  .glyph {
+    text-align: center; padding: 8px 2px; border-radius: 4px; border: 1px solid var(--border);
+    font-family: var(--mono); font-size: 1rem; background: var(--surface2); position: relative;
+  }
+  .glyph b { display: block; font-size: 1.05rem; color: var(--text); font-weight: 700; }
+  .glyph span { display: block; font-size: .62rem; color: var(--muted); margin-top: 2px; }
+  .glyph.wmi { background: #eef2ff; border-color: #c7d2fe; }
+  .glyph.vds { background: #fef3c7; border-color: #fde68a; }
+  .glyph.vis { background: #dcfce7; border-color: #bbf7d0; }
+  .glyph.check { background: #ede9fe; border-color: #ddd6fe; }
+  .glyph.check.bad { background: #fef2f2; border-color: #fecaca; }
+
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: .78rem; color: var(--muted); }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--border); }
+
+  .fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 16px; }
+  .field {
+    padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface2);
+  }
+  .field .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .field .v { font-family: var(--mono); font-size: 1rem; color: var(--text); margin-top: 4px; word-break: break-all; }
+
+  .weights { font-family: var(--mono); font-size: .82rem; margin-top: 12px; overflow-x: auto; }
+  .weights table { border-collapse: collapse; }
+  .weights th, .weights td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; }
+  .weights th { background: var(--surface2); color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .presets button { font-size: .78rem; padding: 4px 10px; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; color: var(--text); cursor: pointer; font-family: var(--mono); }
+  .presets button:hover { background: var(--surface2); }
+
+  @media (max-width: 768px) {
+    .glyphs { grid-template-columns: repeat(9, 1fr); }
+    .fields { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>🚗 VIN Decoder &amp; Validator</h1>
+<p class="subtitle">Break down a 17-character Vehicle Identification Number: WMI (region + manufacturer), VDS, VIS, plant code, serial, and — crucially — validate the position-9 ISO&nbsp;3779 check digit. Decodes model year with the 30-year rollover rule that flipped in 2010.</p>
+
+<div class="card">
+  <input id="vin" class="vin-input" maxlength="20" spellcheck="false" placeholder="1HGBH41JXMN109186">
+  <div id="banner" class="banner neutral"></div>
+  <div class="presets">
+    <button data-vin="1HGBH41JXMN109186">Honda US</button>
+    <button data-vin="WBAJA5C58KWW10001">BMW (Germany)</button>
+    <button data-vin="JTMBFREV6FJ023456">Toyota (Japan)</button>
+    <button data-vin="5YJSA1E27HF206348">Tesla US</button>
+    <button data-vin="WVWZZZ1JZ3W386752">VW (Europe, no check-digit)</button>
+    <button data-vin="11111111111111111">All 1s (sample)</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1rem;margin-bottom:8px;">Position-by-Position Breakdown</h2>
+  <div id="glyphs" class="glyphs"></div>
+  <div class="legend">
+    <span><span class="sw" style="background:#eef2ff"></span>WMI (1–3)</span>
+    <span><span class="sw" style="background:#fef3c7"></span>VDS (4–8)</span>
+    <span><span class="sw" style="background:#ede9fe"></span>Check digit (9)</span>
+    <span><span class="sw" style="background:#dcfce7"></span>VIS (10–17)</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1rem;margin-bottom:8px;">Decoded Fields</h2>
+  <div class="fields" id="fields"></div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1rem;margin-bottom:8px;">Check-Digit Calculation</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:6px;">Each character maps to a value (letters translate to 1–9, digits stay themselves; I, O, Q are illegal). Multiply by the positional weight, sum, take mod 11. Remainder 10 = <code>X</code>. Non-North-American VINs frequently ignore this — an <code>X</code> or numeric mismatch there is often benign.</p>
+  <div class="weights" id="weights"></div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1rem;margin-bottom:8px;">About VIN Structure</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6">
+    ISO 3779 defines the 17-character VIN used by every carmaker since 1981. Position 1 encodes the region (1/4/5 = North America, J = Japan, K = Korea, S–T = UK / Germany / Poland, V = France / Spain / Austria, W = Germany, Y = Belgium / Finland / Sweden, Z = Italy). Positions 2–3 identify the manufacturer inside that region. Positions 10 encodes the model year with a rolling 30-year alphabet — the character <em>A</em> meant 1980, wrapped to 2010, and will wrap again to 2040. Position 11 is the assembly plant, and 12–17 is the production serial. The letters <em>I, O, Q</em> never appear anywhere in the VIN because they collide visually with 1 and 0.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const VIN_VALUES = {
+  A:1,B:2,C:3,D:4,E:5,F:6,G:7,H:8,
+  J:1,K:2,L:3,M:4,N:5,       P:7,       R:9,
+  S:2,T:3,U:4,V:5,W:6,X:7,Y:8,Z:9,
+  '0':0,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9
+};
+const WEIGHTS = [8,7,6,5,4,3,2,10,0,9,8,7,6,5,4,3,2];
+const YEAR_CODES = 'ABCDEFGHJKLMNPRSTVWXY123456789';
+
+function yearFromChar(ch, pos7) {
+  const idx = YEAR_CODES.indexOf(ch);
+  if (idx < 0) return null;
+  const early = 1980 + idx;
+  const late  = 2010 + idx;
+  const pos7Digit = /[0-9]/.test(pos7);
+  return pos7Digit ? { year: early, alt: late } : { year: late,  alt: early };
+}
+
+const WMI_REGION = [
+  { m: /^A[A-H]/, r: 'South Africa' },
+  { m: /^A[J-N]/, r: 'Ivory Coast' },
+  { m: /^AR/,     r: 'Ethiopia' },
+  { m: /^B[A-E]/, r: 'Angola' },
+  { m: /^BF/,     r: 'Kenya' },
+  { m: /^BR/,     r: 'Sri Lanka' },
+  { m: /^CA/,     r: 'Egypt' },
+  { m: /^JA/,     r: 'Japan (Isuzu, Mitsubishi)' },
+  { m: /^JH/,     r: 'Japan (Honda)' },
+  { m: /^JM/,     r: 'Japan (Mazda)' },
+  { m: /^JN/,     r: 'Japan (Nissan)' },
+  { m: /^JS/,     r: 'Japan (Suzuki)' },
+  { m: /^JT/,     r: 'Japan (Toyota)' },
+  { m: /^J/,      r: 'Japan' },
+  { m: /^K[L-R]/, r: 'South Korea' },
+  { m: /^KM/,     r: 'South Korea (Hyundai)' },
+  { m: /^KN/,     r: 'South Korea (Kia)' },
+  { m: /^L/,      r: 'China' },
+  { m: /^M[A-E]/, r: 'India' },
+  { m: /^ML/,     r: 'Thailand' },
+  { m: /^MR/,     r: 'Thailand' },
+  { m: /^N[A-E]/, r: 'Iran' },
+  { m: /^NF/,     r: 'Pakistan' },
+  { m: /^NL/,     r: 'Turkey' },
+  { m: /^P[A-E]/, r: 'Philippines' },
+  { m: /^PL/,     r: 'Malaysia' },
+  { m: /^R/,      r: 'Various Asia / Middle East' },
+  { m: /^SA/,     r: 'United Kingdom (Jaguar)' },
+  { m: /^SB/,     r: 'United Kingdom' },
+  { m: /^S[C-M]/, r: 'United Kingdom' },
+  { m: /^S[N-T]/, r: 'Germany' },
+  { m: /^S[U-Z]/, r: 'Poland' },
+  { m: /^T[A-H]/, r: 'Switzerland' },
+  { m: /^T[J-P]/, r: 'Czech Republic' },
+  { m: /^T[R-V]/, r: 'Hungary' },
+  { m: /^TW/,     r: 'Portugal' },
+  { m: /^V[A-E]/, r: 'Austria' },
+  { m: /^V[F-R]/, r: 'France' },
+  { m: /^V[S-W]/, r: 'Spain' },
+  { m: /^V[X-Z]/, r: 'Serbia / Yugoslavia' },
+  { m: /^W/,      r: 'Germany' },
+  { m: /^X[A-E]/, r: 'Russia' },
+  { m: /^X[F-K]/, r: 'Netherlands' },
+  { m: /^XL/,     r: 'Netherlands' },
+  { m: /^X[M-W]/, r: 'Bulgaria' },
+  { m: /^Y[A-E]/, r: 'Belgium' },
+  { m: /^Y[F-K]/, r: 'Finland' },
+  { m: /^YS/,     r: 'Sweden (Scania)' },
+  { m: /^YV/,     r: 'Sweden (Volvo)' },
+  { m: /^Y/,      r: 'Nordic / Baltic' },
+  { m: /^Z[A-R]/, r: 'Italy' },
+  { m: /^ZX/,     r: 'Slovenia' },
+  { m: /^1/,      r: 'United States' },
+  { m: /^2/,      r: 'Canada' },
+  { m: /^3/,      r: 'Mexico' },
+  { m: /^4/,      r: 'United States' },
+  { m: /^5/,      r: 'United States' },
+  { m: /^6/,      r: 'Australia' },
+  { m: /^7/,      r: 'New Zealand' },
+  { m: /^8/,      r: 'South America' },
+  { m: /^9/,      r: 'Brazil / Argentina' },
+];
+
+const WMI_KNOWN = {
+  '1HG': 'Honda (Marysville, OH — US)',
+  '1G1': 'Chevrolet (US, cars)',
+  '1FT': 'Ford (US, trucks)',
+  '1FA': 'Ford (US, cars)',
+  '2T1': 'Toyota (Canada)',
+  '3VW': 'Volkswagen (Mexico)',
+  '5YJ': 'Tesla (Fremont, CA — US)',
+  '7SA': 'Tesla (Austin, TX — US)',
+  'JHM': 'Honda (Japan)',
+  'JTM': 'Toyota (Japan, Toyota Motor Corp)',
+  'JN1': 'Nissan (Japan, passenger cars)',
+  'JM1': 'Mazda (Japan)',
+  'KMH': 'Hyundai (South Korea)',
+  'KNA': 'Kia (South Korea)',
+  'WBA': 'BMW (Germany)',
+  'WVW': 'Volkswagen (Wolfsburg — Germany)',
+  'WAU': 'Audi (Germany)',
+  'WDD': 'Mercedes-Benz (Germany)',
+  'WP0': 'Porsche (Germany)',
+  'YV1': 'Volvo (Sweden, cars)',
+  'ZFA': 'Fiat (Italy)',
+  'ZAM': 'Maserati (Italy)',
+  'SAJ': 'Jaguar (UK)',
+  'SAL': 'Land Rover (UK)',
+  'VF1': 'Renault (France)',
+  'VF3': 'Peugeot (France)',
+  'VF7': 'Citroën (France)',
+};
+
+function regionFor(w3) {
+  const known = WMI_KNOWN[w3];
+  for (const row of WMI_REGION) {
+    if (row.m.test(w3)) return { region: row.r, manufacturer: known || 'Unknown small manufacturer or not in local table' };
+  }
+  return { region: 'Unassigned', manufacturer: known || 'Unknown' };
+}
+
+function validate(vin) {
+  vin = (vin || '').toUpperCase().replace(/\s+/g,'');
+  if (vin.length !== 17) return { ok:false, reason: `Length ${vin.length}, need exactly 17.` };
+  const illegal = vin.match(/[IOQ]/g);
+  if (illegal) return { ok:false, reason: `Illegal letters ${[...new Set(illegal)].join(', ')} — I, O, Q are never used in VINs.` };
+  const bad = vin.match(/[^A-HJ-NPR-Z0-9]/g);
+  if (bad) return { ok:false, reason: `Unrecognised character(s): ${[...new Set(bad)].join(', ')}` };
+
+  let sum = 0;
+  for (let i = 0; i < 17; i++) sum += VIN_VALUES[vin[i]] * WEIGHTS[i];
+  const rem = sum % 11;
+  const expectedChar = rem === 10 ? 'X' : String(rem);
+  const actualChar = vin[8];
+  const checkOK = expectedChar === actualChar;
+
+  const isNorthAmerican = /^[1-5]/.test(vin);
+  return {
+    ok: true,
+    vin, sum, rem, expectedChar, actualChar, checkOK,
+    checkRelevant: isNorthAmerican
+  };
+}
+
+const positionLabels = [
+  'WMI-1 (country)',
+  'WMI-2 (mfr.)',
+  'WMI-3 (mfr.)',
+  'VDS-1', 'VDS-2', 'VDS-3', 'VDS-4', 'VDS-5',
+  'Check digit',
+  'Model year',
+  'Plant',
+  'Serial 1', 'Serial 2', 'Serial 3', 'Serial 4', 'Serial 5', 'Serial 6'
+];
+
+function render(vin) {
+  const g = document.getElementById('glyphs');
+  const b = document.getElementById('banner');
+  const f = document.getElementById('fields');
+  const w = document.getElementById('weights');
+
+  const V = validate(vin);
+  g.innerHTML = '';
+  f.innerHTML = '';
+  w.innerHTML = '';
+
+  if (!V.ok) {
+    b.className = 'banner bad';
+    b.textContent = '✗ ' + V.reason;
+    for (let i = 0; i < 17; i++) {
+      const ch = vin[i] || '·';
+      g.insertAdjacentHTML('beforeend', `<div class="glyph"><b>${ch}</b><span>${i+1}</span></div>`);
+    }
+    return;
+  }
+
+  const zoneClass = (i) => i < 3 ? 'wmi' : i < 8 ? 'vds' : i === 8 ? 'check' : 'vis';
+  for (let i = 0; i < 17; i++) {
+    const ch = V.vin[i];
+    let cls = 'glyph ' + zoneClass(i);
+    if (i === 8 && !V.checkOK && V.checkRelevant) cls += ' bad';
+    g.insertAdjacentHTML('beforeend',
+      `<div class="${cls}"><b>${ch}</b><span>${i+1}</span></div>`);
+  }
+
+  if (V.checkOK) {
+    b.className = 'banner ok';
+    b.textContent = `✓ Valid VIN — check digit matches (expected ${V.expectedChar}).`;
+  } else if (V.checkRelevant) {
+    b.className = 'banner bad';
+    b.textContent = `✗ Check digit mismatch — position 9 is ${V.actualChar}, expected ${V.expectedChar}. Likely a typo.`;
+  } else {
+    b.className = 'banner warn';
+    b.textContent = `⚠ Structural VIN — check digit mismatch (${V.actualChar} vs ${V.expectedChar}), but this VIN starts with ${V.vin[0]} (non-North-American) so many manufacturers legitimately skip the calc.`;
+  }
+
+  const wmi = V.vin.slice(0,3);
+  const info = regionFor(wmi);
+  const y = yearFromChar(V.vin[9], V.vin[6]);
+  const fields = [
+    ['WMI (positions 1–3)', wmi],
+    ['Region', info.region],
+    ['Manufacturer (best guess)', info.manufacturer],
+    ['VDS — descriptor (4–8)', V.vin.slice(3, 8)],
+    ['Check digit (9)', V.vin[8] + (V.checkOK ? '  ✓' : ` — expected ${V.expectedChar}`)],
+    ['Model year (10)', y ? `${y.year} (or ${y.alt}; disambiguated by position 7 being a ${/[0-9]/.test(V.vin[6]) ? 'digit ⇒ pre-2010' : 'letter ⇒ post-2010'})` : 'unknown'],
+    ['Plant code (11)', V.vin[10]],
+    ['Serial number (12–17)', V.vin.slice(11)],
+  ];
+  for (const [k, v] of fields) {
+    f.insertAdjacentHTML('beforeend', `<div class="field"><div class="k">${k}</div><div class="v">${v}</div></div>`);
+  }
+
+  let t = '<table><thead><tr><th>Pos</th><th>Char</th><th>Value</th><th>×Weight</th><th>Product</th></tr></thead><tbody>';
+  for (let i = 0; i < 17; i++) {
+    const ch = V.vin[i];
+    const val = VIN_VALUES[ch];
+    const wt = WEIGHTS[i];
+    const isCheck = i === 8;
+    t += `<tr${isCheck ? ' style="opacity:.55"' : ''}><td>${i+1}</td><td>${ch}</td><td>${val}</td><td>${wt}</td><td>${val*wt}</td></tr>`;
+  }
+  t += `</tbody><tfoot><tr><td colspan="4" style="text-align:right;font-weight:600">Σ =</td><td>${V.sum}</td></tr>`;
+  t += `<tr><td colspan="4" style="text-align:right;font-weight:600">mod 11 =</td><td>${V.rem}</td></tr>`;
+  t += `<tr><td colspan="4" style="text-align:right;font-weight:600">check digit =</td><td>${V.expectedChar}</td></tr></tfoot></table>`;
+  w.innerHTML = t;
+}
+
+const input = document.getElementById('vin');
+input.addEventListener('input', () => render(input.value.toUpperCase()));
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.addEventListener('click', () => { input.value = btn.dataset.vin; render(input.value); });
+});
+input.value = '1HGBH41JXMN109186';
+render(input.value);
+</script>
+</body>
+</html>
