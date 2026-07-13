@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rabin-Karp String Matching Visualizer — Free Online Tool</title>
+<meta name="description" content="Step through the Rabin-Karp rolling-hash string search algorithm. Watch the polynomial hash slide across the text window-by-window, with hash-match spurious-collision events called out and shown against the pattern hash.">
+<meta name="keywords" content="rabin karp, rolling hash, string matching, pattern search, polynomial hash, algorithm visualizer, spurious collision">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/rabinkarp.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; font-size: .88rem; }
+  .controls input, .controls select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=text] { min-width: 220px; }
+  .controls input[type=number] { width: 90px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .controls label { color: var(--muted); }
+
+  .strip { font-family: var(--mono); font-size: 1rem; overflow-x: auto; padding: 6px 0; white-space: nowrap; }
+  .strip .row { display: inline-flex; gap: 2px; }
+  .strip .cell {
+    width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 3px; background: var(--surface);
+    position: relative;
+  }
+  .strip .cell .idx { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: .62rem; color: var(--muted); }
+  .strip .cell.window { background: rgba(241, 196, 15, .28); border-color: var(--warning); }
+  .strip .cell.match { background: rgba(40, 180, 99, .3); border-color: var(--success); color: var(--success); font-weight: 700; }
+  .strip .cell.spurious { background: rgba(231, 76, 60, .28); border-color: var(--error); }
+  .strip .cell.found { background: rgba(99, 102, 241, .28); border-color: var(--accent); font-weight: 700; }
+  .strip .cell.gap { border-style: dashed; opacity: .35; }
+
+  .hash-row {
+    display: flex; gap: 14px; flex-wrap: wrap; align-items: center; padding: 10px 12px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .85rem; margin-top: 8px;
+  }
+  .hash-row .tag { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; margin-right: 4px; }
+  .hash-row .val { color: var(--text); font-weight: 700; }
+  .hash-row .eq { padding: 2px 10px; border-radius: 12px; font-size: .74rem; font-weight: 700; }
+  .hash-row .eq.yes { background: rgba(40, 180, 99, .22); color: var(--success); }
+  .hash-row .eq.no  { background: rgba(231, 76, 60, .18); color: var(--error); }
+
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px; margin: 12px 0;
+  }
+  .summary .tile {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .summary .tile .l { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .summary .tile .v { font-family: var(--mono); font-size: 1.05rem; margin-top: 3px; color: var(--text); }
+
+  .log {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2); max-height: 260px; overflow-y: auto; margin-top: 10px;
+  }
+  .log h3 { margin: 0 0 6px; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .log .r { font-family: var(--mono); font-size: .8rem; padding: 2px 0; }
+  .log .r.hit { color: var(--success); }
+  .log .r.miss { color: var(--muted); }
+  .log .r.spur { color: var(--error); }
+  .log .r.roll { color: var(--accent); }
+
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  .about strong { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Rabin-Karp String Matching Visualizer</h1>
+<p class="subtitle"><strong>Rabin-Karp</strong> hashes a window of the text and compares to the pattern's hash. When they match, it verifies character-by-character (guarding against spurious hash collisions). The trick is the <em>rolling hash</em>: sliding the window one step costs <code>O(1)</code>, so the total run is <code>O(n + m)</code> average — even faster in practice when the alphabet is large or the pattern is long, and it generalises cleanly to <em>multi-pattern</em> search.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Text</label>
+    <input type="text" id="text" value="GEEKS FOR GEEKS QUIZ" spellcheck="false">
+    <label>Pattern</label>
+    <input type="text" id="pat" value="GEEKS" spellcheck="false">
+    <label>base</label>
+    <input type="number" id="base" value="256" min="2" max="65536">
+    <label>prime q</label>
+    <input type="number" id="prime" value="101" min="3" max="9999999">
+    <button class="primary" onclick="reset()">Build & Reset</button>
+    <button id="btnStep" onclick="step()">Step ▶</button>
+    <button id="btnAll" onclick="runToEnd()">Run to end ⏭</button>
+    <label style="margin-left:auto"><input type="checkbox" id="caseSens" checked onchange="reset()"> case-sensitive</label>
+  </div>
+  <div class="summary" id="summary"></div>
+</div>
+
+<div class="card">
+  <h2>Rolling Hash</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin:0 0 8px">
+    <code>H(s) = (s[0]·b<sup>m-1</sup> + s[1]·b<sup>m-2</sup> + … + s[m-1]) mod q</code>.
+    To slide right by one: <code>H' = ((H − s<sub>old</sub>·b<sup>m-1</sup>)·b + s<sub>new</sub>) mod q</code>.
+  </p>
+  <div class="hash-row" id="hashRow"></div>
+</div>
+
+<div class="card">
+  <h2>Search Trace</h2>
+  <div class="strip" id="textStrip"></div>
+  <div class="strip" id="patStrip"></div>
+  <div class="log" id="log">
+    <h3>Events</h3>
+    <div id="logBody"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About Rabin-Karp</h2>
+  <p class="about">
+    Michael O. Rabin and Richard M. Karp published this in 1987. The naive approach is <code>O(n·m)</code> because comparing each window costs <code>O(m)</code>. Their insight: hash the window into a fixed-size fingerprint, and choose a hash you can <strong>update in O(1)</strong> as the window slides. When fingerprints match, verify the full string to rule out a <em>spurious collision</em>. The polynomial hash mod a prime <code>q</code> keeps values bounded and gives an expected collision probability of ~<code>1/q</code>. Rabin-Karp really earns its keep in <strong>multi-pattern search</strong> — hash <em>k</em> patterns, keep the fingerprints in a hash set, then scan the text once. Bioinformatics <em>k</em>-mer indexing (BLAST, minhash), plagiarism detection, and Bloom-filter-backed content dedup all live on this idea.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let state = null;
+
+function normalize(s) {
+  return $('caseSens').checked ? s : s.toLowerCase();
+}
+
+function computeHash(str, base, q) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * base + str.charCodeAt(i)) % q;
+  }
+  return h;
+}
+
+function reset() {
+  const text = normalize($('text').value);
+  const pat  = normalize($('pat').value);
+  const base = Math.max(2, +$('base').value || 256);
+  const q    = Math.max(3, +$('prime').value || 101);
+
+  if (!pat || pat.length > text.length) {
+    state = null;
+    $('textStrip').innerHTML = '';
+    $('patStrip').innerHTML = '';
+    $('logBody').innerHTML = '';
+    $('hashRow').innerHTML = '<span style="color:var(--muted)">enter a pattern shorter than the text</span>';
+    updateSummary(text.length, pat.length, 0, 0, 0, false);
+    return;
+  }
+
+  const m = pat.length, n = text.length;
+  let power = 1;
+  for (let i = 0; i < m - 1; i++) power = (power * base) % q;
+  const patHash = computeHash(pat, base, q);
+  const winHash = computeHash(text.slice(0, m), base, q);
+
+  state = {
+    text, pat, base, q,
+    m, n, power,
+    patHash,
+    winHash,
+    i: 0,
+    hashHits: 0,
+    spurious: 0,
+    matches: [],
+    done: false,
+  };
+  renderStrips();
+  renderHashRow();
+  $('logBody').innerHTML = '';
+  log('pattern hash = ' + patHash + '   power b^(m-1) mod q = ' + power, 'roll');
+  updateSummary(n, m, 0, 0, 0, false);
+  $('btnStep').disabled = false;
+  $('btnAll').disabled = false;
+}
+
+function renderStrips() {
+  const { text, pat, i, m, matches } = state;
+  const t = $('textStrip');
+  t.innerHTML = '<div class="row">' + text.split('').map((ch, k) => {
+    let cls = '';
+    if (matches.some(mm => k >= mm && k < mm + pat.length)) cls = ' found';
+    else if (k >= i && k < i + m) cls = ' window';
+    return '<span class="cell' + cls + '"><span class="idx">' + k + '</span>' + escapeCh(ch) + '</span>';
+  }).join('') + '</div>';
+
+  const p = $('patStrip');
+  const gaps = Array.from({ length: i }, () => '<span class="cell gap"></span>').join('');
+  p.innerHTML = '<div class="row">' + gaps + pat.split('').map((ch, k) =>
+    '<span class="cell window"><span class="idx">' + k + '</span>' + escapeCh(ch) + '</span>'
+  ).join('') + '</div>';
+}
+
+function renderHashRow() {
+  const { patHash, winHash, i, m, done } = state;
+  const eq = patHash === winHash;
+  const win = state.text.slice(i, i + m);
+  const status = done ? 'done' : (eq ? 'hash hit — verifying…' : 'hash miss — slide window');
+  const cls = eq ? 'yes' : 'no';
+  $('hashRow').innerHTML =
+    '<div><span class="tag">pattern H(pat)</span><span class="val">' + patHash + '</span></div>' +
+    '<div><span class="tag">window H</span><span class="val">' + winHash + '</span>' +
+    '  <span style="color:var(--muted)">at i=' + i + ' “' + escapeStr(win) + '”</span></div>' +
+    '<div class="eq ' + cls + '">' + status + '</div>';
+}
+
+function escapeCh(ch) {
+  if (ch === ' ') return '␣';
+  if (ch === '\t') return '⇥';
+  if (ch === '\n') return '↵';
+  return ch.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+function escapeStr(s) { return s.split('').map(escapeCh).join(''); }
+
+function updateSummary(n, m, hashHits, spurious, matches, done) {
+  $('summary').innerHTML =
+    '<div class="tile"><div class="l">text length n</div><div class="v">' + n + '</div></div>' +
+    '<div class="tile"><div class="l">pattern length m</div><div class="v">' + m + '</div></div>' +
+    '<div class="tile"><div class="l">hash hits</div><div class="v">' + hashHits + '</div></div>' +
+    '<div class="tile"><div class="l">spurious hits</div><div class="v">' + spurious + '</div></div>' +
+    '<div class="tile"><div class="l">true matches</div><div class="v">' + matches + '</div></div>' +
+    '<div class="tile"><div class="l">state</div><div class="v">' + (done ? 'done' : 'searching') + '</div></div>';
+}
+
+function step() {
+  if (!state || state.done) return;
+  const { text, pat, base, q, m, n, power } = state;
+
+  if (state.i > n - m) {
+    state.done = true;
+    log('scan complete — ' + state.matches.length + ' match' + (state.matches.length === 1 ? '' : 'es') +
+        ', ' + state.spurious + ' spurious collision' + (state.spurious === 1 ? '' : 's'), 'roll');
+    renderStrips(); renderHashRow();
+    updateSummary(n, m, state.hashHits, state.spurious, state.matches.length, true);
+    return;
+  }
+
+  if (state.patHash === state.winHash) {
+    state.hashHits++;
+    let ok = true;
+    for (let k = 0; k < m; k++) {
+      if (text[state.i + k] !== pat[k]) { ok = false; break; }
+    }
+    if (ok) {
+      state.matches.push(state.i);
+      log('match at i=' + state.i + '  (H=' + state.winHash + ')', 'hit');
+    } else {
+      state.spurious++;
+      log('spurious hit at i=' + state.i + '  (H=' + state.winHash + ' but strings differ)', 'spur');
+    }
+  } else {
+    log('miss at i=' + state.i + '  window H=' + state.winHash + ' ≠ pat H=' + state.patHash, 'miss');
+  }
+
+  if (state.i < n - m) {
+    const oldCh = text.charCodeAt(state.i);
+    const newCh = text.charCodeAt(state.i + m);
+    let h = (state.winHash - oldCh * power) % q;
+    if (h < 0) h += q;
+    h = (h * base + newCh) % q;
+    state.winHash = h;
+    state.i++;
+    log('  roll: drop “' + escapeCh(text[state.i - 1]) + '” add “' + escapeCh(text[state.i + m - 1]) + '” → H=' + h, 'roll');
+  } else {
+    state.i++;
+  }
+
+  renderStrips();
+  renderHashRow();
+  updateSummary(n, m, state.hashHits, state.spurious, state.matches.length, state.done);
+}
+
+function runToEnd() {
+  if (!state) return;
+  let guard = state.n + 10;
+  while (state && !state.done && guard-- > 0) step();
+}
+
+function log(msg, cls) {
+  const b = $('logBody');
+  const div = document.createElement('div');
+  div.className = 'r ' + (cls || '');
+  div.textContent = msg;
+  b.appendChild(div);
+  b.parentElement.scrollTop = b.parentElement.scrollHeight;
+}
+
+reset();
+</script>
+</body>
+</html>

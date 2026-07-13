@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verhoeff Check Digit Calculator — Free Online Tool</title>
+<meta name="description" content="Compute and validate Verhoeff check digits — a decimal checksum that catches every single-digit error and every adjacent-transposition error, unlike Luhn. Step through the dihedral-group derivation with the d, p and inv tables.">
+<meta name="keywords" content="verhoeff, check digit, checksum, dihedral group, aadhaar, error detection, mod 10, luhn alternative">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/verhoeff.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .number-input {
+    font-family: var(--mono); font-size: 1.4rem; letter-spacing: .15em;
+    text-align: center; padding: 12px 16px;
+  }
+  .result-banner {
+    margin-top: 12px; padding: 12px 16px; border-radius: var(--radius);
+    font-weight: 600; font-size: .95rem; text-align: center;
+  }
+  .result-banner.valid { background: rgba(40, 180, 99, .15); color: var(--success); border: 1px solid rgba(40, 180, 99, .4); }
+  .result-banner.invalid { background: rgba(231, 76, 60, .12); color: var(--error); border: 1px solid rgba(231, 76, 60, .35); }
+  .result-banner.neutral { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+
+  .steps-grid { display: grid; gap: 2px; margin-top: 12px; overflow-x: auto; }
+  .step-row {
+    display: grid; grid-template-columns: 60px 60px 60px 60px 90px 60px;
+    gap: 8px; align-items: center; padding: 5px 8px; font-size: .82rem;
+    font-family: var(--mono); border-radius: 4px; min-width: 460px;
+  }
+  .step-row.header { font-weight: 600; color: var(--muted); font-family: var(--sans); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .step-row:not(.header):nth-child(odd) { background: var(--surface); }
+  .step-row .n { color: var(--accent); font-weight: 600; }
+
+  .digit-viz { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin: 12px 0; }
+  .digit-box {
+    width: 36px; height: 44px; display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 1.1rem; font-weight: 600;
+    border: 2px solid var(--border); border-radius: var(--radius); background: var(--bg);
+  }
+  .digit-box.check { border-color: var(--accent); background: var(--surface2); color: var(--accent); }
+
+  .gen-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .gen-row input { flex: 1; min-width: 200px; font-family: var(--mono); }
+  .gen-result {
+    font-family: var(--mono); font-size: 1.1rem; letter-spacing: .1em;
+    padding: 8px 12px; background: var(--surface); border-radius: var(--radius);
+    text-align: center; margin-top: 8px;
+  }
+
+  .preset-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+  .tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
+  .table-wrap h3 { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 6px; }
+  table.tbl { border-collapse: collapse; font-family: var(--mono); font-size: .78rem; width: 100%; }
+  table.tbl th, table.tbl td {
+    border: 1px solid var(--border); padding: 4px 6px; text-align: center;
+    background: var(--surface);
+  }
+  table.tbl th { background: var(--surface2); color: var(--muted); font-weight: 600; }
+
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    .number-input { font-size: 1.1rem; }
+    .digit-box { width: 28px; height: 36px; font-size: .9rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Verhoeff Check Digit Calculator</h1>
+<p class="subtitle">Verhoeff is a decimal checksum built on the dihedral group <em>D<sub>5</sub></em>. It catches every single-digit substitution and, unlike Luhn (mod 10), every adjacent-digit transposition — the two most common human error classes. India's Aadhaar 12-digit ID uses it.</p>
+
+<div class="card">
+  <h2>Validate Number</h2>
+  <input class="number-input" id="validateInput" type="text" placeholder="2363" oninput="validate()" autocomplete="off" spellcheck="false">
+  <div class="preset-btns">
+    <button class="btn btn-secondary" onclick="setPreset('2363')">Wiki example (2363)</button>
+    <button class="btn btn-secondary" onclick="setPreset('75876')">5-digit (75876)</button>
+    <button class="btn btn-secondary" onclick="setPreset('123451')">6-digit (123451)</button>
+    <button class="btn btn-secondary" onclick="setPreset('124220633288')">Aadhaar-shape (12)</button>
+  </div>
+  <div id="resultBanner" class="result-banner neutral">Enter a number to validate</div>
+  <div id="digitViz" class="digit-viz"></div>
+</div>
+
+<div class="card" id="stepsCard" style="display:none">
+  <h2>Step-by-Step Derivation</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">
+    Reading right-to-left with index <code>i = 0, 1, 2, …</code>, we accumulate
+    <code>c ← d(c, p(i mod 8, n<sub>i</sub>))</code> starting from <code>c = 0</code>.
+    The number is valid iff <code>c = 0</code> after the last digit is consumed.
+    Here <code>d</code> is the multiplication table of <em>D<sub>5</sub></em> and <code>p</code> is a permutation family.
+  </p>
+  <div class="steps-grid" id="stepsGrid"></div>
+  <div id="sumLine" style="font-family:var(--mono);font-size:.9rem;font-weight:600;margin-top:8px;padding:8px;background:var(--surface);border-radius:var(--radius)"></div>
+</div>
+
+<div class="card">
+  <h2>Generate Check Digit</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">Enter a partial number and we'll compute the Verhoeff check digit to append (via <code>inv[c]</code> after running the accumulator with a placeholder <code>0</code>).</p>
+  <div class="gen-row">
+    <input id="genInput" type="text" placeholder="236" oninput="generate()" spellcheck="false">
+    <button class="btn" onclick="copyGenerated()">Copy</button>
+  </div>
+  <div class="gen-result" id="genResult">Enter a partial number above</div>
+</div>
+
+<div class="card">
+  <h2>The three tables</h2>
+  <div class="tables">
+    <div class="table-wrap">
+      <h3>d — D<sub>5</sub> multiplication</h3>
+      <table class="tbl" id="dTable"></table>
+    </div>
+    <div class="table-wrap">
+      <h3>p — permutation family</h3>
+      <table class="tbl" id="pTable"></table>
+    </div>
+    <div class="table-wrap">
+      <h3>inv — inverse under d</h3>
+      <table class="tbl" id="invTable"></table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why Verhoeff beats Luhn</h2>
+  <p class="about">
+    Jacobus Verhoeff published this scheme in 1969 (<em>Error Detecting Decimal Codes</em>, Mathematical Centre Tracts). His empirical study of transcription errors ranked them by frequency: single-digit substitution (79 %), single adjacent transposition (10.2 %), twin errors (0.6 %), jump transpositions (0.8 %), phonetic errors (0.5 %) — and he set out to catch as many as possible with a pure mod-10 checksum. The dihedral group <em>D<sub>5</sub></em> is <em>non-abelian</em>, so <code>d(a, b) ≠ d(b, a)</code> in general — that non-commutativity is exactly what lets Verhoeff detect adjacent transpositions, which Luhn misses (Luhn accepts <code>09</code> ↔ <code>90</code> without complaint). Verhoeff catches <strong>100 %</strong> of single-digit and adjacent-transposition errors, and ~95 % of twin and jump errors. India's <strong>Aadhaar</strong> 12-digit national ID and Deutsche Mark banknote serial numbers used it in production.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const D = [
+  [0,1,2,3,4,5,6,7,8,9],
+  [1,2,3,4,0,6,7,8,9,5],
+  [2,3,4,0,1,7,8,9,5,6],
+  [3,4,0,1,2,8,9,5,6,7],
+  [4,0,1,2,3,9,5,6,7,8],
+  [5,9,8,7,6,0,4,3,2,1],
+  [6,5,9,8,7,1,0,4,3,2],
+  [7,6,5,9,8,2,1,0,4,3],
+  [8,7,6,5,9,3,2,1,0,4],
+  [9,8,7,6,5,4,3,2,1,0],
+];
+
+const P = [
+  [0,1,2,3,4,5,6,7,8,9],
+  [1,5,7,6,2,8,3,0,9,4],
+  [5,8,0,3,7,9,6,1,4,2],
+  [8,9,1,6,0,4,3,5,2,7],
+  [9,4,5,3,1,2,6,8,7,0],
+  [4,2,8,6,5,7,3,9,0,1],
+  [2,7,9,3,8,0,6,4,1,5],
+  [7,0,4,6,9,1,3,2,5,8],
+];
+
+const INV = [0,4,3,2,1,5,6,7,8,9];
+
+function verhoeffTrace(digits) {
+  let c = 0;
+  const steps = [];
+  for (let i = 0; i < digits.length; i++) {
+    const n = digits[digits.length - 1 - i];
+    const pVal = P[i % 8][n];
+    const prev = c;
+    c = D[c][pVal];
+    steps.push({ i, digit: n, p_col: i % 8, pVal, prevC: prev, newC: c });
+  }
+  return { valid: c === 0, c, steps };
+}
+
+function computeCheckDigit(partial) {
+  const digits = partial.split('').map(Number);
+  const withZero = [...digits, 0];
+  let c = 0;
+  for (let i = 0; i < withZero.length; i++) {
+    const n = withZero[withZero.length - 1 - i];
+    c = D[c][P[i % 8][n]];
+  }
+  return INV[c];
+}
+
+function cleanNum(s) { return s.replace(/[\s\-]/g, ''); }
+
+function validate() {
+  const raw = cleanNum($('validateInput').value);
+  if (!raw) {
+    $('resultBanner').className = 'result-banner neutral';
+    $('resultBanner').textContent = 'Enter a number to validate';
+    $('digitViz').innerHTML = '';
+    $('stepsCard').style.display = 'none';
+    return;
+  }
+  if (!/^\d+$/.test(raw)) {
+    $('resultBanner').className = 'result-banner invalid';
+    $('resultBanner').textContent = '✗ Only digits 0-9 are allowed';
+    $('digitViz').innerHTML = '';
+    $('stepsCard').style.display = 'none';
+    return;
+  }
+
+  const digits = raw.split('').map(Number);
+  const result = verhoeffTrace(digits);
+  const banner = $('resultBanner');
+  if (result.valid) {
+    banner.className = 'result-banner valid';
+    banner.textContent = '✓ Valid — accumulator c = 0';
+  } else {
+    banner.className = 'result-banner invalid';
+    const need = INV[result.c];
+    banner.textContent = '✗ Invalid — c = ' + result.c + '. To fix, replace the last digit with ' + need + ' (or append it if this is a partial number).';
+  }
+
+  let viz = '';
+  digits.forEach((d, i) => {
+    const cls = i === digits.length - 1 ? 'check' : '';
+    viz += '<div class="digit-box ' + cls + '">' + d + '</div>';
+  });
+  $('digitViz').innerHTML = viz;
+
+  $('stepsCard').style.display = '';
+  let grid = '<div class="step-row header"><span>i</span><span>digit n</span><span>p col</span><span>p(col, n)</span><span>d(c, p)</span><span>new c</span></div>';
+  result.steps.forEach(s => {
+    grid += '<div class="step-row">' +
+      '<span>' + s.i + '</span>' +
+      '<span class="n">' + s.digit + '</span>' +
+      '<span>' + s.p_col + '</span>' +
+      '<span>' + s.pVal + '</span>' +
+      '<span>d(' + s.prevC + ',' + s.pVal + ')</span>' +
+      '<span class="n">' + s.newC + '</span>' +
+      '</div>';
+  });
+  $('stepsGrid').innerHTML = grid;
+  const verdict = result.valid ? 'valid ✓' : 'invalid ✗';
+  $('sumLine').innerHTML = 'Final accumulator <strong>c = ' + result.c + '</strong> → ' + verdict;
+}
+
+function generate() {
+  const raw = cleanNum($('genInput').value);
+  if (!raw || !/^\d+$/.test(raw)) {
+    $('genResult').textContent = 'Enter a partial number above';
+    return;
+  }
+  const check = computeCheckDigit(raw);
+  $('genResult').innerHTML = raw + '<strong style="color:var(--accent)">' + check + '</strong> <span style="color:var(--muted);font-size:.82rem">← check digit</span>';
+}
+
+function setPreset(num) { $('validateInput').value = num; validate(); }
+
+function copyGenerated() {
+  const raw = cleanNum($('genInput').value);
+  if (!raw || !/^\d+$/.test(raw)) return;
+  const check = computeCheckDigit(raw);
+  navigator.clipboard.writeText(raw + check).then(showToast);
+}
+
+function showToast() {
+  const t = $('toast'); t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+function renderTables() {
+  const dt = $('dTable');
+  let h = '<tr><th>·</th>' + Array.from({length:10}, (_,i)=>'<th>'+i+'</th>').join('') + '</tr>';
+  for (let r = 0; r < 10; r++) {
+    h += '<tr><th>' + r + '</th>' + D[r].map(v=>'<td>'+v+'</td>').join('') + '</tr>';
+  }
+  dt.innerHTML = h;
+
+  const pt = $('pTable');
+  h = '<tr><th>col</th>' + Array.from({length:10}, (_,i)=>'<th>'+i+'</th>').join('') + '</tr>';
+  for (let r = 0; r < 8; r++) {
+    h += '<tr><th>' + r + '</th>' + P[r].map(v=>'<td>'+v+'</td>').join('') + '</tr>';
+  }
+  pt.innerHTML = h;
+
+  const it = $('invTable');
+  h = '<tr>' + Array.from({length:10}, (_,i)=>'<th>'+i+'</th>').join('') + '</tr>' +
+      '<tr>' + INV.map(v=>'<td>'+v+'</td>').join('') + '</tr>';
+  it.innerHTML = h;
+}
+
+renderTables();
+setPreset('2363');
+</script>
+</body>
+</html>

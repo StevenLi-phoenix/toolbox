@@ -175,6 +175,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Verhoeff Check Digit Calculator](verhoeff.html) | Compute and validate Verhoeff check digits — a decimal checksum that catches every single-digit error and every adjacent-transposition error, unlike Luhn. Full step-by-step trace against the dihedral-group `d`, `p`, and `inv` tables. Used by India's Aadhaar 12-digit ID. |
 | [Chinese Remainder Theorem Solver](crt.html) | Solve simultaneous linear congruences `x ≡ aᵢ (mod mᵢ)` — handles the classic coprime case and Gauss's generalized non-coprime case, with full extended-Euclidean derivation and `BigInt` arithmetic that survives RSA-sized moduli. |
 | [CRC Multi-Polynomial Calculator](crcmulti.html) | Compute 18 standard CRC checksums in one pass — CRC-8 (SMBus, MAXIM, ROHC, CDMA2000), CRC-16 (ARC, CCITT-FALSE, KERMIT, MODBUS, USB, XMODEM, GENIBUS, MCRF4XX), CRC-32 (IEEE 802.3, BZIP2, MPEG-2, POSIX, Castagnoli, JAMCRC). ASCII or hex input, full Rocksoft parameter display (poly, init, refIn/Out, xorOut). |
 | [Bitcoin Address Validator](btcaddress.html) | Validate Bitcoin addresses across every format — Legacy `1…` (P2PKH), Script `3…` (P2SH), Native SegWit `bc1q…` (P2WPKH/P2WSH), and Taproot `bc1p…` (P2TR Bech32m). Decodes the version byte, witness program, HRP, checksum, and recognises testnet, regtest, signet, and Litecoin variants. |
@@ -261,6 +262,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [Rabin-Karp String Matching Visualizer](rabinkarp.html) | Step through the rolling-hash string search — polynomial hash slides window-by-window in `O(1)` per shift, and every hash-match runs a character verification with spurious-collision counts called out. Tune base, prime `q`, and watch the trace log. |
+| [Longest Common Subsequence (LCS)](lcs.html) | Watch the classic `O(n·m)` DP table fill cell-by-cell for two strings, then backtrace to recover the LCS with ↖↑← arrows drawn on the grid. Enumerates alternate optimal solutions when ties in the `max` allow them — the same table that underlies `diff` and Needleman-Wunsch alignment. |
 | [VIN Decoder & Validator](vindecoder.html) | Break down a 17-character Vehicle Identification Number — WMI (region + manufacturer), VDS, VIS, plant, and serial — plus the ISO 3779 position-9 check digit with full weighted-sum table. Decodes model year using the 30-year rollover rule (position 7 disambiguates pre-/post-2010). |
 | [Kafka Partition & Throughput Sizer](kafkapartitions.html) | Turn a target throughput and retention window into a partition count, per-broker log footprint, and a starter `kafka-topics.sh` / Strimzi `KafkaTopic` config. Peak-vs-average burst, replication factor, compression ratio, on-disk overhead, single-partition write ceilings — all live, plus a warn box flagging >4k partitions/broker or a hot-partition risk. |
 | [PostgreSQL Row Size Estimator](pgrowsize.html) | Add columns, tick nullability, and see the on-heap tuple size — 23-byte header, null bitmap, per-column MAXALIGN padding, TOAST-threshold check, rows-per-page at any `fillfactor`, and heap + PK-index footprint for a target row count. Presets for users, orders, jsonb events, pgvector 1536-dim tables, and PostGIS geometry. |

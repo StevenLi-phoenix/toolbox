@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Longest Common Subsequence (LCS) DP Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch the classic LCS dynamic-programming table fill cell-by-cell for two strings. Trace the backpointers, recover every optimal alignment, and see the resulting subsequence side-by-side with a diff-style highlight.">
+<meta name="keywords" content="lcs, longest common subsequence, dynamic programming, edit distance, diff algorithm, backtrace, algorithm visualizer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/lcs.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; font-size: .88rem; }
+  .controls input {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+    min-width: 220px;
+  }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .controls label { color: var(--muted); }
+
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin: 10px 0;
+  }
+  .summary .tile {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .summary .tile .l { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .summary .tile .v { font-family: var(--mono); font-size: 1.05rem; margin-top: 3px; color: var(--text); }
+
+  .dp-wrap { overflow: auto; padding: 6px; }
+  table.dp {
+    border-collapse: separate; border-spacing: 2px;
+    font-family: var(--mono); font-size: .82rem;
+  }
+  table.dp th, table.dp td {
+    min-width: 30px; height: 30px; padding: 2px 4px; text-align: center;
+    border: 1px solid var(--border); border-radius: 3px; background: var(--surface);
+    position: relative;
+  }
+  table.dp th { background: var(--surface2); color: var(--muted); font-weight: 600; }
+  table.dp td.zero { color: var(--muted); }
+  table.dp td.match { background: rgba(40, 180, 99, .18); border-color: var(--success); font-weight: 700; }
+  table.dp td.cur { background: rgba(241, 196, 15, .28); border-color: var(--warning); font-weight: 700; }
+  table.dp td.path { background: rgba(99, 102, 241, .22); border-color: var(--accent); font-weight: 700; }
+  table.dp td.match.path { background: rgba(40, 180, 99, .35); border-color: var(--success); color: var(--text); }
+  table.dp td .arr { position: absolute; bottom: 0; right: 2px; font-size: .58rem; color: var(--muted); }
+  table.dp .colhead { color: var(--text); }
+
+  .result-strip { font-family: var(--mono); font-size: 1.05rem; padding: 10px 12px; background: var(--surface2); border-radius: var(--radius); overflow-x: auto; white-space: nowrap; }
+  .result-strip .ch { display: inline-block; padding: 2px 4px; border-radius: 3px; margin-right: 2px; }
+  .result-strip .ch.keep { background: rgba(40, 180, 99, .28); color: var(--success); font-weight: 700; }
+  .result-strip .ch.drop { background: rgba(231, 76, 60, .18); color: var(--error); text-decoration: line-through; }
+  .result-strip .ch.add  { background: rgba(99, 102, 241, .22); color: var(--accent); font-weight: 700; }
+
+  .diff-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  .diff-cols .col h3 { font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 4px; }
+
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  .about strong { color: var(--text); }
+
+  @media (max-width: 768px) {
+    .diff-cols { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Longest Common Subsequence (LCS)</h1>
+<p class="subtitle"><strong>LCS</strong> is the longest sequence of characters that appears in the same relative order (but not necessarily contiguously) in two strings. It's the mathematical core of <code>diff</code>, of <code>git</code>'s minimum-edit view, of DNA alignment, and of every "your version vs mine" three-way merge. Fill the DP table below cell-by-cell to see how.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>A</label>
+    <input type="text" id="strA" value="AGCAT" spellcheck="false">
+    <label>B</label>
+    <input type="text" id="strB" value="GAC" spellcheck="false">
+    <button class="primary" onclick="reset()">Build & Reset</button>
+    <button id="btnStep" onclick="step()">Step ▶</button>
+    <button id="btnAll" onclick="runToEnd()">Fill all ⏭</button>
+    <label style="margin-left:auto"><input type="checkbox" id="caseSens" checked onchange="reset()"> case-sensitive</label>
+  </div>
+  <div class="controls">
+    <button onclick="setPreset('AGCAT','GAC')">AGCAT / GAC</button>
+    <button onclick="setPreset('ABCBDAB','BDCABA')">ABCBDAB / BDCABA</button>
+    <button onclick="setPreset('HUMAN','CHIMPANZEE')">HUMAN / CHIMPANZEE</button>
+    <button onclick="setPreset('kitten','sitting')">kitten / sitting</button>
+    <button onclick="setPreset('the quick brown fox','a quick blue fox')">phrase / phrase</button>
+  </div>
+  <div class="summary" id="summary"></div>
+</div>
+
+<div class="card">
+  <h2>DP Table</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin:0 0 8px">
+    <code>dp[i][j] = A[i-1] === B[j-1] ? dp[i-1][j-1] + 1 : max(dp[i-1][j], dp[i][j-1])</code>.
+    Diagonal ↖ means "matched a character", up ↑ or left ← means "extend without matching".
+  </p>
+  <div class="dp-wrap"><table class="dp" id="dpTable"></table></div>
+</div>
+
+<div class="card" id="resCard" style="display:none">
+  <h2>Longest Common Subsequence</h2>
+  <div class="result-strip" id="lcsStrip"></div>
+  <div class="diff-cols">
+    <div class="col">
+      <h3>A aligned</h3>
+      <div class="result-strip" id="diffA"></div>
+    </div>
+    <div class="col">
+      <h3>B aligned</h3>
+      <div class="result-strip" id="diffB"></div>
+    </div>
+  </div>
+  <p id="allLcs" style="font-size:.82rem;color:var(--muted);margin-top:10px;"></p>
+</div>
+
+<div class="card">
+  <h2>About LCS</h2>
+  <p class="about">
+    The <code>O(n·m)</code> DP table is the standard textbook algorithm. <strong>Where diff actually lives</strong>: <em>edit distance</em> and <em>LCS</em> are duals — edit distance = <code>n + m − 2·|LCS|</code> when the only ops are insert and delete. Unix <code>diff</code> uses the <strong>Myers algorithm</strong> (1986), which is <code>O((n+m)·D)</code> where <code>D</code> is the edit distance — a huge speed-up when files barely changed, but the ideas trace back to this same table. <strong>Hunt-Szymanski</strong> is another classic when one input has few duplicate lines. <strong>Backtracking</strong> from the bottom-right corner recovers <em>an</em> LCS, but ties in the <code>max</code> mean there can be many equally-long ones — try the "ABCBDAB / BDCABA" preset (4 LCS variants). This same table also underlies Needleman-Wunsch global-alignment scoring in bioinformatics.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let state = null;
+
+function normalize(s) { return $('caseSens').checked ? s : s.toLowerCase(); }
+
+function reset() {
+  const A = normalize($('strA').value);
+  const B = normalize($('strB').value);
+  const n = A.length, m = B.length;
+  const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+  const arrow = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(''));
+  state = { A, B, n, m, dp, arrow, i: 1, j: 1, done: n === 0 || m === 0 };
+  if (state.done) { state.done = true; }
+  renderTable();
+  updateSummary();
+  $('resCard').style.display = 'none';
+  $('btnStep').disabled = state.done;
+  $('btnAll').disabled = state.done;
+  if (state.done) finish();
+}
+
+function step() {
+  if (!state || state.done) return;
+  const { A, B, n, m, dp, arrow } = state;
+  const i = state.i, j = state.j;
+  if (A[i - 1] === B[j - 1]) {
+    dp[i][j] = dp[i - 1][j - 1] + 1;
+    arrow[i][j] = '↖';
+  } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+    dp[i][j] = dp[i - 1][j];
+    arrow[i][j] = '↑';
+  } else {
+    dp[i][j] = dp[i][j - 1];
+    arrow[i][j] = '←';
+  }
+
+  state.j++;
+  if (state.j > m) { state.j = 1; state.i++; }
+  if (state.i > n) { state.done = true; }
+  renderTable();
+  updateSummary();
+  if (state.done) finish();
+}
+
+function runToEnd() {
+  if (!state) return;
+  while (state && !state.done) step();
+}
+
+function finish() {
+  $('btnStep').disabled = true;
+  $('btnAll').disabled = true;
+  const { path, lcs } = backtrace(state);
+  state.pathSet = new Set(path.map(([i, j]) => i + ',' + j));
+  renderTable();
+  showResult(lcs, path);
+}
+
+function backtrace(st) {
+  const { A, B, n, m, dp } = st;
+  const path = [];
+  let lcs = '';
+  let i = n, j = m;
+  while (i > 0 && j > 0) {
+    if (A[i - 1] === B[j - 1]) {
+      path.push([i, j]);
+      lcs = A[i - 1] + lcs;
+      i--; j--;
+    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  return { path, lcs };
+}
+
+function collectAllLcs(st, limit) {
+  const { A, B, n, m, dp } = st;
+  const found = new Set();
+  function rec(i, j, tail) {
+    if (found.size >= limit) return;
+    if (i === 0 || j === 0) { found.add(tail); return; }
+    if (A[i - 1] === B[j - 1]) {
+      rec(i - 1, j - 1, A[i - 1] + tail);
+    } else {
+      if (dp[i - 1][j] >= dp[i][j - 1]) rec(i - 1, j, tail);
+      if (dp[i][j - 1] >= dp[i - 1][j]) rec(i, j - 1, tail);
+    }
+  }
+  rec(n, m, '');
+  return found;
+}
+
+function renderTable() {
+  const { A, B, n, m, dp, arrow, i, j, done, pathSet } = state;
+  const t = $('dpTable');
+  let h = '<tr><th></th><th></th>';
+  for (let jj = 0; jj < m; jj++) h += '<th class="colhead">' + escapeCh(B[jj]) + '</th>';
+  h += '</tr>';
+  h += '<tr><th></th><th class="zero">0</th>';
+  for (let jj = 1; jj <= m; jj++) h += '<td class="zero">0</td>';
+  h += '</tr>';
+  for (let ii = 1; ii <= n; ii++) {
+    h += '<tr><th class="colhead">' + escapeCh(A[ii - 1]) + '</th><td class="zero">0</td>';
+    for (let jj = 1; jj <= m; jj++) {
+      const filled = (ii < i) || (ii === i && jj < j) || done;
+      const isCur = !done && ii === i && jj === j;
+      const isMatch = filled && A[ii - 1] === B[jj - 1];
+      const onPath = pathSet && pathSet.has(ii + ',' + jj);
+      let cls = filled ? '' : 'zero';
+      if (isMatch) cls = 'match';
+      if (onPath) cls += ' path';
+      if (isCur) cls = 'cur';
+      const val = filled ? dp[ii][jj] : '·';
+      const arr = filled && arrow[ii][jj] ? '<span class="arr">' + arrow[ii][jj] + '</span>' : '';
+      h += '<td class="' + cls + '">' + val + arr + '</td>';
+    }
+    h += '</tr>';
+  }
+  t.innerHTML = h;
+}
+
+function escapeCh(ch) {
+  if (ch === ' ') return '␣';
+  if (ch === '\t') return '⇥';
+  return ch.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+function updateSummary() {
+  const { n, m, dp, done } = state;
+  const len = done ? dp[n][m] : '—';
+  const editDist = done ? (n + m - 2 * dp[n][m]) : '—';
+  const cells = state.done ? n * m : (state.i - 1) * m + (state.j - 1);
+  const total = n * m;
+  $('summary').innerHTML =
+    '<div class="tile"><div class="l">|A|</div><div class="v">' + n + '</div></div>' +
+    '<div class="tile"><div class="l">|B|</div><div class="v">' + m + '</div></div>' +
+    '<div class="tile"><div class="l">cells filled</div><div class="v">' + cells + ' / ' + total + '</div></div>' +
+    '<div class="tile"><div class="l">LCS length</div><div class="v">' + len + '</div></div>' +
+    '<div class="tile"><div class="l">min edit distance</div><div class="v">' + editDist + '</div></div>' +
+    '<div class="tile"><div class="l">state</div><div class="v">' + (done ? 'done' : 'building') + '</div></div>';
+}
+
+function showResult(lcs, path) {
+  $('resCard').style.display = '';
+  const A = state.A, B = state.B;
+  const matchAinB = new Set(path.map(([i, j]) => 'a' + i));
+  const matchBinB = new Set(path.map(([i, j]) => 'b' + j));
+
+  $('lcsStrip').innerHTML = lcs.length
+    ? lcs.split('').map(c => '<span class="ch keep">' + escapeCh(c) + '</span>').join('')
+    : '<span style="color:var(--muted)">(empty)</span>';
+
+  let a = '';
+  for (let i = 1; i <= A.length; i++) {
+    const cls = matchAinB.has('a' + i) ? 'keep' : 'drop';
+    a += '<span class="ch ' + cls + '">' + escapeCh(A[i - 1]) + '</span>';
+  }
+  $('diffA').innerHTML = a || '<span style="color:var(--muted)">(empty)</span>';
+
+  let b = '';
+  for (let j = 1; j <= B.length; j++) {
+    const cls = matchBinB.has('b' + j) ? 'keep' : 'add';
+    b += '<span class="ch ' + cls + '">' + escapeCh(B[j - 1]) + '</span>';
+  }
+  $('diffB').innerHTML = b || '<span style="color:var(--muted)">(empty)</span>';
+
+  const CAP = 32;
+  const all = collectAllLcs(state, CAP + 1);
+  const n = all.size;
+  const hitCap = n > CAP;
+  const listed = [...all].slice(0, 8).map(s => '<code>' + escapeCh(s || '·') + '</code>').join(', ');
+  const more = n > 8 ? ' … (+' + (n - 8) + ' more)' : '';
+  $('allLcs').innerHTML = n <= 1
+    ? 'The DP table has a unique optimal LCS.'
+    : (hitCap ? '≥ ' + CAP : n) + ' distinct optimal LCS' +
+      (n === 1 ? '' : 's') + ' (tie-breaks in the <code>max</code> let multiple backtrace paths spell out different length-' + lcs.length + ' subsequences): ' + listed + more;
+}
+
+function setPreset(a, b) {
+  $('strA').value = a; $('strB').value = b; reset();
+}
+
+reset();
+</script>
+</body>
+</html>
