@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aho-Corasick Multi-Pattern Matcher — Free Online Tool</title>
+<meta name="description" content="Search for every pattern from a dictionary in one text pass — Aho-Corasick builds a trie, wires up failure links via BFS, then streams the text in O(n + m + z) reporting all matches at every position. Watch the automaton, failure edges, and hit list live.">
+<meta name="keywords" content="aho corasick, multi-pattern matching, dictionary matching, trie, failure links, fail links, string algorithm, keyword tree, exact matching, text scanner">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/ahocorasick.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: .88rem; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls label { color: var(--muted); }
+  .controls input[type=checkbox] { accent-color: var(--accent); }
+  .pane-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 900px) { .pane-grid { grid-template-columns: 1fr; } }
+  .pane { display: flex; flex-direction: column; }
+  .pane label { font-size: .74rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .88rem;
+    box-sizing: border-box; resize: vertical;
+  }
+  #patterns { min-height: 110px; }
+  #text { min-height: 110px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; margin-top: 12px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; max-height: 520px; padding: 8px; }
+  svg.ac { display: block; min-width: 100%; }
+  .node circle { stroke: var(--border); stroke-width: 1.4; fill: var(--surface2); }
+  .node.root circle { fill: rgba(99, 102, 241, .28); stroke: var(--accent); stroke-width: 2; }
+  .node.terminal circle { fill: rgba(40, 180, 99, .22); stroke: var(--success); stroke-width: 2; }
+  .node.current circle { fill: rgba(241, 196, 15, .55); stroke: var(--warning); stroke-width: 2.6; }
+  .node text { font-family: var(--mono); font-size: 11px; fill: var(--muted); text-anchor: middle; pointer-events: none; }
+  .node text.k { fill: var(--text); font-weight: 700; font-size: 12px; }
+  .trie-edge { stroke: var(--border); stroke-width: 1.4; fill: none; }
+  .trie-edge.walk { stroke: var(--warning); stroke-width: 2.4; }
+  .fail-edge { stroke: #9b59b6; stroke-width: 1; fill: none; stroke-dasharray: 3 3; opacity: .75; }
+  .dict-edge { stroke: var(--success); stroke-width: 1; fill: none; stroke-dasharray: 5 2; opacity: .8; }
+  .elabel { font-family: var(--mono); font-size: 11px; fill: var(--muted); pointer-events: none; }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .hits { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 260px; overflow-y: auto; }
+  .hits h3 { margin: 0 0 6px; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .hits table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .82rem; }
+  .hits th, .hits td { padding: 3px 6px; text-align: left; border-bottom: 1px solid var(--border); }
+  .hits th { color: var(--muted); font-weight: 500; }
+  .hits td.idx { color: var(--muted); text-align: right; width: 55px; }
+  .hits td.pat { color: var(--success); font-weight: 700; }
+  .hits .none { color: var(--muted); font-family: var(--mono); font-size: .82rem; padding: 6px 0; }
+  .text-view { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-top: 12px; font-family: var(--mono); font-size: .88rem; line-height: 1.7; word-break: break-word; white-space: pre-wrap; overflow-x: auto; }
+  .text-view mark { background: rgba(241, 196, 15, .35); color: var(--text); padding: 0 1px; border-radius: 2px; }
+  .text-view mark.multi { background: rgba(230, 92, 92, .35); }
+  .text-view mark.cur { background: rgba(40, 180, 99, .55); font-weight: 700; }
+  .log { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 220px; overflow-y: auto; }
+  .log h3 { margin: 0 0 6px; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .log .r { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .log .r.op { color: var(--warning); }
+  .log .r.hit { color: var(--success); font-weight: 700; }
+  .log .r.walk { color: var(--accent); }
+  .log .r.fail { color: #9b59b6; }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 999px; vertical-align: middle; margin-right: 4px; border: 1.4px solid var(--border); }
+  .legend .sw.r { background: rgba(99, 102, 241, .28); border-color: var(--accent); }
+  .legend .sw.t { background: rgba(40, 180, 99, .22); border-color: var(--success); }
+  .legend .sw.c { background: rgba(241, 196, 15, .55); border-color: var(--warning); }
+  .legend .l-line { display: inline-block; width: 22px; height: 3px; vertical-align: middle; margin-right: 4px; }
+  .legend .l-line.f { background: #9b59b6; }
+  .legend .l-line.d { background: var(--success); }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.65; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Aho-Corasick Multi-Pattern Matcher</h1>
+<p class="subtitle"><strong>Aho-Corasick</strong> is the classic algorithm powering <code>grep -F</code>, <code>fgrep</code>, keyword filters, malware scanners, and virus signature databases — it finds every occurrence of every pattern from a dictionary in a single left-to-right pass of the text. The trick is a trie augmented with <em>failure links</em> (like KMP's failure function, extended to a keyword tree) plus optional <em>dictionary links</em> to report shorter suffix matches without re-walking. Complexity: <code>O(|patterns| + |text| + matches)</code>.</p>
+
+<div class="card">
+  <div class="pane-grid">
+    <div class="pane">
+      <label>Patterns — one per line</label>
+      <textarea id="patterns" spellcheck="false">he
+she
+his
+hers</textarea>
+    </div>
+    <div class="pane">
+      <label>Text to scan</label>
+      <textarea id="text" spellcheck="false">ushers</textarea>
+    </div>
+  </div>
+  <div class="controls" style="margin-top:12px">
+    <button class="primary" onclick="build(true)">Build &amp; scan</button>
+    <button onclick="stepOne()">Step 1 char</button>
+    <button onclick="resetScan()">Reset scan</button>
+    <label><input type="checkbox" id="showFail" onchange="renderGraph()" checked> Show fail links</label>
+    <label><input type="checkbox" id="showDict" onchange="renderGraph()" checked> Show dictionary links</label>
+    <label><input type="checkbox" id="caseIns" onchange="build(true)"> Case-insensitive</label>
+    <label><input type="checkbox" id="showLog" onchange="renderLog()" checked> Show trace log</label>
+    <button onclick="loadDemo('classic')">Classic (ushers)</button>
+    <button onclick="loadDemo('malware')">Signature scan</button>
+    <button onclick="loadDemo('stopwords')">Stopword filter</button>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="svg-wrap" id="svgWrap"><svg class="ac" id="svg" viewBox="0 0 800 400" preserveAspectRatio="xMinYMin meet"><defs>
+        <marker id="ah_trie" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path fill="var(--border)" d="M0,0 L7,3.5 L0,7 Z"/></marker>
+        <marker id="ah_fail" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto"><path fill="#9b59b6" d="M0,0 L6,3 L0,6 Z"/></marker>
+        <marker id="ah_dict" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto"><path fill="var(--success)" d="M0,0 L6,3 L0,6 Z"/></marker>
+        <marker id="ah_walk" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path fill="var(--warning)" d="M0,0 L7,3.5 L0,7 Z"/></marker>
+      </defs></svg></div>
+      <div class="text-view" id="textView"></div>
+      <p class="legend">
+        <span class="sw r"></span> root &nbsp;
+        <span class="sw t"></span> terminal (pattern end) &nbsp;
+        <span class="sw c"></span> current state &nbsp;
+        <span class="l-line f"></span> fail link &nbsp;
+        <span class="l-line d"></span> dict link
+      </p>
+    </div>
+    <div>
+      <div class="stats">
+        <h3>Automaton</h3>
+        <div class="stat-row"><span>Patterns</span><span class="v" id="sP">0</span></div>
+        <div class="stat-row"><span>Trie states</span><span class="v" id="sN">0</span></div>
+        <div class="stat-row"><span>Distinct alphabet</span><span class="v" id="sA">0</span></div>
+        <div class="stat-row"><span>Text length</span><span class="v" id="sT">0</span></div>
+        <div class="stat-row"><span>Chars consumed</span><span class="v" id="sC">0</span></div>
+        <div class="stat-row"><span>Fail-link jumps</span><span class="v" id="sF">0</span></div>
+        <div class="stat-row"><span>Matches found</span><span class="v" id="sM">0</span></div>
+      </div>
+      <div class="hits" id="hits">
+        <h3>Match list</h3>
+        <div id="hitBody" class="none">— no matches yet —</div>
+      </div>
+      <div class="log" id="logBox">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How the automaton is built</h2>
+  <p class="about">
+    Insert every pattern into a trie so shared prefixes reuse states. Then, breadth-first from depth 1, wire each state's <em>fail link</em>: from state <code>u</code> reached by character <code>c</code> off parent <code>p</code>, follow <code>p</code>'s fail links until we find one that has a <code>c</code> child — that's <code>fail(u)</code>. Because we handle states in BFS order, that link is already computed by the time we need it. During scan, when the current state has no child for the next character, jump via fail links until it does (or we're back at root). Every match is either the pattern ending at the current state or one ending at a state we reach via <em>dictionary links</em> — the shortest chain of fail links to a terminal — so all occurrences are reported without re-scanning any character. That's how the sequence <code>"ushers"</code> reports <em>she</em>, <em>he</em>, and <em>hers</em> in a single pass.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let patterns = [];
+let states = []; // { id, goto: Map(char->id), fail: id, dict: id, out: [patternIndex], depth, parent, parentChar }
+let text = '';
+let cursor = 0;    // char index in text
+let curState = 0;  // current AC state
+let matches = [];  // {end, patIdx, pattern, start}
+let stats = { fails: 0, consumed: 0 };
+let logRows = [];
+let lastWalkedEdge = null; // "u->v"
+
+function normalize(s) { return $('caseIns').checked ? s.toLowerCase() : s; }
+
+function build(runScan) {
+  patterns = $('patterns').value.split('\n').map(s => normalize(s)).filter(s => s.length);
+  text = normalize($('text').value);
+  states = [{ id: 0, goto: new Map(), fail: 0, dict: 0, out: [], depth: 0, parent: -1, parentChar: '' }];
+  patterns.forEach((p, pi) => {
+    let cur = 0;
+    for (const c of p) {
+      if (!states[cur].goto.has(c)) {
+        const nid = states.length;
+        states.push({ id: nid, goto: new Map(), fail: 0, dict: 0, out: [], depth: states[cur].depth + 1, parent: cur, parentChar: c });
+        states[cur].goto.set(c, nid);
+      }
+      cur = states[cur].goto.get(c);
+    }
+    states[cur].out.push(pi);
+  });
+  // BFS fail + dict links
+  const queue = [];
+  for (const [c, v] of states[0].goto) { states[v].fail = 0; states[v].dict = 0; queue.push(v); }
+  while (queue.length) {
+    const u = queue.shift();
+    for (const [c, v] of states[u].goto) {
+      let f = states[u].fail;
+      while (f !== 0 && !states[f].goto.has(c)) f = states[f].fail;
+      if (states[f].goto.has(c) && states[f].goto.get(c) !== v) {
+        states[v].fail = states[f].goto.get(c);
+      } else {
+        states[v].fail = 0;
+      }
+      const failState = states[v].fail;
+      if (states[failState].out.length > 0) states[v].dict = failState;
+      else states[v].dict = states[failState].dict;
+      queue.push(v);
+    }
+  }
+  resetScan();
+  if (runScan) runAll();
+}
+
+function resetScan() {
+  cursor = 0; curState = 0; matches = [];
+  stats = { fails: 0, consumed: 0 };
+  logRows = [{ t: 'reset — cursor=0, state=0', cls: 'op' }];
+  lastWalkedEdge = null;
+  renderAll();
+}
+
+function stepOne() {
+  if (!states.length || cursor >= text.length) {
+    if (cursor >= text.length && text.length) logRows = [{ t: 'end of text', cls: 'hit' }].concat(logRows);
+    renderAll();
+    return;
+  }
+  const c = text[cursor];
+  const startState = curState;
+  lastWalkedEdge = null;
+  // Follow fail links until we find a transition
+  while (curState !== 0 && !states[curState].goto.has(c)) {
+    logRows = [{ t: `  no goto[${curState}, '${c}'] — fail to ${states[curState].fail}`, cls: 'fail' }].concat(logRows);
+    curState = states[curState].fail;
+    stats.fails++;
+  }
+  if (states[curState].goto.has(c)) {
+    const next = states[curState].goto.get(c);
+    logRows = [{ t: `@${cursor} '${c}' → goto[${curState}] = ${next}`, cls: 'walk' }].concat(logRows);
+    lastWalkedEdge = `${curState}->${next}`;
+    curState = next;
+  } else {
+    logRows = [{ t: `@${cursor} '${c}' — no match at root, stay at 0`, cls: 'op' }].concat(logRows);
+  }
+  // Report all matches from curState and its dictionary chain
+  const end = cursor + 1;
+  let s = curState;
+  while (s !== 0) {
+    for (const pi of states[s].out) {
+      const len = patterns[pi].length;
+      matches.push({ end, start: end - len, patIdx: pi, pattern: patterns[pi] });
+      logRows = [{ t: `  MATCH "${patterns[pi]}" at [${end - len}..${end - 1}] (state ${s})`, cls: 'hit' }].concat(logRows);
+    }
+    s = states[s].dict;
+  }
+  cursor++;
+  stats.consumed++;
+  renderAll();
+}
+
+function runAll() {
+  resetScan();
+  let guard = 0;
+  while (cursor < text.length && guard++ < 100000) stepOne();
+}
+
+function renderStats() {
+  $('sP').textContent = patterns.length;
+  $('sN').textContent = states.length;
+  const alpha = new Set();
+  states.forEach(s => { for (const c of s.goto.keys()) alpha.add(c); });
+  $('sA').textContent = alpha.size;
+  $('sT').textContent = text.length;
+  $('sC').textContent = stats.consumed;
+  $('sF').textContent = stats.fails;
+  $('sM').textContent = matches.length;
+}
+
+function renderHits() {
+  const body = $('hitBody');
+  if (!matches.length) { body.className = 'none'; body.innerHTML = '— no matches yet —'; return; }
+  body.className = '';
+  const rows = ['<table><thead><tr><th>#</th><th>pattern</th><th>range</th></tr></thead><tbody>'];
+  matches.slice(0, 200).forEach((m, i) => {
+    rows.push(`<tr><td class="idx">${i + 1}</td><td class="pat">"${escapeHtml(m.pattern)}"</td><td>[${m.start}..${m.end - 1}]</td></tr>`);
+  });
+  rows.push('</tbody></table>');
+  if (matches.length > 200) rows.push(`<div class="none">…and ${matches.length - 200} more</div>`);
+  body.innerHTML = rows.join('');
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderText() {
+  const view = $('textView');
+  if (!text.length) { view.innerHTML = '<span style="color:var(--muted)">— empty text —</span>'; return; }
+  const covered = new Array(text.length).fill(0);
+  matches.forEach(m => { for (let i = m.start; i < m.end; i++) covered[i]++; });
+  const html = [];
+  let i = 0;
+  while (i < text.length) {
+    const cov = covered[i];
+    const isCur = i === cursor;
+    let j = i;
+    while (j < text.length && covered[j] === cov && (j === cursor) === isCur) j++;
+    const chunk = escapeHtml(text.slice(i, j));
+    if (isCur) html.push(`<mark class="cur">${chunk}</mark>`);
+    else if (cov > 1) html.push(`<mark class="multi" title="${cov} overlapping matches">${chunk}</mark>`);
+    else if (cov === 1) html.push(`<mark>${chunk}</mark>`);
+    else html.push(chunk);
+    i = j;
+  }
+  view.innerHTML = html.join('');
+}
+
+function renderLog() {
+  const el = $('logRows');
+  const box = $('logBox');
+  box.style.display = $('showLog').checked ? '' : 'none';
+  el.innerHTML = '';
+  logRows.slice(0, 100).forEach(r => {
+    const d = document.createElement('div');
+    d.className = 'r ' + (r.cls || '');
+    d.textContent = r.t;
+    el.appendChild(d);
+  });
+}
+
+// Radial-tree layout via BFS depth ordering
+function layoutTrie() {
+  const posMap = new Map();
+  const depth = states.map(s => s.depth);
+  const maxDepth = Math.max(0, ...depth);
+  const byDepth = new Map();
+  states.forEach(s => {
+    const arr = byDepth.get(s.depth) || [];
+    arr.push(s.id);
+    byDepth.set(s.depth, arr);
+  });
+  const W = Math.max(560, states.length * 44);
+  const rowH = 90;
+  const H = 80 + rowH * (maxDepth + 1);
+  // Position each state so that x is centered over its subtree of trie children.
+  // Use a simple leaf-first layout: assign x by counting leaves per subtree.
+  const leaves = new Array(states.length).fill(0);
+  function countLeaves(u) {
+    if (states[u].goto.size === 0) { leaves[u] = 1; return 1; }
+    let s = 0;
+    for (const [, v] of states[u].goto) s += countLeaves(v);
+    leaves[u] = s;
+    return s;
+  }
+  countLeaves(0);
+  const totalLeaves = leaves[0];
+  const margin = 40;
+  function place(u, xL, xR) {
+    const x = (xL + xR) / 2;
+    const y = 50 + states[u].depth * rowH;
+    posMap.set(u, { x, y });
+    if (states[u].goto.size === 0) return;
+    let acc = xL;
+    const entries = [...states[u].goto.entries()].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    for (const [, v] of entries) {
+      const share = leaves[v] / leaves[u];
+      const nR = acc + share * (xR - xL);
+      place(v, acc, nR);
+      acc = nR;
+    }
+  }
+  place(0, margin, W - margin);
+  return { posMap, W, H };
+}
+
+function renderGraph() {
+  const svg = $('svg');
+  const defs = svg.querySelector('defs');
+  svg.innerHTML = '';
+  svg.appendChild(defs);
+  if (!states.length) { svg.setAttribute('viewBox', '0 0 400 200'); return; }
+  const { posMap, W, H } = layoutTrie();
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.style.minWidth = `${Math.min(W, 1200)}px`;
+  const nodeR = 18;
+
+  // Trie edges first (behind)
+  for (const s of states) {
+    const p = posMap.get(s.id);
+    for (const [c, v] of s.goto) {
+      const q = posMap.get(v);
+      const dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const sx = p.x + ux * nodeR, sy = p.y + uy * nodeR;
+      const ex = q.x - ux * nodeR, ey = q.y - uy * nodeR;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', sx); line.setAttribute('y1', sy);
+      line.setAttribute('x2', ex); line.setAttribute('y2', ey);
+      let cls = 'trie-edge';
+      let marker = 'url(#ah_trie)';
+      if (lastWalkedEdge === `${s.id}->${v}`) { cls += ' walk'; marker = 'url(#ah_walk)'; }
+      line.setAttribute('class', cls);
+      line.setAttribute('marker-end', marker);
+      svg.appendChild(line);
+      const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lbl.setAttribute('class', 'elabel');
+      lbl.setAttribute('x', (sx + ex) / 2 + 6);
+      lbl.setAttribute('y', (sy + ey) / 2);
+      lbl.textContent = c === ' ' ? '·' : c;
+      svg.appendChild(lbl);
+    }
+  }
+  // Fail edges (curved)
+  if ($('showFail').checked) {
+    for (const s of states) {
+      if (s.id === 0) continue;
+      if (s.fail === 0 && states[s.id].parent === 0) continue; // skip trivial root fails for clarity
+      const p = posMap.get(s.id);
+      const q = posMap.get(s.fail);
+      const dx = q.x - p.x, dy = q.y - p.y;
+      const mx = (p.x + q.x) / 2 + dy * 0.15;
+      const my = (p.y + q.y) / 2 - dx * 0.15;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M${p.x},${p.y} Q${mx},${my} ${q.x},${q.y}`);
+      path.setAttribute('class', 'fail-edge');
+      path.setAttribute('marker-end', 'url(#ah_fail)');
+      svg.appendChild(path);
+    }
+  }
+  // Dict edges
+  if ($('showDict').checked) {
+    for (const s of states) {
+      if (s.dict === 0) continue;
+      const p = posMap.get(s.id);
+      const q = posMap.get(s.dict);
+      const dx = q.x - p.x, dy = q.y - p.y;
+      const mx = (p.x + q.x) / 2 - dy * 0.2;
+      const my = (p.y + q.y) / 2 + dx * 0.2;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M${p.x},${p.y} Q${mx},${my} ${q.x},${q.y}`);
+      path.setAttribute('class', 'dict-edge');
+      path.setAttribute('marker-end', 'url(#ah_dict)');
+      svg.appendChild(path);
+    }
+  }
+  // Nodes on top
+  for (const s of states) {
+    const p = posMap.get(s.id);
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    let cls = 'node';
+    if (s.id === 0) cls += ' root';
+    else if (s.out.length > 0) cls += ' terminal';
+    if (s.id === curState) cls += ' current';
+    g.setAttribute('class', cls);
+    g.setAttribute('transform', `translate(${p.x},${p.y})`);
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('r', nodeR);
+    g.appendChild(c);
+    const k = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    k.setAttribute('class', 'k'); k.setAttribute('y', 4); k.textContent = s.id;
+    g.appendChild(k);
+    if (s.out.length > 0) {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('y', nodeR + 12);
+      t.textContent = s.out.map(pi => `"${patterns[pi]}"`).join(',');
+      g.appendChild(t);
+    }
+    svg.appendChild(g);
+  }
+}
+
+function renderAll() {
+  renderGraph();
+  renderStats();
+  renderHits();
+  renderText();
+  renderLog();
+}
+
+function loadDemo(kind) {
+  if (kind === 'classic') {
+    $('patterns').value = 'he\nshe\nhis\nhers';
+    $('text').value = 'ushers';
+  } else if (kind === 'malware') {
+    $('patterns').value = 'MZ\neval(\ncmd.exe\npowershell\nbase64\nEICAR';
+    $('text').value = 'downloaded MZ header, then cmd.exe /c powershell -enc base64 blob; EICAR test string embedded';
+  } else if (kind === 'stopwords') {
+    $('patterns').value = 'the\nand\nof\nto\nis';
+    $('text').value = 'the quick brown fox jumps over the lazy dog and runs to the river of gold';
+    $('caseIns').checked = true;
+  }
+  build(true);
+}
+
+build(true);
+</script>
+</body>
+</html>

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suffix Array & LCP Builder — Free Online Tool</title>
+<meta name="description" content="Sort every suffix of a string and get the classic SA + LCP arrays — with the Kasai O(n) longest-common-prefix computation, the sorted-suffix table, longest repeated substring, distinct-substring count, and instant substring queries via binary search.">
+<meta name="keywords" content="suffix array, lcp array, kasai algorithm, longest repeated substring, distinct substring count, string algorithm, substring search, sa lcp, string index, suffix sorting">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/suffixarray.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; font-size: .88rem; }
+  .controls input[type=text] {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+    min-width: 260px; flex: 1;
+  }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls label { color: var(--muted); }
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px; margin: 8px 0 14px;
+  }
+  .summary .tile {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .summary .tile .l { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .summary .tile .v { font-family: var(--mono); font-size: 1.02rem; margin-top: 3px; color: var(--text); word-break: break-all; }
+  .summary .tile.hi .v { color: var(--success); }
+  .sa-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .sa-table { border-collapse: collapse; font-family: var(--mono); font-size: .8rem; width: 100%; }
+  .sa-table th, .sa-table td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .sa-table th { background: var(--surface2); color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; font-size: .68rem; position: sticky; top: 0; }
+  .sa-table td.idx, .sa-table td.rank, .sa-table td.lcp { color: var(--muted); text-align: right; }
+  .sa-table td.suf { color: var(--text); }
+  .sa-table td.suf .pref { background: rgba(40, 180, 99, .28); border-radius: 2px; }
+  .sa-table td.hit .suf { color: var(--warning); font-weight: 700; }
+  .sa-table tr.match { background: rgba(241, 196, 15, .12); }
+  .sa-table tr.top { background: rgba(40, 180, 99, .09); }
+  .search-hits { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .search-hits h3 { margin: 0 0 6px; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .search-hits .r { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .search-hits .r .p { color: var(--warning); font-weight: 700; }
+  .search-hits .r .rest { color: var(--muted); }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.65; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+  .banner { padding: 10px 12px; border-radius: var(--radius); font-size: .88rem; margin-bottom: 10px; }
+  .banner.err { background: rgba(230, 92, 92, .12); border: 1px solid var(--error); color: var(--error); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Suffix Array &amp; LCP Builder</h1>
+<p class="subtitle">A <strong>suffix array</strong> is the sorted list of every suffix of a string, represented compactly as start indices. Paired with the <strong>LCP array</strong> — the longest common prefix between adjacent suffixes — it powers substring search in <code>O(m log n)</code>, longest-repeated-substring detection, distinct-substring counting, and full-text search. This builder shows every suffix in sorted order plus the running LCP, computed via Kasai's classic linear-time algorithm.</p>
+
+<div class="card">
+  <div class="controls">
+    <label for="text">Text</label>
+    <input type="text" id="text" spellcheck="false" value="banana">
+    <button class="primary" onclick="build()">Build</button>
+    <button onclick="loadDemo('mississippi')">mississippi</button>
+    <button onclick="loadDemo('abracadabra')">abracadabra</button>
+    <button onclick="loadDemo('the quick brown fox jumps over the quick brown dog')">Sentence</button>
+    <button onclick="loadDemo('aaaaaa')">Degenerate</button>
+  </div>
+  <div class="controls">
+    <label for="query">Substring search</label>
+    <input type="text" id="query" spellcheck="false" placeholder="type to search…" oninput="doSearch()">
+    <label><input type="checkbox" id="showRank" onchange="render()"> Show inverse-rank column</label>
+    <label><input type="checkbox" id="wrap" onchange="render()" checked> Wrap long suffixes</label>
+  </div>
+  <div id="banner"></div>
+  <div class="summary">
+    <div class="tile"><div class="l">Length n</div><div class="v" id="sN">0</div></div>
+    <div class="tile"><div class="l">Distinct chars</div><div class="v" id="sChars">0</div></div>
+    <div class="tile hi"><div class="l">Longest repeated substring</div><div class="v" id="sLRS">—</div></div>
+    <div class="tile"><div class="l">Distinct substrings</div><div class="v" id="sDist">0</div></div>
+    <div class="tile"><div class="l">Search matches</div><div class="v" id="sMatches">—</div></div>
+    <div class="tile"><div class="l">Search range in SA</div><div class="v" id="sRange">—</div></div>
+  </div>
+  <div class="sa-table-wrap" id="tableWrap"></div>
+  <div class="search-hits" id="hits" style="display:none">
+    <h3>Match positions in original text</h3>
+    <div id="hitList"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>How the suffix array + LCP unlock string search</h2>
+  <p class="about">
+    Sorting suffixes lexicographically clusters everything that shares a prefix into a contiguous slice of the array. To find whether a pattern <code>P</code> occurs in the text, two binary searches locate the first and last suffix whose sorted key is <code>P…</code> — that's <code>O(m log n)</code> comparisons. To count distinct substrings, notice that suffix <code>i</code> contributes <code>n − SA[i] − LCP[i]</code> new prefixes (the ones not already shared with its predecessor), summed across all rows. And the maximum LCP value <em>is</em> the length of the longest substring that appears at least twice, with the pair of positions read off from the two adjacent SA rows. Kasai's algorithm walks the text in original order and uses the inverse rank to bound how much LCP can shrink per step — amortised <code>O(n)</code>. This builder uses the O(n log² n) prefix-doubling sort, which is fast enough for interactive text up to a few thousand characters.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let text = '', SA = [], RANK = [], LCP = [];
+let matchLo = -1, matchHi = -1, query = '';
+
+function buildSA(s) {
+  const n = s.length;
+  if (n === 0) return { SA: [], rank: [] };
+  let sa = Array.from({ length: n }, (_, i) => i);
+  let rank = new Array(n);
+  for (let i = 0; i < n; i++) rank[i] = s.charCodeAt(i);
+  for (let k = 1; k < n; k *= 2) {
+    const cmp = (a, b) => {
+      if (rank[a] !== rank[b]) return rank[a] - rank[b];
+      const ra = a + k < n ? rank[a + k] : -1;
+      const rb = b + k < n ? rank[b + k] : -1;
+      return ra - rb;
+    };
+    sa.sort(cmp);
+    const tmp = new Array(n);
+    tmp[sa[0]] = 0;
+    for (let i = 1; i < n; i++) {
+      tmp[sa[i]] = tmp[sa[i - 1]] + (cmp(sa[i - 1], sa[i]) !== 0 ? 1 : 0);
+    }
+    rank = tmp;
+    if (rank[sa[n - 1]] === n - 1) break;
+  }
+  return { SA: sa, rank };
+}
+
+function buildLCP(s, sa, rank) {
+  const n = s.length;
+  const lcp = new Array(n).fill(0);
+  let h = 0;
+  for (let i = 0; i < n; i++) {
+    if (rank[i] > 0) {
+      const j = sa[rank[i] - 1];
+      while (i + h < n && j + h < n && s[i + h] === s[j + h]) h++;
+      lcp[rank[i]] = h;
+      if (h > 0) h--;
+    } else {
+      h = 0;
+    }
+  }
+  return lcp;
+}
+
+function build() {
+  text = $('text').value;
+  if (text.length === 0) {
+    SA = []; RANK = []; LCP = [];
+    $('banner').innerHTML = '<div class="banner err">Enter some text to build the suffix array.</div>';
+    render();
+    return;
+  }
+  if (text.length > 5000) {
+    $('banner').innerHTML = `<div class="banner err">Text is ${text.length} chars — capped at 5000 for interactive speed. Truncating.</div>`;
+    text = text.slice(0, 5000);
+  } else {
+    $('banner').innerHTML = '';
+  }
+  const built = buildSA(text);
+  SA = built.SA; RANK = built.rank;
+  LCP = buildLCP(text, SA, RANK);
+  doSearch();
+}
+
+function bsearchLo(pattern) {
+  let lo = 0, hi = SA.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const suf = text.substr(SA[mid], pattern.length);
+    if (suf < pattern) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+function bsearchHi(pattern) {
+  let lo = 0, hi = SA.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const suf = text.substr(SA[mid], pattern.length);
+    if (suf <= pattern) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function doSearch() {
+  query = $('query').value;
+  matchLo = matchHi = -1;
+  if (query && SA.length) {
+    matchLo = bsearchLo(query);
+    matchHi = bsearchHi(query);
+    if (matchLo >= matchHi) matchLo = matchHi = -1;
+  }
+  render();
+}
+
+function render() {
+  const n = text.length;
+  const distinct = new Set(text.split('')).size;
+  let lrsLen = 0, lrsAt = -1;
+  for (let i = 1; i < LCP.length; i++) {
+    if (LCP[i] > lrsLen) { lrsLen = LCP[i]; lrsAt = SA[i]; }
+  }
+  // Distinct substrings: sum n - SA[i] - LCP[i] for i in [0, n)
+  let distSubs = 0;
+  for (let i = 0; i < SA.length; i++) {
+    distSubs += (n - SA[i]) - (i === 0 ? 0 : LCP[i]);
+  }
+  $('sN').textContent = n;
+  $('sChars').textContent = distinct;
+  $('sLRS').textContent = lrsLen > 0 ? `"${escapeVisible(text.substr(lrsAt, lrsLen))}" (len ${lrsLen})` : '— (none)';
+  $('sDist').textContent = distSubs.toLocaleString();
+  if (matchLo >= 0) {
+    const count = matchHi - matchLo;
+    $('sMatches').textContent = `${count} occurrence${count === 1 ? '' : 's'}`;
+    $('sRange').textContent = `SA[${matchLo} .. ${matchHi - 1}]`;
+  } else if (query) {
+    $('sMatches').textContent = '0';
+    $('sRange').textContent = '—';
+  } else {
+    $('sMatches').textContent = '—';
+    $('sRange').textContent = '—';
+  }
+  renderTable();
+  renderHits();
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function escapeVisible(s) {
+  return s.replace(/ /g, '·').replace(/\t/g, '→').replace(/\n/g, '↵');
+}
+
+function renderTable() {
+  const wrap = $('tableWrap');
+  if (!SA.length) { wrap.innerHTML = '<div style="padding:10px;color:var(--muted);font-family:var(--mono);font-size:.85rem">— empty —</div>'; return; }
+  const showRank = $('showRank').checked;
+  const wrapLong = $('wrap').checked;
+  const rows = [];
+  rows.push('<table class="sa-table"><thead><tr><th>i</th><th>SA[i]</th><th>LCP[i]</th>' + (showRank ? '<th>rank[SA[i]]</th>' : '') + '<th>suffix (' + text.length + ' chars max)</th></tr></thead><tbody>');
+  const qLen = query.length;
+  let maxLcp = 0;
+  for (let i = 0; i < SA.length; i++) if (LCP[i] > maxLcp) maxLcp = LCP[i];
+  for (let i = 0; i < SA.length; i++) {
+    const start = SA[i];
+    const full = text.slice(start);
+    const view = wrapLong ? full : full.slice(0, 200) + (full.length > 200 ? '…' : '');
+    const shown = escapeHtml(escapeVisible(view));
+    let sufCell;
+    if (qLen && shown.length >= qLen && text.substr(start, qLen) === query) {
+      const before = escapeHtml(escapeVisible(view.slice(0, 0)));
+      const pref = escapeHtml(escapeVisible(view.slice(0, qLen)));
+      const rest = escapeHtml(escapeVisible(view.slice(qLen)));
+      sufCell = `${before}<span class="pref">${pref}</span>${rest}`;
+    } else {
+      sufCell = shown;
+    }
+    let cls = '';
+    if (matchLo >= 0 && i >= matchLo && i < matchHi) cls = ' class="match"';
+    else if (LCP[i] === maxLcp && maxLcp > 0 && (i > 0)) cls = ' class="top"';
+    rows.push(`<tr${cls}><td class="idx">${i}</td><td class="idx">${start}</td><td class="lcp">${LCP[i]}</td>` + (showRank ? `<td class="rank">${RANK[start]}</td>` : '') + `<td class="suf">${sufCell || '<span style="color:var(--muted)">ε</span>'}</td></tr>`);
+  }
+  rows.push('</tbody></table>');
+  wrap.innerHTML = rows.join('');
+}
+
+function renderHits() {
+  const box = $('hits');
+  if (matchLo < 0) { box.style.display = 'none'; return; }
+  const list = $('hitList');
+  const positions = [];
+  for (let i = matchLo; i < matchHi; i++) positions.push(SA[i]);
+  positions.sort((a, b) => a - b);
+  const shown = positions.slice(0, 40);
+  const CTX = 12;
+  const parts = [];
+  for (const p of shown) {
+    const from = Math.max(0, p - CTX);
+    const to = Math.min(text.length, p + query.length + CTX);
+    const left = escapeHtml(escapeVisible(text.slice(from, p)));
+    const hit = escapeHtml(escapeVisible(text.slice(p, p + query.length)));
+    const right = escapeHtml(escapeVisible(text.slice(p + query.length, to)));
+    const pre = from > 0 ? '…' : '';
+    const post = to < text.length ? '…' : '';
+    parts.push(`<div class="r">@${p.toString().padStart(4)}: <span class="rest">${pre}${left}</span><span class="p">${hit}</span><span class="rest">${right}${post}</span></div>`);
+  }
+  if (positions.length > shown.length) parts.push(`<div class="r"><span class="rest">…and ${positions.length - shown.length} more</span></div>`);
+  list.innerHTML = parts.join('');
+  box.style.display = '';
+}
+
+function loadDemo(s) { $('text').value = s; $('query').value = ''; build(); }
+
+build();
+</script>
+</body>
+</html>

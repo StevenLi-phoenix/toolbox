@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dijkstra's Shortest Path Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch Dijkstra's greedy algorithm settle the single-source shortest path on any non-negative weighted graph — priority queue pops, edge relaxations, distance-and-predecessor table, and the final shortest-path tree, all step-by-step.">
+<meta name="keywords" content="dijkstra, shortest path, greedy algorithm, priority queue, graph algorithm, visualizer, single source shortest path, relaxation, shortest path tree, non-negative weights">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dijkstra.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: .88rem; }
+  .controls input[type=number], .controls input[type=text], .controls textarea {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=number] { width: 70px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .controls label { color: var(--muted); }
+  .edges-input { width: 100%; min-height: 90px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; resize: vertical; box-sizing: border-box; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; max-height: 520px; padding: 8px; }
+  svg.dj { display: block; min-width: 100%; }
+  .node circle { stroke: var(--border); stroke-width: 1.5; fill: var(--surface2); }
+  .node text.k { font-family: var(--mono); font-size: 13px; fill: var(--text); text-anchor: middle; dominant-baseline: central; pointer-events: none; font-weight: 700; }
+  .node text.d { font-family: var(--mono); font-size: 10px; fill: var(--muted); text-anchor: middle; }
+  .node.src circle { fill: rgba(99, 102, 241, .3); stroke: var(--accent); stroke-width: 2.4; }
+  .node.settled circle { fill: rgba(40, 180, 99, .22); stroke: var(--success); }
+  .node.frontier circle { fill: rgba(241, 196, 15, .25); stroke: var(--warning); }
+  .node.current circle { fill: rgba(241, 196, 15, .55); stroke: var(--warning); stroke-width: 2.6; }
+  .node.target circle { fill: rgba(230, 92, 92, .25); stroke: var(--error); stroke-width: 2.4; }
+  .edge { stroke: var(--border); stroke-width: 1.4; fill: none; }
+  .edge.relaxed { stroke: var(--warning); stroke-width: 2.4; }
+  .edge.tree { stroke: var(--success); stroke-width: 2.4; }
+  .edge.path { stroke: var(--error); stroke-width: 3; }
+  .edge.arrowhead { fill: var(--border); }
+  .edge.arrow-relax { fill: var(--warning); }
+  .edge.arrow-tree { fill: var(--success); }
+  .edge.arrow-path { fill: var(--error); }
+  .elabel { font-family: var(--mono); font-size: 11px; fill: var(--muted); pointer-events: none; }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .dist-table { margin-top: 12px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .dist-table h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .dist-table table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .78rem; }
+  .dist-table th, .dist-table td { padding: 3px 6px; text-align: center; border-bottom: 1px solid var(--border); }
+  .dist-table th { color: var(--muted); font-weight: 500; }
+  .dist-table td.upd { background: rgba(241, 196, 15, .16); color: var(--warning); font-weight: 700; }
+  .dist-table td.set { color: var(--success); font-weight: 700; }
+  .pq-box { margin-top: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .pq-box h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .pq-list { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--mono); font-size: .82rem; }
+  .pq-list .item { padding: 3px 8px; border-radius: 3px; background: var(--bg); border: 1px solid var(--border); }
+  .pq-list .item.top { background: rgba(241, 196, 15, .22); border-color: var(--warning); font-weight: 700; }
+  .pq-list .item.stale { opacity: .45; text-decoration: line-through; }
+  .log { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 220px; overflow-y: auto; }
+  .log h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .log .row { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .log .row.op { color: var(--warning); font-weight: 600; }
+  .log .row.hit { color: var(--success); }
+  .log .row.miss { color: var(--muted); }
+  .log .row.walk { color: var(--accent); }
+  .banner { padding: 10px 12px; border-radius: var(--radius); font-size: .88rem; margin-top: 10px; }
+  .banner.ok { background: rgba(40, 180, 99, .12); border: 1px solid var(--success); color: var(--success); }
+  .banner.err { background: rgba(230, 92, 92, .12); border: 1px solid var(--error); color: var(--error); }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 999px; vertical-align: middle; margin-right: 4px; border: 1.4px solid var(--border); }
+  .legend .sw.s { background: rgba(99, 102, 241, .3); border-color: var(--accent); }
+  .legend .sw.f { background: rgba(241, 196, 15, .25); border-color: var(--warning); }
+  .legend .sw.c { background: rgba(241, 196, 15, .55); border-color: var(--warning); }
+  .legend .sw.se { background: rgba(40, 180, 99, .22); border-color: var(--success); }
+  .legend .sw.t { background: rgba(230, 92, 92, .25); border-color: var(--error); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Dijkstra's Shortest Path Visualizer</h1>
+<p class="subtitle"><strong>Dijkstra's algorithm</strong> greedily settles the closest unvisited vertex on each step, guaranteeing that its distance is final. Because the frontier grows outward like a wave, every shortest path is discovered before any longer path — but the guarantee only holds when all edge weights are non-negative. Watch the priority queue, per-step relaxations, and the shortest-path tree unfold below.</p>
+
+<div class="card">
+  <div class="controls">
+    <label>Source</label>
+    <input type="number" id="src" min="0" value="1">
+    <label>Target (optional)</label>
+    <input type="number" id="tgt" min="0" value="6">
+    <button class="primary" onclick="runAll()">Run to completion</button>
+    <button onclick="stepOne()">Step 1 settle</button>
+    <button onclick="reset()">Reset</button>
+    <button onclick="loadRoute()">Road-network demo</button>
+    <button onclick="loadGrid()">Sparse grid demo</button>
+    <button onclick="loadNeg()">Negative-edge demo</button>
+  </div>
+  <div class="controls" style="align-items:flex-start;flex-direction:column;gap:4px">
+    <label>Edges — one <code>u v w</code> per line (space-separated, weights ≥ 0). Prefix with <code>u v w d</code> where <code>d=1</code> marks the edge directed:</label>
+    <textarea class="edges-input" id="edgesIn">1 2 7
+1 3 9
+1 6 14
+2 3 10
+2 4 15
+3 4 11
+3 6 2
+4 5 6
+6 5 9</textarea>
+  </div>
+  <div class="layout">
+    <div class="svg-wrap" id="svgWrap"><svg class="dj" id="svg" viewBox="0 0 800 440" preserveAspectRatio="xMinYMin meet"><defs>
+      <marker id="ah" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path class="edge arrowhead" d="M0,0 L8,4 L0,8 Z"/></marker>
+      <marker id="ahr" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path class="edge arrow-relax" d="M0,0 L8,4 L0,8 Z"/></marker>
+      <marker id="aht" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path class="edge arrow-tree" d="M0,0 L8,4 L0,8 Z"/></marker>
+      <marker id="ahp" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path class="edge arrow-path" d="M0,0 L8,4 L0,8 Z"/></marker>
+    </defs></svg></div>
+    <div>
+      <div id="banner"></div>
+      <div class="stats">
+        <h3>Run stats</h3>
+        <div class="stat-row"><span>Vertices |V|</span><span class="v" id="sV">0</span></div>
+        <div class="stat-row"><span>Edges |E|</span><span class="v" id="sE">0</span></div>
+        <div class="stat-row"><span>PQ pops (settles)</span><span class="v" id="sPop">0</span></div>
+        <div class="stat-row"><span>PQ pushes</span><span class="v" id="sPush">0</span></div>
+        <div class="stat-row"><span>Stale pops skipped</span><span class="v" id="sStale">0</span></div>
+        <div class="stat-row"><span>Edges relaxed</span><span class="v" id="sRelax">0</span></div>
+        <div class="stat-row"><span>Target distance</span><span class="v" id="sTgt">—</span></div>
+      </div>
+      <div class="pq-box">
+        <h3>Priority queue (min-heap peek)</h3>
+        <div id="pqList" class="pq-list"></div>
+      </div>
+      <div class="dist-table">
+        <h3>Distance & predecessor</h3>
+        <div id="distTbl"></div>
+      </div>
+      <div class="log">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+      <p class="legend">
+        <span class="sw s"></span> source &nbsp;
+        <span class="sw c"></span> current pop &nbsp;
+        <span class="sw f"></span> in queue &nbsp;
+        <span class="sw se"></span> settled &nbsp;
+        <span class="sw t"></span> target
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why the greedy settle is always correct — provided no negative edges</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Pop the vertex <code>u</code> with the smallest tentative distance <code>d[u]</code>. Suppose some other still-unsettled vertex actually has a shorter true distance — the path to it must pass through at least one unsettled vertex whose tentative distance is already <code>≥ d[u]</code>. Every subsequent edge adds non-negative weight, so the arrival distance can only grow, contradicting the assumption. That's the induction: each settled vertex's distance is final. If any edge is negative, a later hop can shrink the total, and the invariant breaks — that's when you reach for Bellman-Ford instead. Complexity with a binary heap: <code>O((|V| + |E|) log |V|)</code>. This visualizer uses a lazy min-heap: rather than decrease-key, it pushes duplicate entries and discards stale pops (whose <code>d</code> no longer matches <code>dist[v]</code>).
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const INF = Infinity;
+
+// Simple binary min-heap keyed by numeric priority (first tuple element)
+class MinHeap {
+  constructor() { this.a = []; }
+  size() { return this.a.length; }
+  peek() { return this.a[0]; }
+  push(item) {
+    this.a.push(item);
+    let i = this.a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (this.a[p][0] <= this.a[i][0]) break;
+      [this.a[p], this.a[i]] = [this.a[i], this.a[p]];
+      i = p;
+    }
+  }
+  pop() {
+    if (!this.a.length) return null;
+    const top = this.a[0];
+    const last = this.a.pop();
+    if (this.a.length) {
+      this.a[0] = last;
+      let i = 0, n = this.a.length;
+      while (true) {
+        const l = 2 * i + 1, r = 2 * i + 2;
+        let m = i;
+        if (l < n && this.a[l][0] < this.a[m][0]) m = l;
+        if (r < n && this.a[r][0] < this.a[m][0]) m = r;
+        if (m === i) break;
+        [this.a[m], this.a[i]] = [this.a[i], this.a[m]];
+        i = m;
+      }
+    }
+    return top;
+  }
+  toArray() { return this.a.slice().sort((x, y) => x[0] - y[0]); }
+}
+
+let vertices = [], adj = {}, edges = [];
+let src = 1, tgt = null;
+let dist = {}, pred = {}, settled = new Set();
+let heap = new MinHeap();
+let stats = { pops: 0, pushes: 0, stale: 0, relax: 0 };
+let lastRelaxed = new Set(), currentPop = null;
+let logRows = [];
+let hasNeg = false;
+
+function parseEdges() {
+  edges = []; adj = {}; hasNeg = false;
+  const seen = new Set();
+  const lines = $('edgesIn').value.split('\n').map(l => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const parts = line.split(/\s+/);
+    if (parts.length < 3) continue;
+    const u = parseInt(parts[0]), v = parseInt(parts[1]), w = parseFloat(parts[2]);
+    const dir = parts.length >= 4 ? parseInt(parts[3]) : 0;
+    if (!Number.isFinite(u) || !Number.isFinite(v) || !Number.isFinite(w)) continue;
+    if (w < 0) hasNeg = true;
+    seen.add(u); seen.add(v);
+    edges.push({ u, v, w, dir: !!dir });
+    (adj[u] = adj[u] || []).push({ to: v, w });
+    if (!dir) (adj[v] = adj[v] || []).push({ to: u, w });
+  }
+  vertices = [...seen].sort((a, b) => a - b);
+}
+
+function reset() {
+  parseEdges();
+  src = parseInt($('src').value);
+  const tv = parseInt($('tgt').value);
+  tgt = Number.isFinite(tv) && vertices.includes(tv) ? tv : null;
+  if (!vertices.includes(src) && vertices.length) src = vertices[0];
+  dist = {}; pred = {}; settled = new Set();
+  for (const v of vertices) { dist[v] = INF; pred[v] = null; }
+  if (vertices.includes(src)) dist[src] = 0;
+  heap = new MinHeap();
+  if (vertices.includes(src)) heap.push([0, src]);
+  stats = { pops: 0, pushes: heap.size(), stale: 0, relax: 0 };
+  lastRelaxed = new Set(); currentPop = null;
+  logRows = [{ t: `reset — source=${src}${tgt !== null ? `, target=${tgt}` : ''}, |V|=${vertices.length}, |E|=${edges.length}`, cls: 'op' }];
+  if (hasNeg) {
+    $('banner').innerHTML = '<div class="banner err">Warning: negative-weight edge detected. Dijkstra is not guaranteed to be correct here — try the Bellman-Ford visualizer instead.</div>';
+  } else {
+    $('banner').innerHTML = '';
+  }
+  renderAll();
+}
+
+function stepOne() {
+  if (!heap.size()) {
+    logRows = [{ t: 'queue empty — done', cls: 'hit' }].concat(logRows);
+    renderAll();
+    return;
+  }
+  lastRelaxed = new Set();
+  while (heap.size()) {
+    const [d, u] = heap.pop();
+    stats.pops++;
+    if (settled.has(u) || d > dist[u] + 1e-9) {
+      stats.stale++;
+      logRows = [{ t: `pop stale (${u}, d=${d}) — skip`, cls: 'miss' }].concat(logRows);
+      continue;
+    }
+    settled.add(u);
+    currentPop = u;
+    logRows = [{ t: `settle ${u} — d=${d}`, cls: 'hit' }].concat(logRows);
+    const neigh = adj[u] || [];
+    for (const { to, w } of neigh) {
+      if (settled.has(to)) continue;
+      const nd = d + w;
+      if (nd < dist[to] - 1e-9) {
+        dist[to] = nd;
+        pred[to] = u;
+        heap.push([nd, to]);
+        stats.pushes++;
+        stats.relax++;
+        lastRelaxed.add(`${u}->${to}`);
+        lastRelaxed.add(`${to}->${u}`);
+        logRows = [{ t: `  relax ${u}→${to} — dist[${to}] ← ${nd}`, cls: 'op' }].concat(logRows);
+      }
+    }
+    if (tgt !== null && u === tgt) {
+      logRows = [{ t: `reached target ${tgt} — early stop possible`, cls: 'walk' }].concat(logRows);
+    }
+    break;
+  }
+  renderAll();
+}
+
+function runAll() {
+  reset();
+  let guard = 0;
+  while (heap.size() && guard++ < 20000) stepOne();
+}
+
+function tracePath(from, to) {
+  if (dist[to] === INF) return [];
+  const path = []; let cur = to;
+  while (cur !== null && cur !== undefined) {
+    path.push(cur);
+    if (cur === from) break;
+    cur = pred[cur];
+  }
+  if (path[path.length - 1] !== from) return [];
+  path.reverse();
+  return path;
+}
+
+function renderStats() {
+  $('sV').textContent = vertices.length;
+  $('sE').textContent = edges.length;
+  $('sPop').textContent = stats.pops;
+  $('sPush').textContent = stats.pushes;
+  $('sStale').textContent = stats.stale;
+  $('sRelax').textContent = stats.relax;
+  if (tgt !== null && dist[tgt] !== INF) {
+    $('sTgt').textContent = dist[tgt];
+  } else if (tgt !== null) {
+    $('sTgt').textContent = '∞';
+  } else {
+    $('sTgt').textContent = '—';
+  }
+}
+
+function renderTable() {
+  const rows = ['<table><thead><tr><th>v</th><th>dist</th><th>pred</th><th>state</th></tr></thead><tbody>'];
+  for (const v of vertices) {
+    const d = dist[v] === INF ? '∞' : dist[v];
+    const p = pred[v] == null ? '—' : pred[v];
+    let cls = '';
+    let state = 'unseen';
+    if (settled.has(v)) { cls = ' class="set"'; state = 'settled'; }
+    else if (dist[v] !== INF) { cls = ' class="upd"'; state = 'in-queue'; }
+    rows.push(`<tr><td>${v}</td><td${cls}>${d}</td><td>${p}</td><td>${state}</td></tr>`);
+  }
+  rows.push('</tbody></table>');
+  $('distTbl').innerHTML = rows.join('');
+}
+
+function renderPQ() {
+  const arr = heap.toArray();
+  const list = $('pqList');
+  list.innerHTML = '';
+  if (!arr.length) {
+    list.innerHTML = '<span style="color:var(--muted);font-family:var(--mono);font-size:.82rem">— empty —</span>';
+    return;
+  }
+  arr.slice(0, 40).forEach(([d, v], i) => {
+    const el = document.createElement('span');
+    let cls = 'item';
+    if (i === 0) cls += ' top';
+    if (settled.has(v) || d > dist[v] + 1e-9) cls += ' stale';
+    el.className = cls;
+    el.textContent = `${v}:${d}`;
+    list.appendChild(el);
+  });
+  if (arr.length > 40) {
+    const more = document.createElement('span');
+    more.className = 'item';
+    more.style.color = 'var(--muted)';
+    more.textContent = `+${arr.length - 40} more`;
+    list.appendChild(more);
+  }
+}
+
+function renderLog() {
+  const el = $('logRows'); el.innerHTML = '';
+  logRows.slice(0, 80).forEach(r => {
+    const d = document.createElement('div');
+    d.className = 'row ' + (r.cls || '');
+    d.textContent = r.t;
+    el.appendChild(d);
+  });
+}
+
+function renderGraph() {
+  const svg = $('svg');
+  const defs = svg.querySelector('defs');
+  svg.innerHTML = '';
+  svg.appendChild(defs);
+  if (!vertices.length) { svg.setAttribute('viewBox', '0 0 400 200'); return; }
+  const cx = 400, cy = 220, R = 170, nodeR = 22;
+  const positions = new Map();
+  const N = vertices.length;
+  for (let i = 0; i < N; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / N;
+    positions.set(vertices[i], { x: cx + R * Math.cos(angle), y: cy + R * Math.sin(angle) });
+  }
+  svg.setAttribute('viewBox', `0 0 ${cx * 2} ${cy * 2 - 40}`);
+  svg.style.minWidth = `${cx * 2}px`;
+
+  const pathVertices = tgt !== null ? tracePath(src, tgt) : [];
+  const pathEdges = new Set();
+  for (let i = 0; i + 1 < pathVertices.length; i++) {
+    pathEdges.add(`${pathVertices[i]}->${pathVertices[i + 1]}`);
+    pathEdges.add(`${pathVertices[i + 1]}->${pathVertices[i]}`);
+  }
+
+  const pairSeen = new Map();
+  for (const e of edges) {
+    const key = `${Math.min(e.u, e.v)}-${Math.max(e.u, e.v)}`;
+    pairSeen.set(key, (pairSeen.get(key) || 0) + 1);
+  }
+  const drawn = new Map();
+  for (const e of edges) {
+    const a = positions.get(e.u), b = positions.get(e.v);
+    if (!a || !b) continue;
+    const key = `${Math.min(e.u, e.v)}-${Math.max(e.u, e.v)}`;
+    const total = pairSeen.get(key);
+    const idx = drawn.get(key) || 0; drawn.set(key, idx + 1);
+    const bidir = total > 1;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const sx = a.x + ux * nodeR, sy = a.y + uy * nodeR;
+    const ex = b.x - ux * nodeR, ey = b.y - uy * nodeR;
+
+    const eid = `${e.u}->${e.v}`;
+    const eidRev = `${e.v}->${e.u}`;
+    const treeEdge = pred[e.v] === e.u && Math.abs(dist[e.v] - (dist[e.u] + e.w)) < 1e-9 && dist[e.u] !== INF;
+    const treeEdgeRev = !e.dir && pred[e.u] === e.v && Math.abs(dist[e.u] - (dist[e.v] + e.w)) < 1e-9 && dist[e.v] !== INF;
+    let cls = 'edge', marker = 'url(#ah)';
+    if (pathEdges.has(eid) || pathEdges.has(eidRev)) { cls += ' path'; marker = 'url(#ahp)'; }
+    else if (lastRelaxed.has(eid) || lastRelaxed.has(eidRev)) { cls += ' relaxed'; marker = 'url(#ahr)'; }
+    else if (treeEdge || treeEdgeRev) { cls += ' tree'; marker = 'url(#aht)'; }
+
+    if (bidir) {
+      const nx = -uy, ny = ux;
+      const off = 14 * (idx === 0 ? 1 : -1);
+      const mx = (sx + ex) / 2 + nx * off, my = (sy + ey) / 2 + ny * off;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M${sx},${sy} Q${mx},${my} ${ex},${ey}`);
+      path.setAttribute('class', cls);
+      if (e.dir) path.setAttribute('marker-end', marker);
+      svg.appendChild(path);
+      const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lbl.setAttribute('class', 'elabel');
+      lbl.setAttribute('x', mx); lbl.setAttribute('y', my - 4);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.textContent = e.w;
+      svg.appendChild(lbl);
+    } else {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', sx); line.setAttribute('y1', sy);
+      line.setAttribute('x2', ex); line.setAttribute('y2', ey);
+      line.setAttribute('class', cls);
+      if (e.dir) line.setAttribute('marker-end', marker);
+      svg.appendChild(line);
+      const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lbl.setAttribute('class', 'elabel');
+      const nx = -uy, ny = ux;
+      lbl.setAttribute('x', (sx + ex) / 2 + nx * 10);
+      lbl.setAttribute('y', (sy + ey) / 2 + ny * 10);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.textContent = e.w;
+      svg.appendChild(lbl);
+    }
+  }
+
+  const pqSet = new Set(heap.toArray().filter(([d, v]) => !settled.has(v) && Math.abs(d - dist[v]) < 1e-9).map(([, v]) => v));
+  for (const v of vertices) {
+    const p = positions.get(v);
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    let cls = 'node';
+    if (v === src) cls += ' src';
+    if (settled.has(v)) cls += ' settled';
+    else if (pqSet.has(v)) cls += ' frontier';
+    if (v === currentPop) cls += ' current';
+    if (tgt !== null && v === tgt) cls += ' target';
+    g.setAttribute('class', cls);
+    g.setAttribute('transform', `translate(${p.x},${p.y})`);
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('r', nodeR);
+    g.appendChild(c);
+    const k = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    k.setAttribute('class', 'k'); k.setAttribute('y', -2); k.textContent = v;
+    g.appendChild(k);
+    const d = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    d.setAttribute('class', 'd'); d.setAttribute('y', 12);
+    d.textContent = dist[v] === INF ? '∞' : `d=${dist[v]}`;
+    g.appendChild(d);
+    svg.appendChild(g);
+  }
+}
+
+function renderAll() { renderGraph(); renderTable(); renderStats(); renderPQ(); renderLog(); }
+
+function loadRoute() {
+  $('edgesIn').value = '1 2 7\n1 3 9\n1 6 14\n2 3 10\n2 4 15\n3 4 11\n3 6 2\n4 5 6\n6 5 9';
+  $('src').value = 1; $('tgt').value = 5;
+  reset();
+}
+function loadGrid() {
+  const lines = [];
+  const W = 4, H = 3;
+  for (let r = 0; r < H; r++) {
+    for (let c = 0; c < W; c++) {
+      const id = r * W + c + 1;
+      if (c + 1 < W) lines.push(`${id} ${id + 1} ${1 + ((r + c) % 4)}`);
+      if (r + 1 < H) lines.push(`${id} ${id + W} ${1 + ((r * 2 + c) % 5)}`);
+    }
+  }
+  $('edgesIn').value = lines.join('\n');
+  $('src').value = 1; $('tgt').value = W * H;
+  reset();
+}
+function loadNeg() {
+  $('edgesIn').value = '1 2 4\n1 3 5\n2 3 -3\n3 4 4';
+  $('src').value = 1; $('tgt').value = 4;
+  reset();
+}
+
+reset();
+</script>
+</body>
+</html>
