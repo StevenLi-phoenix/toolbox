@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Feistel Cipher Round Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch a Feistel network encrypt and decrypt block by block — split into L and R halves, apply the round function, XOR, swap, repeat. Choose block size, rounds, round-key schedule, and F function to see how the structure works.">
+<meta name="keywords" content="feistel cipher, feistel network, block cipher, des, round function, cryptography learning, xor, symmetric encryption">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/feistel.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .form label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--muted); }
+  .form input, .form select {
+    padding: 7px 10px; font-family: var(--mono); font-size: .88rem;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+  }
+  textarea {
+    width: 100%; padding: 10px 12px; font-family: var(--mono); font-size: .88rem;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
+    box-sizing: border-box; min-height: 70px; resize: vertical;
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  button.pri, button.sec {
+    padding: 8px 14px; border-radius: 8px; font-family: var(--sans); font-size: .88rem;
+    cursor: pointer; border: 1px solid var(--border);
+  }
+  button.pri { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.sec { background: var(--surface2); color: var(--text); }
+  button.pri:hover, button.sec:hover { opacity: .9; }
+
+  .rounds { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+  .round {
+    display: grid; grid-template-columns: 44px 1fr 1fr 100px 1fr;
+    gap: 8px; align-items: center; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); font-family: var(--mono); font-size: .82rem;
+  }
+  .round.head { background: var(--surface2); color: var(--muted); font-size: .68rem;
+    text-transform: uppercase; letter-spacing: .04em; font-family: var(--sans); }
+  .round .lbl { color: var(--muted); font-size: .7rem; margin-bottom: 1px; font-family: var(--sans); }
+  .round .val { color: var(--text); word-break: break-all; }
+  .half-L { color: rgba(90, 140, 220, 1); }
+  .half-R { color: rgba(230, 165, 70, 1); }
+  .roundnum { font-weight: 700; color: var(--accent); text-align: center; }
+
+  .banner {
+    margin-top: 10px; padding: 10px 14px; border-radius: var(--radius);
+    background: var(--surface2); font-family: var(--mono); font-size: .88rem;
+    border-left: 3px solid var(--accent); word-break: break-all;
+  }
+  .banner .lbl { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-family: var(--sans); display: block; margin-bottom: 4px; }
+  .roundtrip {
+    margin-top: 10px; padding: 10px 14px; border-radius: var(--radius);
+    background: rgba(80, 180, 130, .12); color: var(--success);
+    border: 1px solid rgba(80, 180, 130, .35); font-size: .88rem;
+  }
+  .roundtrip.err { background: rgba(231, 76, 60, .12); color: var(--error); border-color: rgba(231, 76, 60, .35); }
+  @media (max-width: 720px) {
+    .round { grid-template-columns: 34px 1fr 1fr; }
+    .round .col-key, .round .col-out { grid-column: 1 / -1; }
+    .round.head { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Feistel Cipher Round Visualizer</h1>
+<p class="subtitle">A Feistel network splits a block into two halves <em>L</em> and <em>R</em>, then repeats a simple round: compute <code>F(R, K<sub>i</sub>)</code>, XOR the result into <em>L</em>, and swap. Because XOR is self-inverse and the swap is undone by another swap, the exact same circuit run with the round keys in reverse order decrypts — <em>F itself never needs to be invertible</em>. That's the trick that powers DES, Blowfish, TEA, and many others.</p>
+
+<div class="card">
+  <h2>Setup</h2>
+  <div class="form">
+    <label>Block bits
+      <select id="blockBits" onchange="run()">
+        <option>16</option>
+        <option selected>32</option>
+        <option>64</option>
+      </select>
+    </label>
+    <label>Rounds
+      <input id="rounds" type="number" min="1" max="32" value="8" oninput="run()">
+    </label>
+    <label>Round function F
+      <select id="fname" onchange="run()">
+        <option value="xorkey">XOR with rotated key</option>
+        <option value="addmix" selected>Add + rotate mix</option>
+        <option value="sbox">Byte S-box + shift</option>
+      </select>
+    </label>
+    <label>Key schedule
+      <select id="ksched" onchange="run()">
+        <option value="repeat" selected>Repeat master key</option>
+        <option value="rotate">Rotate master key per round</option>
+        <option value="lcg">LCG-derived subkeys</option>
+      </select>
+    </label>
+  </div>
+  <div class="row">
+    <div style="flex:1;min-width:240px">
+      <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Plaintext block (hex, padded/truncated to block size)</div>
+      <textarea id="pt" oninput="run()" spellcheck="false">deadbeef</textarea>
+    </div>
+    <div style="flex:1;min-width:240px">
+      <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Master key (hex)</div>
+      <textarea id="key" oninput="run()" spellcheck="false">cafebabe</textarea>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Encrypt</h2>
+  <div class="banner"><span class="lbl">initial (L | R)</span><span id="encInit"></span></div>
+  <div class="rounds" id="encRounds"></div>
+  <div class="banner"><span class="lbl">ciphertext (L | R after final swap-back per Feistel convention)</span><span id="encFinal"></span></div>
+</div>
+
+<div class="card">
+  <h2>Decrypt (same network, reversed keys)</h2>
+  <div class="banner"><span class="lbl">ciphertext (L | R)</span><span id="decInit"></span></div>
+  <div class="rounds" id="decRounds"></div>
+  <div class="banner"><span class="lbl">recovered plaintext</span><span id="decFinal"></span></div>
+  <div id="roundtrip" class="roundtrip"></div>
+</div>
+
+<div class="card">
+  <h2>Why the same circuit decrypts</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    After a round: <code>L' = R</code>, <code>R' = L ⊕ F(R, K<sub>i</sub>)</code>. To invert, we want L and R back from L' and R'. Substitute <code>R = L'</code>: <code>L = R' ⊕ F(L', K<sub>i</sub>)</code>. That's exactly the same round formula applied to (R', L') — swap the halves, apply the same F with the same key, swap again. So running the network with the round keys in reverse order undoes encryption. F can be anything — hash, S-box, table lookup — because it never has to be inverted; only XOR does the reversible heavy lifting.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const SBOX = (() => {
+  // Deterministic pseudo-S-box (bijection on 0..255)
+  const arr = Array.from({length: 256}, (_, i) => i);
+  let seed = 0x9e3779b9;
+  for (let i = 255; i > 0; i--) {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    const j = seed % (i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+})();
+
+function normHex(s, bits) {
+  s = (s || '').replace(/[^0-9a-fA-F]/g, '').toLowerCase();
+  const nyb = bits / 4;
+  if (s.length > nyb) s = s.slice(-nyb);
+  if (s.length < nyb) s = s.padStart(nyb, '0');
+  return s;
+}
+function normKey(s) {
+  s = (s || '').replace(/[^0-9a-fA-F]/g, '').toLowerCase();
+  if (s.length === 0) s = '0';
+  if (s.length % 2) s = '0' + s;
+  return s;
+}
+function hexToBytes(h) {
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i*2, 2), 16);
+  return out;
+}
+function bytesToHex(b) {
+  return [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function xorBytes(a, b) {
+  const out = new Uint8Array(a.length);
+  for (let i = 0; i < a.length; i++) out[i] = a[i] ^ b[i];
+  return out;
+}
+function rol8(x, n) { n &= 7; return ((x << n) | (x >>> (8 - n))) & 0xff; }
+
+function subkeys(masterHex, nRounds, halfBytes, schedule) {
+  const mk = hexToBytes(masterHex.length ? masterHex : '00');
+  const keys = [];
+  for (let i = 0; i < nRounds; i++) {
+    const k = new Uint8Array(halfBytes);
+    if (schedule === 'repeat') {
+      for (let j = 0; j < halfBytes; j++) k[j] = mk[j % mk.length];
+    } else if (schedule === 'rotate') {
+      for (let j = 0; j < halfBytes; j++) k[j] = mk[(j + i) % mk.length];
+    } else { // lcg
+      let s = 0;
+      for (const b of mk) s = ((s * 131) + b) >>> 0;
+      s = (s ^ (i * 0x9e3779b9)) >>> 0;
+      for (let j = 0; j < halfBytes; j++) {
+        s = (s * 1103515245 + 12345 + i) >>> 0;
+        k[j] = (s >>> ((j & 3) * 8)) & 0xff;
+      }
+    }
+    keys.push(k);
+  }
+  return keys;
+}
+
+function F(R, K, fname, roundIdx) {
+  const out = new Uint8Array(R.length);
+  if (fname === 'xorkey') {
+    for (let i = 0; i < R.length; i++) out[i] = rol8(R[i] ^ K[i], (roundIdx + i) % 8);
+  } else if (fname === 'addmix') {
+    for (let i = 0; i < R.length; i++) {
+      const s = (R[i] + K[i] + roundIdx * 17) & 0xff;
+      out[i] = rol8(s, (roundIdx + i) % 8) ^ K[(i + 1) % K.length];
+    }
+  } else { // sbox
+    for (let i = 0; i < R.length; i++) {
+      out[i] = SBOX[(R[i] + K[i]) & 0xff];
+    }
+    // simple mix
+    const t = out[0]; for (let i = 0; i < out.length - 1; i++) out[i] = out[i+1] ^ K[i]; out[out.length-1] = t;
+  }
+  return out;
+}
+
+function feistel(blockHex, keys, fname, forEncrypt) {
+  const b = hexToBytes(blockHex);
+  const half = b.length / 2;
+  let L = b.slice(0, half);
+  let R = b.slice(half);
+  const trace = [];
+  const ks = forEncrypt ? keys : [...keys].reverse();
+  for (let i = 0; i < ks.length; i++) {
+    const K = ks[i];
+    const Fout = F(R, K, fname, forEncrypt ? i : (ks.length - 1 - i));
+    const newL = R;
+    const newR = xorBytes(L, Fout);
+    trace.push({
+      round: i + 1,
+      L: bytesToHex(L), R: bytesToHex(R),
+      K: bytesToHex(K),
+      F: bytesToHex(Fout),
+      newL: bytesToHex(newL), newR: bytesToHex(newR),
+    });
+    L = newL; R = newR;
+  }
+  // Final swap per Feistel convention (so ciphertext = R || L after last round doesn't swap)
+  const finalL = R, finalR = L;
+  return { trace, final: bytesToHex(finalL) + bytesToHex(finalR), initial: bytesToHex(b) };
+}
+
+function renderRounds(container, trace, forEncrypt) {
+  const box = $(container);
+  box.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'round head';
+  head.innerHTML = `
+    <div>#</div>
+    <div>L<sub>${forEncrypt ? 'i' : 'i'}</sub> <span class="half-L">(blue)</span></div>
+    <div>R<sub>i</sub> <span class="half-R">(orange)</span></div>
+    <div>K<sub>i</sub></div>
+    <div>F(R,K) → L<sub>i+1</sub> | R<sub>i+1</sub></div>
+  `;
+  box.appendChild(head);
+  trace.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'round';
+    row.innerHTML = `
+      <div class="roundnum">${t.round}</div>
+      <div><div class="lbl">L</div><div class="val half-L">${t.L}</div></div>
+      <div><div class="lbl">R</div><div class="val half-R">${t.R}</div></div>
+      <div class="col-key"><div class="lbl">K</div><div class="val">${t.K}</div></div>
+      <div class="col-out">
+        <div class="lbl">F=${t.F}</div>
+        <div class="val"><span class="half-L">${t.newL}</span> | <span class="half-R">${t.newR}</span></div>
+      </div>
+    `;
+    box.appendChild(row);
+  });
+}
+
+function splitLR(hex) {
+  const h = hex.length / 2;
+  return hex.slice(0, h) + ' | ' + hex.slice(h);
+}
+
+function run() {
+  const bits = parseInt($('blockBits').value);
+  const rounds = Math.max(1, Math.min(32, parseInt($('rounds').value) || 1));
+  const fname = $('fname').value;
+  const sched = $('ksched').value;
+  const pt = normHex($('pt').value, bits);
+  const key = normKey($('key').value);
+  const halfBytes = bits / 8 / 2;
+  const keys = subkeys(key, rounds, halfBytes, sched);
+
+  const enc = feistel(pt, keys, fname, true);
+  $('encInit').textContent = splitLR(enc.initial);
+  renderRounds('encRounds', enc.trace, true);
+  $('encFinal').textContent = splitLR(enc.final);
+
+  const dec = feistel(enc.final, keys, fname, false);
+  $('decInit').textContent = splitLR(dec.initial);
+  renderRounds('decRounds', dec.trace, false);
+  $('decFinal').textContent = splitLR(dec.final);
+
+  const box = $('roundtrip');
+  if (dec.final === pt) {
+    box.className = 'roundtrip';
+    box.textContent = `✓ Round-trip OK — decryption recovered the exact plaintext ${pt}.`;
+  } else {
+    box.className = 'roundtrip err';
+    box.textContent = `✗ Round-trip mismatch: expected ${pt}, got ${dec.final}.`;
+  }
+}
+
+run();
+</script>
+</body>
+</html>

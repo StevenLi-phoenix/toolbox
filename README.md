@@ -175,6 +175,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Feistel Cipher Round Visualizer](feistel.html) | Watch a Feistel network encrypt block by block — split into L and R, apply `F(R,K)`, XOR into L, swap, repeat — then decrypt with the same circuit and reversed round keys. Configurable block size, rounds, F function, and key schedule; live round-trip check. |
 | [Verhoeff Check Digit Calculator](verhoeff.html) | Compute and validate Verhoeff check digits — a decimal checksum that catches every single-digit error and every adjacent-transposition error, unlike Luhn. Full step-by-step trace against the dihedral-group `d`, `p`, and `inv` tables. Used by India's Aadhaar 12-digit ID. |
 | [Chinese Remainder Theorem Solver](crt.html) | Solve simultaneous linear congruences `x ≡ aᵢ (mod mᵢ)` — handles the classic coprime case and Gauss's generalized non-coprime case, with full extended-Euclidean derivation and `BigInt` arithmetic that survives RSA-sized moduli. |
 | [CRC Multi-Polynomial Calculator](crcmulti.html) | Compute 18 standard CRC checksums in one pass — CRC-8 (SMBus, MAXIM, ROHC, CDMA2000), CRC-16 (ARC, CCITT-FALSE, KERMIT, MODBUS, USB, XMODEM, GENIBUS, MCRF4XX), CRC-32 (IEEE 802.3, BZIP2, MPEG-2, POSIX, Castagnoli, JAMCRC). ASCII or hex input, full Rocksoft parameter display (poly, init, refIn/Out, xorOut). |
@@ -262,6 +263,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [UUIDv7 Generator & Inspector](uuidv7.html) | Generate and decode UUID v7 (RFC 9562) — the time-ordered, k-sortable identifier that packs a Unix millisecond timestamp into the leading 48 bits. Batch up to 1024 IDs, or paste any UUID to see its embedded timestamp, version, variant, and random bits colour-mapped. |
+| [0/1 Knapsack DP Visualizer](knapsack.html) | Watch the O(nW) dynamic-programming table fill cell by cell for the 0/1 knapsack problem — green when taking an item beats skipping it, orange for the traceback path, blue for the optimal answer. Presets included; edit items and capacity live. |
 | [Dijkstra's Shortest Path Visualizer](dijkstra.html) | Watch the greedy min-heap settle vertices in outward-wave order on any non-negative weighted graph. Every step shows the priority queue, per-edge relaxation, the shortest-path tree, and the final target path — with a negative-edge warning that steers you to Bellman-Ford when the assumption breaks. |
 | [Suffix Array & LCP Builder](suffixarray.html) | Sort every suffix, build the LCP array in linear time via Kasai, and get instant substring search (binary-search range in SA), the longest repeated substring, distinct-substring count, and inverse-rank column — the same index behind `grep -r`, bioinformatics BWT, and full-text search engines. |
 | [Aho-Corasick Multi-Pattern Matcher](ahocorasick.html) | Search every pattern from a dictionary in one text pass. Watch the trie get built, failure links wired via BFS (KMP generalized to a keyword tree), dictionary links surface shorter suffix matches, and the automaton stream through the text in `O(|patterns| + |text| + matches)` — the algorithm behind `fgrep`, keyword filters, and signature scanners. |

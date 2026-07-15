@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UUIDv7 Generator &amp; Inspector — Free Online Tool</title>
+<meta name="description" content="Generate and decode UUID v7 — the time-ordered, k-sortable RFC 9562 identifier. See the embedded millisecond timestamp, version, variant, and random bits — batch generate up to 1024 at a time.">
+<meta name="keywords" content="uuidv7, uuid v7, rfc 9562, time-ordered uuid, k-sortable id, sortable uuid, uuid decoder, uuid inspector">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/uuidv7.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .mono { font-family: var(--mono); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .row label { font-size: .82rem; color: var(--muted); }
+  .row input[type=number] { width: 100px; padding: 6px 8px; font-family: var(--mono);
+    background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
+  button.pri, button.sec {
+    padding: 8px 14px; border-radius: 8px; font-family: var(--sans); font-size: .88rem;
+    cursor: pointer; border: 1px solid var(--border);
+  }
+  button.pri { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.sec { background: var(--surface2); color: var(--text); }
+  button.sec:hover, button.pri:hover { opacity: .9; }
+  textarea {
+    width: 100%; min-height: 160px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem;
+    box-sizing: border-box; resize: vertical;
+  }
+  #single {
+    width: 100%; padding: 12px 14px; font-family: var(--mono); font-size: 1.05rem;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: var(--radius); box-sizing: border-box; letter-spacing: .02em;
+  }
+  .bits {
+    display: flex; flex-wrap: wrap; gap: 2px; margin: 10px 0;
+  }
+  .bit-group {
+    padding: 6px 8px; border-radius: 6px; font-family: var(--mono);
+    font-size: .78rem; display: flex; flex-direction: column; gap: 2px;
+    border: 1px solid var(--border); min-width: 60px;
+  }
+  .bit-group .label { font-size: .62rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .bit-group .val { font-weight: 600; color: var(--text); }
+  .bit-group.ts { background: rgba(90, 140, 220, .15); border-color: rgba(90, 140, 220, .5); }
+  .bit-group.ver { background: rgba(230, 165, 70, .18); border-color: rgba(230, 165, 70, .5); }
+  .bit-group.var { background: rgba(200, 90, 200, .18); border-color: rgba(200, 90, 200, .5); }
+  .bit-group.rand { background: rgba(80, 180, 130, .15); border-color: rgba(80, 180, 130, .5); }
+  .decoded {
+    display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin-top: 12px;
+    font-size: .88rem;
+  }
+  .decoded dt { color: var(--muted); font-family: var(--sans); }
+  .decoded dd { margin: 0; font-family: var(--mono); color: var(--text); word-break: break-all; }
+  .status { font-size: .82rem; margin-top: 8px; }
+  .status.ok { color: var(--success); }
+  .status.err { color: var(--error); }
+  .layout {
+    display: grid; grid-template-columns: 48px 16px 48px 16px 48px 8px 48px 8px 48px 16px 48px 16px 48px 16px 48px;
+    justify-content: center; gap: 0; margin: 10px 0; font-family: var(--mono); font-size: .68rem;
+    color: var(--muted); overflow-x: auto;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>UUIDv7 Generator &amp; Inspector</h1>
+<p class="subtitle">UUID version 7 (RFC 9562) packs a big-endian Unix millisecond timestamp into the leading 48 bits so IDs sort naturally by creation time. Great for database indexes: no more random-uuid B-tree fragmentation, no separate <code>created_at</code> needed for coarse ordering, and still collision-safe thanks to 74 bits of entropy.</p>
+
+<div class="card">
+  <h2>Single</h2>
+  <div class="row">
+    <input id="single" spellcheck="false" value="">
+  </div>
+  <div class="row">
+    <button class="pri" onclick="generateSingle()">Generate new</button>
+    <button class="sec" onclick="copyOne()">Copy</button>
+    <span id="copyMsg" class="status"></span>
+  </div>
+  <div id="viz" class="bits"></div>
+  <dl id="decoded" class="decoded"></dl>
+  <div id="parseErr" class="status err"></div>
+</div>
+
+<div class="card">
+  <h2>Batch generate</h2>
+  <div class="row">
+    <label>Count <input id="count" type="number" min="1" max="1024" value="16"></label>
+    <label>Base timestamp (ms, blank = now) <input id="baseTs" type="number" placeholder="1752585600000" style="width:180px"></label>
+    <label>Step per row (ms) <input id="step" type="number" value="0"></label>
+    <button class="pri" onclick="generateBatch()">Generate batch</button>
+    <button class="sec" onclick="copyBatch()">Copy all</button>
+    <span id="batchMsg" class="status"></span>
+  </div>
+  <textarea id="batch" spellcheck="false" placeholder="Generated UUIDs appear here…"></textarea>
+</div>
+
+<div class="card">
+  <h2>Bit layout</h2>
+  <p style="font-size:.85rem;color:var(--muted);line-height:1.6;margin:6px 0">
+    128 bits total, rendered as 8-4-4-4-12 hex. The high 48 bits hold the timestamp (ms since 1970-01-01 UTC), followed by 4 bits fixed to <code>0111</code> (version 7), 12 bits of extra randomness (<code>rand_a</code>), 2 bits fixed to <code>10</code> (variant), and 62 bits of random <code>rand_b</code>. That means the first hex digit of the 3rd group is always <code>7</code>, and the first hex digit of the 4th group is one of <code>8 9 a b</code>.
+  </p>
+  <pre class="mono" style="font-size:.72rem;background:var(--surface);padding:12px;border-radius:6px;overflow-x:auto;line-height:1.4">
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                           unix_ts_ms                          |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|          unix_ts_ms           |  ver  |       rand_a          |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|var|                        rand_b                             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                            rand_b                             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+</pre>
+</div>
+
+<div class="card">
+  <h2>UUIDv4 vs UUIDv7 vs ULID</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+    <thead>
+      <tr style="text-align:left;border-bottom:1px solid var(--border)">
+        <th style="padding:6px 8px">&nbsp;</th>
+        <th style="padding:6px 8px">v4</th>
+        <th style="padding:6px 8px">v7</th>
+        <th style="padding:6px 8px">ULID</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Sortable by time</td><td style="padding:6px 8px">✘</td><td style="padding:6px 8px">✔ (ms)</td><td style="padding:6px 8px">✔ (ms)</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Bits of entropy</td><td style="padding:6px 8px">122</td><td style="padding:6px 8px">74</td><td style="padding:6px 8px">80</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Length (rendered)</td><td style="padding:6px 8px">36</td><td style="padding:6px 8px">36</td><td style="padding:6px 8px">26 (base32)</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Standardised</td><td style="padding:6px 8px">RFC 9562</td><td style="padding:6px 8px">RFC 9562</td><td style="padding:6px 8px">Draft (Alizain 2016)</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Drop-in for existing <code>uuid</code> columns</td><td style="padding:6px 8px">✔</td><td style="padding:6px 8px">✔</td><td style="padding:6px 8px">✘ (needs base32)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function randomBytes(n) {
+  const b = new Uint8Array(n);
+  crypto.getRandomValues(b);
+  return b;
+}
+
+function uuidv7(tsMs) {
+  const ts = BigInt(tsMs);
+  const b = randomBytes(16);
+  // High 48 bits = timestamp big-endian
+  b[0] = Number((ts >> 40n) & 0xffn);
+  b[1] = Number((ts >> 32n) & 0xffn);
+  b[2] = Number((ts >> 24n) & 0xffn);
+  b[3] = Number((ts >> 16n) & 0xffn);
+  b[4] = Number((ts >> 8n) & 0xffn);
+  b[5] = Number(ts & 0xffn);
+  // Version 7 in top 4 bits of byte 6
+  b[6] = (b[6] & 0x0f) | 0x70;
+  // Variant 10 in top 2 bits of byte 8
+  b[8] = (b[8] & 0x3f) | 0x80;
+  return bytesToUuid(b);
+}
+
+function bytesToUuid(b) {
+  const hex = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
+}
+
+function parseUuid(s) {
+  s = s.trim().toLowerCase().replace(/^urn:uuid:/, '').replace(/[{}]/g, '');
+  const m = s.match(/^([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})$/);
+  if (!m) return null;
+  const hex = (m[1] + m[2] + m[3] + m[4] + m[5]);
+  const b = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) b[i] = parseInt(hex.substr(i*2, 2), 16);
+  return b;
+}
+
+function inspect(uuidStr) {
+  const b = parseUuid(uuidStr);
+  if (!b) return { error: 'Not a valid UUID string (expect 8-4-4-4-12 hex).' };
+  const version = (b[6] >> 4) & 0x0f;
+  const variantHigh = b[8] >> 4;
+  let variant;
+  if ((variantHigh & 0x8) === 0) variant = 'NCS (0xxx) — reserved backward compat';
+  else if ((variantHigh & 0xc) === 0x8) variant = 'RFC 9562 (10xx)';
+  else if ((variantHigh & 0xe) === 0xc) variant = 'Microsoft (110x)';
+  else variant = 'Reserved future (111x)';
+  const tsHigh = BigInt(b[0]) << 40n | BigInt(b[1]) << 32n | BigInt(b[2]) << 24n
+               | BigInt(b[3]) << 16n | BigInt(b[4]) << 8n | BigInt(b[5]);
+  const tsMs = Number(tsHigh);
+  const randA = ((b[6] & 0x0f) << 8) | b[7];
+  const randBHex = [...b.slice(8)].map(x => x.toString(16).padStart(2, '0')).join('');
+  return { b, version, variant, variantHigh, tsMs, randA, randBHex };
+}
+
+function renderInspect(uuidStr) {
+  const viz = $('viz'), dec = $('decoded'), err = $('parseErr');
+  viz.innerHTML = ''; dec.innerHTML = ''; err.textContent = '';
+  const r = inspect(uuidStr);
+  if (r.error) { err.textContent = r.error; return; }
+  const groups = [
+    { cls: 'ts',   label: 'ts_ms hi 32',  val: [...r.b.slice(0,4)].map(x=>x.toString(16).padStart(2,'0')).join('') },
+    { cls: 'ts',   label: 'ts_ms lo 16',  val: [...r.b.slice(4,6)].map(x=>x.toString(16).padStart(2,'0')).join('') },
+    { cls: 'ver',  label: 'ver',          val: ((r.b[6]>>4)&0xf).toString(16) },
+    { cls: 'rand', label: 'rand_a',       val: (((r.b[6]&0xf)<<8) | r.b[7]).toString(16).padStart(3,'0') },
+    { cls: 'var',  label: 'var',          val: ((r.b[8]>>6)&0x3).toString(2).padStart(2,'0') },
+    { cls: 'rand', label: 'rand_b',       val: [...r.b.slice(8,16)].map(x=>x.toString(16).padStart(2,'0')).join('').slice(1) },
+  ];
+  for (const g of groups) {
+    const d = document.createElement('div');
+    d.className = 'bit-group ' + g.cls;
+    d.innerHTML = `<span class="label">${g.label}</span><span class="val">${g.val}</span>`;
+    viz.appendChild(d);
+  }
+  const dt = new Date(r.tsMs);
+  const rows = [
+    ['Version', `${r.version}${r.version === 7 ? ' (UUIDv7 ✓)' : ' — not v7'}`],
+    ['Variant bits', `${((r.b[8]>>6)&0x3).toString(2).padStart(2,'0')} — ${r.variant}`],
+    ['Timestamp (ms)', r.tsMs.toString()],
+    ['Timestamp (ISO)', isFinite(dt.getTime()) ? dt.toISOString() : '(out of range)'],
+    ['Timestamp (local)', isFinite(dt.getTime()) ? dt.toString() : '(out of range)'],
+    ['rand_a (12b)', '0x' + r.randA.toString(16).padStart(3, '0')],
+    ['rand_b (62b, hex)', '0x' + r.randBHex.slice(1) + ' (top 2 bits masked as variant)'],
+    ['Raw bytes', [...r.b].map(x=>x.toString(16).padStart(2,'0')).join(' ')],
+  ];
+  for (const [k, v] of rows) {
+    const dtEl = document.createElement('dt'); dtEl.textContent = k;
+    const ddEl = document.createElement('dd'); ddEl.textContent = v;
+    dec.appendChild(dtEl); dec.appendChild(ddEl);
+  }
+}
+
+function generateSingle() {
+  $('single').value = uuidv7(Date.now());
+  renderInspect($('single').value);
+}
+
+function copyOne() {
+  navigator.clipboard.writeText($('single').value).then(() => {
+    $('copyMsg').textContent = 'Copied.';
+    $('copyMsg').className = 'status ok';
+    setTimeout(() => $('copyMsg').textContent = '', 1200);
+  });
+}
+
+function generateBatch() {
+  const n = Math.max(1, Math.min(1024, parseInt($('count').value) || 1));
+  const baseRaw = $('baseTs').value.trim();
+  const base = baseRaw === '' ? Date.now() : parseInt(baseRaw);
+  const step = parseInt($('step').value) || 0;
+  const lines = [];
+  for (let i = 0; i < n; i++) lines.push(uuidv7(base + step * i));
+  $('batch').value = lines.join('\n');
+  $('batchMsg').textContent = `${n} generated.`;
+  $('batchMsg').className = 'status ok';
+  setTimeout(() => $('batchMsg').textContent = '', 1500);
+}
+
+function copyBatch() {
+  navigator.clipboard.writeText($('batch').value).then(() => {
+    $('batchMsg').textContent = 'Copied.';
+    $('batchMsg').className = 'status ok';
+    setTimeout(() => $('batchMsg').textContent = '', 1200);
+  });
+}
+
+$('single').addEventListener('input', () => renderInspect($('single').value));
+
+generateSingle();
+generateBatch();
+</script>
+</body>
+</html>
