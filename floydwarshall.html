@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Floyd-Warshall All-Pairs Shortest Paths Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch Floyd-Warshall solve all-pairs shortest paths on any weighted graph — with a live dist and next matrix, per-k relaxation heatmap, negative-cycle detection, and clickable path reconstruction between any pair.">
+<meta name="keywords" content="floyd-warshall, all pairs shortest paths, apsp, dynamic programming, graph algorithm, visualizer, distance matrix, negative cycle, shortest path, path reconstruction">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/floydwarshall.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: .88rem; }
+  .controls input[type=number], .controls input[type=text], .controls textarea {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=number] { width: 70px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .controls label { color: var(--muted); }
+  .edges-input { width: 100%; min-height: 100px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; resize: vertical; box-sizing: border-box; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .matrix-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; padding: 12px; }
+  table.mx { border-collapse: collapse; font-family: var(--mono); font-size: .82rem; margin: 0 auto; }
+  table.mx th, table.mx td {
+    padding: 5px 9px; text-align: center; border: 1px solid var(--border);
+    min-width: 44px; height: 28px;
+  }
+  table.mx th { background: var(--surface2); color: var(--muted); font-weight: 500; }
+  table.mx td.k-row, table.mx td.k-col { background: rgba(99, 102, 241, .12); }
+  table.mx td.k-cell { background: rgba(99, 102, 241, .3); font-weight: 700; }
+  table.mx td.updated { background: rgba(40, 180, 99, .3); color: var(--success); font-weight: 700; }
+  table.mx td.considered { background: rgba(241, 196, 15, .25); color: var(--warning); }
+  table.mx td.negcycle { background: rgba(230, 92, 92, .35); color: var(--error); font-weight: 700; }
+  table.mx td.self { color: var(--muted); }
+  table.mx td.inf { color: var(--muted); }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .banner { padding: 10px 12px; border-radius: var(--radius); font-size: .88rem; margin-top: 10px; }
+  .banner.ok { background: rgba(40, 180, 99, .12); border: 1px solid var(--success); color: var(--success); }
+  .banner.err { background: rgba(230, 92, 92, .12); border: 1px solid var(--error); color: var(--error); }
+  .banner.warn { background: rgba(241, 196, 15, .12); border: 1px solid var(--warning); color: var(--warning); }
+  .path-box { margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .path-box h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .path-box .path { font-family: var(--mono); font-size: .95rem; padding: 6px; background: var(--bg); border-radius: 4px; border: 1px solid var(--border); word-break: break-all; }
+  .path-box .path .hop { color: var(--accent); }
+  .log { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 220px; overflow-y: auto; }
+  .log h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .log .row { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .log .row.op { color: var(--warning); font-weight: 600; }
+  .log .row.hit { color: var(--success); }
+  .log .row.miss { color: var(--muted); }
+  .log .row.walk { color: var(--accent); }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+  .legend .sw { display: inline-block; width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; border-radius: 3px; border: 1px solid var(--border); }
+  .legend .sw.k { background: rgba(99, 102, 241, .3); }
+  .legend .sw.u { background: rgba(40, 180, 99, .3); }
+  .legend .sw.c { background: rgba(241, 196, 15, .25); }
+  .legend .sw.n { background: rgba(230, 92, 92, .35); }
+  .mx-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .mx-tabs button {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .82rem;
+  }
+  .mx-tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .kstep {
+    text-align: center; font-family: var(--mono); font-size: .95rem; color: var(--muted);
+    padding: 6px 0;
+  }
+  .kstep b { color: var(--accent); font-size: 1.15rem; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Floyd-Warshall All-Pairs Shortest Paths Visualizer</h1>
+<p class="subtitle"><strong>Floyd-Warshall</strong> solves shortest paths between <em>every pair</em> of vertices in a single <code>O(|V|³)</code> triple loop. Each outer step picks an intermediate vertex <code>k</code> and, for every pair <code>(i, j)</code>, checks if routing through <code>k</code> is shorter than the current best <code>dist[i][j]</code>. Unlike Dijkstra, it tolerates negative edges (as long as there are no negative-weight cycles) — and it detects those cycles for you when a diagonal entry drops below zero. Watch the matrix fill and shrink step by step.</p>
+
+<div class="card">
+  <div class="controls">
+    <button class="primary" onclick="runAll()">Run to completion</button>
+    <button onclick="stepK()">Step 1 <code>k</code></button>
+    <button onclick="reset()">Reset</button>
+    <button onclick="loadRoute()">Road-network demo</button>
+    <button onclick="loadNeg()">Negative-edge demo</button>
+    <button onclick="loadNegCycle()">Negative-cycle demo</button>
+    <button onclick="loadCurrency()">Currency arbitrage demo</button>
+  </div>
+  <div class="controls" style="align-items:flex-start;flex-direction:column;gap:4px">
+    <label>Edges — one <code>u v w</code> per line (space-separated). Add <code>d</code> as 4th column to mark directed (<code>1</code>), otherwise undirected.</label>
+    <textarea class="edges-input" id="edgesIn">1 2 3
+1 3 8
+1 5 -4
+2 4 1
+2 5 7
+3 2 4
+4 1 2
+4 3 -5
+5 4 6</textarea>
+    <label style="margin-top:6px">Treat every edge as <label style="color:var(--text)"><input type="radio" name="dir" id="dirUndir"> undirected</label> <label style="color:var(--text)"><input type="radio" name="dir" id="dirDir" checked> directed</label> (per-line <code>d</code> flag overrides)</label>
+  </div>
+  <div class="layout">
+    <div>
+      <div class="kstep" id="kstep">before initialisation</div>
+      <div class="mx-tabs">
+        <button id="tabD" class="active" onclick="setTab('D')">Distance matrix</button>
+        <button id="tabN" onclick="setTab('N')">Next-hop matrix</button>
+      </div>
+      <div class="matrix-wrap"><div id="mxHolder"></div></div>
+      <div id="banner"></div>
+      <p class="legend" style="margin-top:10px">
+        <span class="sw k"></span> current row <code>i=k</code> / col <code>j=k</code> &nbsp;
+        <span class="sw u"></span> updated (shorter via <code>k</code>) &nbsp;
+        <span class="sw c"></span> considered &nbsp;
+        <span class="sw n"></span> negative-cycle diagonal
+      </p>
+    </div>
+    <div>
+      <div class="stats">
+        <h3>Run stats</h3>
+        <div class="stat-row"><span>Vertices |V|</span><span class="v" id="sV">0</span></div>
+        <div class="stat-row"><span>Edges |E|</span><span class="v" id="sE">0</span></div>
+        <div class="stat-row"><span>Current k</span><span class="v" id="sK">—</span></div>
+        <div class="stat-row"><span>Relaxations</span><span class="v" id="sR">0</span></div>
+        <div class="stat-row"><span>Improvements this k</span><span class="v" id="sI">0</span></div>
+        <div class="stat-row"><span>Negative cycle?</span><span class="v" id="sNC">?</span></div>
+      </div>
+      <div class="path-box">
+        <h3>Reconstruct a path (click two cells or type)</h3>
+        <div class="controls" style="margin-top:6px">
+          <label>From <input type="number" id="pFrom" style="width:70px" value="1"></label>
+          <label>To <input type="number" id="pTo" style="width:70px" value="4"></label>
+          <button onclick="showPath()">Show</button>
+        </div>
+        <div class="path" id="pathOut">— run first —</div>
+      </div>
+      <div class="log">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>The DP recurrence</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Let <code>d<sup>(k)</sup>[i][j]</code> be the shortest path from <code>i</code> to <code>j</code> using only intermediate vertices from the set <code>{1, 2, …, k}</code>. Then either the shortest path already avoids vertex <code>k</code> — in which case <code>d<sup>(k)</sup>[i][j] = d<sup>(k−1)</sup>[i][j]</code> — or it passes through <code>k</code> exactly once, giving <code>d<sup>(k)</sup>[i][j] = d<sup>(k−1)</sup>[i][k] + d<sup>(k−1)</sup>[k][j]</code>. Take the minimum. The in-place implementation famously overwrites the same matrix as it goes because the row and column for the current <code>k</code> are stable within the pass: <code>d[k][k] + d[k][k]</code> can't improve anything else so long as <code>d[k][k] = 0</code> (which stays true until a negative cycle appears).
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    A negative diagonal entry <code>d[v][v] &lt; 0</code> after the algorithm finishes is the ironclad signature of a negative-weight cycle reachable from <code>v</code>. Every APSP entry <code>d[i][j]</code> where <code>i</code> can reach some cycle vertex and that vertex can reach <code>j</code> is effectively <code>−∞</code> — no finite shortest path exists.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Floyd-Warshall vs Dijkstra vs Bellman-Ford</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+    <thead>
+      <tr style="text-align:left;border-bottom:1px solid var(--border)">
+        <th style="padding:6px 8px">&nbsp;</th>
+        <th style="padding:6px 8px">Floyd-Warshall</th>
+        <th style="padding:6px 8px">Dijkstra × |V|</th>
+        <th style="padding:6px 8px">Bellman-Ford × |V|</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Problem solved</td><td style="padding:6px 8px">all-pairs</td><td style="padding:6px 8px">all-pairs (via SSSP loop)</td><td style="padding:6px 8px">all-pairs (via SSSP loop)</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Time complexity</td><td style="padding:6px 8px"><code>O(|V|³)</code></td><td style="padding:6px 8px"><code>O(|V|·(|V|+|E|) log |V|)</code></td><td style="padding:6px 8px"><code>O(|V|²·|E|)</code></td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Negative edges</td><td style="padding:6px 8px">✔ (no negative cycles)</td><td style="padding:6px 8px">✘</td><td style="padding:6px 8px">✔ (no negative cycles)</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Detects negative cycle</td><td style="padding:6px 8px">✔ (diagonal &lt; 0)</td><td style="padding:6px 8px">✘</td><td style="padding:6px 8px">✔</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Best for</td><td style="padding:6px 8px">dense graphs, small |V|</td><td style="padding:6px 8px">sparse, non-negative</td><td style="padding:6px 8px">sparse, allows negative</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const INF = Infinity;
+
+let vertices = [], vIdx = {}, edges = [];
+let dist = [], next = [];
+let currentK = -1, doneK = -1;
+let stats = { r: 0, i: 0 };
+let logRows = [];
+let updatedCells = new Set(), consideredCells = new Set();
+let negCycle = false;
+let tab = 'D';
+
+function parseEdges() {
+  edges = [];
+  const seen = new Set();
+  const globalDir = $('dirDir').checked;
+  const lines = $('edgesIn').value.split('\n').map(l => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const parts = line.split(/\s+/);
+    if (parts.length < 3) continue;
+    const u = parseInt(parts[0]), v = parseInt(parts[1]), w = parseFloat(parts[2]);
+    const dir = parts.length >= 4 ? parseInt(parts[3]) === 1 : globalDir;
+    if (!Number.isFinite(u) || !Number.isFinite(v) || !Number.isFinite(w)) continue;
+    seen.add(u); seen.add(v);
+    edges.push({ u, v, w, dir });
+  }
+  vertices = [...seen].sort((a, b) => a - b);
+  vIdx = {}; vertices.forEach((v, i) => vIdx[v] = i);
+}
+
+function reset() {
+  parseEdges();
+  const n = vertices.length;
+  dist = Array.from({ length: n }, () => Array(n).fill(INF));
+  next = Array.from({ length: n }, () => Array(n).fill(null));
+  for (let i = 0; i < n; i++) dist[i][i] = 0;
+  for (const e of edges) {
+    const i = vIdx[e.u], j = vIdx[e.v];
+    if (e.w < dist[i][j]) { dist[i][j] = e.w; next[i][j] = j; }
+    if (!e.dir && e.w < dist[j][i]) { dist[j][i] = e.w; next[j][i] = i; }
+  }
+  currentK = -1; doneK = -1;
+  stats = { r: 0, i: 0 };
+  updatedCells = new Set(); consideredCells = new Set();
+  negCycle = false;
+  logRows = [{ t: `reset — |V|=${n}, |E|=${edges.length}, initialised dist matrix from edges`, cls: 'op' }];
+  $('banner').innerHTML = '';
+  $('kstep').innerHTML = 'before iteration — initial dist matrix from edges';
+  renderAll();
+}
+
+function stepK() {
+  const n = vertices.length;
+  if (!n) return;
+  if (doneK >= n - 1) {
+    $('banner').innerHTML = negCycle
+      ? '<div class="banner err">Negative-weight cycle detected — diagonal entries went negative. APSP values along cycle-reachable pairs are effectively −∞.</div>'
+      : `<div class="banner ok">Done — full APSP matrix computed in ${n} k-passes, ${stats.r} relaxations total.</div>`;
+    return;
+  }
+  doneK++;
+  currentK = doneK;
+  updatedCells = new Set(); consideredCells = new Set();
+  stats.i = 0;
+  for (let i = 0; i < n; i++) {
+    if (dist[i][currentK] === INF) continue;
+    for (let j = 0; j < n; j++) {
+      if (dist[currentK][j] === INF) continue;
+      stats.r++;
+      const via = dist[i][currentK] + dist[currentK][j];
+      consideredCells.add(`${i},${j}`);
+      if (via < dist[i][j] - 1e-9) {
+        dist[i][j] = via;
+        next[i][j] = next[i][currentK];
+        updatedCells.add(`${i},${j}`);
+        stats.i++;
+      }
+    }
+  }
+  logRows = [{ t: `k=${vertices[currentK]} — ${stats.i} improvements, cumulative ${stats.r} relaxations`, cls: stats.i > 0 ? 'hit' : 'miss' }].concat(logRows);
+  for (let i = 0; i < n; i++) if (dist[i][i] < -1e-9) negCycle = true;
+  if (doneK === n - 1) {
+    $('banner').innerHTML = negCycle
+      ? '<div class="banner err">Negative-weight cycle detected — a diagonal entry dist[v][v] went below zero. Any pair whose shortest path touches the cycle is effectively −∞.</div>'
+      : `<div class="banner ok">Done — full APSP matrix computed in ${n} k-passes, ${stats.r} relaxations total.</div>`;
+    currentK = -1;
+  }
+  renderAll();
+}
+
+function runAll() {
+  reset();
+  const n = vertices.length;
+  let guard = 0;
+  while (doneK < n - 1 && guard++ < n + 5) stepK();
+}
+
+function reconstruct(u, v) {
+  const i = vIdx[u], j = vIdx[v];
+  if (i === undefined || j === undefined) return null;
+  if (dist[i][j] === INF) return { path: null, w: INF };
+  if (i === j) return { path: [vertices[i]], w: 0 };
+  const path = [vertices[i]];
+  let cur = i, guard = 0;
+  while (cur !== j && guard++ < 500) {
+    const nx = next[cur][j];
+    if (nx === null) return { path: null, w: INF };
+    path.push(vertices[nx]);
+    cur = nx;
+  }
+  return { path, w: dist[i][j] };
+}
+
+function showPath() {
+  const u = parseInt($('pFrom').value), v = parseInt($('pTo').value);
+  const r = reconstruct(u, v);
+  if (!r || r.path === null) {
+    $('pathOut').innerHTML = `<span style="color:var(--error)">No finite path from ${u} to ${v}.</span>`;
+    return;
+  }
+  const parts = r.path.map((x, i) => i === 0 ? x : `<span class="hop">→</span> ${x}`);
+  $('pathOut').innerHTML = `${parts.join(' ')} &nbsp;<span style="color:var(--muted)">(w = ${r.w})</span>`;
+}
+
+function renderStats() {
+  $('sV').textContent = vertices.length;
+  $('sE').textContent = edges.length;
+  $('sK').textContent = currentK >= 0 ? vertices[currentK] : (doneK >= 0 ? '—' : '—');
+  $('sR').textContent = stats.r;
+  $('sI').textContent = stats.i;
+  $('sNC').textContent = negCycle ? 'YES' : (doneK >= 0 ? 'no' : '?');
+  $('sNC').style.color = negCycle ? 'var(--error)' : 'var(--text)';
+}
+
+function fmt(v) { return v === INF ? '∞' : (Number.isInteger(v) ? v : v.toFixed(1)); }
+
+function renderMatrix() {
+  const holder = $('mxHolder');
+  const n = vertices.length;
+  if (!n) { holder.innerHTML = '<em style="color:var(--muted)">No vertices</em>'; return; }
+  const cells = tab === 'D' ? dist : next;
+  const rows = ['<table class="mx"><thead><tr><th></th>'];
+  for (const v of vertices) rows.push(`<th>${v}</th>`);
+  rows.push('</tr></thead><tbody>');
+  for (let i = 0; i < n; i++) {
+    rows.push(`<tr><th>${vertices[i]}</th>`);
+    for (let j = 0; j < n; j++) {
+      let cls = '';
+      const key = `${i},${j}`;
+      if (currentK >= 0 && (i === currentK || j === currentK)) cls = 'k-row';
+      if (currentK >= 0 && i === currentK && j === currentK) cls = 'k-cell';
+      if (updatedCells.has(key)) cls = 'updated';
+      else if (consideredCells.has(key) && cls === '') cls = 'considered';
+      if (i === j && dist[i][i] < -1e-9) cls = 'negcycle';
+      let val;
+      if (tab === 'D') {
+        const v = cells[i][j];
+        if (v === INF) { val = '∞'; cls += ' inf'; }
+        else if (i === j) { val = fmt(v); if (cls === '') cls = 'self'; }
+        else val = fmt(v);
+      } else {
+        const nx = cells[i][j];
+        val = nx === null ? '—' : vertices[nx];
+      }
+      rows.push(`<td class="${cls}" data-i="${i}" data-j="${j}">${val}</td>`);
+    }
+    rows.push('</tr>');
+  }
+  rows.push('</tbody></table>');
+  holder.innerHTML = rows.join('');
+  holder.querySelectorAll('td[data-i]').forEach(td => {
+    td.style.cursor = 'pointer';
+    td.title = `dist[${vertices[+td.dataset.i]}][${vertices[+td.dataset.j]}]`;
+    td.addEventListener('click', () => {
+      $('pFrom').value = vertices[+td.dataset.i];
+      $('pTo').value = vertices[+td.dataset.j];
+      showPath();
+    });
+  });
+  $('kstep').innerHTML = currentK >= 0
+    ? `after outer pass <b>k = ${vertices[currentK]}</b> — considering paths that may route through vertex ${vertices[currentK]}`
+    : (doneK < 0 ? 'before iteration — initial dist matrix from edges' : `finished — matrix now shows d<sup>(${vertices.length})</sup>[i][j]`);
+}
+
+function renderLog() {
+  const el = $('logRows'); el.innerHTML = '';
+  logRows.slice(0, 80).forEach(r => {
+    const d = document.createElement('div');
+    d.className = 'row ' + (r.cls || '');
+    d.textContent = r.t;
+    el.appendChild(d);
+  });
+}
+
+function setTab(t) {
+  tab = t;
+  $('tabD').classList.toggle('active', t === 'D');
+  $('tabN').classList.toggle('active', t === 'N');
+  renderMatrix();
+}
+
+function renderAll() { renderMatrix(); renderStats(); renderLog(); }
+
+function loadRoute() {
+  $('edgesIn').value = '1 2 3\n1 3 8\n1 5 -4\n2 4 1\n2 5 7\n3 2 4\n4 1 2\n4 3 -5\n5 4 6';
+  $('dirDir').checked = true;
+  reset();
+}
+function loadNeg() {
+  $('edgesIn').value = '1 2 4\n1 3 5\n2 3 -3\n3 4 4\n4 1 2';
+  $('dirDir').checked = true;
+  reset();
+}
+function loadNegCycle() {
+  $('edgesIn').value = '1 2 1\n2 3 -1\n3 1 -1\n3 4 5\n4 5 2';
+  $('dirDir').checked = true;
+  reset();
+}
+function loadCurrency() {
+  $('edgesIn').value = '1 2 0.88\n2 1 1.13\n1 3 148.2\n3 1 0.0068\n2 3 168.9\n3 2 0.0059\n1 4 0.79\n4 1 1.27';
+  $('dirDir').checked = true;
+  reset();
+}
+
+reset();
+</script>
+</body>
+</html>

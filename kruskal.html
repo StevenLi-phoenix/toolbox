@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kruskal's Minimum Spanning Tree Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch Kruskal's greedy MST algorithm sort every edge by weight then add each one only if it doesn't form a cycle — with a live union-find (disjoint-set) forest, accepted / rejected trace, and the final minimum spanning tree.">
+<meta name="keywords" content="kruskal, minimum spanning tree, mst, union find, disjoint set, greedy algorithm, graph algorithm, visualizer, kruskal algorithm, spanning tree">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/kruskal.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: .88rem; }
+  .controls input[type=number], .controls input[type=text], .controls textarea {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem;
+  }
+  .controls input[type=number] { width: 70px; }
+  .controls button {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); cursor: pointer; font-size: .85rem;
+  }
+  .controls button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .controls label { color: var(--muted); }
+  .edges-input { width: 100%; min-height: 100px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; resize: vertical; box-sizing: border-box; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; max-height: 520px; padding: 8px; }
+  svg.kr { display: block; min-width: 100%; }
+  .node circle { stroke: var(--border); stroke-width: 1.5; fill: var(--surface2); }
+  .node text.k { font-family: var(--mono); font-size: 13px; fill: var(--text); text-anchor: middle; dominant-baseline: central; pointer-events: none; font-weight: 700; }
+  .edge { stroke: var(--border); stroke-width: 1.4; fill: none; }
+  .edge.considered { stroke: var(--warning); stroke-width: 2.6; }
+  .edge.accepted { stroke: var(--success); stroke-width: 2.6; }
+  .edge.rejected { stroke: var(--error); stroke-width: 1.6; stroke-dasharray: 4 3; opacity: .7; }
+  .elabel { font-family: var(--mono); font-size: 11px; fill: var(--muted); pointer-events: none; }
+  .elabel.accepted { fill: var(--success); font-weight: 700; }
+  .elabel.considered { fill: var(--warning); font-weight: 700; }
+  .stats { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stats h3 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: .88rem; }
+  .stat-row .v { font-family: var(--mono); font-weight: 700; }
+  .dsu-box { margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .dsu-box h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .dsu-list { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--mono); font-size: .82rem; }
+  .dsu-set { padding: 4px 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); }
+  .dsu-set.merged { background: rgba(40, 180, 99, .18); border-color: var(--success); }
+  .edge-queue { margin-top: 12px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 260px; overflow-y: auto; }
+  .edge-queue h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .edge-queue table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .78rem; }
+  .edge-queue th, .edge-queue td { padding: 3px 6px; text-align: center; border-bottom: 1px solid var(--border); }
+  .edge-queue th { color: var(--muted); font-weight: 500; }
+  .edge-queue tr.done td { opacity: .5; }
+  .edge-queue tr.accepted td { color: var(--success); font-weight: 700; }
+  .edge-queue tr.rejected td { color: var(--error); text-decoration: line-through; }
+  .edge-queue tr.current td { background: rgba(241, 196, 15, .18); color: var(--warning); font-weight: 700; }
+  .log { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); max-height: 220px; overflow-y: auto; }
+  .log h3 { margin: 0 0 6px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .log .row { font-family: var(--mono); font-size: .82rem; padding: 2px 0; }
+  .log .row.op { color: var(--warning); font-weight: 600; }
+  .log .row.hit { color: var(--success); }
+  .log .row.miss { color: var(--error); }
+  .log .row.walk { color: var(--accent); }
+  .banner { padding: 10px 12px; border-radius: var(--radius); font-size: .88rem; margin-top: 10px; }
+  .banner.ok { background: rgba(40, 180, 99, .12); border: 1px solid var(--success); color: var(--success); }
+  .banner.err { background: rgba(230, 92, 92, .12); border: 1px solid var(--error); color: var(--error); }
+  .banner.warn { background: rgba(241, 196, 15, .12); border: 1px solid var(--warning); color: var(--warning); }
+  .legend { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+  .legend .sw { display: inline-block; width: 16px; height: 4px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+  .legend .sw.a { background: var(--success); }
+  .legend .sw.c { background: var(--warning); }
+  .legend .sw.r { background: var(--error); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Kruskal's Minimum Spanning Tree Visualizer</h1>
+<p class="subtitle"><strong>Kruskal's algorithm</strong> sorts every edge by weight, then walks the list adding each edge to the growing forest — but only if its two endpoints belong to different components. Cycle-checking is done in near-constant time using a <em>union-find</em> (disjoint-set) structure with path compression and union by rank. After |V|−1 accepted edges the forest becomes a single spanning tree of minimum total weight. Watch the DSU roots merge and the sorted edge list get consumed step by step.</p>
+
+<div class="card">
+  <div class="controls">
+    <button class="primary" onclick="runAll()">Run to completion</button>
+    <button onclick="stepOne()">Step 1 edge</button>
+    <button onclick="reset()">Reset</button>
+    <button onclick="loadClassic()">Textbook demo</button>
+    <button onclick="loadGrid()">Grid demo</button>
+    <button onclick="loadDense()">Dense complete K6</button>
+    <button onclick="loadDisc()">Disconnected demo</button>
+  </div>
+  <div class="controls" style="align-items:flex-start;flex-direction:column;gap:4px">
+    <label>Edges — one <code>u v w</code> per line (space-separated, undirected). Vertex ids are auto-collected. Duplicate parallel edges are kept (Kruskal will pick the lighter one first).</label>
+    <textarea class="edges-input" id="edgesIn">1 2 7
+1 4 5
+2 3 8
+2 4 9
+2 5 7
+3 5 5
+4 5 15
+4 6 6
+5 6 8
+5 7 9
+6 7 11</textarea>
+  </div>
+  <div class="layout">
+    <div class="svg-wrap" id="svgWrap"><svg class="kr" id="svg" viewBox="0 0 800 440" preserveAspectRatio="xMinYMin meet"></svg></div>
+    <div>
+      <div id="banner"></div>
+      <div class="stats">
+        <h3>Run stats</h3>
+        <div class="stat-row"><span>Vertices |V|</span><span class="v" id="sV">0</span></div>
+        <div class="stat-row"><span>Edges |E|</span><span class="v" id="sE">0</span></div>
+        <div class="stat-row"><span>Edges considered</span><span class="v" id="sCon">0</span></div>
+        <div class="stat-row"><span>Edges accepted</span><span class="v" id="sAcc">0</span></div>
+        <div class="stat-row"><span>Edges rejected (cycle)</span><span class="v" id="sRej">0</span></div>
+        <div class="stat-row"><span>Union operations</span><span class="v" id="sUni">0</span></div>
+        <div class="stat-row"><span>MST weight</span><span class="v" id="sW">0</span></div>
+        <div class="stat-row"><span>Components remaining</span><span class="v" id="sComp">0</span></div>
+      </div>
+      <div class="dsu-box">
+        <h3>Disjoint-set forest (components)</h3>
+        <div id="dsuList" class="dsu-list"></div>
+      </div>
+      <div class="edge-queue">
+        <h3>Sorted edge list</h3>
+        <div id="edgeTbl"></div>
+      </div>
+      <div class="log">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+      <p class="legend">
+        <span class="sw a"></span> accepted (MST) &nbsp;
+        <span class="sw c"></span> current &nbsp;
+        <span class="sw r"></span> rejected (cycle)
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why Kruskal is correct — the cut property</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Every time Kruskal accepts an edge <code>e = (u, v)</code>, that edge is the lightest one crossing the cut that separates <code>u</code>'s component from every other vertex. The <em>cut property</em> says: for any cut, the minimum-weight edge crossing it belongs to some MST. So accepting <code>e</code> can never be a mistake. Sorted-edge order plus union-find gives us <code>O(|E| log |E|)</code> — dominated by the sort — and the DSU operations amortise to nearly <code>O(|E| α(|V|))</code>, where α is the inverse Ackermann function (effectively constant for any conceivable input).
+  </p>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    When the graph is <strong>disconnected</strong>, Kruskal still terminates cleanly — you get a <em>minimum spanning forest</em>, one MST per connected component. That's why real-world tools like <code>tc</code> traffic-control classes, network-latency clustering, and cluster hierarchical-linkage (single-linkage clustering is literally MST plus cut) can use Kruskal on graphs without a global connectivity guarantee.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Kruskal vs Prim</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+    <thead>
+      <tr style="text-align:left;border-bottom:1px solid var(--border)">
+        <th style="padding:6px 8px">&nbsp;</th>
+        <th style="padding:6px 8px">Kruskal</th>
+        <th style="padding:6px 8px">Prim</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Grows by</td><td style="padding:6px 8px">lightest global edge that doesn't cycle</td><td style="padding:6px 8px">lightest edge leaving current tree</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Core data structure</td><td style="padding:6px 8px">union-find (DSU)</td><td style="padding:6px 8px">min-priority queue</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Complexity</td><td style="padding:6px 8px"><code>O(|E| log |E|)</code></td><td style="padding:6px 8px"><code>O((|V|+|E|) log |V|)</code></td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Better on</td><td style="padding:6px 8px">sparse graphs / edge-list input</td><td style="padding:6px 8px">dense graphs / adjacency-matrix input</td></tr>
+      <tr><td style="padding:6px 8px;color:var(--muted)">Disconnected graph</td><td style="padding:6px 8px">gives minimum spanning <em>forest</em> naturally</td><td style="padding:6px 8px">needs a wrapper loop, one Prim per component</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+class DSU {
+  constructor(ids) {
+    this.parent = {}; this.rank = {}; this.size = {};
+    for (const v of ids) { this.parent[v] = v; this.rank[v] = 0; this.size[v] = 1; }
+    this.components = ids.length;
+  }
+  find(x) {
+    while (this.parent[x] !== x) {
+      this.parent[x] = this.parent[this.parent[x]];
+      x = this.parent[x];
+    }
+    return x;
+  }
+  union(a, b) {
+    const ra = this.find(a), rb = this.find(b);
+    if (ra === rb) return false;
+    if (this.rank[ra] < this.rank[rb]) { this.parent[ra] = rb; this.size[rb] += this.size[ra]; }
+    else if (this.rank[ra] > this.rank[rb]) { this.parent[rb] = ra; this.size[ra] += this.size[rb]; }
+    else { this.parent[rb] = ra; this.size[ra] += this.size[rb]; this.rank[ra]++; }
+    this.components--;
+    return true;
+  }
+  groups() {
+    const g = {};
+    for (const v of Object.keys(this.parent)) {
+      const r = this.find(v);
+      (g[r] = g[r] || []).push(v);
+    }
+    return Object.values(g).map(a => a.sort((x, y) => (+x) - (+y)));
+  }
+}
+
+let vertices = [], edges = [], sorted = [];
+let dsu = null;
+let idx = 0;
+let acceptedIds = new Set(), rejectedIds = new Set(), currentId = -1;
+let stats = { con: 0, acc: 0, rej: 0, uni: 0, w: 0 };
+let logRows = [];
+let lastMerged = null;
+
+function parseEdges() {
+  edges = [];
+  const seen = new Set();
+  const lines = $('edgesIn').value.split('\n').map(l => l.trim()).filter(Boolean);
+  let id = 0;
+  for (const line of lines) {
+    const parts = line.split(/\s+/);
+    if (parts.length < 3) continue;
+    const u = parts[0], v = parts[1], w = parseFloat(parts[2]);
+    if (!Number.isFinite(w) || u === v) continue;
+    seen.add(u); seen.add(v);
+    edges.push({ id: id++, u, v, w });
+  }
+  vertices = [...seen].sort((a, b) => (+a) - (+b));
+}
+
+function reset() {
+  parseEdges();
+  sorted = edges.slice().sort((a, b) => a.w - b.w || a.id - b.id);
+  dsu = new DSU(vertices);
+  idx = 0;
+  acceptedIds = new Set();
+  rejectedIds = new Set();
+  currentId = -1;
+  stats = { con: 0, acc: 0, rej: 0, uni: 0, w: 0 };
+  lastMerged = null;
+  logRows = [{ t: `reset — |V|=${vertices.length}, |E|=${edges.length}, sorted by weight`, cls: 'op' }];
+  $('banner').innerHTML = '';
+  renderAll();
+}
+
+function stepOne() {
+  if (dsu.components === 1) {
+    $('banner').innerHTML = '<div class="banner ok">MST complete — spanning tree covers every vertex.</div>';
+    return;
+  }
+  if (idx >= sorted.length) {
+    $('banner').innerHTML = `<div class="banner warn">Edge list exhausted with ${dsu.components} components — you got a minimum spanning <em>forest</em>, not a single tree (the graph is disconnected).</div>`;
+    return;
+  }
+  const e = sorted[idx];
+  currentId = e.id;
+  stats.con++;
+  const merged = dsu.union(e.u, e.v);
+  if (merged) {
+    acceptedIds.add(e.id);
+    stats.acc++; stats.uni++; stats.w += e.w;
+    lastMerged = [e.u, e.v];
+    logRows = [{ t: `accept ${e.u}—${e.v} (w=${e.w}) — union ok, |MST|=${stats.acc}`, cls: 'hit' }].concat(logRows);
+  } else {
+    rejectedIds.add(e.id);
+    stats.rej++;
+    lastMerged = null;
+    logRows = [{ t: `reject ${e.u}—${e.v} (w=${e.w}) — endpoints already in same component`, cls: 'miss' }].concat(logRows);
+  }
+  idx++;
+  if (dsu.components === 1) {
+    $('banner').innerHTML = `<div class="banner ok">MST complete — ${stats.acc} edges, total weight ${stats.w}. Considered ${stats.con} of ${edges.length}.</div>`;
+  }
+  renderAll();
+}
+
+function runAll() {
+  reset();
+  let guard = 0;
+  while (idx < sorted.length && dsu.components > 1 && guard++ < 20000) stepOne();
+  if (dsu.components > 1) {
+    $('banner').innerHTML = `<div class="banner warn">Minimum spanning forest — ${dsu.components} components, ${stats.acc} edges, total weight ${stats.w}.</div>`;
+  }
+}
+
+function renderStats() {
+  $('sV').textContent = vertices.length;
+  $('sE').textContent = edges.length;
+  $('sCon').textContent = stats.con;
+  $('sAcc').textContent = stats.acc;
+  $('sRej').textContent = stats.rej;
+  $('sUni').textContent = stats.uni;
+  $('sW').textContent = stats.w;
+  $('sComp').textContent = dsu ? dsu.components : vertices.length;
+}
+
+function renderDSU() {
+  const box = $('dsuList');
+  box.innerHTML = '';
+  const groups = dsu ? dsu.groups() : vertices.map(v => [v]);
+  const mergedSet = new Set();
+  if (lastMerged && dsu) {
+    const r = dsu.find(lastMerged[0]);
+    for (const g of groups) if (dsu.find(g[0]) === r) g.forEach(x => mergedSet.add(x));
+  }
+  for (const g of groups) {
+    const el = document.createElement('span');
+    el.className = 'dsu-set' + (g.some(x => mergedSet.has(x)) ? ' merged' : '');
+    el.textContent = `{${g.join(', ')}}`;
+    box.appendChild(el);
+  }
+}
+
+function renderEdgeTbl() {
+  const rows = ['<table><thead><tr><th>#</th><th>u</th><th>v</th><th>w</th><th>state</th></tr></thead><tbody>'];
+  for (let i = 0; i < sorted.length; i++) {
+    const e = sorted[i];
+    let cls = '';
+    let state = 'pending';
+    if (acceptedIds.has(e.id)) { cls = 'accepted'; state = 'accepted'; }
+    else if (rejectedIds.has(e.id)) { cls = 'rejected'; state = 'rejected'; }
+    else if (i < idx) { cls = 'done'; state = 'done'; }
+    if (e.id === currentId && idx - 1 === i) { cls += ' current'; state = state + ' ←'; }
+    rows.push(`<tr class="${cls}"><td>${i + 1}</td><td>${e.u}</td><td>${e.v}</td><td>${e.w}</td><td>${state}</td></tr>`);
+  }
+  rows.push('</tbody></table>');
+  $('edgeTbl').innerHTML = rows.join('');
+}
+
+function renderLog() {
+  const el = $('logRows'); el.innerHTML = '';
+  logRows.slice(0, 80).forEach(r => {
+    const d = document.createElement('div');
+    d.className = 'row ' + (r.cls || '');
+    d.textContent = r.t;
+    el.appendChild(d);
+  });
+}
+
+function renderGraph() {
+  const svg = $('svg');
+  svg.innerHTML = '';
+  if (!vertices.length) { svg.setAttribute('viewBox', '0 0 400 200'); return; }
+  const cx = 400, cy = 220, R = 170, nodeR = 22;
+  const positions = new Map();
+  const N = vertices.length;
+  for (let i = 0; i < N; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / N;
+    positions.set(vertices[i], { x: cx + R * Math.cos(angle), y: cy + R * Math.sin(angle) });
+  }
+  svg.setAttribute('viewBox', `0 0 ${cx * 2} ${cy * 2 - 40}`);
+  svg.style.minWidth = `${cx * 2}px`;
+
+  const pairSeen = new Map();
+  for (const e of edges) {
+    const key = `${[e.u, e.v].sort().join('-')}`;
+    pairSeen.set(key, (pairSeen.get(key) || 0) + 1);
+  }
+  const drawn = new Map();
+  for (const e of edges) {
+    const a = positions.get(e.u), b = positions.get(e.v);
+    if (!a || !b) continue;
+    const key = `${[e.u, e.v].sort().join('-')}`;
+    const total = pairSeen.get(key);
+    const eidx = drawn.get(key) || 0; drawn.set(key, eidx + 1);
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const sx = a.x + ux * nodeR, sy = a.y + uy * nodeR;
+    const ex = b.x - ux * nodeR, ey = b.y - uy * nodeR;
+
+    let cls = 'edge', lcls = 'elabel';
+    if (acceptedIds.has(e.id)) { cls += ' accepted'; lcls += ' accepted'; }
+    else if (rejectedIds.has(e.id)) { cls += ' rejected'; }
+    if (e.id === currentId) { cls = 'edge considered'; lcls = 'elabel considered'; }
+
+    if (total > 1) {
+      const nx = -uy, ny = ux;
+      const off = 16 * (eidx === 0 ? 1 : -1);
+      const mx = (sx + ex) / 2 + nx * off, my = (sy + ey) / 2 + ny * off;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M${sx},${sy} Q${mx},${my} ${ex},${ey}`);
+      path.setAttribute('class', cls);
+      svg.appendChild(path);
+      const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lbl.setAttribute('class', lcls);
+      lbl.setAttribute('x', mx); lbl.setAttribute('y', my - 4);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.textContent = e.w;
+      svg.appendChild(lbl);
+    } else {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', sx); line.setAttribute('y1', sy);
+      line.setAttribute('x2', ex); line.setAttribute('y2', ey);
+      line.setAttribute('class', cls);
+      svg.appendChild(line);
+      const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lbl.setAttribute('class', lcls);
+      const nx = -uy, ny = ux;
+      lbl.setAttribute('x', (sx + ex) / 2 + nx * 10);
+      lbl.setAttribute('y', (sy + ey) / 2 + ny * 10);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.textContent = e.w;
+      svg.appendChild(lbl);
+    }
+  }
+
+  const compColors = ['#5a8cdc', '#e6a546', '#c85ac8', '#50b482', '#e65c5c', '#7ec8e3', '#b98cff'];
+  const rootOf = new Map();
+  if (dsu) {
+    let colorIdx = 0;
+    const rootColor = new Map();
+    for (const v of vertices) {
+      const r = dsu.find(v);
+      if (!rootColor.has(r)) { rootColor.set(r, compColors[colorIdx++ % compColors.length]); }
+      rootOf.set(v, rootColor.get(r));
+    }
+  }
+  for (const v of vertices) {
+    const p = positions.get(v);
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', 'node');
+    g.setAttribute('transform', `translate(${p.x},${p.y})`);
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('r', nodeR);
+    if (rootOf.has(v)) { c.setAttribute('fill', rootOf.get(v) + '33'); c.setAttribute('stroke', rootOf.get(v)); c.setAttribute('stroke-width', 2); }
+    g.appendChild(c);
+    const k = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    k.setAttribute('class', 'k'); k.textContent = v;
+    g.appendChild(k);
+    svg.appendChild(g);
+  }
+}
+
+function renderAll() { renderGraph(); renderDSU(); renderEdgeTbl(); renderStats(); renderLog(); }
+
+function loadClassic() {
+  $('edgesIn').value = '1 2 7\n1 4 5\n2 3 8\n2 4 9\n2 5 7\n3 5 5\n4 5 15\n4 6 6\n5 6 8\n5 7 9\n6 7 11';
+  reset();
+}
+function loadGrid() {
+  const lines = [];
+  const W = 4, H = 3;
+  for (let r = 0; r < H; r++) {
+    for (let c = 0; c < W; c++) {
+      const id = r * W + c + 1;
+      if (c + 1 < W) lines.push(`${id} ${id + 1} ${1 + ((r + c * 3) % 9)}`);
+      if (r + 1 < H) lines.push(`${id} ${id + W} ${1 + ((r * 3 + c) % 9)}`);
+    }
+  }
+  $('edgesIn').value = lines.join('\n');
+  reset();
+}
+function loadDense() {
+  const lines = [];
+  const N = 6;
+  const w = [[0, 4, 7, 12, 3, 9], [4, 0, 5, 8, 6, 11], [7, 5, 0, 6, 10, 4], [12, 8, 6, 0, 7, 5], [3, 6, 10, 7, 0, 8], [9, 11, 4, 5, 8, 0]];
+  for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) lines.push(`${i + 1} ${j + 1} ${w[i][j]}`);
+  $('edgesIn').value = lines.join('\n');
+  reset();
+}
+function loadDisc() {
+  $('edgesIn').value = '1 2 3\n1 3 5\n2 3 4\n4 5 6\n5 6 7\n4 6 8\n7 8 2';
+  reset();
+}
+
+reset();
+</script>
+</body>
+</html>
