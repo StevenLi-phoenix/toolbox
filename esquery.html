@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elasticsearch Query DSL Builder — Free Online Tool</title>
+<meta name="description" content="Build Elasticsearch and OpenSearch bool queries visually — term, match, range, prefix, wildcard, and exists clauses combined under must/should/must_not/filter. Copies runnable JSON.">
+<meta name="keywords" content="elasticsearch, opensearch, query dsl, bool query, term, match, range, kibana, lucene">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/esquery.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .buckets { display: grid; gap: 12px; }
+  .bucket { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); padding: 10px 12px; }
+  .bucket header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
+  .bucket header h3 { font-size: .82rem; margin: 0; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .bucket header .why { font-size: .72rem; color: var(--muted); font-style: italic; }
+  .clause { display: grid; grid-template-columns: 110px 1fr 1fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .clause select, .clause input {
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .82rem;
+  }
+  .clause .rm { padding: 4px 8px; font-size: .8rem; }
+  .add-row { display: flex; gap: 6px; margin-top: 4px; }
+  .add-row button { font-size: .78rem; padding: 5px 9px; }
+  pre.out {
+    font-family: var(--mono); font-size: .82rem; background: var(--surface2);
+    padding: 12px; border-radius: var(--radius); border: 1px solid var(--border);
+    overflow-x: auto; margin: 0; white-space: pre; line-height: 1.4;
+  }
+  .meta-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  @media (max-width: 640px) { .meta-row { grid-template-columns: 1fr 1fr; } .clause { grid-template-columns: 1fr; } }
+  .meta-row label { font-size: .74rem; color: var(--muted); display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
+  .meta-row input {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .82rem; box-sizing: border-box;
+  }
+  .lucene { font-family: var(--mono); font-size: .82rem; background: var(--surface2); padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--border); word-break: break-all; }
+  .copy { float: right; padding: 4px 10px; font-size: .74rem; margin-top: -2px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .presets button { font-size: .72rem; padding: 4px 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Elasticsearch Query DSL Builder</h1>
+<p class="subtitle">Compose Elasticsearch / OpenSearch <code>bool</code> queries by dropping clauses into <code>must</code>, <code>should</code>, <code>must_not</code>, and <code>filter</code> buckets. Every change re-renders runnable JSON plus the equivalent Lucene / KQL fragment. 100% client-side.</p>
+
+<div class="card">
+  <div class="presets">
+    <button class="btn btn-secondary" onclick="loadPreset('errors')">HTTP 5xx errors</button>
+    <button class="btn btn-secondary" onclick="loadPreset('user')">User activity in range</button>
+    <button class="btn btn-secondary" onclick="loadPreset('geo')">Match phrase + exists</button>
+    <button class="btn btn-secondary" onclick="loadPreset('empty')">Clear</button>
+  </div>
+  <div class="meta-row">
+    <div><label>Index</label><input id="index" value="logs-*" oninput="render()"></div>
+    <div><label>Size</label><input id="size" type="number" min="0" value="20" oninput="render()"></div>
+    <div><label>From</label><input id="from" type="number" min="0" value="0" oninput="render()"></div>
+    <div><label>Sort field (optional)</label><input id="sort" value="@timestamp:desc" oninput="render()"></div>
+  </div>
+  <div class="layout">
+    <div class="buckets" id="buckets"></div>
+    <div>
+      <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Generated JSON <button class="btn btn-secondary copy" onclick="copyOut('json')">Copy</button></label>
+      <pre class="out" id="jsonOut"></pre>
+      <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-top:10px">Equivalent Lucene / KQL <button class="btn btn-secondary copy" onclick="copyOut('lucene')">Copy</button></label>
+      <div class="lucene" id="luceneOut">&nbsp;</div>
+      <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-top:10px">curl <button class="btn btn-secondary copy" onclick="copyOut('curl')">Copy</button></label>
+      <pre class="out" id="curlOut"></pre>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Bucket cheat sheet</h2>
+  <p style="font-size:.86rem;color:var(--muted);line-height:1.6">
+    <strong>must</strong> — must match, contributes to <code>_score</code>. Use for relevance-driven full-text hits.<br>
+    <strong>should</strong> — optional matches that boost score; if there is no <code>must</code>, at least <code>minimum_should_match</code> (default 1) is required.<br>
+    <strong>must_not</strong> — excludes docs, doesn't score.<br>
+    <strong>filter</strong> — must match but doesn't score. Fastest for structured fields (keyword, term, range) and cache-friendly.
+  </p>
+  <h2 style="margin-top:14px">Clause reference</h2>
+  <p style="font-size:.86rem;color:var(--muted);line-height:1.6">
+    <code>term</code> exact keyword; <code>terms</code> multi-value; <code>match</code> analyzed text; <code>match_phrase</code> ordered tokens; <code>range</code> gte/lte on numeric/date; <code>prefix</code> starts-with; <code>wildcard</code> <code>*</code>/<code>?</code>; <code>exists</code> field is present.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const BUCKETS = [
+  { key: 'must',     label: 'must',     why: 'match & score' },
+  { key: 'should',   label: 'should',   why: 'optional boost' },
+  { key: 'must_not', label: 'must_not', why: 'exclude' },
+  { key: 'filter',   label: 'filter',   why: 'match, no score' },
+];
+
+let state = {
+  must: [], should: [], must_not: [], filter: []
+};
+
+let cid = 0;
+function newClause(type = 'term') {
+  return { id: ++cid, type, field: 'status', value: '500' };
+}
+
+function loadPreset(name) {
+  cid = 0;
+  if (name === 'empty') {
+    state = { must: [], should: [], must_not: [], filter: [] };
+  } else if (name === 'errors') {
+    state = {
+      must: [{ id: ++cid, type: 'range', field: 'http.response.status_code', value: '500,599' }],
+      should: [],
+      must_not: [{ id: ++cid, type: 'term', field: 'url.path', value: '/health' }],
+      filter: [{ id: ++cid, type: 'range', field: '@timestamp', value: 'now-1h,now' }],
+    };
+    $('index').value = 'logs-web-*';
+  } else if (name === 'user') {
+    state = {
+      must: [{ id: ++cid, type: 'term', field: 'user.id', value: 'u_42' }],
+      should: [{ id: ++cid, type: 'match', field: 'event.action', value: 'purchase view' }],
+      must_not: [],
+      filter: [{ id: ++cid, type: 'range', field: '@timestamp', value: '2025-01-01,2025-12-31' }],
+    };
+    $('index').value = 'events-*';
+  } else if (name === 'geo') {
+    state = {
+      must: [{ id: ++cid, type: 'match_phrase', field: 'message', value: 'connection reset by peer' }],
+      should: [],
+      must_not: [],
+      filter: [{ id: ++cid, type: 'exists', field: 'source.geo.country_name', value: '' }],
+    };
+    $('index').value = 'logs-*';
+  }
+  renderBuckets();
+  render();
+}
+
+function addClause(bucket) {
+  state[bucket].push(newClause());
+  renderBuckets();
+  render();
+}
+
+function removeClause(bucket, id) {
+  state[bucket] = state[bucket].filter(c => c.id !== id);
+  renderBuckets();
+  render();
+}
+
+function updateClause(bucket, id, key, val) {
+  const c = state[bucket].find(c => c.id === id);
+  if (c) c[key] = val;
+  render();
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderBuckets() {
+  const box = $('buckets');
+  box.innerHTML = '';
+  for (const b of BUCKETS) {
+    const el = document.createElement('div');
+    el.className = 'bucket';
+    el.innerHTML = `<header><h3>${b.label}</h3><span class="why">${b.why}</span></header>`;
+    for (const c of state[b.key]) {
+      const row = document.createElement('div');
+      row.className = 'clause';
+      row.innerHTML = `
+        <select data-x="type">
+          <option value="term">term</option>
+          <option value="terms">terms</option>
+          <option value="match">match</option>
+          <option value="match_phrase">match_phrase</option>
+          <option value="range">range</option>
+          <option value="prefix">prefix</option>
+          <option value="wildcard">wildcard</option>
+          <option value="exists">exists</option>
+        </select>
+        <input data-x="field" placeholder="field.name" value="${esc(c.field)}">
+        <input data-x="value" placeholder="${c.type==='range'?'gte,lte':c.type==='exists'?'(unused)':c.type==='terms'?'a,b,c':'value'}" value="${esc(c.value)}" ${c.type==='exists'?'disabled':''}>
+        <button class="btn btn-secondary rm" data-x="rm">×</button>
+      `;
+      row.querySelector('[data-x="type"]').value = c.type;
+      row.querySelector('[data-x="type"]').addEventListener('change', e => { updateClause(b.key, c.id, 'type', e.target.value); renderBuckets(); });
+      row.querySelector('[data-x="field"]').addEventListener('input', e => updateClause(b.key, c.id, 'field', e.target.value));
+      row.querySelector('[data-x="value"]').addEventListener('input', e => updateClause(b.key, c.id, 'value', e.target.value));
+      row.querySelector('[data-x="rm"]').addEventListener('click', () => removeClause(b.key, c.id));
+      el.appendChild(row);
+    }
+    const add = document.createElement('div');
+    add.className = 'add-row';
+    add.innerHTML = `<button class="btn btn-secondary" data-add="${b.key}">+ Add clause</button>`;
+    add.querySelector('button').addEventListener('click', () => addClause(b.key));
+    el.appendChild(add);
+    box.appendChild(el);
+  }
+}
+
+function clauseToJson(c) {
+  const f = c.field.trim();
+  const v = c.value.trim();
+  if (!f) return null;
+  switch (c.type) {
+    case 'term':         return { term: { [f]: coerce(v) } };
+    case 'terms':        return { terms: { [f]: v.split(',').map(x => coerce(x.trim())).filter(x => x !== '') } };
+    case 'match':        return { match: { [f]: v } };
+    case 'match_phrase': return { match_phrase: { [f]: v } };
+    case 'range': {
+      const [gte, lte] = v.split(',').map(x => x && x.trim());
+      const r = {};
+      if (gte) r.gte = coerce(gte);
+      if (lte) r.lte = coerce(lte);
+      return { range: { [f]: r } };
+    }
+    case 'prefix':       return { prefix: { [f]: v } };
+    case 'wildcard':     return { wildcard: { [f]: v } };
+    case 'exists':       return { exists: { field: f } };
+  }
+  return null;
+}
+
+function coerce(v) {
+  if (v === '' || v == null) return v;
+  if (/^-?\d+$/.test(v)) return parseInt(v, 10);
+  if (/^-?\d+\.\d+$/.test(v)) return parseFloat(v);
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  return v;
+}
+
+function build() {
+  const bool = {};
+  for (const b of BUCKETS) {
+    const arr = state[b.key].map(clauseToJson).filter(Boolean);
+    if (arr.length) bool[b.key] = arr;
+  }
+  const body = { size: +$('size').value || 0, from: +$('from').value || 0 };
+  if (Object.keys(bool).length) body.query = { bool };
+  else body.query = { match_all: {} };
+  const sort = $('sort').value.trim();
+  if (sort) {
+    body.sort = sort.split(',').map(s => {
+      const [f, ord] = s.split(':').map(x => x.trim());
+      return { [f]: { order: ord || 'asc' } };
+    });
+  }
+  return body;
+}
+
+function toLucene() {
+  const parts = [];
+  const join = (arr, sep) => arr.filter(Boolean).join(' ' + sep + ' ');
+  const clauseToLucene = (c, negate = false) => {
+    const f = c.field.trim(); const v = c.value.trim();
+    if (!f) return '';
+    const q = s => /[\s():*?"~^\\]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s;
+    let s;
+    switch (c.type) {
+      case 'term':
+      case 'match':        s = `${f}:${q(v)}`; break;
+      case 'terms':        s = `${f}:(${v.split(',').map(x => q(x.trim())).join(' OR ')})`; break;
+      case 'match_phrase': s = `${f}:"${v.replace(/"/g,'\\"')}"`; break;
+      case 'range': {
+        const [gte, lte] = v.split(',').map(x => x && x.trim());
+        s = `${f}:[${gte || '*'} TO ${lte || '*'}]`; break;
+      }
+      case 'prefix':       s = `${f}:${v}*`; break;
+      case 'wildcard':     s = `${f}:${v}`; break;
+      case 'exists':       s = `_exists_:${f}`; break;
+    }
+    return negate ? `NOT ${s}` : s;
+  };
+  const must = join(state.must.map(c => clauseToLucene(c)), 'AND');
+  const filter = join(state.filter.map(c => clauseToLucene(c)), 'AND');
+  const not = join(state.must_not.map(c => clauseToLucene(c, true)), 'AND');
+  const should = join(state.should.map(c => clauseToLucene(c)), 'OR');
+  const scoring = [must, filter, not].filter(Boolean).join(' AND ');
+  const withShould = should ? (scoring ? `${scoring} AND (${should})` : `(${should})` ) : scoring;
+  return withShould || '*';
+}
+
+function copyOut(which) {
+  let s;
+  if (which === 'json') s = $('jsonOut').textContent;
+  else if (which === 'lucene') s = $('luceneOut').textContent;
+  else s = $('curlOut').textContent;
+  navigator.clipboard?.writeText(s);
+  const t = $('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+function render() {
+  const body = build();
+  const json = JSON.stringify(body, null, 2);
+  $('jsonOut').textContent = json;
+  $('luceneOut').textContent = toLucene();
+  const idx = $('index').value.trim() || '_all';
+  $('curlOut').textContent = `curl -s -H 'Content-Type: application/json' \\\n  '${'http://localhost:9200/' + idx.replace(/'/g,"'\\''")}/_search' \\\n  -d '${json.replace(/'/g,"'\\''")}'`;
+}
+
+loadPreset('errors');
+</script>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMQP / RabbitMQ URI Parser &amp; Builder — Free Online Tool</title>
+<meta name="description" content="Parse and build AMQP 0-9-1 / RabbitMQ connection URIs — amqp:// and amqps:// with vhost decoding, credentials, port defaults, and query params like heartbeat, channel_max, connection_timeout.">
+<meta name="keywords" content="amqp, amqps, rabbitmq, connection string, uri parser, vhost, heartbeat, channel_max">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/amqpuri.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .in { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .92rem; box-sizing: border-box; }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .parts { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; font-size: .86rem; }
+  .parts .label { color: var(--muted); align-self: center; }
+  .parts .val { font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; word-break: break-all; }
+  .parts .val.empty { color: var(--muted); font-style: italic; }
+  .verdict { margin-top: 10px; padding: 10px 14px; border-radius: var(--radius); font-size: .9rem; font-weight: 500; }
+  .verdict.ok { background: rgba(16,185,129,.1); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+  .verdict.bad { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.3); }
+  .verdict.warn { background: rgba(245,158,11,.1); color: #d97706; border: 1px solid rgba(245,158,11,.3); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .presets button { font-size: .74rem; padding: 4px 8px; }
+  .builder { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; font-size: .86rem; }
+  @media (max-width: 640px) { .builder { grid-template-columns: 1fr; } }
+  .builder label { color: var(--muted); }
+  .builder input, .builder select {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem;
+  }
+  .options-list { list-style: none; padding: 0; margin: 0; }
+  .options-list li { font-family: var(--mono); font-size: .82rem; padding: 4px 0; border-bottom: 1px dashed var(--border); display: flex; justify-content: space-between; gap: 8px; }
+  .options-list li:last-child { border-bottom: 0; }
+  .options-list li .k { color: var(--text); font-weight: 500; }
+  .options-list li .v { color: var(--muted); text-align: right; word-break: break-all; }
+  .built { font-family: var(--mono); font-size: .9rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; word-break: break-all; margin-top: 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>AMQP / RabbitMQ URI Parser &amp; Builder</h1>
+<p class="subtitle">Decode <code>amqp://</code> and <code>amqps://</code> connection strings into scheme, credentials, host, port, virtual host, and query params — or build one from a form. Flags common mistakes like the missing leading <code>/</code> on the vhost, unencoded slashes, or a port that doesn't match the scheme. 100% client-side.</p>
+
+<div class="card">
+  <label style="font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Connection URI</label>
+  <input type="text" id="uri" class="in" value="amqps://guest:guest@rabbit.example.com:5671/%2Fprod?heartbeat=30&connection_timeout=10000&channel_max=2047">
+  <div class="presets">
+    <button class="btn btn-secondary" onclick="ex('amqp://localhost')">Localhost default</button>
+    <button class="btn btn-secondary" onclick="ex('amqp://guest:guest@localhost:5672/')">guest + default vhost</button>
+    <button class="btn btn-secondary" onclick="ex('amqp://user:p%40ss@rabbit:5672/my-vhost')">Named vhost</button>
+    <button class="btn btn-secondary" onclick="ex('amqps://prod:s3cret@rabbit.example.com:5671/%2Fprod?heartbeat=30&channel_max=2047')">TLS + tuning</button>
+    <button class="btn btn-secondary" onclick="ex('amqp://user:pass@host/%2f')">Encoded default vhost</button>
+  </div>
+  <div id="verdict"></div>
+</div>
+
+<div class="layout">
+  <div class="card">
+    <h2>Parsed components</h2>
+    <div class="parts" id="parts"></div>
+    <h2 style="margin-top:14px">Query params</h2>
+    <ul class="options-list" id="opts"></ul>
+  </div>
+
+  <div class="card">
+    <h2>Rebuild URI</h2>
+    <div class="builder">
+      <label for="b-scheme">Scheme</label>
+      <select id="b-scheme"><option value="amqp">amqp (5672)</option><option value="amqps">amqps (5671)</option></select>
+      <label for="b-user">User</label><input id="b-user" value="guest">
+      <label for="b-pass">Password</label><input id="b-pass" value="guest">
+      <label for="b-host">Host</label><input id="b-host" value="localhost">
+      <label for="b-port">Port <span style="color:var(--muted)">(blank = default)</span></label><input id="b-port" placeholder="5672 / 5671">
+      <label for="b-vhost">Virtual host</label><input id="b-vhost" value="/">
+      <label for="b-heartbeat">heartbeat</label><input id="b-heartbeat" placeholder="60">
+      <label for="b-chmax">channel_max</label><input id="b-chmax" placeholder="2047">
+      <label for="b-timeout">connection_timeout (ms)</label><input id="b-timeout" placeholder="10000">
+      <label for="b-frame">frame_max</label><input id="b-frame" placeholder="131072">
+      <label for="b-extra">Extra params (a=1&amp;b=2)</label><input id="b-extra" placeholder="server_name=..&verify=verify_peer">
+    </div>
+    <div class="built" id="built" onclick="copy(this)">amqp://localhost</div>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:8px">Click the URI to copy.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About AMQP URIs</h2>
+  <p style="font-size:.86rem;color:var(--muted);line-height:1.6">
+    Grammar (<a href="https://www.rabbitmq.com/uri-spec.html" target="_blank" rel="noopener">RabbitMQ URI Spec</a>):
+  </p>
+  <pre style="font-family:var(--mono);font-size:.8rem;background:var(--surface2);padding:10px;border-radius:var(--radius);border:1px solid var(--border);overflow-x:auto;">amqp[s]://[user[:password]@]host[:port][/vhost][?params]</pre>
+  <p style="font-size:.86rem;color:var(--muted);line-height:1.6;margin-top:8px">
+    The virtual host is <strong>everything after the first <code>/</code> that follows the host</strong>, percent-decoded — including further slashes. To use the default <code>/</code> vhost explicitly, encode it as <code>%2F</code> (writing <code>amqp://host/</code> means <em>empty vhost</em>, which most clients then map back to <code>/</code>). Default ports are <code>5672</code> for <code>amqp</code> and <code>5671</code> for <code>amqps</code>. Common query params: <code>heartbeat</code> (seconds), <code>connection_timeout</code> (ms), <code>channel_max</code>, <code>frame_max</code>, <code>auth_mechanism</code>, <code>verify</code>, <code>server_name_indication</code>.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function decodeSafe(s) { try { return decodeURIComponent(s); } catch { return s; } }
+
+function parseAmqp(input) {
+  const s = (input || '').trim();
+  if (!s) return { ok: false, error: 'Empty input' };
+
+  let scheme;
+  let rest = s;
+  if (rest.startsWith('amqps://')) { scheme = 'amqps'; rest = rest.slice(8); }
+  else if (rest.startsWith('amqp://')) { scheme = 'amqp'; rest = rest.slice(7); }
+  else return { ok: false, error: 'Must start with "amqp://" or "amqps://"' };
+
+  let query = '';
+  const qi = rest.indexOf('?');
+  if (qi !== -1) { query = rest.slice(qi + 1); rest = rest.slice(0, qi); }
+
+  // Split off vhost — the FIRST '/' after the host is the vhost delimiter,
+  // and everything after it is the vhost (still percent-encoded).
+  let vhostRaw = null;
+  const si = rest.indexOf('/');
+  if (si !== -1) { vhostRaw = rest.slice(si + 1); rest = rest.slice(0, si); }
+
+  // Auth
+  let userRaw = '', passRaw = '';
+  const ai = rest.lastIndexOf('@');
+  if (ai !== -1) {
+    const authRaw = rest.slice(0, ai);
+    rest = rest.slice(ai + 1);
+    const ci = authRaw.indexOf(':');
+    if (ci === -1) userRaw = authRaw;
+    else { userRaw = authRaw.slice(0, ci); passRaw = authRaw.slice(ci + 1); }
+  }
+  const username = decodeSafe(userRaw);
+  const password = decodeSafe(passRaw);
+
+  // Host + port (support IPv6 bracket syntax)
+  let host = '', port = '';
+  if (rest.startsWith('[')) {
+    const close = rest.indexOf(']');
+    if (close === -1) return { ok: false, error: 'Unclosed IPv6 bracket' };
+    host = rest.slice(1, close);
+    if (rest.slice(close + 1).startsWith(':')) port = rest.slice(close + 2);
+  } else {
+    const pi = rest.lastIndexOf(':');
+    if (pi !== -1) { host = rest.slice(0, pi); port = rest.slice(pi + 1); }
+    else host = rest;
+  }
+
+  const vhost = vhostRaw == null ? null : decodeSafe(vhostRaw);
+
+  // Query params
+  const options = [];
+  if (query) for (const kv of query.split('&')) {
+    if (!kv) continue;
+    const ei = kv.indexOf('=');
+    const k = ei === -1 ? kv : kv.slice(0, ei);
+    const v = ei === -1 ? '' : kv.slice(ei + 1);
+    options.push({ key: decodeSafe(k), value: decodeSafe(v) });
+  }
+
+  // Warnings
+  const warns = [];
+  if (!host) warns.push('Missing host');
+  if (port && !/^\d{1,5}$/.test(port)) warns.push('Non-numeric port: ' + port);
+  else if (port && +port > 65535) warns.push('Port out of range: ' + port);
+  if (scheme === 'amqp' && port === '5671') warns.push('Port 5671 is the AMQPS default — did you mean amqps://?');
+  if (scheme === 'amqps' && port === '5672') warns.push('Port 5672 is the plain AMQP default — did you mean amqp://?');
+  if (userRaw && userRaw !== encodeURIComponent(username)) {
+    // fine — already encoded
+  } else if (userRaw && /[@:/?#]/.test(userRaw)) {
+    warns.push('Username contains reserved chars — should be percent-encoded');
+  }
+  if (passRaw && /[@:/?#]/.test(passRaw) && passRaw === decodeSafe(passRaw)) {
+    warns.push('Password contains reserved chars — should be percent-encoded');
+  }
+  if (vhostRaw != null && vhostRaw.includes('/') && !vhostRaw.includes('%2F') && !vhostRaw.includes('%2f')) {
+    warns.push('Vhost path contains an unencoded "/" — encode as %2F if it is part of the vhost name');
+  }
+  const heartbeat = options.find(o => o.key === 'heartbeat');
+  if (heartbeat && !/^\d+$/.test(heartbeat.value)) warns.push('heartbeat should be a non-negative integer (seconds)');
+
+  return {
+    ok: true, scheme, username, password, userRaw, passRaw, host, port, vhost, vhostRaw, options, warnings: warns,
+    effectivePort: port || (scheme === 'amqps' ? '5671' : '5672'),
+    effectiveVhost: vhost === '' ? '/' : (vhost == null ? '/' : vhost),
+  };
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function ex(s) { $('uri').value = s; renderParse(); syncBuilderFromParse(); }
+
+function renderParse() {
+  const r = parseAmqp($('uri').value);
+  const vd = $('verdict'), parts = $('parts'), opts = $('opts');
+  if (!r.ok) {
+    vd.innerHTML = '<div class="verdict bad">✗ ' + esc(r.error) + '</div>';
+    parts.innerHTML = ''; opts.innerHTML = '';
+    return;
+  }
+  const cls = r.warnings.length ? 'warn' : 'ok';
+  const icon = r.warnings.length ? '⚠' : '✓';
+  const msg = r.warnings.length ? 'Parsed with warnings: ' + r.warnings.join('; ') : 'Valid AMQP URI';
+  vd.innerHTML = '<div class="verdict ' + cls + '">' + icon + ' ' + esc(msg) + '</div>';
+
+  const rows = [
+    ['Scheme', esc(r.scheme)],
+    ['Username', r.username ? esc(r.username) : '<span class="empty">(none)</span>'],
+    ['Password', r.password ? esc(r.password) : '<span class="empty">(none)</span>'],
+    ['Host', r.host ? esc(r.host) : '<span class="empty">(none)</span>'],
+    ['Port', r.port ? esc(r.port) : '<span class="empty">(default ' + r.effectivePort + ')</span>'],
+    ['Virtual host', r.vhost === '' ? '<span class="empty">(empty → "/")</span>' : (r.vhost == null ? '<span class="empty">(unspecified → "/")</span>' : esc(r.vhost))],
+  ];
+  parts.innerHTML = rows.map(([k, v]) => `<div class="label">${k}</div><div class="val">${v}</div>`).join('');
+  opts.innerHTML = r.options.length
+    ? r.options.map(o => `<li><span class="k">${esc(o.key)}</span><span class="v">${esc(o.value)}</span></li>`).join('')
+    : '<li><span class="k" style="color:var(--muted);font-style:italic">(none)</span></li>';
+  return r;
+}
+
+function syncBuilderFromParse() {
+  const r = parseAmqp($('uri').value);
+  if (!r.ok) return;
+  $('b-scheme').value = r.scheme;
+  $('b-user').value = r.username;
+  $('b-pass').value = r.password;
+  $('b-host').value = r.host;
+  $('b-port').value = r.port;
+  $('b-vhost').value = r.vhost == null ? '/' : (r.vhost === '' ? '/' : r.vhost);
+  const opt = k => (r.options.find(o => o.key === k) || {}).value || '';
+  $('b-heartbeat').value = opt('heartbeat');
+  $('b-chmax').value = opt('channel_max');
+  $('b-timeout').value = opt('connection_timeout');
+  $('b-frame').value = opt('frame_max');
+  const consumed = new Set(['heartbeat', 'channel_max', 'connection_timeout', 'frame_max']);
+  $('b-extra').value = r.options.filter(o => !consumed.has(o.key)).map(o => encodeURIComponent(o.key) + '=' + encodeURIComponent(o.value)).join('&');
+  buildUri();
+}
+
+function buildUri() {
+  const scheme = $('b-scheme').value;
+  const user = $('b-user').value.trim();
+  const pass = $('b-pass').value;
+  const host = $('b-host').value.trim() || 'localhost';
+  const port = $('b-port').value.trim();
+  const vhost = $('b-vhost').value;
+  const params = [];
+  const push = (k, v) => { if (v !== '' && v != null) params.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); };
+  push('heartbeat', $('b-heartbeat').value.trim());
+  push('channel_max', $('b-chmax').value.trim());
+  push('connection_timeout', $('b-timeout').value.trim());
+  push('frame_max', $('b-frame').value.trim());
+  const extra = $('b-extra').value.trim();
+  if (extra) params.push(extra);
+
+  let auth = '';
+  if (user) {
+    auth = encodeURIComponent(user);
+    if (pass) auth += ':' + encodeURIComponent(pass);
+    auth += '@';
+  }
+  const hostPart = host.includes(':') && !host.startsWith('[') ? '[' + host + ']' : host;
+  const portPart = port ? ':' + port : '';
+  let vhostPart = '';
+  if (vhost) vhostPart = '/' + encodeURIComponent(vhost).replace(/%2F/g, '%2F');
+  const q = params.length ? '?' + params.join('&') : '';
+  const uri = `${scheme}://${auth}${hostPart}${portPart}${vhostPart}${q}`;
+  $('built').textContent = uri;
+}
+
+function copy(el) {
+  navigator.clipboard?.writeText(el.textContent);
+  const t = $('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+$('uri').addEventListener('input', () => { renderParse(); });
+document.querySelectorAll('#b-scheme, #b-user, #b-pass, #b-host, #b-port, #b-vhost, #b-heartbeat, #b-chmax, #b-timeout, #b-frame, #b-extra')
+  .forEach(el => el.addEventListener('input', buildUri));
+
+renderParse();
+syncBuilderFromParse();
+</script>
+</body>
+</html>

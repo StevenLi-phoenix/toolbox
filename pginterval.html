@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PostgreSQL Interval Parser — Free Online Tool</title>
+<meta name="description" content="Parse and normalize PostgreSQL INTERVAL expressions — verbose ('1 year 2 mons 3 days 04:05:06'), ISO 8601 (P1Y2M3DT4H5M6S), postgres shorthand, and integer seconds — into components, human, and total-seconds equivalents.">
+<meta name="keywords" content="postgresql, interval, duration parser, iso 8601 duration, pg interval, timedelta, epoch">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/pginterval.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .in { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .92rem; box-sizing: border-box; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+  @media (max-width: 780px) { .grid2 { grid-template-columns: 1fr; } }
+  .parts { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; font-size: .86rem; }
+  .parts .label { color: var(--muted); align-self: center; }
+  .parts .val { font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; }
+  .verdict { margin-top: 10px; padding: 10px 14px; border-radius: var(--radius); font-size: .9rem; font-weight: 500; }
+  .verdict.ok { background: rgba(16,185,129,.1); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+  .verdict.bad { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.3); }
+  .verdict.warn { background: rgba(245,158,11,.1); color: #d97706; border: 1px solid rgba(245,158,11,.3); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .presets button { font-size: .74rem; padding: 4px 8px; }
+  .emit { font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: .84rem; margin-top: 4px; word-break: break-all; }
+  .emit-row { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; margin-bottom: 6px; align-items: center; }
+  .emit-row .k { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>PostgreSQL Interval Parser</h1>
+<p class="subtitle">Paste a PostgreSQL <code>INTERVAL</code> in any accepted form — verbose, ISO 8601 duration (<code>P1Y2M3DT4H5M6S</code>), postgres shorthand (<code>@ 1 year 2 mons</code>), <code>HH:MM:SS.uuu</code>, or a bare number of seconds — and get a component breakdown, human summary, total-seconds (using the pg-standard 30-day month / 365.25-day year), and re-emitted equivalents. 100% client-side.</p>
+
+<div class="card">
+  <label style="font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Interval expression</label>
+  <input type="text" id="src" class="in" value="1 year 2 mons 3 days 04:05:06.789">
+  <div class="presets">
+    <button class="btn btn-secondary" onclick="ex('1 year 2 mons 3 days 04:05:06.789')">Verbose</button>
+    <button class="btn btn-secondary" onclick="ex('P1Y2M3DT4H5M6S')">ISO 8601</button>
+    <button class="btn btn-secondary" onclick="ex('@ 1 year 2 mons 3 days 4 hours 5 mins 6 secs')">@ postgres</button>
+    <button class="btn btn-secondary" onclick="ex('90 days')">90 days</button>
+    <button class="btn btn-secondary" onclick="ex('36:15:00')">36:15:00</button>
+    <button class="btn btn-secondary" onclick="ex('-2 mons +5 days -04:00:00')">Signed mix</button>
+    <button class="btn btn-secondary" onclick="ex('1500')">1500 (secs)</button>
+  </div>
+  <div id="verdict"></div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>Components</h2>
+    <div class="parts" id="parts"></div>
+  </div>
+  <div class="card">
+    <h2>Re-emit as</h2>
+    <div id="emit"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About PostgreSQL intervals</h2>
+  <p style="font-size:.86rem;color:var(--muted);line-height:1.6">
+    PostgreSQL stores intervals as three separate fields — <code>months</code>, <code>days</code>, and <code>microseconds</code> — because a month and a day don't have a fixed number of seconds (DST, leap seconds, month length). When PostgreSQL <em>does</em> need a total-seconds figure — for <code>EXTRACT(epoch FROM interval)</code> or comparisons — it uses <strong>30-day months</strong> and <strong>365.25-day years</strong>. That's the convention this tool uses too. Fields with different signs (e.g. <code>-2 mons +5 days</code>) are legal and preserved separately.
+  </p>
+  <p style="font-size:.86rem;color:var(--muted);line-height:1.6;margin-top:8px">
+    Accepted forms: verbose (<code>1 year 2 mons</code>), ISO 8601 duration (<code>P1Y2M3DT4H5M6S</code>), postgres-shorthand SQL-92 (<code>@ 1 hour 30 mins ago</code>), plain <code>[-]HH:MM:SS[.fff]</code>, or a bare integer read as seconds. Unit aliases: <code>y</code>/<code>yr</code>/<code>yrs</code>/<code>year</code>/<code>years</code>, <code>mo</code>/<code>mon</code>/<code>mons</code>/<code>month</code>/<code>months</code>, <code>w</code>/<code>wk</code>/<code>week</code>/<code>weeks</code>, <code>d</code>/<code>day</code>/<code>days</code>, <code>h</code>/<code>hr</code>/<code>hour</code>/<code>hours</code>, <code>m</code>/<code>min</code>/<code>mins</code>/<code>minute</code>/<code>minutes</code>, <code>s</code>/<code>sec</code>/<code>secs</code>/<code>second</code>/<code>seconds</code>, <code>ms</code>/<code>millisecond</code>/<code>milliseconds</code>, <code>us</code>/<code>μs</code>/<code>microsecond</code>/<code>microseconds</code>.
+  </p>
+</div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+<footer>Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const UNIT_MAP = {
+  y:'y', yr:'y', yrs:'y', year:'y', years:'y',
+  mo:'mo', mon:'mo', mons:'mo', month:'mo', months:'mo',
+  w:'w', wk:'w', week:'w', weeks:'w',
+  d:'d', day:'d', days:'d',
+  h:'h', hr:'h', hrs:'h', hour:'h', hours:'h',
+  m:'m', min:'m', mins:'m', minute:'m', minutes:'m',
+  s:'s', sec:'s', secs:'s', second:'s', seconds:'s',
+  ms:'ms', millisecond:'ms', milliseconds:'ms',
+  us:'us', 'μs':'us', microsecond:'us', microseconds:'us',
+};
+
+function parseInterval(input) {
+  let s = (input || '').trim();
+  if (!s) return { ok: false, error: 'Empty input' };
+  const warns = [];
+
+  // Bare number → treat as seconds.
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    const n = parseFloat(s);
+    warns.push('Bare number interpreted as seconds');
+    return finalize({ months: 0, days: 0, us: Math.round(n * 1_000_000) }, warns);
+  }
+
+  // ISO 8601 duration: P[nY][nM][nW][nD][T[nH][nM][nS]]
+  const iso = /^-?P(?=[\dT])(?:(\d+(?:\.\d+)?)Y)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)W)?(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/;
+  const m = s.match(iso);
+  if (m) {
+    const sign = s.startsWith('-') ? -1 : 1;
+    const [_, Y, MO, W, D, H, MI, SE] = m;
+    if (!Y && !MO && !W && !D && !H && !MI && !SE) return { ok: false, error: 'Empty ISO 8601 duration' };
+    const months = (parseFloat(Y || 0) * 12 + parseFloat(MO || 0)) * sign;
+    const days = (parseFloat(W || 0) * 7 + parseFloat(D || 0)) * sign;
+    const seconds = (parseFloat(H || 0) * 3600 + parseFloat(MI || 0) * 60 + parseFloat(SE || 0)) * sign;
+    return finalize({ months: Math.trunc(months), days: Math.trunc(days), us: Math.round(seconds * 1_000_000), fracMonths: months - Math.trunc(months), fracDays: days - Math.trunc(days) }, warns);
+  }
+
+  // Strip the postgres SQL-92 leading '@' and trailing 'ago' if present.
+  let ago = false;
+  if (s.startsWith('@')) s = s.slice(1).trim();
+  if (/\bago\b\s*$/.test(s)) { ago = true; s = s.replace(/\bago\b\s*$/, '').trim(); }
+
+  let months = 0, days = 0, us = 0;
+  let seen = false;
+
+  // Peel off any HH:MM:SS[.fff] token, keeping its optional leading sign.
+  const timeMatch = s.match(/(^|\s)(-?)(\d+):(\d{1,2})(?::(\d{1,2})(?:\.(\d{1,6}))?)?(?=\s|$)/);
+  if (timeMatch) {
+    const sign = timeMatch[2] === '-' ? -1 : 1;
+    const hh = parseInt(timeMatch[3], 10);
+    const mm = parseInt(timeMatch[4], 10);
+    const ss = timeMatch[5] ? parseInt(timeMatch[5], 10) : 0;
+    const frac = timeMatch[6] ? parseFloat('0.' + timeMatch[6]) : 0;
+    if (mm >= 60 || ss >= 60) warns.push('Minutes or seconds ≥ 60 in HH:MM:SS token');
+    us += sign * Math.round(((hh * 3600 + mm * 60 + ss) + frac) * 1_000_000);
+    seen = true;
+    s = (s.slice(0, timeMatch.index) + ' ' + s.slice(timeMatch.index + timeMatch[0].length)).trim();
+  }
+
+  // Then everything else should be `[sign] number unit` pairs.
+  const re = /([+-]?)\s*(\d+(?:\.\d+)?)\s*([A-Za-zμ]+)/g;
+  let mm;
+  while ((mm = re.exec(s))) {
+    seen = true;
+    const sign = mm[1] === '-' ? -1 : 1;
+    const n = parseFloat(mm[2]) * sign;
+    const unit = UNIT_MAP[mm[3].toLowerCase()];
+    if (!unit) { warns.push('Unknown unit: ' + mm[3]); continue; }
+    switch (unit) {
+      case 'y':  months += n * 12; break;
+      case 'mo': months += n; break;
+      case 'w':  days += n * 7; break;
+      case 'd':  days += n; break;
+      case 'h':  us += n * 3600 * 1_000_000; break;
+      case 'm':  us += n * 60 * 1_000_000; break;
+      case 's':  us += n * 1_000_000; break;
+      case 'ms': us += n * 1000; break;
+      case 'us': us += n; break;
+    }
+  }
+
+  if (!seen) return { ok: false, error: 'Could not parse — no recognisable interval tokens' };
+  const leftover = s.replace(re, '').replace(/[+\-\s]+/g, '');
+  if (leftover) warns.push('Ignored garbage: "' + leftover + '"');
+
+  if (ago) { months = -months; days = -days; us = -us; }
+
+  // Split fractional months/days into their subordinate units the way pg does.
+  const fracMonths = months - Math.trunc(months);
+  const fracDays = days - Math.trunc(days);
+  if (fracMonths) days += fracMonths * 30;
+  if (fracDays) us += fracDays * 86400 * 1_000_000;
+  months = Math.trunc(months);
+  const dInt = Math.trunc(days);
+  const dFrac = days - dInt;
+  if (dFrac) us += dFrac * 86400 * 1_000_000;
+  days = dInt;
+  us = Math.round(us);
+
+  return finalize({ months, days, us }, warns);
+}
+
+function finalize(v, warns) {
+  return { ok: true, months: v.months, days: v.days, us: v.us, warnings: warns };
+}
+
+function human(months, days, us) {
+  const parts = [];
+  const push = (n, s) => { if (n) parts.push(n + ' ' + s + (Math.abs(n) === 1 ? '' : 's')); };
+  const years = Math.trunc(months / 12);
+  const mo = months - years * 12;
+  push(years, 'year');
+  push(mo, 'month');
+  push(days, 'day');
+  let sec = us / 1_000_000;
+  const h = Math.trunc(sec / 3600); sec -= h * 3600;
+  const mi = Math.trunc(sec / 60); sec -= mi * 60;
+  push(h, 'hour');
+  push(mi, 'minute');
+  if (sec) parts.push((Math.round(sec * 1_000_000) / 1_000_000) + ' seconds');
+  return parts.length ? parts.join(', ') : '0';
+}
+
+function pad(n, w) { const s = String(Math.abs(n)); return s.length >= w ? s : '0'.repeat(w - s.length) + s; }
+
+function hhmmss(us) {
+  const sign = us < 0 ? '-' : '';
+  const abs = Math.abs(us);
+  const totalSec = Math.floor(abs / 1_000_000);
+  const frac = abs - totalSec * 1_000_000;
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  let out = sign + pad(h, 2) + ':' + pad(m, 2) + ':' + pad(s, 2);
+  if (frac) out += '.' + String(frac).padStart(6, '0').replace(/0+$/, '');
+  return out;
+}
+
+function toISO8601(months, days, us) {
+  const sign = (months < 0 || days < 0 || us < 0) && !(months > 0 || days > 0 || us > 0) ? '-' : '';
+  const M = Math.abs(months);
+  const D = Math.abs(days);
+  const seconds = Math.abs(us) / 1_000_000;
+  const years = Math.trunc(M / 12);
+  const mo = M - years * 12;
+  const h = Math.trunc(seconds / 3600);
+  const mi = Math.trunc((seconds - h * 3600) / 60);
+  const s = seconds - h * 3600 - mi * 60;
+  let out = 'P';
+  if (years) out += years + 'Y';
+  if (mo) out += mo + 'M';
+  if (D) out += D + 'D';
+  if (h || mi || s) {
+    out += 'T';
+    if (h) out += h + 'H';
+    if (mi) out += mi + 'M';
+    if (s) out += (Math.round(s * 1_000_000) / 1_000_000) + 'S';
+  }
+  if (out === 'P') out = 'PT0S';
+  return sign + out;
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function ex(s) { $('src').value = s; render(); }
+
+function render() {
+  const r = parseInterval($('src').value);
+  const verdict = $('verdict');
+  const parts = $('parts');
+  const emit = $('emit');
+  if (!r.ok) {
+    verdict.innerHTML = '<div class="verdict bad">✗ ' + esc(r.error) + '</div>';
+    parts.innerHTML = '';
+    emit.innerHTML = '';
+    return;
+  }
+  const cls = r.warnings.length ? 'warn' : 'ok';
+  const icon = r.warnings.length ? '⚠' : '✓';
+  const msg = r.warnings.length ? 'Parsed with warnings: ' + r.warnings.join('; ') : 'Parsed successfully';
+  verdict.innerHTML = '<div class="verdict ' + cls + '">' + icon + ' ' + esc(msg) + '</div>';
+
+  const totalSec = r.months * 30 * 86400 + r.days * 86400 + r.us / 1_000_000;
+
+  const rows = [
+    ['Months', r.months],
+    ['Days', r.days],
+    ['Microseconds', r.us.toLocaleString()],
+    ['Total seconds (pg)', totalSec.toLocaleString(undefined, { maximumFractionDigits: 6 })],
+    ['Total ms', (totalSec * 1000).toLocaleString(undefined, { maximumFractionDigits: 3 })],
+    ['Human', human(r.months, r.days, r.us)],
+  ];
+  parts.innerHTML = rows.map(([k, v]) => `<div class="label">${k}</div><div class="val">${esc(v)}</div>`).join('');
+
+  const verbose = [
+    r.months ? (r.months + ' mons') : '',
+    r.days ? (r.days + ' days') : '',
+    r.us ? hhmmss(r.us) : '',
+  ].filter(Boolean).join(' ') || '00:00:00';
+
+  const emits = [
+    ['Verbose', verbose],
+    ['ISO 8601', toISO8601(r.months, r.days, r.us)],
+    ['Postgres @', '@ ' + verbose],
+    ['SQL literal', `INTERVAL '${verbose.replace(/'/g,"''")}'`],
+    ['Total seconds', String(totalSec)],
+    ['Time only', hhmmss(r.us)],
+  ];
+  emit.innerHTML = emits.map(([k, v]) => `<div class="emit-row"><span class="k">${k}</span><div class="emit" onclick="copy(this)">${esc(v)}</div></div>`).join('');
+}
+
+function copy(el) {
+  navigator.clipboard?.writeText(el.textContent);
+  const t = $('toast'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+$('src').addEventListener('input', render);
+render();
+</script>
+</body>
+</html>
