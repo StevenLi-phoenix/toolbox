@@ -175,6 +175,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [BCD (Binary-Coded Decimal) Converter](bcd.html) | Convert decimal numbers to and from packed BCD (COBOL COMP-3), unpacked BCD, Excess-3, and Aiken 2-4-2-1 encodings — with per-digit nibble grid, hex-byte layout that highlights the sign nibble (`C`, `D`, `F`), and a reverse hex-bytes-to-decimal decoder that catches illegal `A`–`F` nibbles. |
 | [Feistel Cipher Round Visualizer](feistel.html) | Watch a Feistel network encrypt block by block — split into L and R, apply `F(R,K)`, XOR into L, swap, repeat — then decrypt with the same circuit and reversed round keys. Configurable block size, rounds, F function, and key schedule; live round-trip check. |
 | [Verhoeff Check Digit Calculator](verhoeff.html) | Compute and validate Verhoeff check digits — a decimal checksum that catches every single-digit error and every adjacent-transposition error, unlike Luhn. Full step-by-step trace against the dihedral-group `d`, `p`, and `inv` tables. Used by India's Aadhaar 12-digit ID. |
 | [Chinese Remainder Theorem Solver](crt.html) | Solve simultaneous linear congruences `x ≡ aᵢ (mod mᵢ)` — handles the classic coprime case and Gauss's generalized non-coprime case, with full extended-Euclidean derivation and `BigInt` arithmetic that survives RSA-sized moduli. |
@@ -263,6 +264,8 @@
 
 | Tool | Description |
 |------|-------------|
+| [Tarjan's Strongly Connected Components](tarjan.html) | Walk a directed graph in one DFS pass — every vertex gets a DFS `index` and a `lowlink` (the smallest index reachable via any tree or back edge). When `lowlink[v] == index[v]`, everything on the open-vertex stack down to `v` is one SCC. See the stack grow, back edges pull low-link down, and every component pop in reverse topological order. |
+| [Ford-Fulkerson Max Flow Visualizer](maxflow.html) | Watch the Edmonds-Karp variant pick the shortest BFS augmenting path, push the bottleneck through, update the residual graph, and iterate until BFS can no longer reach the sink — then surface the s-t min-cut and confirm `Σ crossing-cap = max flow` (max-flow-min-cut theorem). Includes classic 6-node, bipartite matching, and parallel-pipe demos. |
 | [Elasticsearch Query DSL Builder](esquery.html) | Compose Elasticsearch / OpenSearch `bool` queries by dropping `term`, `match`, `range`, `prefix`, `wildcard`, and `exists` clauses into `must` / `should` / `must_not` / `filter` buckets — every change re-renders runnable JSON, the equivalent Lucene / KQL fragment, and a copy-paste `curl`. |
 | [PostgreSQL Interval Parser](pginterval.html) | Parse PostgreSQL `INTERVAL` expressions in any accepted form — verbose (`1 year 2 mons 3 days 04:05:06`), ISO 8601 (`P1Y2M3DT4H5M6S`), the `@ … ago` shorthand, plain `HH:MM:SS.fff`, or a bare seconds count — into months / days / microseconds, total pg-standard seconds, human summary, and re-emitted SQL literal. |
 | [AMQP / RabbitMQ URI Parser & Builder](amqpuri.html) | Decode `amqp://` and `amqps://` connection strings into scheme, credentials, host, port, vhost (with the `%2F` default-vhost pitfall called out), and query params like `heartbeat`, `channel_max`, `connection_timeout`, `frame_max` — or build a URI from a form and copy it back. |

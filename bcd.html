@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCD (Binary-Coded Decimal) Converter — Free Online Tool</title>
+<meta name="description" content="Convert decimal numbers to and from packed BCD, unpacked BCD, Excess-3 (XS-3), and Aiken 2-4-2-1 encodings. See per-digit nibbles, hex bytes, and detect illegal codes A–F used in embedded, financial, and legacy mainframe systems.">
+<meta name="keywords" content="bcd, binary coded decimal, packed bcd, unpacked bcd, excess-3, aiken code, nibble, decimal to hex, embedded, 8421 code">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/bcd.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:10px; font-size:.88rem; }
+  .controls label { color: var(--muted); }
+  .controls input, .controls select {
+    padding:7px 10px; border:1px solid var(--border); border-radius:var(--radius);
+    background:var(--bg); color:var(--text); font-family:var(--mono); font-size:.9rem;
+  }
+  .controls input[type=text] { min-width: 240px; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  @media (max-width:800px){ .grid2 { grid-template-columns: 1fr; } }
+  .box { border:1px solid var(--border); border-radius:var(--radius); background:var(--surface2); padding:12px; }
+  .box h3 { margin:0 0 8px; font-size:.85rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .box .val { font-family:var(--mono); font-size:.95rem; word-break:break-all; }
+  .nibble-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .nib {
+    display:inline-grid; grid-template-rows:auto auto auto; text-align:center;
+    padding:6px 8px; min-width:60px; border:1px solid var(--border); border-radius:4px;
+    background:var(--bg); font-family:var(--mono); font-size:.78rem; line-height:1.3;
+  }
+  .nib.bad { border-color: var(--error); background: rgba(196,30,30,.08); }
+  .nib.sign { border-color: var(--warning); background: rgba(154,103,0,.10); }
+  .nib b { font-size:.95rem; color:var(--text); }
+  .nib span { color:var(--muted); font-size:.7rem; }
+  .bits { color: var(--accent); font-weight:700; }
+  .byte-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .byte {
+    display:grid; grid-template-columns: 1fr 1fr; gap:2px; padding:4px 6px; min-width:80px;
+    border:1px solid var(--border); border-radius:4px; background:var(--bg);
+    font-family:var(--mono); font-size:.78rem; text-align:center;
+  }
+  .byte .h { color:var(--muted); font-size:.7rem; }
+  .byte b { color:var(--text); font-size:.9rem; }
+  .banner { padding: 10px 12px; border-radius: var(--radius); font-size: .88rem; margin-top: 10px; }
+  .banner.ok { background: rgba(26,140,63,.10); border: 1px solid var(--success); color: var(--success); }
+  .banner.err { background: rgba(196,30,30,.10); border: 1px solid var(--error); color: var(--error); }
+  .table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:.82rem; margin-top:6px; }
+  .table th, .table td { padding:4px 8px; border-bottom:1px solid var(--border); text-align:center; }
+  .table th { color:var(--muted); font-weight:500; }
+  .table td.d { color:var(--accent); }
+  .toolnote { font-size:.85rem; color:var(--muted); line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>BCD (Binary-Coded Decimal) Converter</h1>
+<p class="subtitle"><strong>Binary-Coded Decimal</strong> stores each decimal digit in its own 4-bit nibble instead of converting the whole number to base 2 — so <code>1234</code> becomes <code>0001 0010 0011 0100</code>, not <code>0100 1101 0010</code>. Financial systems, HP calculators, IBM mainframes (COMP-3), digital clocks, and every 7-segment driver still lean on it because the digits can be read off directly with no divide-by-10. Convert between decimal and <em>packed</em>, <em>unpacked</em>, <em>Excess-3</em>, and <em>Aiken 2-4-2-1</em> forms below.</p>
+
+<div class="card">
+  <div class="controls">
+    <label for="dec">Decimal</label>
+    <input type="text" id="dec" value="1234567" spellcheck="false" oninput="fromDec()">
+    <label for="sign">Sign nibble</label>
+    <select id="sign" onchange="fromDec()">
+      <option value="none">none (unsigned)</option>
+      <option value="cobol" selected>COBOL COMP-3 (C = +, D = −, F = unsigned)</option>
+      <option value="xs3">Excess-3 sign (0=+, F=−)</option>
+    </select>
+    <label><input type="checkbox" id="upper" checked onchange="fromDec()"> Upper-case hex</label>
+  </div>
+  <div id="err"></div>
+</div>
+
+<div class="grid2">
+  <div class="box">
+    <h3>Packed BCD (COMP-3)</h3>
+    <div class="val" id="packedHex">—</div>
+    <div class="byte-row" id="packedBytes"></div>
+    <p class="toolnote" style="margin-top:8px">Two decimal digits per byte, sign nibble in the low half of the last byte. Used by IBM z/OS, Oracle NUMBER, and every DB2 COMP-3 column.</p>
+  </div>
+  <div class="box">
+    <h3>Unpacked BCD</h3>
+    <div class="val" id="unpackedHex">—</div>
+    <div class="byte-row" id="unpackedBytes"></div>
+    <p class="toolnote" style="margin-top:8px">One digit per byte (low nibble), zone nibble in the high half. EBCDIC uses <code>F</code>, ASCII uses <code>3</code> so digits become <code>'0'</code>–<code>'9'</code>.</p>
+  </div>
+  <div class="box">
+    <h3>Per-digit nibbles (8-4-2-1)</h3>
+    <div class="nibble-row" id="digitNibbles"></div>
+  </div>
+  <div class="box">
+    <h3>Excess-3 (XS-3)</h3>
+    <div class="val" id="xs3Hex">—</div>
+    <div class="nibble-row" id="xs3Nibbles"></div>
+    <p class="toolnote" style="margin-top:8px">Add 3 to every digit before encoding. Self-complementing: nines' complement is bitwise NOT. Used in old TTL adders (74HC163).</p>
+  </div>
+  <div class="box">
+    <h3>Aiken 2-4-2-1 code</h3>
+    <div class="val" id="aikenHex">—</div>
+    <div class="nibble-row" id="aikenNibbles"></div>
+    <p class="toolnote" style="margin-top:8px">Weighted 2-4-2-1 instead of 8-4-2-1. Also self-complementing. Digits 0–4 keep 8421 form, 5–9 use the shifted range.</p>
+  </div>
+  <div class="box">
+    <h3>Reverse — hex bytes → decimal</h3>
+    <input type="text" id="fromHex" value="12 34 56 7C" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg); color:var(--text); font-family:var(--mono); font-size:.9rem;" oninput="fromPacked()">
+    <div style="margin-top:8px">Decodes as packed BCD (COBOL COMP-3). Value: <b id="fromHexOut">—</b></div>
+    <div id="fromHexErr"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Digit lookup table</h2>
+  <table class="table">
+    <thead><tr><th>digit</th><th>8-4-2-1 (BCD)</th><th>Excess-3</th><th>Aiken 2-4-2-1</th><th>Gray</th></tr></thead>
+    <tbody id="lookup"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Why packed BCD survives in 2026</h2>
+  <p class="toolnote">
+    Packed BCD is not going away because it solves a problem plain binary cannot: exact base-10 arithmetic. A 64-bit IEEE-754 double cannot represent <code>0.1</code> exactly — a US-dollar transaction that adds ten cents ten times drifts away from a dollar. Packed BCD represents each digit exactly, so a COBOL PIC S9(11)V99 field holding <code>12345678901.23</code> stores the same 14 nibbles on any machine, byte for byte, with the sign nibble encoding sign (<code>C</code>=+, <code>D</code>=−, <code>F</code>=unsigned). x86 kept a <code>DAA</code> instruction (Decimal Adjust after Addition) through 32-bit long-mode for exactly this. Even modern chips ship a decimal-floating-point (DFP) unit on IBM z16, POWER, and some ARM cores — DFP is packed BCD's grand-nephew. If you ever debug a mainframe hex dump, decode a barcode payload, or read a smart-meter register, you'll meet 4-bit digits again.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function nibbleBin(n) { return n.toString(2).padStart(4, '0'); }
+function hex1(n, up) { const s = n.toString(16); return up ? s.toUpperCase() : s; }
+
+function parseDecInput(raw) {
+  let s = raw.trim();
+  if (!s) return { ok: false, err: '' };
+  let neg = false;
+  if (s.startsWith('+')) s = s.slice(1);
+  else if (s.startsWith('-')) { neg = true; s = s.slice(1); }
+  if (!/^\d+$/.test(s)) return { ok: false, err: 'Only decimal digits (0–9), optional leading + or −.' };
+  return { ok: true, digits: s.split('').map(Number), neg };
+}
+
+function pickSignNibble(mode, neg) {
+  if (mode === 'none') return null;
+  if (mode === 'cobol') return neg ? 0xD : 0xC;
+  if (mode === 'xs3') return neg ? 0xF : 0x0;
+  return null;
+}
+
+function renderDigits(digits, containerId, mapper) {
+  const box = $(containerId);
+  box.innerHTML = '';
+  for (const d of digits) {
+    const nib = document.createElement('div');
+    nib.className = 'nib';
+    const v = mapper(d);
+    nib.innerHTML = '<b>' + d + '</b><span class="bits">' + nibbleBin(v) + '</span><span>' + hex1(v, $('upper').checked) + '</span>';
+    box.appendChild(nib);
+  }
+}
+
+function fromDec() {
+  const parsed = parseDecInput($('dec').value);
+  const errEl = $('err');
+  errEl.innerHTML = '';
+  if (!parsed.ok) {
+    if (parsed.err) errEl.innerHTML = '<div class="banner err">' + parsed.err + '</div>';
+    clear();
+    return;
+  }
+  const { digits, neg } = parsed;
+  const upper = $('upper').checked;
+
+  renderDigits(digits, 'digitNibbles', d => d);
+  renderDigits(digits, 'xs3Nibbles', d => d + 3);
+  renderDigits(digits, 'aikenNibbles', d => d < 5 ? d : d + 6);
+
+  $('xs3Hex').textContent = digits.map(d => hex1(d + 3, upper)).join(' ');
+  $('aikenHex').textContent = digits.map(d => hex1(d < 5 ? d : d + 6, upper)).join(' ');
+
+  const signNib = pickSignNibble($('sign').value, neg);
+  const packedNibs = [...digits];
+  if (signNib !== null) packedNibs.push(signNib);
+  else if (packedNibs.length % 2 === 1) packedNibs.unshift(0);
+  if (signNib !== null && packedNibs.length % 2 === 1) packedNibs.unshift(0);
+
+  const bytes = [];
+  for (let i = 0; i < packedNibs.length; i += 2) {
+    bytes.push((packedNibs[i] << 4) | packedNibs[i + 1]);
+  }
+  $('packedHex').textContent = bytes.map(b => b.toString(16).padStart(2, '0'))[upper ? 'map' : 'map'](s => upper ? s.toUpperCase() : s).join(' ');
+  renderBytes(bytes, 'packedBytes', packedNibs, signNib !== null);
+
+  const unpacked = digits.map(d => (0xF0 | d));
+  $('unpackedHex').textContent = unpacked.map(b => hex1((b >> 4) & 0xF, upper) + hex1(b & 0xF, upper)).join(' ');
+  renderUnpackedBytes(unpacked, digits, 'unpackedBytes');
+}
+
+function renderBytes(bytes, id, nibs, hasSign) {
+  const box = $(id); box.innerHTML = '';
+  const upper = $('upper').checked;
+  for (let i = 0; i < bytes.length; i++) {
+    const hi = (bytes[i] >> 4) & 0xF, lo = bytes[i] & 0xF;
+    const isSignLo = hasSign && i === bytes.length - 1;
+    const cell = document.createElement('div'); cell.className = 'byte';
+    cell.innerHTML = '<div class="h">' + (isSignLo ? 'digit' : 'digit') + '</div><div class="h">' + (isSignLo ? 'sign' : 'digit') + '</div><b>' + hex1(hi, upper) + '</b><b style="' + (isSignLo ? 'color:var(--warning)' : '') + '">' + hex1(lo, upper) + '</b>';
+    box.appendChild(cell);
+  }
+}
+
+function renderUnpackedBytes(bytes, digits, id) {
+  const box = $(id); box.innerHTML = '';
+  const upper = $('upper').checked;
+  for (let i = 0; i < bytes.length; i++) {
+    const hi = (bytes[i] >> 4) & 0xF, lo = bytes[i] & 0xF;
+    const cell = document.createElement('div'); cell.className = 'byte';
+    cell.innerHTML = '<div class="h">zone</div><div class="h">digit</div><b style="color:var(--muted)">' + hex1(hi, upper) + '</b><b>' + hex1(lo, upper) + '</b>';
+    box.appendChild(cell);
+  }
+}
+
+function clear() {
+  ['packedHex','unpackedHex','xs3Hex','aikenHex'].forEach(id => $(id).textContent = '—');
+  ['digitNibbles','xs3Nibbles','aikenNibbles','packedBytes','unpackedBytes'].forEach(id => $(id).innerHTML = '');
+}
+
+function fromPacked() {
+  const raw = $('fromHex').value.trim().replace(/0x/gi, '').replace(/[\s,_]/g, '');
+  const errEl = $('fromHexErr'); errEl.innerHTML = '';
+  if (!raw) { $('fromHexOut').textContent = '—'; return; }
+  if (!/^[0-9a-f]+$/i.test(raw)) { errEl.innerHTML = '<div class="banner err">Hex digits only (0–9, A–F, spaces optional).</div>'; return; }
+  if (raw.length % 2 === 1) { errEl.innerHTML = '<div class="banner err">Odd hex length — packed BCD needs whole bytes.</div>'; return; }
+  const nibs = raw.split('').map(c => parseInt(c, 16));
+  const last = nibs[nibs.length - 1];
+  let sign = '', trailingDigits;
+  if (last >= 0xA) {
+    sign = (last === 0xB || last === 0xD) ? '-' : '+';
+    trailingDigits = nibs.slice(0, -1);
+  } else {
+    trailingDigits = nibs.slice();
+  }
+  let bad = false;
+  for (const n of trailingDigits) if (n > 9) { bad = true; break; }
+  if (bad) { errEl.innerHTML = '<div class="banner err">Illegal digit nibble (A–F) in non-sign position.</div>'; return; }
+  let s = trailingDigits.join('');
+  s = s.replace(/^0+/, '') || '0';
+  $('fromHexOut').textContent = sign + s;
+}
+
+function renderLookup() {
+  const rows = [];
+  const gray = d => d ^ (d >> 1);
+  for (let d = 0; d <= 9; d++) {
+    rows.push(`<tr><td class="d">${d}</td><td>${nibbleBin(d)}</td><td>${nibbleBin(d + 3)}</td><td>${nibbleBin(d < 5 ? d : d + 6)}</td><td>${nibbleBin(gray(d))}</td></tr>`);
+  }
+  $('lookup').innerHTML = rows.join('');
+}
+
+renderLookup();
+fromDec();
+fromPacked();
+</script>
+</body>
+</html>

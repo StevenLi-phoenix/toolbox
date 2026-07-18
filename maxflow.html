@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ford-Fulkerson Max Flow Visualizer (Edmonds-Karp) — Free Online Tool</title>
+<meta name="description" content="Watch the Ford-Fulkerson max-flow algorithm find the shortest BFS augmenting path (Edmonds-Karp), push its bottleneck through, update the residual graph, and eventually surface the s-t min-cut — with per-iteration flow, residuals, and traceback.">
+<meta name="keywords" content="ford fulkerson, edmonds karp, max flow, min cut, residual graph, augmenting path, network flow, bfs, graph algorithm, visualizer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/maxflow.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; font-size:.88rem; }
+  .controls button, .controls input, .controls select {
+    padding:7px 10px; border:1px solid var(--border); border-radius:var(--radius);
+    background:var(--surface); color:var(--text); font-size:.85rem; font-family:var(--sans); cursor:pointer;
+  }
+  .controls button.primary { background: var(--accent); color:#fff; border-color: var(--accent); }
+  .controls button:disabled { opacity:.4; cursor:not-allowed; }
+  .controls label { color: var(--muted); }
+  .controls input[type=text] { font-family: var(--mono); width: 90px; }
+  .edges-input {
+    width:100%; min-height:110px; padding:8px; border:1px solid var(--border);
+    border-radius:var(--radius); background:var(--bg); color:var(--text);
+    font-family:var(--mono); font-size:.85rem; resize:vertical; box-sizing:border-box;
+  }
+  .layout { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); overflow:auto; max-height:540px; padding:8px; }
+  svg.mf { display:block; min-width:100%; }
+  .node circle { stroke: var(--border); stroke-width:1.5; fill: var(--surface2); }
+  .node.src circle { fill: rgba(41,89,196,.20); stroke: var(--accent); stroke-width:2.4; }
+  .node.snk circle { fill: rgba(26,140,63,.20); stroke: var(--success); stroke-width:2.4; }
+  .node.cut-src circle { fill: rgba(41,89,196,.35); }
+  .node.cut-snk circle { fill: rgba(196,30,30,.28); }
+  .node.on-path circle { stroke: var(--warning); stroke-width:2.6; }
+  .node text.k { font-family:var(--mono); font-size:12px; fill:var(--text); text-anchor:middle; dominant-baseline:central; font-weight:700; }
+  .edge { stroke: var(--border); stroke-width:1.5; fill:none; }
+  .edge.on-path { stroke: var(--warning); stroke-width: 3; }
+  .edge.saturated { stroke: var(--error); stroke-width: 2; }
+  .edge.cut { stroke: var(--error); stroke-width: 3; stroke-dasharray: 6 4; }
+  .edge.residual-only { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 3 3; }
+  .elabel { font-family:var(--mono); font-size:10.5px; fill:var(--muted); pointer-events:none; }
+  .elabel.on-path { fill: var(--warning); font-weight:700; font-size:11.5px; }
+  .elabel.saturated { fill: var(--error); font-weight:700; }
+  .stats { padding:12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface2); }
+  .stats h3 { margin:0 0 8px; font-size:.85rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .stat-row { display:flex; justify-content:space-between; padding:3px 0; font-size:.88rem; }
+  .stat-row .v { font-family:var(--mono); font-weight:700; }
+  .iter-box, .cut-box, .log { margin-top:12px; padding:10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface2); }
+  .iter-box h3, .cut-box h3, .log h3 { margin:0 0 6px; font-size:.85rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .path { font-family: var(--mono); font-size: .85rem; word-wrap: break-word; color: var(--warning); font-weight:700; }
+  .cut-side { font-family: var(--mono); font-size: .82rem; padding: 4px 8px; border-radius: 4px; }
+  .cut-side.s { background: rgba(41,89,196,.10); border: 1px solid var(--accent); color: var(--accent); margin-bottom:4px; }
+  .cut-side.t { background: rgba(196,30,30,.10); border: 1px solid var(--error); color: var(--error); }
+  .log { max-height: 220px; overflow-y:auto; }
+  .log .row { font-family: var(--mono); font-size:.78rem; padding:2px 0; }
+  .log .row.aug { color: var(--warning); font-weight:600; }
+  .log .row.done { color: var(--success); font-weight:700; }
+  .log .row.info { color: var(--muted); }
+  .banner { padding: 10px 12px; border-radius: var(--radius); font-size: .88rem; margin-top: 10px; }
+  .banner.ok { background: rgba(26,140,63,.10); border: 1px solid var(--success); color: var(--success); }
+  .banner.err { background: rgba(196,30,30,.10); border: 1px solid var(--error); color: var(--error); }
+  .legend { font-size:.78rem; color:var(--muted); margin-top:8px; line-height:1.55; }
+  .legend .sw { display:inline-block; width:14px; height:4px; vertical-align:middle; margin-right:4px; border-radius:2px; }
+  .legend .sw.a { background: var(--accent); }
+  .legend .sw.s { background: var(--success); }
+  .legend .sw.w { background: var(--warning); }
+  .legend .sw.e { background: var(--error); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Ford-Fulkerson Max Flow Visualizer</h1>
+<p class="subtitle"><strong>Ford-Fulkerson</strong> finds the maximum flow from a source <code>s</code> to a sink <code>t</code> by repeatedly discovering augmenting paths in the <em>residual graph</em>, pushing as much flow as the bottleneck edge allows, and reducing residual capacity accordingly. The <strong>Edmonds-Karp</strong> variant always picks the <em>shortest</em> augmenting path (BFS), giving a clean <code>O(V·E²)</code> bound. When BFS can no longer reach <code>t</code>, the vertices it did reach form the <em>s-side of the min-cut</em>: by the max-flow min-cut theorem, the sum of forward-edge capacities across that cut equals the max flow.</p>
+
+<div class="card">
+  <div class="controls">
+    <label for="src">Source</label>
+    <input type="text" id="src" value="s">
+    <label for="snk">Sink</label>
+    <input type="text" id="snk" value="t">
+    <button class="primary" onclick="runAll()">Run all</button>
+    <button onclick="stepOne()">Step 1 augmenting path</button>
+    <button onclick="reset()">Reset</button>
+    <button onclick="loadDemo('classic')">Classic 6-node</button>
+    <button onclick="loadDemo('bipartite')">Bipartite matching</button>
+    <button onclick="loadDemo('parallel')">Parallel pipes</button>
+  </div>
+  <div class="controls" style="flex-direction:column;align-items:flex-start;gap:4px">
+    <label>Directed capacitated edges — one <code>u v cap</code> per line:</label>
+    <textarea class="edges-input" id="edgesIn">s a 10
+s c 10
+a b 4
+a c 2
+a d 8
+b t 10
+c d 9
+d b 6
+d t 10</textarea>
+  </div>
+  <div class="layout">
+    <div class="svg-wrap" id="svgWrap">
+      <svg class="mf" id="svg" viewBox="0 0 800 460" preserveAspectRatio="xMinYMin meet">
+        <defs>
+          <marker id="ah" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto"><path style="fill:var(--border)" d="M0,0 L9,4.5 L0,9 Z"/></marker>
+          <marker id="ahw" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto"><path style="fill:var(--warning)" d="M0,0 L9,4.5 L0,9 Z"/></marker>
+          <marker id="ahe" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto"><path style="fill:var(--error)" d="M0,0 L9,4.5 L0,9 Z"/></marker>
+        </defs>
+      </svg>
+    </div>
+    <div>
+      <div id="banner"></div>
+      <div class="stats">
+        <h3>Run stats</h3>
+        <div class="stat-row"><span>Vertices |V|</span><span class="v" id="sV">0</span></div>
+        <div class="stat-row"><span>Edges |E|</span><span class="v" id="sE">0</span></div>
+        <div class="stat-row"><span>Augmenting paths found</span><span class="v" id="sIter">0</span></div>
+        <div class="stat-row"><span>BFS total edges scanned</span><span class="v" id="sScan">0</span></div>
+        <div class="stat-row"><span>Current max flow</span><span class="v" id="sFlow">0</span></div>
+      </div>
+      <div class="iter-box">
+        <h3>Last augmenting path</h3>
+        <div class="path" id="pathBox">—</div>
+        <div style="font-family:var(--mono); font-size:.82rem; margin-top:6px; color:var(--muted)">bottleneck: <b id="bottle" style="color:var(--warning)">—</b></div>
+      </div>
+      <div class="cut-box">
+        <h3>Min-cut (S / T partition)</h3>
+        <div id="cutBox"><span style="color:var(--muted)">not solved yet</span></div>
+      </div>
+      <div class="log">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+      <p class="legend">
+        <span class="sw a"></span> source &nbsp;
+        <span class="sw s"></span> sink &nbsp;
+        <span class="sw w"></span> augmenting path &nbsp;
+        <span class="sw e"></span> saturated / min-cut edge
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Reading the labels</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Each edge is labelled <code>flow / capacity</code>. When flow equals capacity the edge turns red and adds nothing to the forward residual — but the algorithm can still push a <em>reverse</em> flow along it in the residual graph, effectively "cancelling" flow it committed earlier. That's why Ford-Fulkerson always finds the true optimum, not a greedy local one: back-edges give it the freedom to reroute. When BFS from <code>s</code> finally cannot reach <code>t</code>, the vertices it visited form the S-side of a min-cut, and the max-flow value equals the total capacity of edges crossing S → T. This is the max-flow min-cut theorem in one screen.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Where max-flow shows up in real code</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Bipartite matching (interviewer ↔ candidate scheduling), image-segmentation cost cuts, edge-connectivity in a network, project-selection with prerequisites, baseball-elimination proofs, traffic-plan capacity checks, ETL pipeline throughput limits — all reduce to a graph, a source, a sink, and this one loop. When capacities are unit or small integers, Edmonds-Karp finishes in milliseconds even on graphs with tens of thousands of edges. For denser or higher-capacity graphs, Dinic's algorithm and push-relabel keep the same theorem but tighten the loop.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+let vertices = [], edges = [], adj = new Map();
+let cap = new Map(), flow = new Map();
+let source = 's', sink = 't';
+let totalFlow = 0, iterCount = 0, scanCount = 0;
+let pathEdges = new Set(), pathNodes = new Set();
+let lastPath = [], lastBottle = 0;
+let solved = false, cutS = new Set();
+let logRows = [];
+
+function ek(a, b) { return a + '␟' + b; }
+
+function parseEdges() {
+  edges = []; adj = new Map(); cap = new Map(); flow = new Map();
+  const seen = new Set();
+  const lines = $('edgesIn').value.split('\n').map(s => s.trim()).filter(Boolean);
+  for (const line of lines) {
+    const m = line.match(/^(\S+)\s+(\S+)\s+([+-]?\d+(?:\.\d+)?)$/);
+    if (!m) continue;
+    const u = m[1], v = m[2], c = parseFloat(m[3]);
+    if (!Number.isFinite(c) || c <= 0) continue;
+    edges.push({ u, v, c });
+    if (!adj.has(u)) adj.set(u, new Set());
+    if (!adj.has(v)) adj.set(v, new Set());
+    adj.get(u).add(v);
+    adj.get(v).add(u);
+    cap.set(ek(u, v), (cap.get(ek(u, v)) || 0) + c);
+    if (!cap.has(ek(v, u))) cap.set(ek(v, u), 0);
+    flow.set(ek(u, v), 0);
+    flow.set(ek(v, u), 0);
+    seen.add(u); seen.add(v);
+  }
+  vertices = [...seen];
+  vertices.sort((a, b) => {
+    if (a === source) return -1; if (b === source) return 1;
+    if (a === sink) return 1; if (b === sink) return -1;
+    return String(a).localeCompare(String(b));
+  });
+}
+
+function residual(u, v) { return (cap.get(ek(u, v)) || 0) - (flow.get(ek(u, v)) || 0); }
+
+function bfsFind() {
+  const parent = new Map(); parent.set(source, null);
+  const q = [source];
+  let head = 0;
+  let scanned = 0;
+  while (head < q.length) {
+    const u = q[head++];
+    if (u === sink) break;
+    const neigh = adj.get(u);
+    if (!neigh) continue;
+    for (const v of neigh) {
+      scanned++;
+      if (!parent.has(v) && residual(u, v) > 1e-9) {
+        parent.set(v, u);
+        if (v === sink) { q.push(v); break; }
+        q.push(v);
+      }
+    }
+  }
+  scanCount += scanned;
+  if (!parent.has(sink)) return null;
+  const path = [];
+  let cur = sink;
+  while (cur !== null) { path.unshift(cur); cur = parent.get(cur); }
+  return path;
+}
+
+function stepOne() {
+  if (solved) return;
+  const path = bfsFind();
+  if (!path) {
+    solved = true;
+    computeCut();
+    logRows.unshift({ t: `converged — max flow = ${totalFlow}`, cls: 'done' });
+    lastPath = []; lastBottle = 0;
+    pathEdges = new Set(); pathNodes = new Set();
+    $('banner').innerHTML = '<div class="banner ok">Converged. Max flow = ' + fmt(totalFlow) + '.</div>';
+    renderAll(); return;
+  }
+  let bottle = Infinity;
+  for (let i = 0; i + 1 < path.length; i++) bottle = Math.min(bottle, residual(path[i], path[i + 1]));
+  for (let i = 0; i + 1 < path.length; i++) {
+    const u = path[i], v = path[i + 1];
+    flow.set(ek(u, v), (flow.get(ek(u, v)) || 0) + bottle);
+    flow.set(ek(v, u), (flow.get(ek(v, u)) || 0) - bottle);
+  }
+  totalFlow += bottle;
+  iterCount++;
+  lastPath = path; lastBottle = bottle;
+  pathEdges = new Set(); pathNodes = new Set(path);
+  for (let i = 0; i + 1 < path.length; i++) pathEdges.add(ek(path[i], path[i + 1]));
+  logRows.unshift({ t: `augment ${iterCount}: ${path.join(' → ')} — bottleneck ${fmt(bottle)}, total flow ${fmt(totalFlow)}`, cls: 'aug' });
+  renderAll();
+}
+
+function runAll() {
+  reset(); let guard = 5000;
+  while (!solved && guard-- > 0) stepOne();
+}
+
+function reset() {
+  source = ($('src').value || 's').trim();
+  sink = ($('snk').value || 't').trim();
+  parseEdges();
+  totalFlow = 0; iterCount = 0; scanCount = 0; solved = false;
+  cutS = new Set(); pathEdges = new Set(); pathNodes = new Set();
+  lastPath = []; lastBottle = 0;
+  $('banner').innerHTML = '';
+  logRows = [{ t: `reset — source=${source}, sink=${sink}, |V|=${vertices.length}, |E|=${edges.length}`, cls: 'info' }];
+  if (!vertices.includes(source)) logRows.unshift({ t: `source "${source}" not in graph`, cls: 'done' });
+  if (!vertices.includes(sink)) logRows.unshift({ t: `sink "${sink}" not in graph`, cls: 'done' });
+  layout();
+  renderAll();
+}
+
+function computeCut() {
+  cutS = new Set([source]);
+  const q = [source]; let head = 0;
+  while (head < q.length) {
+    const u = q[head++];
+    for (const v of (adj.get(u) || [])) {
+      if (!cutS.has(v) && residual(u, v) > 1e-9) { cutS.add(v); q.push(v); }
+    }
+  }
+}
+
+function fmt(x) { return Number.isInteger(x) ? x : x.toFixed(2); }
+
+let coords = new Map();
+function layout() {
+  coords = new Map();
+  const W = 800, H = 460, pad = 60;
+  const n = vertices.length;
+  if (n === 0) return;
+  const mids = vertices.filter(v => v !== source && v !== sink);
+  const colCount = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, mids.length))));
+  const rowCount = Math.max(1, Math.ceil(mids.length / colCount));
+  coords.set(source, { x: pad, y: H / 2 });
+  coords.set(sink, { x: W - pad, y: H / 2 });
+  const gridW = W - 2 * pad - 120;
+  const gridH = H - 2 * pad;
+  for (let i = 0; i < mids.length; i++) {
+    const r = Math.floor(i / colCount), c = i % colCount;
+    const x = pad + 100 + (colCount === 1 ? gridW / 2 : (gridW * c) / (colCount - 1 || 1));
+    const y = pad + (rowCount === 1 ? gridH / 2 : (gridH * r) / (rowCount - 1 || 1));
+    coords.set(mids[i], { x, y });
+  }
+}
+
+function renderSVG() {
+  const svg = $('svg');
+  while (svg.lastChild && svg.lastChild.tagName !== 'defs') svg.removeChild(svg.lastChild);
+
+  const seenPairs = new Set();
+  for (const { u, v, c } of edges) {
+    const a = coords.get(u), b = coords.get(v);
+    if (!a || !b) continue;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const nx = dx / len, ny = dy / len;
+    const r = 18;
+    const hasReverse = adj.get(v)?.has(u) && edges.some(e => e.u === v && e.v === u);
+    const bend = hasReverse ? 12 : 0;
+    const px = -ny * bend, py = nx * bend;
+    const x1 = a.x + nx * r + px, y1 = a.y + ny * r + py;
+    const x2 = b.x - nx * r + px, y2 = b.y - ny * r + py;
+
+    const f = flow.get(ek(u, v)) || 0;
+    const key = ek(u, v);
+    const onPath = pathEdges.has(key);
+    const saturated = f >= c - 1e-9;
+    const isCut = solved && cutS.has(u) && !cutS.has(v);
+
+    let cls = 'edge', marker = 'ah';
+    if (onPath) { cls = 'edge on-path'; marker = 'ahw'; }
+    else if (isCut) { cls = 'edge cut'; marker = 'ahe'; }
+    else if (saturated) { cls = 'edge saturated'; marker = 'ahe'; }
+
+    const path = document.createElementNS(SVG_NS, 'path');
+    const midx = (x1 + x2) / 2 + (hasReverse ? -ny * 6 : 0);
+    const midy = (y1 + y2) / 2 + (hasReverse ? nx * 6 : 0);
+    path.setAttribute('d', `M${x1},${y1} Q${midx},${midy} ${x2},${y2}`);
+    path.setAttribute('class', cls);
+    path.setAttribute('marker-end', 'url(#' + marker + ')');
+    svg.appendChild(path);
+
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('class', 'elabel' + (onPath ? ' on-path' : (saturated ? ' saturated' : '')));
+    label.setAttribute('x', midx + (hasReverse ? -ny * 8 : 4));
+    label.setAttribute('y', midy + (hasReverse ? nx * 8 : -4));
+    label.setAttribute('text-anchor', 'middle');
+    label.textContent = fmt(f) + '/' + fmt(c);
+    svg.appendChild(label);
+  }
+
+  for (const v of vertices) {
+    const p = coords.get(v);
+    if (!p) continue;
+    const g = document.createElementNS(SVG_NS, 'g');
+    let cls = 'node';
+    if (v === source) cls += ' src';
+    else if (v === sink) cls += ' snk';
+    if (pathNodes.has(v)) cls += ' on-path';
+    if (solved) {
+      if (cutS.has(v)) cls += ' cut-src';
+      else cls += ' cut-snk';
+    }
+    g.setAttribute('class', cls);
+    const c = document.createElementNS(SVG_NS, 'circle');
+    c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', 18);
+    g.appendChild(c);
+    const t = document.createElementNS(SVG_NS, 'text');
+    t.setAttribute('class', 'k'); t.setAttribute('x', p.x); t.setAttribute('y', p.y);
+    t.textContent = v;
+    g.appendChild(t);
+    svg.appendChild(g);
+  }
+}
+
+function renderStats() {
+  $('sV').textContent = vertices.length;
+  $('sE').textContent = edges.length;
+  $('sIter').textContent = iterCount;
+  $('sScan').textContent = scanCount;
+  $('sFlow').textContent = fmt(totalFlow);
+}
+
+function renderPath() {
+  $('pathBox').textContent = lastPath.length ? lastPath.join(' → ') : '—';
+  $('bottle').textContent = lastBottle > 0 ? fmt(lastBottle) : '—';
+}
+
+function renderCut() {
+  const el = $('cutBox');
+  if (!solved) { el.innerHTML = '<span style="color:var(--muted)">not solved yet</span>'; return; }
+  const T = vertices.filter(v => !cutS.has(v));
+  const crossing = [];
+  let cutSum = 0;
+  for (const { u, v, c } of edges) {
+    if (cutS.has(u) && !cutS.has(v)) { crossing.push(`${u}→${v} (cap ${fmt(c)})`); cutSum += c; }
+  }
+  el.innerHTML = '<div class="cut-side s"><b>S:</b> ' + [...cutS].join(', ') + '</div>'
+    + '<div class="cut-side t"><b>T:</b> ' + T.join(', ') + '</div>'
+    + '<div style="margin-top:8px; font-size:.82rem; color:var(--muted); font-family:var(--mono)">Crossing S→T: ' + (crossing.join(', ') || '(none)') + '</div>'
+    + '<div style="margin-top:4px; font-size:.85rem"><b>Σ cap = ' + fmt(cutSum) + '</b> = max flow ✓</div>';
+}
+
+function renderLog() {
+  const el = $('logRows'); el.innerHTML = '';
+  logRows.slice(0, 80).forEach(r => {
+    const d = document.createElement('div');
+    d.className = 'row ' + (r.cls || '');
+    d.textContent = r.t;
+    el.appendChild(d);
+  });
+}
+
+function renderAll() { renderSVG(); renderStats(); renderPath(); renderCut(); renderLog(); }
+
+const DEMOS = {
+  classic: 's a 10\ns c 10\na b 4\na c 2\na d 8\nb t 10\nc d 9\nd b 6\nd t 10',
+  bipartite: 's u1 1\ns u2 1\ns u3 1\nu1 v1 1\nu1 v2 1\nu2 v2 1\nu2 v3 1\nu3 v1 1\nu3 v3 1\nv1 t 1\nv2 t 1\nv3 t 1',
+  parallel: 's a 3\ns b 3\na t 2\nb t 2\na b 5\nb a 5'
+};
+function loadDemo(k) {
+  $('edgesIn').value = DEMOS[k];
+  if (k === 'bipartite') { $('src').value = 's'; $('snk').value = 't'; }
+  reset();
+}
+
+reset();
+</script>
+</body>
+</html>

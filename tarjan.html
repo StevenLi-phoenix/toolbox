@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tarjan's Strongly Connected Components Visualizer — Free Online Tool</title>
+<meta name="description" content="Watch Tarjan's linear-time strongly connected components (SCC) algorithm walk a directed graph — DFS numbers, low-link values, the stack of open vertices, and every SCC popped in reverse topological order.">
+<meta name="keywords" content="tarjan, strongly connected components, scc, low-link, dfs, graph algorithm, visualizer, directed graph, condensation, kosaraju alternative">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/tarjan.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; font-size:.88rem; }
+  .controls button, .controls input, .controls select {
+    padding:7px 10px; border:1px solid var(--border); border-radius:var(--radius);
+    background:var(--surface); color:var(--text); font-size:.85rem; font-family:var(--sans);
+    cursor:pointer;
+  }
+  .controls button.primary { background: var(--accent); color:#fff; border-color: var(--accent); }
+  .controls button:disabled { opacity:.4; cursor:not-allowed; }
+  .controls label { color: var(--muted); }
+  .edges-input {
+    width:100%; min-height:110px; padding:8px; border:1px solid var(--border);
+    border-radius:var(--radius); background:var(--bg); color:var(--text);
+    font-family:var(--mono); font-size:.85rem; resize:vertical; box-sizing:border-box;
+  }
+  .layout { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .svg-wrap { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); overflow:auto; max-height:540px; padding:8px; }
+  svg.tj { display:block; min-width:100%; }
+  .node circle { stroke: var(--border); stroke-width:1.5; fill: var(--surface2); transition: fill .12s; }
+  .node.onstack circle { fill: rgba(154,103,0,.20); stroke: var(--warning); }
+  .node.done circle { stroke: var(--success); stroke-width: 2.4; }
+  .node.current circle { fill: rgba(41,89,196,.20); stroke: var(--accent); stroke-width: 2.4; }
+  .node text.k { font-family:var(--mono); font-size:12px; fill:var(--text); text-anchor:middle; dominant-baseline:central; font-weight:700; }
+  .node text.ll { font-family:var(--mono); font-size:10px; fill:var(--muted); text-anchor:middle; }
+  .edge { stroke: var(--border); stroke-width:1.4; fill:none; }
+  .edge.tree { stroke: var(--accent); stroke-width: 2.2; }
+  .edge.back { stroke: var(--warning); stroke-width: 2; stroke-dasharray: 4 3; }
+  .edge.cross, .edge.forward { stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 2 3; }
+  .arrowhead { fill: var(--border); }
+  .stats { padding:12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface2); }
+  .stats h3 { margin:0 0 8px; font-size:.85rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .stat-row { display:flex; justify-content:space-between; padding:3px 0; font-size:.88rem; }
+  .stat-row .v { font-family:var(--mono); font-weight:700; }
+  .stack-box, .scc-box, .log { margin-top:12px; padding:10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface2); }
+  .stack-box h3, .scc-box h3, .log h3 { margin:0 0 6px; font-size:.85rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .stack-list { display:flex; flex-wrap:wrap; gap:6px; font-family:var(--mono); font-size:.82rem; }
+  .stack-item { padding:4px 8px; border-radius:4px; background:var(--bg); border:1px solid var(--warning); color: var(--warning); font-weight:700; }
+  .scc { display:inline-block; padding:5px 8px; margin:3px 4px 0 0; border-radius:4px; border:1px solid var(--success); background: rgba(26,140,63,.10); color: var(--success); font-family:var(--mono); font-size:.82rem; font-weight:700; }
+  .log { max-height: 220px; overflow-y:auto; }
+  .log .row { font-family: var(--mono); font-size:.78rem; padding:2px 0; }
+  .log .row.enter { color: var(--accent); }
+  .log .row.tree { color: var(--accent); }
+  .log .row.back { color: var(--warning); }
+  .log .row.pop { color: var(--success); font-weight:700; }
+  .log .row.close { color: var(--muted); }
+  .table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:.78rem; margin-top:6px; }
+  .table th, .table td { padding:3px 6px; border-bottom:1px solid var(--border); text-align:center; }
+  .table th { color:var(--muted); font-weight:500; }
+  .table td.hit { color: var(--success); font-weight:700; }
+  .legend { font-size:.78rem; color:var(--muted); margin-top:8px; line-height:1.5; }
+  .legend .sw { display:inline-block; width:14px; height:4px; vertical-align:middle; margin-right:4px; border-radius:2px; }
+  .legend .sw.a { background: var(--accent); }
+  .legend .sw.w { background: var(--warning); }
+  .legend .sw.s { background: var(--success); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Tarjan's Strongly Connected Components Visualizer</h1>
+<p class="subtitle"><strong>Tarjan's SCC algorithm</strong> finds every maximal set of mutually reachable vertices in a directed graph in a single depth-first pass — <code>O(|V| + |E|)</code>, no second graph, no reverse edges. Each vertex gets a DFS <em>index</em> and a <em>low-link</em>: the smallest index reachable from its subtree via any tree or back edge. When <code>lowlink[v] == index[v]</code>, everything on the stack down to <code>v</code> is one SCC. Feed it a call graph to find mutually-recursive function clusters, feed it package imports to find dependency cycles, or feed it a currency exchange graph to find arbitrage loops.</p>
+
+<div class="card">
+  <div class="controls">
+    <button class="primary" onclick="runAll()">Run</button>
+    <button onclick="stepOne()">Step</button>
+    <button onclick="reset()">Reset</button>
+    <button onclick="loadDemo('cycle')">Cycle demo</button>
+    <button onclick="loadDemo('dag')">DAG demo</button>
+    <button onclick="loadDemo('classic')">Classic (CLRS)</button>
+    <button onclick="loadDemo('mutrec')">Mutual recursion</button>
+    <label>Speed <input type="range" id="speed" min="50" max="800" step="50" value="300"></label>
+  </div>
+  <div class="controls" style="flex-direction:column;align-items:flex-start;gap:4px">
+    <label>Directed edges — one <code>u v</code> per line:</label>
+    <textarea class="edges-input" id="edgesIn">1 2
+2 3
+3 1
+3 4
+4 5
+5 6
+6 4
+6 7
+7 8
+8 7</textarea>
+  </div>
+  <div class="layout">
+    <div class="svg-wrap" id="svgWrap">
+      <svg class="tj" id="svg" viewBox="0 0 800 460" preserveAspectRatio="xMinYMin meet">
+        <defs>
+          <marker id="ah" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path class="arrowhead" d="M0,0 L8,4 L0,8 Z"/></marker>
+          <marker id="aht" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path style="fill:var(--accent)" d="M0,0 L8,4 L0,8 Z"/></marker>
+          <marker id="ahb" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path style="fill:var(--warning)" d="M0,0 L8,4 L0,8 Z"/></marker>
+        </defs>
+      </svg>
+    </div>
+    <div>
+      <div class="stats">
+        <h3>Run stats</h3>
+        <div class="stat-row"><span>Vertices |V|</span><span class="v" id="sV">0</span></div>
+        <div class="stat-row"><span>Edges |E|</span><span class="v" id="sE">0</span></div>
+        <div class="stat-row"><span>DFS index counter</span><span class="v" id="sIdx">0</span></div>
+        <div class="stat-row"><span>Vertices on stack</span><span class="v" id="sStk">0</span></div>
+        <div class="stat-row"><span>SCCs found</span><span class="v" id="sScc">0</span></div>
+      </div>
+      <div class="stack-box">
+        <h3>DFS stack (bottom → top)</h3>
+        <div class="stack-list" id="stackList"><span style="color:var(--muted)">empty</span></div>
+      </div>
+      <div class="scc-box">
+        <h3>SCCs (in pop order = reverse topological)</h3>
+        <div id="sccList"><span style="color:var(--muted)">none yet</span></div>
+      </div>
+      <div class="scc-box" style="margin-top:12px">
+        <h3>index / low-link table</h3>
+        <div id="tableWrap"></div>
+      </div>
+      <div class="log">
+        <h3>Trace</h3>
+        <div id="logRows"></div>
+      </div>
+      <p class="legend">
+        <span class="sw a"></span> tree edge · current vertex &nbsp;
+        <span class="sw w"></span> back / on-stack &nbsp;
+        <span class="sw s"></span> popped SCC
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why one DFS is enough</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    An SCC is a maximal set where every vertex reaches every other. When DFS enters a vertex <code>v</code>, everything reachable from <code>v</code> that has not been visited yet lives in <code>v</code>'s DFS subtree. The <em>low-link</em> propagates upward the smallest DFS index that <code>v</code>'s subtree can still reach via one back-edge or cross-in-same-SCC edge. If a subtree can escape backward to an earlier ancestor, all of it belongs with that ancestor's SCC; if it can't, then <code>v</code> is the entry point (or "root") of its own SCC, and <em>every vertex on the stack above <code>v</code></em> is inside it — because they were pushed after <code>v</code> and none escaped. Popping the stack down to <code>v</code> gives the component in one clean sweep. The output arrives in reverse topological order of the condensation (each SCC seen as one super-node), which is exactly what a scheduler needs.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+let vertices = [], adj = new Map(), edges = [];
+let idx = {}, low = {}, onStack = {}, stack = [], counter = 0;
+let sccs = [], logRows = [];
+let events = [], evIndex = 0;
+let running = false, timer = null;
+let currentVertex = null;
+let treeEdges = new Set(), backEdges = new Set();
+
+function parseEdges() {
+  edges = []; adj = new Map();
+  const seen = new Set();
+  const lines = $('edgesIn').value.split('\n').map(s => s.trim()).filter(Boolean);
+  for (const line of lines) {
+    const m = line.match(/^(\S+)\s+(\S+)$/);
+    if (!m) continue;
+    const u = m[1], v = m[2];
+    edges.push({ u, v });
+    if (!adj.has(u)) adj.set(u, []);
+    adj.get(u).push(v);
+    seen.add(u); seen.add(v);
+  }
+  for (const v of seen) if (!adj.has(v)) adj.set(v, []);
+  vertices = [...seen].sort((a, b) => {
+    const na = +a, nb = +b;
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return String(a).localeCompare(String(b));
+  });
+}
+
+function reset() {
+  clearTimeout(timer); running = false;
+  parseEdges();
+  idx = {}; low = {}; onStack = {}; stack = []; counter = 0;
+  sccs = []; logRows = [{ t: `reset — |V|=${vertices.length}, |E|=${edges.length}`, cls: '' }];
+  events = []; evIndex = 0;
+  currentVertex = null;
+  treeEdges = new Set(); backEdges = new Set();
+  precompute();
+  layout();
+  renderAll();
+}
+
+function precompute() {
+  const localIdx = {}, localLow = {}, localOnStack = {}, localStack = [];
+  let localCounter = 0;
+  const ev = [];
+  const iter = [];
+
+  function strongconnect(root) {
+    const dfs = [{ v: root, i: 0, phase: 'enter' }];
+    while (dfs.length) {
+      const frame = dfs[dfs.length - 1];
+      const v = frame.v;
+      if (frame.phase === 'enter') {
+        localIdx[v] = localCounter;
+        localLow[v] = localCounter;
+        localCounter++;
+        localStack.push(v);
+        localOnStack[v] = true;
+        ev.push({ t: 'enter', v, idx: localIdx[v], low: localLow[v] });
+        frame.phase = 'iterate';
+      }
+      const neighbors = adj.get(v) || [];
+      if (frame.i < neighbors.length) {
+        const w = neighbors[frame.i];
+        frame.i++;
+        if (localIdx[w] === undefined) {
+          ev.push({ t: 'tree', u: v, w });
+          dfs.push({ v: w, i: 0, phase: 'enter', parent: v });
+        } else if (localOnStack[w]) {
+          const old = localLow[v];
+          localLow[v] = Math.min(localLow[v], localIdx[w]);
+          ev.push({ t: 'back', u: v, w, oldLow: old, newLow: localLow[v] });
+        } else {
+          ev.push({ t: 'cross', u: v, w });
+        }
+      } else {
+        const popped = dfs.pop();
+        if (dfs.length) {
+          const parent = dfs[dfs.length - 1].v;
+          const old = localLow[parent];
+          localLow[parent] = Math.min(localLow[parent], localLow[v]);
+          if (old !== localLow[parent]) ev.push({ t: 'update', u: parent, from: old, to: localLow[parent] });
+        }
+        if (localLow[v] === localIdx[v]) {
+          const comp = [];
+          while (true) {
+            const x = localStack.pop();
+            localOnStack[x] = false;
+            comp.push(x);
+            if (x === v) break;
+          }
+          ev.push({ t: 'scc', root: v, comp });
+        } else {
+          ev.push({ t: 'close', v });
+        }
+      }
+    }
+  }
+
+  for (const v of vertices) {
+    if (localIdx[v] === undefined) strongconnect(v);
+  }
+  events = ev;
+}
+
+function stepOne() {
+  if (evIndex >= events.length) return;
+  const e = events[evIndex++];
+  applyEvent(e);
+  renderAll();
+}
+
+function runAll() {
+  if (running) { clearTimeout(timer); running = false; return; }
+  running = true;
+  const tick = () => {
+    if (evIndex >= events.length) { running = false; return; }
+    stepOne();
+    if (running) timer = setTimeout(tick, +$('speed').value);
+  };
+  tick();
+}
+
+function applyEvent(e) {
+  if (e.t === 'enter') {
+    idx[e.v] = e.idx; low[e.v] = e.low; stack.push(e.v); onStack[e.v] = true;
+    counter = Math.max(counter, e.idx + 1);
+    currentVertex = e.v;
+    logRows.unshift({ t: `enter ${e.v} — idx=${e.idx}, low=${e.low}`, cls: 'enter' });
+  } else if (e.t === 'tree') {
+    treeEdges.add(e.u + '->' + e.w);
+    logRows.unshift({ t: `tree edge ${e.u} → ${e.w}`, cls: 'tree' });
+  } else if (e.t === 'back') {
+    backEdges.add(e.u + '->' + e.w);
+    low[e.u] = e.newLow;
+    logRows.unshift({ t: `back edge ${e.u} → ${e.w}, low[${e.u}] : ${e.oldLow} → ${e.newLow}`, cls: 'back' });
+  } else if (e.t === 'cross') {
+    logRows.unshift({ t: `cross edge ${e.u} → ${e.w} (already-closed SCC, ignore)`, cls: 'close' });
+  } else if (e.t === 'update') {
+    low[e.u] = e.to;
+    logRows.unshift({ t: `low[${e.u}] pulled up from child : ${e.from} → ${e.to}`, cls: 'back' });
+  } else if (e.t === 'scc') {
+    for (const x of e.comp) {
+      const idxInStack = stack.lastIndexOf(x);
+      if (idxInStack >= 0) stack.splice(idxInStack, 1);
+      onStack[x] = false;
+    }
+    sccs.push(e.comp.slice());
+    logRows.unshift({ t: `SCC found (root ${e.root}) : { ${e.comp.join(', ')} }`, cls: 'pop' });
+    currentVertex = null;
+  } else if (e.t === 'close') {
+    logRows.unshift({ t: `${e.v} closes, not a root — carries state upward`, cls: 'close' });
+  }
+}
+
+let coords = new Map();
+function layout() {
+  coords = new Map();
+  const W = 800, H = 460, pad = 50;
+  const n = vertices.length;
+  if (n === 0) return;
+  if (n === 1) { coords.set(vertices[0], { x: W/2, y: H/2 }); return; }
+  const cx = W / 2, cy = H / 2;
+  const rx = (W - 2 * pad) / 2, ry = (H - 2 * pad) / 2;
+  for (let i = 0; i < n; i++) {
+    const t = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    coords.set(vertices[i], { x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t) });
+  }
+}
+
+function renderSVG() {
+  const svg = $('svg');
+  while (svg.lastChild && svg.lastChild.tagName !== 'defs') svg.removeChild(svg.lastChild);
+
+  const componentOf = {};
+  sccs.forEach((c, i) => c.forEach(v => componentOf[v] = i));
+  const palette = ['#1a8c3f','#9a6700','#7a2df5','#0b7285','#a61e4d','#c92a2a','#2b8a3e','#d9480f'];
+
+  for (const { u, v } of edges) {
+    const a = coords.get(u), b = coords.get(v);
+    if (!a || !b) continue;
+    const key = u + '->' + v;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const nx = dx / len, ny = dy / len;
+    const r = 18;
+    const x1 = a.x + nx * r, y1 = a.y + ny * r;
+    const x2 = b.x - nx * r, y2 = b.y - ny * r;
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    let cls = 'edge';
+    let marker = 'ah';
+    if (treeEdges.has(key)) { cls = 'edge tree'; marker = 'aht'; }
+    else if (backEdges.has(key)) { cls = 'edge back'; marker = 'ahb'; }
+    line.setAttribute('class', cls);
+    line.setAttribute('marker-end', 'url(#' + marker + ')');
+    svg.appendChild(line);
+  }
+
+  for (const v of vertices) {
+    const p = coords.get(v);
+    if (!p) continue;
+    const g = document.createElementNS(SVG_NS, 'g');
+    let cls = 'node';
+    if (v === currentVertex) cls += ' current';
+    else if (onStack[v]) cls += ' onstack';
+    else if (idx[v] !== undefined) cls += ' done';
+    g.setAttribute('class', cls);
+    const circle = document.createElementNS(SVG_NS, 'circle');
+    circle.setAttribute('cx', p.x); circle.setAttribute('cy', p.y);
+    circle.setAttribute('r', 18);
+    if (componentOf[v] !== undefined && !onStack[v]) {
+      circle.setAttribute('style', 'fill:' + palette[componentOf[v] % palette.length] + '22; stroke:' + palette[componentOf[v] % palette.length] + '; stroke-width:2.4');
+    }
+    g.appendChild(circle);
+    const t1 = document.createElementNS(SVG_NS, 'text');
+    t1.setAttribute('class', 'k'); t1.setAttribute('x', p.x); t1.setAttribute('y', p.y - 2);
+    t1.textContent = v;
+    g.appendChild(t1);
+    if (idx[v] !== undefined) {
+      const t2 = document.createElementNS(SVG_NS, 'text');
+      t2.setAttribute('class', 'll'); t2.setAttribute('x', p.x); t2.setAttribute('y', p.y + 11);
+      t2.textContent = idx[v] + '/' + low[v];
+      g.appendChild(t2);
+    }
+    svg.appendChild(g);
+  }
+}
+
+function renderStats() {
+  $('sV').textContent = vertices.length;
+  $('sE').textContent = edges.length;
+  $('sIdx').textContent = counter;
+  $('sStk').textContent = stack.length;
+  $('sScc').textContent = sccs.length;
+}
+
+function renderStack() {
+  const el = $('stackList');
+  if (!stack.length) { el.innerHTML = '<span style="color:var(--muted)">empty</span>'; return; }
+  el.innerHTML = stack.map(v => '<span class="stack-item">' + v + '</span>').join('');
+}
+
+function renderSCCs() {
+  const el = $('sccList');
+  if (!sccs.length) { el.innerHTML = '<span style="color:var(--muted)">none yet</span>'; return; }
+  el.innerHTML = sccs.map(c => '<span class="scc">{ ' + c.join(', ') + ' }</span>').join('');
+}
+
+function renderTable() {
+  const rows = ['<table class="table"><thead><tr><th>v</th><th>index</th><th>lowlink</th><th>on-stack</th></tr></thead><tbody>'];
+  for (const v of vertices) {
+    const hit = idx[v] !== undefined && low[v] === idx[v] && !onStack[v];
+    rows.push('<tr>'
+      + '<td>' + v + '</td>'
+      + '<td>' + (idx[v] !== undefined ? idx[v] : '—') + '</td>'
+      + '<td' + (hit ? ' class="hit"' : '') + '>' + (low[v] !== undefined ? low[v] : '—') + '</td>'
+      + '<td>' + (onStack[v] ? '●' : '') + '</td></tr>');
+  }
+  rows.push('</tbody></table>');
+  $('tableWrap').innerHTML = rows.join('');
+}
+
+function renderLog() {
+  const el = $('logRows'); el.innerHTML = '';
+  logRows.slice(0, 80).forEach(r => {
+    const d = document.createElement('div');
+    d.className = 'row ' + (r.cls || '');
+    d.textContent = r.t;
+    el.appendChild(d);
+  });
+}
+
+function renderAll() { renderSVG(); renderStats(); renderStack(); renderSCCs(); renderTable(); renderLog(); }
+
+const DEMOS = {
+  cycle: '1 2\n2 3\n3 4\n4 1',
+  dag: '1 2\n1 3\n2 4\n3 4\n4 5',
+  classic: 'a b\nb c\nb e\nb f\nc d\nc g\nd c\nd h\ne a\ne f\nf g\ng f\nh d\nh g',
+  mutrec: 'main foo\nfoo bar\nbar baz\nbaz foo\nmain util\nutil log\nlog util'
+};
+
+function loadDemo(k) {
+  $('edgesIn').value = DEMOS[k];
+  reset();
+}
+
+reset();
+</script>
+</body>
+</html>
