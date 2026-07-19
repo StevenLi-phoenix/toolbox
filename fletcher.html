@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fletcher Checksum Calculator — Free Online Tool</title>
+<meta name="description" content="Compute Fletcher-16, Fletcher-32, and Fletcher-64 checksums over arbitrary bytes — with a live block-by-block accumulator trace, mod-255 vs mod-65535 vs mod-4294967295 sums, byte-order options, and side-by-side comparison against Adler-32 and 1's-complement IP checksum.">
+<meta name="keywords" content="fletcher checksum, fletcher-16, fletcher-32, fletcher-64, adler-32, tcp checksum, error detection, block sum, running sum">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/fletcher.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; font-size: .88rem; }
+  .controls label { display: flex; align-items: center; gap: 6px; }
+  .controls select, .controls input {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .88rem;
+  }
+  textarea.input {
+    width: 100%; min-height: 100px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .92rem; box-sizing: border-box; resize: vertical;
+  }
+  .results-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px; margin-top: 12px;
+  }
+  .result-card {
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .result-card .lbl { font-size: .72rem; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; margin-bottom: 4px; }
+  .result-card .val { font-family: var(--mono); font-size: 1rem; font-weight: 700; color: var(--text); word-break: break-all; }
+  .result-card .sub { font-size: .72rem; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+
+  .trace {
+    margin-top: 10px; max-height: 320px; overflow: auto;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg);
+  }
+  .trace-row {
+    display: grid; grid-template-columns: 60px 100px 90px 90px 90px;
+    gap: 8px; padding: 5px 10px; font-size: .82rem; font-family: var(--mono);
+    border-bottom: 1px solid var(--border);
+  }
+  .trace-row.header { font-family: var(--sans); font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; background: var(--surface2); position: sticky; top: 0; }
+  .trace-row:nth-child(even):not(.header) { background: var(--surface); }
+  .trace-row .accent { color: var(--accent); font-weight: 600; }
+  .trace-row .b { color: var(--muted); }
+
+  .compare {
+    margin-top: 10px; display: grid; gap: 6px; font-size: .85rem;
+  }
+  .compare .row {
+    display: grid; grid-template-columns: 160px 1fr;
+    gap: 10px; padding: 6px 10px; background: var(--surface); border-radius: 4px; font-family: var(--mono);
+  }
+  .compare .row .k { color: var(--muted); font-family: var(--sans); font-size: .78rem; }
+
+  .radio-set { display: flex; gap: 4px; }
+  .radio-set label {
+    padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); cursor: pointer; font-size: .82rem;
+  }
+  .radio-set label.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .radio-set input { display: none; }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    .trace-row { grid-template-columns: 40px 70px 70px 70px 70px; font-size: .72rem; padding: 3px 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Fletcher Checksum Calculator</h1>
+<p class="subtitle">Fletcher's algorithm (John G. Fletcher, 1982) maintains two running sums &mdash; the first accumulates blocks, the second accumulates the first &mdash; then packs both into the output word. It's stronger than a plain block sum against burst errors and byte-reordering, cheaper than CRC-32, and ships in TCP/UDP (as a related 1's-complement variant), OSI CLNS/CLNP, TLS, ZFS, and many embedded protocols. Fletcher-16 uses 8-bit blocks and mod 255, Fletcher-32 uses 16-bit blocks and mod 65535, Fletcher-64 uses 32-bit blocks and mod 2<sup>32</sup>&minus;1.</p>
+
+<div class="card">
+  <h2>Input</h2>
+  <div class="controls">
+    <label>Encoding:
+      <div class="radio-set" id="encSet">
+        <label class="on"><input type="radio" name="enc" value="text" checked> Text</label>
+        <label><input type="radio" name="enc" value="hex"> Hex bytes</label>
+        <label><input type="radio" name="enc" value="ascii"> ASCII codes</label>
+      </div>
+    </label>
+    <label>Padding:
+      <select id="pad">
+        <option value="zero" selected>zero-pad tail</option>
+        <option value="drop">drop odd tail</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="showTrace" checked> Show trace</label>
+  </div>
+  <div class="presets">
+    <button class="btn btn-secondary" onclick="setInput('abcde', 'text')">"abcde"</button>
+    <button class="btn btn-secondary" onclick="setInput('abcdef', 'text')">"abcdef"</button>
+    <button class="btn btn-secondary" onclick="setInput('abcdefgh', 'text')">"abcdefgh"</button>
+    <button class="btn btn-secondary" onclick="setInput('The quick brown fox jumps over the lazy dog', 'text')">Pangram</button>
+    <button class="btn btn-secondary" onclick="setInput('01 02 03 04', 'hex')">01 02 03 04</button>
+    <button class="btn btn-secondary" onclick="setInput('ff ff ff ff', 'hex')">ff ff ff ff</button>
+  </div>
+  <textarea class="input" id="inputData" spellcheck="false" oninput="compute()">abcde</textarea>
+</div>
+
+<div class="card">
+  <h2>Results</h2>
+  <div class="results-grid" id="resultsGrid"></div>
+</div>
+
+<div class="card">
+  <h2>Compare with Related Sums</h2>
+  <div class="compare" id="compare"></div>
+  <p style="font-size:.78rem;color:var(--muted);margin-top:8px">
+    IP checksum is the 16-bit 1's-complement sum used by IPv4 headers, ICMP, TCP, and UDP (RFC 1071). It's cheaper than Fletcher-16 but weaker &mdash; it misses adjacent-word swaps that Fletcher catches. Adler-32 is a Fletcher-like sum used in zlib, with prime moduli that improve short-message detection.
+  </p>
+</div>
+
+<div class="card" id="traceCard">
+  <h2>Fletcher-16 Trace</h2>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">
+    Each byte updates both running sums: <code>sum1 = (sum1 + byte) mod 255</code>, then <code>sum2 = (sum2 + sum1) mod 255</code>. The final checksum packs them: <code>(sum2 &lt;&lt; 8) | sum1</code>. Note how <code>sum2</code> grows quadratically &mdash; that's what gives Fletcher its position-sensitive strength.
+  </p>
+  <div class="trace" id="traceBox"></div>
+</div>
+
+<div class="card">
+  <h2>About Fletcher</h2>
+  <p class="about">
+    John G. Fletcher, then at Lawrence Livermore, described the algorithm in <em>An Arithmetic Checksum for Serial Transmissions</em> (IEEE Trans. Comm., January 1982). His goal was a link-level checksum stronger than the widely used single-byte modular sum but cheaper than the polynomial CRCs of the day. The two running sums make the checksum <em>position-aware</em>: reordering the same bytes changes <code>sum2</code>, which a plain sum would miss entirely. The modulus is one less than the block base (255 for 8-bit blocks, 65535 for 16-bit) so that any all-ones block still contributes; using the base itself would create a null block that could be hidden. Fletcher-32 became the default choice for OSI CLNP, DECnet Phase IV, and later ZFS's non-cryptographic on-disk metadata. The related TCP/UDP checksum is the 16-bit 1's-complement sum from RFC 1071 &mdash; simpler than Fletcher but requiring the same end-around carry.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function toBytes(str, enc) {
+  if (enc === 'text') return new TextEncoder().encode(str);
+  if (enc === 'hex') {
+    const clean = str.replace(/[^0-9a-fA-F]/g, '');
+    if (clean.length === 0) return new Uint8Array();
+    const pad = clean.length % 2 ? '0' + clean : clean;
+    const out = new Uint8Array(pad.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(pad.substr(i * 2, 2), 16);
+    return out;
+  }
+  if (enc === 'ascii') {
+    const parts = str.split(/[\s,;]+/).filter(x => x.length > 0);
+    const out = new Uint8Array(parts.length);
+    for (let i = 0; i < parts.length; i++) out[i] = parseInt(parts[i], 10) & 0xff;
+    return out;
+  }
+  return new Uint8Array();
+}
+
+function fletcher16(bytes) {
+  let sum1 = 0, sum2 = 0;
+  const trace = [];
+  for (let i = 0; i < bytes.length; i++) {
+    sum1 = (sum1 + bytes[i]) % 255;
+    sum2 = (sum2 + sum1) % 255;
+    trace.push({ i, byte: bytes[i], sum1, sum2 });
+  }
+  return { checksum: (sum2 << 8) | sum1, sum1, sum2, trace };
+}
+
+function fletcher32(bytes, padMode) {
+  let padded = bytes;
+  if (bytes.length % 2 !== 0) {
+    if (padMode === 'drop') padded = bytes.slice(0, bytes.length - 1);
+    else { padded = new Uint8Array(bytes.length + 1); padded.set(bytes); }
+  }
+  let sum1 = 0, sum2 = 0;
+  for (let i = 0; i < padded.length; i += 2) {
+    const word = (padded[i] << 8) | padded[i + 1];
+    sum1 = (sum1 + word) % 65535;
+    sum2 = (sum2 + sum1) % 65535;
+  }
+  return { checksum: (sum2 * 65536 + sum1) >>> 0, hex: ((sum2 * 65536 + sum1) >>> 0).toString(16).padStart(8, '0'), sum1, sum2, length: padded.length };
+}
+
+function fletcher64(bytes, padMode) {
+  let padded = bytes;
+  const rem = bytes.length % 4;
+  if (rem !== 0) {
+    if (padMode === 'drop') padded = bytes.slice(0, bytes.length - rem);
+    else { padded = new Uint8Array(bytes.length + (4 - rem)); padded.set(bytes); }
+  }
+  const MOD = 0xFFFFFFFFn;
+  let sum1 = 0n, sum2 = 0n;
+  for (let i = 0; i < padded.length; i += 4) {
+    const word = BigInt((padded[i] << 24) >>> 0) | BigInt(padded[i + 1] << 16) | BigInt(padded[i + 2] << 8) | BigInt(padded[i + 3]);
+    sum1 = (sum1 + word) % MOD;
+    sum2 = (sum2 + sum1) % MOD;
+  }
+  const checksum = (sum2 << 32n) | sum1;
+  return { checksum, hex: checksum.toString(16).padStart(16, '0'), sum1, sum2, length: padded.length };
+}
+
+function ipChecksum(bytes) {
+  let padded = bytes;
+  if (bytes.length % 2 !== 0) {
+    padded = new Uint8Array(bytes.length + 1); padded.set(bytes);
+  }
+  let sum = 0;
+  for (let i = 0; i < padded.length; i += 2) {
+    sum += (padded[i] << 8) | padded[i + 1];
+    if (sum > 0xFFFF) sum = (sum & 0xFFFF) + 1;
+  }
+  return (~sum) & 0xFFFF;
+}
+
+function adler32(bytes) {
+  const MOD = 65521;
+  let a = 1, b = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    a = (a + bytes[i]) % MOD;
+    b = (b + a) % MOD;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+function xorSum(bytes) {
+  let x = 0;
+  for (let i = 0; i < bytes.length; i++) x ^= bytes[i];
+  return x;
+}
+
+function getEnc() {
+  const r = document.querySelector('input[name=enc]:checked');
+  return r ? r.value : 'text';
+}
+
+function setInput(v, enc) {
+  const rs = document.querySelector('input[name=enc][value=' + enc + ']');
+  if (rs) { rs.checked = true; updateEncUI(); }
+  $('inputData').value = v;
+  compute();
+}
+
+function updateEncUI() {
+  const labels = $('encSet').querySelectorAll('label');
+  labels.forEach(l => {
+    const inp = l.querySelector('input');
+    l.classList.toggle('on', inp && inp.checked);
+  });
+}
+
+function compute() {
+  const raw = $('inputData').value;
+  const enc = getEnc();
+  const pad = $('pad').value;
+  const bytes = toBytes(raw, enc);
+  const grid = $('resultsGrid');
+  const cmp = $('compare');
+
+  const f16 = fletcher16(bytes);
+  const f32 = fletcher32(bytes, pad);
+  const f64 = fletcher64(bytes, pad);
+  const ip = ipChecksum(bytes);
+  const adl = adler32(bytes);
+  const x = xorSum(bytes);
+
+  grid.innerHTML =
+    card('Fletcher-16', '0x' + f16.checksum.toString(16).padStart(4, '0'), 'dec ' + f16.checksum + ' · sum1=' + f16.sum1 + ' sum2=' + f16.sum2 + ' · ' + bytes.length + ' B') +
+    card('Fletcher-32', '0x' + f32.hex, 'dec ' + f32.checksum + ' · sum1=' + f32.sum1 + ' sum2=' + f32.sum2 + ' · ' + f32.length + ' B') +
+    card('Fletcher-64', '0x' + f64.hex, 'dec ' + f64.checksum.toString() + ' · ' + f64.length + ' B');
+
+  cmp.innerHTML =
+    row('IP checksum (RFC 1071, 16-bit)', '0x' + ip.toString(16).padStart(4, '0') + '  (dec ' + ip + ')') +
+    row('Adler-32 (zlib)', '0x' + adl.toString(16).padStart(8, '0') + '  (dec ' + adl + ')') +
+    row('XOR byte sum', '0x' + x.toString(16).padStart(2, '0') + '  (dec ' + x + ')') +
+    row('Byte count', String(bytes.length));
+
+  if ($('showTrace').checked && bytes.length > 0) {
+    $('traceCard').style.display = 'block';
+    renderTrace(f16.trace);
+  } else {
+    $('traceCard').style.display = 'none';
+  }
+}
+
+function card(lbl, val, sub) {
+  return '<div class="result-card"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div><div class="sub">' + sub + '</div></div>';
+}
+function row(k, v) {
+  return '<div class="row"><div class="k">' + k + '</div><div>' + v + '</div></div>';
+}
+
+function renderTrace(trace) {
+  const box = $('traceBox');
+  const MAX = 200;
+  let html = '<div class="trace-row header"><div>i</div><div>byte</div><div>+ sum1</div><div>= sum1</div><div>= sum2</div></div>';
+  const view = trace.length > MAX ? trace.slice(0, MAX) : trace;
+  for (const t of view) {
+    html += '<div class="trace-row">' +
+      '<div class="b">' + t.i + '</div>' +
+      '<div class="accent">' + t.byte + ' <span class="b">(0x' + t.byte.toString(16).padStart(2, '0') + ')</span></div>' +
+      '<div class="b">+' + t.byte + '</div>' +
+      '<div>' + t.sum1 + '</div>' +
+      '<div>' + t.sum2 + '</div>' +
+      '</div>';
+  }
+  if (trace.length > MAX) {
+    html += '<div class="trace-row"><div colspan="5" style="grid-column:1/-1;color:var(--muted);text-align:center;font-family:var(--sans);font-size:.78rem">… ' + (trace.length - MAX) + ' more rows omitted …</div></div>';
+  }
+  box.innerHTML = html;
+}
+
+$('encSet').addEventListener('change', () => { updateEncUI(); compute(); });
+$('pad').addEventListener('change', compute);
+$('showTrace').addEventListener('change', compute);
+compute();
+</script>
+</body>
+</html>
