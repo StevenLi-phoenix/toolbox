@@ -12,6 +12,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSV Column Profiler](csvprofile.html) | Paste CSV or TSV and get a per-column data profile — inferred type (integer, float, boolean, ISO date, datetime, email, URL, UUID, IP, JSON, string), null and unique counts, min / max / mean, sample values, and a starter SQL `CREATE TABLE` for PostgreSQL, MySQL, or SQLite. |
 | [CSV Column Reorder & Filter](csvreorder.html) | Drag-and-drop reorder columns in a CSV, hide unwanted columns, rename headers, and re-emit clean CSV — auto-detects delimiter, handles quoted fields and embedded newlines. |
 | [JSON Formatter](json.html) | Format, validate, minify, and beautify JSON with syntax highlighting. |
 | [JSON → Swift](json2swift.html) | Generate Swift Codable structs or classes with CodingKeys, Optionals, and nested types. |
@@ -214,6 +215,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [DNS TTL Migration Planner](dnscutover.html) | Plan an A, CNAME, MX, or NS change as a three-step cutover — lower the TTL well ahead of time so old caches drain fast, flip the record at the appointed instant, then restore a healthy long TTL. Prints a wall-clock timeline in UTC or local time, the worst-case stale-answer window, and a copy-paste change-ticket runbook. |
 | [Reverse DNS (PTR) Builder](revdns.html) | Turn any IPv4 or IPv6 address into its `in-addr.arpa` / `ip6.arpa` reversed lookup name, with zone origin picked from the CIDR prefix, a starter BIND `$ORIGIN` block, and the RFC 2317 classless-delegation form for /25–/31 sub-allocations. |
 | [Content-Type Parser & Builder](contenttype.html) | Split a media-type into `type`, `subtype`, structured-syntax suffix (`+json`, `+xml`, `+cbor`, …), and parameters per RFC 7231 / 6838 — flag charset on JSON, missing multipart boundary, misplaced `q=`, and identify the registration tree (standards / vendor / personal / private). Compose new headers with a parameter builder and generate WebKit / hex / base64 multipart boundaries. |
 | [RFC 7807 Problem+JSON Builder](problemjson.html) | Compose a spec-compliant `application/problem+json` error payload — the five standard members (`type`, `title`, `status`, `detail`, `instance`), the RFC 9457 `errors` array, and custom extension members — with a linter that flags missing fields, non-URI `type`, and bad JSON Pointers. Copy as JSON, full HTTP response, curl, fetch, or Spring `ProblemDetail`. |
@@ -266,6 +268,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Erlang C / M/M/c Queue Calculator](mmc.html) | Size call centres, thread pools, and connection pools with the Erlang C formula. Given arrival rate λ, mean service time, and *c* servers, get utilization, probability of any wait, average wait time, queue length, service level `P(wait ≤ t)`, and the minimum staffing to hit a wait-time SLA — with a per-`c` staffing sweep. |
 | [Count-Min Sketch Visualizer](countminsketch.html) | Stream items into a `d × w` Count-Min counter grid, watch each row's independent hash light up its bucket, query point frequencies with the min-over-rows rule, and compare estimates against exact top-K to see the one-sided `εN` over-count bound in action. Tune `w` for `ε`, `d` for `δ`. |
 | [Tarjan's Strongly Connected Components](tarjan.html) | Walk a directed graph in one DFS pass — every vertex gets a DFS `index` and a `lowlink` (the smallest index reachable via any tree or back edge). When `lowlink[v] == index[v]`, everything on the open-vertex stack down to `v` is one SCC. See the stack grow, back edges pull low-link down, and every component pop in reverse topological order. |
 | [Ford-Fulkerson Max Flow Visualizer](maxflow.html) | Watch the Edmonds-Karp variant pick the shortest BFS augmenting path, push the bottleneck through, update the residual graph, and iterate until BFS can no longer reach the sink — then surface the s-t min-cut and confirm `Σ crossing-cap = max flow` (max-flow-min-cut theorem). Includes classic 6-node, bipartite matching, and parallel-pipe demos. |

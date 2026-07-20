@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Erlang C / M/M/c Queue Calculator — Free Online Tool</title>
+<meta name="description" content="Size call centers, thread pools, and connection pools with the Erlang C formula. Given arrival rate λ, mean service time, and c servers, get utilization, probability of waiting, average wait time, queue length, service level, and the minimum staffing to hit a wait-time SLA.">
+<meta name="keywords" content="erlang c calculator, m/m/c queue, queueing theory, staffing calculator, call center, thread pool sizing, connection pool, service level agreement, wait time probability">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/mmc.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-two { grid-template-columns: 1fr; } }
+
+  .input-row { display: grid; grid-template-columns: 1fr 90px 90px; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .input-row label { font-weight: 700; font-size: .88rem; }
+  .input-row .hint-sub { grid-column: 1 / -1; font-size: .75rem; color: var(--muted); margin-top: -6px; margin-bottom: 6px; }
+  .input-row input, .input-row select { padding: 6px 8px; font-family: var(--mono); }
+
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+  .metric {
+    padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .metric .k { display: block; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .metric .v { font-family: var(--mono); font-size: 1.2rem; font-weight: 700; color: var(--text); }
+  .metric .v.warn { color: var(--warning); }
+  .metric .v.err { color: var(--error); }
+  .metric .v.ok { color: var(--success); }
+  .metric .sub { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+
+  .banner { padding: 12px 14px; border-radius: var(--radius); font-size: .9rem; margin-top: 12px; }
+  .banner.ok { background: rgba(26, 140, 63, .12); color: var(--success); border: 1px solid rgba(26, 140, 63, .4); }
+  .banner.warn { background: rgba(154, 103, 0, .12); color: var(--warning); border: 1px solid rgba(154, 103, 0, .4); }
+  .banner.err { background: rgba(196, 30, 30, .12); color: var(--error); border: 1px solid rgba(196, 30, 30, .4); }
+
+  table.staff { width: 100%; border-collapse: collapse; margin-top: 8px; font-family: var(--mono); font-size: .85rem; }
+  table.staff th, table.staff td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  table.staff th { background: var(--surface2); color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  table.staff tr.target td { background: rgba(26, 140, 63, .1); font-weight: 700; color: var(--success); }
+  table.staff tr.overload td { color: var(--error); }
+  table.staff td:first-child, table.staff th:first-child { text-align: left; }
+
+  .chart { display: block; width: 100%; height: 180px; margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+  .about h3 { color: var(--text); font-size: .95rem; margin: 14px 0 6px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Erlang C / M/M/c Queue Calculator</h1>
+<p class="subtitle">Given a Poisson arrival rate <em>λ</em>, an exponential mean service time <em>1/μ</em>, and <em>c</em> identical servers, the <strong>Erlang C</strong> formula predicts the probability an arriving job has to wait, how long the average wait is, and how long the queue gets. Use it to size call centers, thread pools, connection pools, backend replicas — anything with a shared queue in front of a fixed pool of workers.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Workload</h2>
+    <div class="presets">
+      <button class="btn btn-secondary" onclick="loadPreset('cc')">Call centre (100/hr, 4min AHT)</button>
+      <button class="btn btn-secondary" onclick="loadPreset('api')">API (500 rps, 20ms p50)</button>
+      <button class="btn btn-secondary" onclick="loadPreset('db')">DB pool (200 qps, 8ms)</button>
+      <button class="btn btn-secondary" onclick="loadPreset('worker')">Batch worker (10/min, 5s)</button>
+    </div>
+
+    <div class="input-row">
+      <label for="lambda">λ arrival rate</label>
+      <input type="number" id="lambda" step="any" min="0" value="500" oninput="run()">
+      <select id="lambdaUnit" onchange="run()">
+        <option value="1">/sec</option>
+        <option value="60">/min</option>
+        <option value="3600">/hour</option>
+      </select>
+      <div class="hint-sub">How many jobs arrive per unit time. Assumes Poisson arrivals (independent, memoryless).</div>
+    </div>
+
+    <div class="input-row">
+      <label for="svc">1/μ service time</label>
+      <input type="number" id="svc" step="any" min="0" value="20" oninput="run()">
+      <select id="svcUnit" onchange="run()">
+        <option value="0.001">ms</option>
+        <option value="1" selected>sec</option>
+        <option value="60">min</option>
+        <option value="3600">hour</option>
+      </select>
+      <div class="hint-sub">Mean time one server takes per job. Assumes exponential service (some short, some long, same mean).</div>
+    </div>
+
+    <div class="input-row">
+      <label for="c">c servers</label>
+      <input type="number" id="c" min="1" step="1" value="12" oninput="run()">
+      <span style="font-size:.8rem;color:var(--muted)">agents</span>
+      <div class="hint-sub">Number of identical, independent servers pulling from the same FIFO queue.</div>
+    </div>
+
+    <div class="input-row">
+      <label for="tgt">SLA wait ≤</label>
+      <input type="number" id="tgt" step="any" min="0" value="20" oninput="run()">
+      <select id="tgtUnit" onchange="run()">
+        <option value="0.001">ms</option>
+        <option value="1" selected>sec</option>
+        <option value="60">min</option>
+      </select>
+      <div class="hint-sub">Target: the fraction of jobs whose in-queue wait should be at most this. Reported as service level below.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div id="results">
+      <div id="banner"></div>
+      <div class="metric-grid" id="metrics"></div>
+      <div style="margin-top:14px;font-size:.85rem;color:var(--muted)">
+        Wait-time survival <code>P(wait &gt; t)</code>:
+      </div>
+      <canvas id="chart" class="chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Staffing Sweep</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">
+    Same λ and 1/μ, varying <code>c</code>. Highlighted row is the minimum staff level that meets your SLA (target service level ≥ <span id="tgtLabel">80%</span>).
+  </p>
+  <div class="input-row" style="grid-template-columns:180px 1fr 90px">
+    <label for="slaTarget">Target service level</label>
+    <input type="number" id="slaTarget" step="1" min="1" max="99" value="80" oninput="run()">
+    <span style="font-size:.8rem;color:var(--muted)">%</span>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="staff" id="staffTable"></table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About Erlang C</h2>
+  <div class="about">
+    <p>Agner Krarup Erlang published the formula in 1917 while working out how many telephone circuits a Copenhagen switchboard needed. The model — Poisson arrivals, exponential service, <em>c</em> parallel servers, unbounded FIFO queue, no reneging — is written in Kendall notation as <code>M/M/c</code>. It stays useful a century later because most real-world contention (threads waiting for a DB connection, requests queued behind CPUs, callers waiting for an agent) sits close enough to those assumptions for the numbers to be actionable.</p>
+    <h3>Key formulae</h3>
+    <ul>
+      <li><strong>Offered load</strong> <code>a = λ/μ</code> (Erlangs). Dimensionless "amount of continuous work".</li>
+      <li><strong>Utilization</strong> <code>ρ = a/c</code>. Must be <em>strictly</em> below 1 or the queue grows without bound.</li>
+      <li><strong>Erlang B</strong> (loss / blocking): <code>B(c,a) = (a<sup>c</sup>/c!) / Σ<sub>k=0..c</sub> a<sup>k</sup>/k!</code> — computed with the stable recursion <code>B(k) = a·B(k-1) / (k + a·B(k-1))</code>.</li>
+      <li><strong>Erlang C</strong> (probability of any wait): <code>C = c·B / (c − a + a·B)</code>.</li>
+      <li><strong>Average queue wait</strong> <code>W<sub>q</sub> = C / (cμ − λ)</code>. Total sojourn <code>W = W<sub>q</sub> + 1/μ</code>.</li>
+      <li><strong>Queue length</strong> <code>L<sub>q</sub> = λ·W<sub>q</sub></code> (Little's law).</li>
+      <li><strong>Service level</strong> <code>SL(t) = 1 − C·e<sup>−(cμ−λ)t</sup></code>.</li>
+    </ul>
+    <h3>Where Erlang C gets optimistic</h3>
+    <ul>
+      <li>Assumes callers wait forever; real callers abandon (use Erlang A for reneging).</li>
+      <li>Assumes service times are exponential; if they are heavy-tailed, wait times balloon (M/G/c or simulation).</li>
+      <li>Assumes homogeneous servers and single skill; skill-based routing needs a bigger model.</li>
+      <li>Predicts steady state; brief bursts of arrivals well above λ still cause transient queues.</li>
+    </ul>
+    <p>As a rule of thumb, staffing much beyond <code>ρ ≈ 0.85</code> pays for itself only when the tail matters — the SLA sweep below shows exactly how much each extra server buys you.</p>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Numerically stable Erlang B via recursion.
+function erlangB(c, a) {
+  if (c === 0) return 1;
+  let B = 1;
+  for (let k = 1; k <= c; k++) B = (a * B) / (k + a * B);
+  return B;
+}
+
+// Erlang C from Erlang B: C = c·B / (c - a + a·B)
+function erlangC(c, a) {
+  if (a >= c) return 1;
+  const B = erlangB(c, a);
+  return (c * B) / (c - a + a * B);
+}
+
+function fmt(x, digits = 3) {
+  if (!isFinite(x)) return '∞';
+  if (x === 0) return '0';
+  if (Math.abs(x) >= 1000) return x.toFixed(0);
+  if (Math.abs(x) >= 10) return x.toFixed(1);
+  if (Math.abs(x) >= 1) return x.toFixed(2);
+  return x.toPrecision(digits);
+}
+
+function fmtTime(s) {
+  if (!isFinite(s)) return '∞';
+  if (s < 1e-3) return (s * 1e6).toFixed(1) + ' µs';
+  if (s < 1) return (s * 1e3).toFixed(1) + ' ms';
+  if (s < 60) return s.toFixed(2) + ' s';
+  if (s < 3600) return (s / 60).toFixed(2) + ' min';
+  return (s / 3600).toFixed(2) + ' hr';
+}
+
+function fmtPct(p) {
+  if (p >= 0.995) return '≥99.5%';
+  if (p <= 0.005) return '≤0.5%';
+  return (p * 100).toFixed(1) + '%';
+}
+
+function readInputs() {
+  const lambdaRaw = parseFloat($('lambda').value);
+  const lambdaScale = parseFloat($('lambdaUnit').value);
+  const svcRaw = parseFloat($('svc').value);
+  const svcScale = parseFloat($('svcUnit').value);
+  const c = Math.max(1, Math.floor(parseFloat($('c').value)));
+  const tgtRaw = parseFloat($('tgt').value);
+  const tgtScale = parseFloat($('tgtUnit').value);
+
+  if (!isFinite(lambdaRaw) || !isFinite(svcRaw)) return null;
+
+  const lambda = lambdaRaw / lambdaScale; // per second
+  const svcTime = svcRaw * svcScale;      // seconds
+  const mu = svcTime > 0 ? 1 / svcTime : Infinity;
+  const t = (isFinite(tgtRaw) ? tgtRaw : 0) * tgtScale;
+  return { lambda, mu, svcTime, c, t };
+}
+
+function run() {
+  const inp = readInputs();
+  const banner = $('banner');
+  const metrics = $('metrics');
+  const staffTable = $('staffTable');
+  const slaPct = Math.min(0.99, Math.max(0.01, parseFloat($('slaTarget').value || 80) / 100));
+  $('tgtLabel').textContent = (slaPct * 100).toFixed(0) + '%';
+
+  if (!inp) {
+    banner.innerHTML = '<div class="banner err">Enter numeric λ and 1/μ to compute.</div>';
+    metrics.innerHTML = ''; staffTable.innerHTML = ''; drawChart(null); return;
+  }
+
+  const { lambda, mu, svcTime, c, t } = inp;
+  const a = lambda / mu;
+  const rho = a / c;
+
+  if (rho >= 1) {
+    banner.innerHTML = '<div class="banner err"><b>Unstable — queue grows without bound.</b> Offered load <code>a = ' + fmt(a) + '</code> Erlangs; you have only <code>c = ' + c + '</code> servers, so utilization <code>ρ = ' + fmt(rho) + ' ≥ 1</code>. Add capacity, reduce λ, or speed up service.</div>';
+    metrics.innerHTML = '';
+  } else {
+    const C = erlangC(c, a);
+    const decayRate = c * mu - lambda; // 1/s
+    const Wq = C / decayRate;           // s
+    const W = Wq + 1 / mu;
+    const Lq = lambda * Wq;
+    const L = lambda * W;
+    const SL = 1 - C * Math.exp(-decayRate * t);
+
+    let bClass = 'ok', bMsg = 'Meets SLA.';
+    if (rho > 0.9) { bClass = 'warn'; bMsg = 'Stable but hot — utilization above 90%. Tail wait rises steeply from here.'; }
+    if (SL < slaPct) { bClass = 'warn'; bMsg = 'Under SLA. Current service level ' + fmtPct(SL) + ' &lt; target ' + fmtPct(slaPct) + ' — add servers.'; }
+    if (SL >= slaPct && rho <= 0.9) { bClass = 'ok'; bMsg = 'Comfortable — service level ' + fmtPct(SL) + ' meets ' + fmtPct(slaPct) + ' target with ρ = ' + (rho * 100).toFixed(1) + '%.'; }
+    banner.innerHTML = '<div class="banner ' + bClass + '">' + bMsg + '</div>';
+
+    metrics.innerHTML =
+      metric('Utilization ρ', (rho * 100).toFixed(1) + '%', 'a/c', rho > 0.9 ? 'warn' : (rho > 0.8 ? '' : 'ok')) +
+      metric('Offered load a', fmt(a) + ' E', 'λ/μ') +
+      metric('P(wait > 0)', fmtPct(C), 'Erlang C', C > 0.5 ? 'warn' : '') +
+      metric('Avg queue wait W<sub>q</sub>', fmtTime(Wq), 'in queue') +
+      metric('Avg total time W', fmtTime(W), 'wait + service') +
+      metric('Avg queue length L<sub>q</sub>', fmt(Lq), 'jobs waiting') +
+      metric('Avg in system L', fmt(L), 'waiting + serving') +
+      metric('Service level SL(t)', fmtPct(SL), 'P(wait ≤ ' + fmtTime(t) + ')', SL >= slaPct ? 'ok' : 'err');
+
+    drawChart({ C, decayRate, tTarget: t });
+  }
+
+  // Staffing sweep
+  const rows = [];
+  const minC = Math.max(1, Math.ceil(a * 0.6));
+  const maxC = Math.max(minC + 8, Math.ceil(a * 2.5));
+  let firstMeet = null;
+  for (let k = minC; k <= maxC; k++) {
+    if (k <= a) {
+      rows.push({ c: k, overload: true });
+      continue;
+    }
+    const Ck = erlangC(k, a);
+    const decay = k * mu - lambda;
+    const Wqk = Ck / decay;
+    const Lqk = lambda * Wqk;
+    const SLk = 1 - Ck * Math.exp(-decay * t);
+    const rhoK = a / k;
+    if (SLk >= slaPct && firstMeet === null) firstMeet = k;
+    rows.push({ c: k, rho: rhoK, C: Ck, Wq: Wqk, Lq: Lqk, SL: SLk });
+  }
+  let html = '<tr><th>c</th><th>ρ</th><th>P(wait&gt;0)</th><th>W<sub>q</sub></th><th>L<sub>q</sub></th><th>SL(' + fmtTime(t) + ')</th></tr>';
+  for (const r of rows) {
+    if (r.overload) {
+      html += '<tr class="overload"><td>' + r.c + '</td><td colspan="5">overloaded (ρ ≥ 1)</td></tr>';
+    } else {
+      const cls = r.c === firstMeet ? ' class="target"' : '';
+      html += '<tr' + cls + '><td>' + r.c + '</td><td>' + (r.rho * 100).toFixed(1) + '%</td><td>' + fmtPct(r.C) + '</td><td>' + fmtTime(r.Wq) + '</td><td>' + fmt(r.Lq) + '</td><td>' + fmtPct(r.SL) + '</td></tr>';
+    }
+  }
+  staffTable.innerHTML = html;
+}
+
+function metric(k, v, sub, cls) {
+  return '<div class="metric"><span class="k">' + k + '</span><span class="v' + (cls ? ' ' + cls : '') + '">' + v + '</span>' + (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>';
+}
+
+function drawChart(data) {
+  const canvas = $('chart');
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
+  canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const pad = { l: 42, r: 12, t: 10, b: 26 };
+  const w = cssW - pad.l - pad.r, h = cssH - pad.t - pad.b;
+
+  ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t + h); ctx.lineTo(pad.l + w, pad.t + h); ctx.stroke();
+  ctx.fillStyle = '#666'; ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+  for (let p = 0; p <= 1.001; p += 0.25) {
+    const y = pad.t + h - p * h;
+    ctx.beginPath(); ctx.moveTo(pad.l - 3, y); ctx.lineTo(pad.l, y); ctx.stroke();
+    ctx.fillText((p * 100).toFixed(0) + '%', 6, y + 3);
+  }
+
+  if (!data) { ctx.fillText('no data', pad.l + 10, pad.t + h / 2); return; }
+  const { C, decayRate, tTarget } = data;
+  // domain: 0 to whichever is bigger — 3× tTarget or the time when P(wait>t) drops to 1%.
+  let tMax = tTarget * 3;
+  if (C > 0.01) {
+    const tTo01 = Math.log(C / 0.01) / decayRate;
+    if (isFinite(tTo01) && tTo01 > tMax) tMax = tTo01;
+  }
+  if (tMax <= 0 || !isFinite(tMax)) tMax = 1;
+
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (let i = 0; i <= 200; i++) {
+    const tt = (i / 200) * tMax;
+    const p = C * Math.exp(-decayRate * tt);
+    const x = pad.l + (i / 200) * w;
+    const y = pad.t + h - Math.min(1, Math.max(0, p)) * h;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // vertical marker at tTarget
+  if (tTarget > 0 && tTarget <= tMax) {
+    const x = pad.l + (tTarget / tMax) * w;
+    ctx.strokeStyle = '#c41e1e'; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + h); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#c41e1e';
+    ctx.fillText('t = ' + fmtTime(tTarget), Math.min(x + 4, pad.l + w - 60), pad.t + 10);
+  }
+
+  ctx.fillStyle = '#666';
+  ctx.fillText('0', pad.l - 3, pad.t + h + 13);
+  ctx.fillText(fmtTime(tMax), pad.l + w - 40, pad.t + h + 13);
+}
+
+function loadPreset(name) {
+  const presets = {
+    cc:     { lambda: 100, lu: '3600', svc: 4,   su: '60',  c: 10, tgt: 20, tu: '1',    sla: 80 },
+    api:    { lambda: 500, lu: '1',    svc: 20,  su: '0.001', c: 12, tgt: 100, tu: '0.001', sla: 95 },
+    db:     { lambda: 200, lu: '1',    svc: 8,   su: '0.001', c: 4,  tgt: 50,  tu: '0.001', sla: 99 },
+    worker: { lambda: 10,  lu: '60',   svc: 5,   su: '1',   c: 2,  tgt: 30, tu: '1',    sla: 90 },
+  };
+  const p = presets[name]; if (!p) return;
+  $('lambda').value = p.lambda; $('lambdaUnit').value = p.lu;
+  $('svc').value = p.svc; $('svcUnit').value = p.su;
+  $('c').value = p.c;
+  $('tgt').value = p.tgt; $('tgtUnit').value = p.tu;
+  $('slaTarget').value = p.sla;
+  run();
+}
+
+window.addEventListener('resize', () => run());
+run();
+</script>
+</body>
+</html>

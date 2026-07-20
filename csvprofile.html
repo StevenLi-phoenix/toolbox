@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV Column Profiler &amp; Type Inferencer — Free Online Tool</title>
+<meta name="description" content="Paste CSV or TSV and instantly get a per-column data profile — inferred type (integer, float, boolean, ISO date, datetime, email, URL, UUID, IP, JSON, string), null count, unique count, min/max/mean, sample values, and a suggested SQL CREATE TABLE. 100% client-side.">
+<meta name="keywords" content="csv profiler, column type inference, data profiling, csv analyzer, column statistics, csv schema, sql create table generator, data type detector">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/csvprofile.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  textarea#csv {
+    width: 100%; min-height: 180px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .82rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  .controls-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 10px 0; font-size: .85rem; }
+  .controls-row label { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+  .controls-row select, .controls-row input[type="text"] { padding: 4px 8px; font-family: var(--mono); font-size: .82rem; }
+
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
+  .toolbar .btn { padding: 6px 12px; font-size: .8rem; }
+
+  .stats-bar { display: flex; gap: 18px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-bottom: 12px; }
+  .stats-bar b { color: var(--text); font-family: var(--mono); }
+
+  .col-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .col-card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; background: var(--surface);
+  }
+  .col-card h3 {
+    font-family: var(--mono); font-size: .95rem; margin-bottom: 4px;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  }
+  .col-card .type {
+    font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
+    padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted); font-family: var(--sans);
+    font-weight: 600; flex-shrink: 0;
+  }
+  .col-card .type.integer, .col-card .type.float, .col-card .type.number { background: #e0f2fe; border-color: #7dd3fc; color: #0369a1; }
+  .col-card .type.boolean { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+  .col-card .type.date, .col-card .type.datetime, .col-card .type.time { background: #e0e7ff; border-color: #a5b4fc; color: #3730a3; }
+  .col-card .type.email, .col-card .type.url, .col-card .type.uuid, .col-card .type.ip, .col-card .type.json { background: #dcfce7; border-color: #86efac; color: #166534; }
+  .col-card .type.string { background: var(--surface2); border-color: var(--border); color: var(--muted); }
+
+  .col-card .stat-row { display: grid; grid-template-columns: 100px 1fr; gap: 6px; font-size: .82rem; margin-top: 6px; font-family: var(--mono); }
+  .col-card .stat-row .k { color: var(--muted); font-family: var(--sans); }
+  .col-card .stat-row .v { color: var(--text); word-break: break-word; }
+  .col-card .bar { height: 4px; background: var(--surface2); border-radius: 2px; margin-top: 2px; overflow: hidden; }
+  .col-card .bar .fill { height: 100%; background: var(--accent); }
+  .col-card .bar .fill.warn { background: var(--warning); }
+  .col-card .bar .fill.err { background: var(--error); }
+  .samples { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); font-family: var(--mono); font-size: .78rem; color: var(--muted); line-height: 1.5; }
+  .samples b { color: var(--text); font-family: var(--sans); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .samples ol { margin: 4px 0 0 18px; padding: 0; }
+  .samples li { margin: 2px 0; word-break: break-word; }
+
+  pre.schema {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; font-family: var(--mono); font-size: .82rem; overflow-x: auto;
+    color: var(--text); white-space: pre;
+  }
+
+  .banner { padding: 10px 14px; border-radius: var(--radius); font-size: .85rem; margin: 8px 0; }
+  .banner.err { background: rgba(196, 30, 30, .12); color: var(--error); border: 1px solid rgba(196, 30, 30, .4); }
+  .banner.warn { background: rgba(154, 103, 0, .12); color: var(--warning); border: 1px solid rgba(154, 103, 0, .4); }
+
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>CSV Column Profiler</h1>
+<p class="subtitle">Paste any CSV or TSV and get a per-column data profile — inferred type, null and unique counts, min/max/mean, top sample values, and a starter SQL <code>CREATE&nbsp;TABLE</code>. Nothing leaves the browser, so profiling a suspicious dataset before importing it into your database is safe.</p>
+
+<div class="card">
+  <h2>Input</h2>
+  <div class="toolbar">
+    <button class="btn btn-secondary" onclick="loadSample('mixed')">Load mixed sample</button>
+    <button class="btn btn-secondary" onclick="loadSample('sales')">Sales data</button>
+    <button class="btn btn-secondary" onclick="loadSample('logs')">Access logs</button>
+    <button class="btn btn-secondary" onclick="loadSample('users')">Users</button>
+    <button class="btn btn-secondary" onclick="clearInput()">Clear</button>
+  </div>
+  <textarea id="csv" spellcheck="false" oninput="scheduleRun()" placeholder="Paste CSV here — first row is treated as headers unless you turn that off."></textarea>
+  <div class="controls-row">
+    <label>Delimiter
+      <select id="delim" onchange="run()">
+        <option value="auto">Auto-detect</option>
+        <option value=",">Comma ,</option>
+        <option value=";">Semicolon ;</option>
+        <option value="\t">Tab</option>
+        <option value="|">Pipe |</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="hasHeader" checked onchange="run()"> First row is header</label>
+    <label>Nulls
+      <input type="text" id="nulls" value=",NA,N/A,null,NULL,None,-" onchange="run()" style="width:220px" title="Comma-separated list of tokens to treat as null. Leading empty entry means the empty string counts as null too.">
+    </label>
+    <label>Sample cap
+      <select id="cap" onchange="run()">
+        <option value="1000">1,000 rows</option>
+        <option value="10000" selected>10,000 rows</option>
+        <option value="100000">100,000 rows</option>
+        <option value="0">All rows</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div id="banner"></div>
+
+<div class="card" id="summaryCard" style="display:none">
+  <h2>Overview</h2>
+  <div class="stats-bar" id="statsBar"></div>
+  <div class="col-grid" id="colGrid"></div>
+</div>
+
+<div class="card" id="schemaCard" style="display:none">
+  <h2>Suggested SQL Schema</h2>
+  <div class="controls-row">
+    <label>Table name
+      <input type="text" id="tableName" value="my_data" onchange="renderSchema()" style="width:180px">
+    </label>
+    <label>Dialect
+      <select id="dialect" onchange="renderSchema()">
+        <option value="pg">PostgreSQL</option>
+        <option value="mysql">MySQL</option>
+        <option value="sqlite">SQLite</option>
+      </select>
+    </label>
+    <button class="btn" onclick="copySchema()">Copy</button>
+  </div>
+  <pre class="schema" id="schema"></pre>
+</div>
+
+<div class="card">
+  <h2>How types are inferred</h2>
+  <div class="about">
+    <p>Each non-null cell in a column is matched against a chain of pattern tests, from most-specific to least. A column takes the most-specific type all its values agree on. If a single cell fails the check, the column falls back to the next candidate; if no candidate wins, it's <code>string</code>.</p>
+    <ul>
+      <li><b>boolean</b> — every value is one of <code>true / false / yes / no / t / f / y / n / 0 / 1</code> (case-insensitive).</li>
+      <li><b>integer</b> — optional sign, digits, no decimal point or exponent, fits in 64-bit range.</li>
+      <li><b>float</b> — integer, or has a decimal point / exponent, and parses as a finite number.</li>
+      <li><b>datetime</b> — RFC 3339 / ISO 8601 with a time component, e.g. <code>2026-07-20T13:45:00Z</code>.</li>
+      <li><b>date</b> — <code>YYYY-MM-DD</code>, <code>YYYY/MM/DD</code>, <code>MM/DD/YYYY</code>, or <code>DD/MM/YYYY</code>.</li>
+      <li><b>time</b> — <code>HH:MM</code> or <code>HH:MM:SS</code>.</li>
+      <li><b>email</b> — <code>local@domain.tld</code> style, single <code>@</code>, tld ≥ 2.</li>
+      <li><b>url</b> — starts with <code>http://</code>, <code>https://</code>, or <code>ftp://</code>.</li>
+      <li><b>uuid</b> — 8-4-4-4-12 hex (with or without hyphens).</li>
+      <li><b>ip</b> — IPv4 dotted quad or a plausible IPv6.</li>
+      <li><b>json</b> — parses as an object or array with <code>JSON.parse</code>.</li>
+      <li><b>string</b> — the fallback.</li>
+    </ul>
+    <p>Numeric stats (min / max / mean / std) are only computed for <code>integer</code> and <code>float</code>; length stats for everything else. Uniqueness is exact up to the sample cap you set — beyond that, treat it as an approximation.</p>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let runTimer = null;
+function scheduleRun() { clearTimeout(runTimer); runTimer = setTimeout(run, 220); }
+
+const SAMPLES = {
+  mixed: 'id,name,email,signup_date,is_active,balance,tier,ipv4\n1,Alice,alice@example.com,2024-01-15,true,120.50,gold,10.0.0.1\n2,Bob,bob@example.com,2024-02-03,false,0.00,silver,10.0.0.2\n3,Carol,carol@example.com,2024-02-19,true,44.25,gold,10.0.0.3\n4,Dan,,2024-03-01,true,,silver,10.0.0.4\n5,Eve,eve@example.com,2024-03-14,false,999.99,platinum,10.0.0.5\n6,Frank,frank@example.com,2024-03-30,true,15.00,silver,10.0.0.6\n7,Grace,grace@example.com,2024-04-11,true,275.80,gold,10.0.0.7',
+  sales: 'order_id,customer_uuid,order_date,amount_usd,items,discount_pct\nORD-001,7c9e6679-7425-40de-944b-e07fc1f90ae7,2026-01-04,142.50,3,0\nORD-002,e5f1a2b3-c4d5-6789-abcd-0123456789ab,2026-01-05,89.00,1,10\nORD-003,7c9e6679-7425-40de-944b-e07fc1f90ae7,2026-01-05,215.75,5,5\nORD-004,f0e1d2c3-b4a5-9876-fedc-ba0987654321,2026-01-06,,2,0\nORD-005,e5f1a2b3-c4d5-6789-abcd-0123456789ab,2026-01-07,58.20,1,15',
+  logs: 'ts,method,path,status,bytes,ua_class\n2026-07-20T09:00:11Z,GET,/,200,3421,browser\n2026-07-20T09:00:12Z,POST,/api/login,401,127,browser\n2026-07-20T09:00:13Z,GET,/api/users/42,200,880,browser\n2026-07-20T09:00:15Z,GET,/health,200,17,bot\n2026-07-20T09:00:16Z,GET,/api/users/42,304,0,browser\n2026-07-20T09:00:22Z,DELETE,/api/session,204,0,browser\n2026-07-20T09:00:31Z,GET,/,500,240,browser',
+  users: 'user_id\tusername\thomepage\tsettings\tage\n1\talice\thttps://alice.dev\t{"theme":"dark"}\t29\n2\tbob\thttps://bob.io\t{"theme":"light"}\t34\n3\tcarol\t\t{"theme":"dark","cols":3}\t\n4\tdan\thttps://dan.example.org\t{}\t41',
+};
+
+function loadSample(k) {
+  $('csv').value = SAMPLES[k] || '';
+  $('delim').value = 'auto';
+  run();
+}
+function clearInput() { $('csv').value = ''; run(); }
+
+// --- CSV parser (RFC 4180 flavour, tolerant of CR/LF and quoted embedded delimiters) ---
+function parseCSV(text, delim) {
+  const rows = [];
+  let row = [], field = '', inQuote = false;
+  const n = text.length;
+  for (let i = 0; i < n; i++) {
+    const c = text[i];
+    if (inQuote) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuote = false;
+      } else field += c;
+    } else {
+      if (c === '"' && field === '') inQuote = true;
+      else if (c === delim) { row.push(field); field = ''; }
+      else if (c === '\r') { /* skip; \n handles line end */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function detectDelim(sample) {
+  const cands = [',', '\t', ';', '|'];
+  const lines = sample.split(/\r?\n/).slice(0, 10).filter(l => l.length);
+  if (!lines.length) return ',';
+  let best = ',', bestScore = -1;
+  for (const d of cands) {
+    const counts = lines.map(l => (l.match(new RegExp(d === '\t' ? '\\t' : '\\' + d, 'g')) || []).length);
+    const first = counts[0]; if (first === 0) continue;
+    const consistent = counts.every(c => c === first);
+    const score = first * (consistent ? 10 : 1);
+    if (score > bestScore) { bestScore = score; best = d; }
+  }
+  return best;
+}
+
+// --- Type detection ---
+const RE_INT = /^-?(?:0|[1-9]\d*)$/;
+const RE_FLOAT = /^-?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?$/;
+const RE_BOOL = /^(true|false|yes|no|t|f|y|n|0|1)$/i;
+const RE_DATE_ISO = /^\d{4}-\d{2}-\d{2}$/;
+const RE_DATE_SLASH = /^(?:\d{1,4}\/\d{1,2}\/\d{1,4})$/;
+const RE_TIME = /^\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
+const RE_DATETIME_ISO = /^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/;
+const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const RE_URL = /^(?:https?|ftp):\/\/\S+$/i;
+const RE_UUID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+const RE_IPV4 = /^(25[0-5]|2[0-4]\d|[01]?\d?\d)(\.(25[0-5]|2[0-4]\d|[01]?\d?\d)){3}$/;
+const RE_IPV6 = /^(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}$|^::$|^::1$|^(?:[0-9a-f]{1,4}:){1,7}:$/i;
+
+function isBool(v) { return RE_BOOL.test(v); }
+function isInt(v) { if (!RE_INT.test(v)) return false; const n = Number(v); return Number.isSafeInteger(n); }
+function isFloat(v) { return RE_FLOAT.test(v) && isFinite(Number(v)); }
+function isDate(v) {
+  if (RE_DATE_ISO.test(v)) { const d = new Date(v + 'T00:00:00Z'); return !isNaN(d) && d.toISOString().slice(0, 10) === v; }
+  if (RE_DATE_SLASH.test(v)) { const parts = v.split('/').map(Number); return parts.every(p => !isNaN(p)); }
+  return false;
+}
+function isTime(v) { return RE_TIME.test(v); }
+function isDateTime(v) { if (!RE_DATETIME_ISO.test(v)) return false; return !isNaN(new Date(v)); }
+function isEmail(v) { return v.length <= 254 && RE_EMAIL.test(v); }
+function isURL(v) { return RE_URL.test(v); }
+function isUUID(v) { return RE_UUID.test(v); }
+function isIP(v) { return RE_IPV4.test(v) || RE_IPV6.test(v); }
+function isJSON(v) {
+  if (v.length < 2) return false;
+  const c = v[0], l = v[v.length - 1];
+  if (!((c === '{' && l === '}') || (c === '[' && l === ']'))) return false;
+  try { JSON.parse(v); return true; } catch { return false; }
+}
+
+const TYPE_ORDER = ['boolean', 'integer', 'float', 'datetime', 'date', 'time', 'email', 'url', 'uuid', 'ip', 'json', 'string'];
+const TYPE_TEST = {
+  boolean: isBool, integer: isInt, float: isFloat,
+  datetime: isDateTime, date: isDate, time: isTime,
+  email: isEmail, url: isURL, uuid: isUUID, ip: isIP, json: isJSON,
+  string: () => true,
+};
+
+function inferColumnType(values) {
+  const candidates = new Set(TYPE_ORDER);
+  for (const v of values) {
+    for (const t of Array.from(candidates)) {
+      if (t === 'string') continue;
+      if (!TYPE_TEST[t](v)) candidates.delete(t);
+    }
+    if (candidates.size <= 1) break;
+  }
+  // Prefer more specific type; integer wins over float when both hold; datetime over date etc.
+  const priority = ['boolean', 'integer', 'float', 'datetime', 'date', 'time', 'email', 'url', 'uuid', 'ip', 'json', 'string'];
+  for (const t of priority) if (candidates.has(t)) return t;
+  return 'string';
+}
+
+function coerceNumber(v) { return Number(v); }
+function toDateValue(v, type) {
+  if (type === 'date') {
+    if (RE_DATE_ISO.test(v)) return Date.parse(v + 'T00:00:00Z');
+    return Date.parse(v);
+  }
+  if (type === 'datetime') return Date.parse(v);
+  return NaN;
+}
+
+function summarize(vals, nullCount, type, uniqueSet) {
+  const total = vals.length + nullCount;
+  const out = { total, nulls: nullCount, nullPct: total ? nullCount / total : 0, unique: uniqueSet.size };
+  if (!vals.length) return out;
+  if (type === 'integer' || type === 'float') {
+    const nums = vals.map(coerceNumber);
+    let sum = 0, mn = Infinity, mx = -Infinity, sq = 0;
+    for (const n of nums) { sum += n; if (n < mn) mn = n; if (n > mx) mx = n; }
+    const mean = sum / nums.length;
+    for (const n of nums) sq += (n - mean) * (n - mean);
+    out.min = mn; out.max = mx; out.mean = mean; out.std = Math.sqrt(sq / nums.length);
+  } else if (type === 'date' || type === 'datetime') {
+    const ts = vals.map(v => toDateValue(v, type)).filter(t => !isNaN(t));
+    if (ts.length) { out.min = new Date(Math.min(...ts)).toISOString(); out.max = new Date(Math.max(...ts)).toISOString(); }
+  } else {
+    let mnL = Infinity, mxL = -Infinity;
+    for (const v of vals) { const L = v.length; if (L < mnL) mnL = L; if (L > mxL) mxL = L; }
+    out.minLen = mnL; out.maxLen = mxL;
+  }
+  return out;
+}
+
+let PROFILE = null;
+
+function run() {
+  const banner = $('banner');
+  const raw = $('csv').value;
+  if (!raw.trim()) {
+    banner.innerHTML = '';
+    $('summaryCard').style.display = 'none';
+    $('schemaCard').style.display = 'none';
+    PROFILE = null;
+    return;
+  }
+
+  const delimSel = $('delim').value;
+  const delim = delimSel === 'auto' ? detectDelim(raw) : (delimSel === '\\t' ? '\t' : delimSel);
+  const cap = parseInt($('cap').value || '0', 10);
+  const hasHeader = $('hasHeader').checked;
+
+  const nullTokens = new Set($('nulls').value.split(',').map(s => s));
+
+  let rows = parseCSV(raw, delim);
+  if (!rows.length) { banner.innerHTML = '<div class="banner warn">No rows detected — check delimiter.</div>'; return; }
+
+  let headers;
+  if (hasHeader) {
+    headers = rows[0].map((h, i) => h.trim() || 'col' + (i + 1));
+    rows = rows.slice(1);
+  } else {
+    headers = rows[0].map((_, i) => 'col' + (i + 1));
+  }
+  const ncols = headers.length;
+
+  const dataRows = cap > 0 ? rows.slice(0, cap) : rows;
+  const truncated = cap > 0 && rows.length > cap;
+
+  const cols = headers.map(name => ({ name, values: [], nulls: 0, unique: new Set() }));
+
+  for (const r of dataRows) {
+    if (r.length === 1 && r[0] === '') continue;
+    for (let c = 0; c < ncols; c++) {
+      const raw = c < r.length ? r[c] : '';
+      const isNull = nullTokens.has(raw);
+      if (isNull) cols[c].nulls++;
+      else {
+        cols[c].values.push(raw);
+        cols[c].unique.add(raw);
+      }
+    }
+  }
+
+  const profile = cols.map(col => {
+    const type = inferColumnType(col.values);
+    const stats = summarize(col.values, col.nulls, type, col.unique);
+    // top samples: distinct, first-seen order, up to 5
+    const seen = new Set(); const samples = [];
+    for (const v of col.values) { if (!seen.has(v)) { seen.add(v); samples.push(v); if (samples.length >= 5) break; } }
+    return { name: col.name, type, stats, samples };
+  });
+
+  PROFILE = { headers, profile, rowCount: dataRows.length, truncated, totalRows: rows.length, delim };
+
+  if (truncated) {
+    banner.innerHTML = '<div class="banner warn">Sampled first <b>' + cap.toLocaleString() + '</b> of ' + rows.length.toLocaleString() + ' data rows — raise the sample cap for exact stats.</div>';
+  } else {
+    banner.innerHTML = '';
+  }
+
+  renderSummary();
+  renderSchema();
+}
+
+function renderSummary() {
+  if (!PROFILE) return;
+  const { headers, profile, rowCount, delim } = PROFILE;
+  $('summaryCard').style.display = 'block';
+
+  const dLabel = delim === '\t' ? 'TAB' : (delim === ',' ? ',' : (delim === ';' ? ';' : delim));
+  const totalCells = rowCount * headers.length;
+  const totalNulls = profile.reduce((a, p) => a + p.stats.nulls, 0);
+  $('statsBar').innerHTML =
+    '<span>rows <b>' + rowCount.toLocaleString() + '</b></span>' +
+    '<span>columns <b>' + headers.length + '</b></span>' +
+    '<span>cells <b>' + totalCells.toLocaleString() + '</b></span>' +
+    '<span>null cells <b>' + totalNulls.toLocaleString() + '</b> (' + (totalCells ? (totalNulls / totalCells * 100).toFixed(1) : '0') + '%)</span>' +
+    '<span>delimiter <b>' + dLabel + '</b></span>';
+
+  const grid = $('colGrid');
+  grid.innerHTML = profile.map(col => {
+    const s = col.stats;
+    const nullPct = s.nullPct * 100;
+    const uniqPct = s.total ? (s.unique / s.total * 100) : 0;
+    const nullCls = nullPct > 50 ? 'err' : (nullPct > 15 ? 'warn' : '');
+    const uniqCls = uniqPct >= 100 ? 'ok' : '';
+    const numStat = (s.min !== undefined && (col.type === 'integer' || col.type === 'float'))
+      ? '<div class="stat-row"><div class="k">min / max</div><div class="v">' + fmtN(s.min) + ' … ' + fmtN(s.max) + '</div></div>' +
+        '<div class="stat-row"><div class="k">mean ± std</div><div class="v">' + fmtN(s.mean) + ' ± ' + fmtN(s.std) + '</div></div>'
+      : (s.min !== undefined && (col.type === 'date' || col.type === 'datetime'))
+      ? '<div class="stat-row"><div class="k">range</div><div class="v">' + s.min + ' → ' + s.max + '</div></div>'
+      : (s.minLen !== undefined)
+      ? '<div class="stat-row"><div class="k">length</div><div class="v">' + s.minLen + ' – ' + s.maxLen + ' chars</div></div>'
+      : '';
+    return '<div class="col-card">' +
+      '<h3><span>' + esc(col.name) + '</span><span class="type ' + col.type + '">' + col.type + '</span></h3>' +
+      '<div class="stat-row"><div class="k">null</div><div class="v">' + s.nulls.toLocaleString() + ' / ' + s.total.toLocaleString() + ' (' + nullPct.toFixed(1) + '%)<div class="bar"><div class="fill ' + nullCls + '" style="width:' + Math.min(100, nullPct) + '%"></div></div></div></div>' +
+      '<div class="stat-row"><div class="k">unique</div><div class="v">' + s.unique.toLocaleString() + ' (' + uniqPct.toFixed(1) + '%)<div class="bar"><div class="fill ' + uniqCls + '" style="width:' + Math.min(100, uniqPct) + '%"></div></div></div></div>' +
+      numStat +
+      '<div class="samples"><b>Sample values</b><ol>' + col.samples.map(v => '<li>' + esc(v.length > 80 ? v.slice(0, 80) + '…' : v) + '</li>').join('') + '</ol></div>' +
+    '</div>';
+  }).join('');
+}
+
+function fmtN(n) {
+  if (!isFinite(n)) return String(n);
+  if (Number.isInteger(n)) return n.toLocaleString();
+  if (Math.abs(n) >= 1000) return n.toFixed(2);
+  return n.toPrecision(4);
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+const SQL_TYPES = {
+  pg: { integer: 'INTEGER', float: 'DOUBLE PRECISION', boolean: 'BOOLEAN', date: 'DATE', datetime: 'TIMESTAMPTZ', time: 'TIME', email: 'VARCHAR(254)', url: 'TEXT', uuid: 'UUID', ip: 'INET', json: 'JSONB', string: 'TEXT' },
+  mysql: { integer: 'INT', float: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', datetime: 'DATETIME', time: 'TIME', email: 'VARCHAR(254)', url: 'TEXT', uuid: 'CHAR(36)', ip: 'VARCHAR(45)', json: 'JSON', string: 'TEXT' },
+  sqlite: { integer: 'INTEGER', float: 'REAL', boolean: 'INTEGER', date: 'TEXT', datetime: 'TEXT', time: 'TEXT', email: 'TEXT', url: 'TEXT', uuid: 'TEXT', ip: 'TEXT', json: 'TEXT', string: 'TEXT' },
+};
+
+function quoteIdent(dialect, name) {
+  const safe = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name);
+  if (dialect === 'mysql') return safe ? name : '`' + name.replace(/`/g, '``') + '`';
+  return safe ? name : '"' + name.replace(/"/g, '""') + '"';
+}
+
+function renderSchema() {
+  if (!PROFILE) { $('schemaCard').style.display = 'none'; return; }
+  $('schemaCard').style.display = 'block';
+  const dialect = $('dialect').value;
+  const map = SQL_TYPES[dialect];
+  const tbl = quoteIdent(dialect, ($('tableName').value || 'my_data').trim());
+  const uniqCols = PROFILE.profile.map(c => ({ col: c, uniq: c.stats.total && c.stats.unique === c.stats.total && c.stats.nulls === 0 }));
+  const pkCandidate = uniqCols.find(u => u.uniq && (u.col.type === 'integer' || u.col.type === 'uuid' || /id$/i.test(u.col.name)));
+  const lines = PROFILE.profile.map(c => {
+    const nn = c.stats.nulls === 0 ? ' NOT NULL' : '';
+    const isPk = pkCandidate && pkCandidate.col === c;
+    return '  ' + quoteIdent(dialect, c.name).padEnd(24) + ' ' + map[c.type] + nn + (isPk ? ' PRIMARY KEY' : '');
+  });
+  $('schema').textContent = 'CREATE TABLE ' + tbl + ' (\n' + lines.join(',\n') + '\n);';
+}
+
+function copySchema() { navigator.clipboard.writeText($('schema').textContent).catch(() => {}); }
+
+// Initial run with a sample loaded
+loadSample('mixed');
+</script>
+</body>
+</html>

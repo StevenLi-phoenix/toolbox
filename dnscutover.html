@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNS TTL Migration &amp; Cutover Planner — Free Online Tool</title>
+<meta name="description" content="Plan a DNS record change: lower TTL in advance so old caches drain fast, cut over at a specific instant, then restore a healthy long TTL once traffic has settled. Get a step-by-step schedule with UTC and local timestamps, the worst-case stale-answer window, and a copy-paste runbook.">
+<meta name="keywords" content="dns cutover planner, dns migration, ttl lowering, dns propagation, ip migration, cname flip, resolver cache, dns runbook, change management">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/dnscutover.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-two { grid-template-columns: 1fr; } }
+
+  .input-row { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .input-row.wide { grid-template-columns: 160px 1fr 90px; }
+  .input-row label { font-weight: 700; font-size: .86rem; }
+  .input-row input, .input-row select { padding: 6px 8px; font-family: var(--mono); font-size: .88rem; }
+  .input-row .hint { font-size: .74rem; color: var(--muted); grid-column: 2 / -1; margin-top: -6px; margin-bottom: 4px; }
+
+  .runbook { display: grid; gap: 10px; }
+  .step {
+    display: grid; grid-template-columns: 40px 1fr; gap: 12px;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .step.past { opacity: .55; }
+  .step.now { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(17, 17, 17, .07); }
+  .step.risk { background: rgba(196, 30, 30, .05); border-color: rgba(196, 30, 30, .35); }
+  .step-num {
+    font-family: var(--mono); font-size: 1.1rem; font-weight: 700; text-align: center;
+    background: var(--surface2); border-radius: var(--radius); align-self: start;
+    padding: 6px 0;
+  }
+  .step-num.risk { background: rgba(196, 30, 30, .12); color: var(--error); }
+  .step h4 { font-size: .95rem; margin-bottom: 2px; }
+  .step .when { font-family: var(--mono); font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+  .step .when b { color: var(--text); }
+  .step .body { font-size: .88rem; color: var(--text); line-height: 1.55; }
+  .step .body code { font-family: var(--mono); background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-size: .82rem; }
+
+  .timeline {
+    position: relative; height: 60px; margin: 12px 0 8px;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  .tl-bar { position: absolute; top: 22px; height: 16px; border-radius: 3px; }
+  .tl-bar.pre { background: rgba(154, 103, 0, .35); }
+  .tl-bar.risk { background: rgba(196, 30, 30, .45); }
+  .tl-bar.post { background: rgba(26, 140, 63, .35); }
+  .tl-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
+  .tl-tick.event { background: var(--accent); }
+  .tl-tick label { position: absolute; top: -2px; font-size: .7rem; color: var(--muted); white-space: nowrap; transform: translateX(4px); }
+  .tl-tick.event label { color: var(--accent); font-weight: 600; }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .badge { padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface2); font-size: .78rem; color: var(--muted); }
+  .badge.warn { background: rgba(154, 103, 0, .1); border-color: rgba(154, 103, 0, .4); color: var(--warning); }
+  .badge.err { background: rgba(196, 30, 30, .1); border-color: rgba(196, 30, 30, .4); color: var(--error); }
+  .badge.ok { background: rgba(26, 140, 63, .1); border-color: rgba(26, 140, 63, .4); color: var(--success); }
+
+  pre.script {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; font-family: var(--mono); font-size: .82rem; overflow-x: auto;
+    color: var(--text); line-height: 1.5;
+  }
+
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+  .about h3 { color: var(--text); font-size: .95rem; margin: 14px 0 6px; }
+  .about ul { padding-left: 18px; margin: 6px 0; }
+
+  .quickset { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>DNS TTL Migration Planner</h1>
+<p class="subtitle">Every DNS record change is really three changes: <strong>drop the TTL first</strong> so resolvers stop clinging to the old answer, <strong>flip the record</strong> at cutover, and <strong>raise the TTL back</strong> once things have settled. This planner sequences those steps against wall-clock time, warns about the exact minutes when clients could still get stale answers, and prints a copy-paste runbook you can drop into a change ticket.</p>
+
+<div class="grid-two">
+  <div class="card">
+    <h2>Change</h2>
+    <div class="quickset">
+      <button class="btn btn-secondary" onclick="loadPreset('a')">A record → new IP</button>
+      <button class="btn btn-secondary" onclick="loadPreset('cname')">CNAME → new host</button>
+      <button class="btn btn-secondary" onclick="loadPreset('mx')">MX → new mail provider</button>
+      <button class="btn btn-secondary" onclick="loadPreset('nameserver')">Nameserver delegation</button>
+    </div>
+
+    <div class="input-row">
+      <label for="record">Record</label>
+      <input type="text" id="record" value="www.example.com" oninput="run()">
+      <div class="hint">The FQDN whose value you're changing.</div>
+    </div>
+    <div class="input-row">
+      <label for="rtype">Type</label>
+      <select id="rtype" onchange="run()">
+        <option>A</option><option>AAAA</option><option>CNAME</option><option>MX</option><option>TXT</option><option>NS</option><option>SRV</option>
+      </select>
+    </div>
+    <div class="input-row">
+      <label for="oldVal">Old value</label>
+      <input type="text" id="oldVal" value="203.0.113.10" oninput="run()">
+    </div>
+    <div class="input-row">
+      <label for="newVal">New value</label>
+      <input type="text" id="newVal" value="198.51.100.20" oninput="run()">
+    </div>
+
+    <div class="input-row wide">
+      <label for="curTtl">Current TTL</label>
+      <input type="number" id="curTtl" value="24" min="0" step="any" oninput="run()">
+      <select id="curTtlUnit" onchange="run()">
+        <option value="1">sec</option>
+        <option value="60">min</option>
+        <option value="3600" selected>hour</option>
+        <option value="86400">day</option>
+      </select>
+      <div class="hint">Whatever's in the zone today — the value resolvers may still be caching right now.</div>
+    </div>
+    <div class="input-row wide">
+      <label for="loTtl">Lowered TTL</label>
+      <input type="number" id="loTtl" value="60" min="1" step="any" oninput="run()">
+      <select id="loTtlUnit" onchange="run()">
+        <option value="1" selected>sec</option>
+        <option value="60">min</option>
+      </select>
+      <div class="hint">Short TTL you drop to <em>before</em> cutover. 30–300 s is typical; go lower for a critical flip, but every query hits your authoritative server.</div>
+    </div>
+    <div class="input-row wide">
+      <label for="hiTtl">Restored TTL</label>
+      <input type="number" id="hiTtl" value="4" min="1" step="any" oninput="run()">
+      <select id="hiTtlUnit" onchange="run()">
+        <option value="1">sec</option>
+        <option value="60">min</option>
+        <option value="3600" selected>hour</option>
+        <option value="86400">day</option>
+      </select>
+      <div class="hint">TTL you restore <em>after</em> cutover, once you're happy with the new value. Higher means lower authoritative-server load and better resolver hit rates.</div>
+    </div>
+
+    <div class="input-row wide">
+      <label for="cutTime">Cutover at</label>
+      <input type="datetime-local" id="cutTime" oninput="run()">
+      <select id="tz" onchange="run()">
+        <option value="local">local</option>
+        <option value="utc">UTC</option>
+      </select>
+      <div class="hint">Instant you'll swap old → new value. Pick a low-traffic window if you can.</div>
+    </div>
+    <div class="input-row wide">
+      <label for="safety">Safety margin</label>
+      <input type="number" id="safety" value="15" min="0" step="any" oninput="run()">
+      <select id="safetyUnit" onchange="run()">
+        <option value="1">sec</option>
+        <option value="60" selected>min</option>
+        <option value="3600">hour</option>
+      </select>
+      <div class="hint">Extra buffer added on top of the current TTL before cutover, to cover clock skew and misbehaving resolvers that honour TTL loosely.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Plan</h2>
+    <div id="summary"></div>
+    <div class="timeline" id="timeline"></div>
+    <div class="runbook" id="runbook"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Runbook (copy-paste)</h2>
+  <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">Paste this into your change ticket or the pinned Slack message. All times shown in your selected zone.</p>
+  <pre class="script" id="script"></pre>
+  <div class="btn-row">
+    <button class="btn" onclick="copyScript()">Copy runbook</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Why the three-step dance</h2>
+  <div class="about">
+    <p>The TTL on a DNS record is a resolver's licence to cache: "you may hand this answer out for up to N seconds without asking me again." If you change the record while the current TTL is 24 hours, resolvers around the world can serve the old value for up to 24 hours after your change is authoritative — and there is <em>nothing you can do server-side</em> to make them re-fetch faster.</p>
+    <h3>Step 1 — Lower the TTL, well ahead of cutover</h3>
+    <p>You have to wait at least one <em>current</em> TTL before every resolver has seen your new low TTL. Only then can you count on their next cache entry being short-lived. The <em>Safety margin</em> above handles clock drift and resolvers that round TTLs up or ignore short values (some enterprise resolvers clamp at 60 s or higher).</p>
+    <h3>Step 2 — Cut over</h3>
+    <p>Push the new value. From this instant, the worst-case time a client sees the <em>old</em> value is the <em>lowered</em> TTL. Watch traffic, error rates, and connection counts to the old and new endpoints.</p>
+    <h3>Step 3 — Restore a healthy long TTL</h3>
+    <p>Once the new endpoint has been serving fine for at least one lowered-TTL window (so any stale cached queries have expired and re-fetched), raise the TTL back to something sensible — typically hours or a day. Long TTLs cut authoritative-server load, cut client-facing latency (cache hits are ~0 ms vs. ~30 ms for a fresh recursive lookup), and reduce the blast radius if your authoritative provider has an outage.</p>
+    <h3>Things this planner can't check for you</h3>
+    <ul>
+      <li>Whether your registrar's own SOA <code>MINIMUM</code> field or your CDN clamps TTLs to a floor. Some hosted DNS providers refuse TTLs below 30 or 60 s.</li>
+      <li>Whether downstream <em>clients</em> (browsers, JVMs with <code>networkaddress.cache.ttl</code>, some proxies) cache DNS even more aggressively than resolvers.</li>
+      <li>Whether the <em>old</em> endpoint can be kept alive during the drain window. Ideally serve both endpoints in parallel until step 3 completes; that way even the most stubborn stale cache still gets an answer that works.</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function initCutoverDefault() {
+  const now = new Date(Date.now() + 26 * 3600 * 1000);
+  now.setSeconds(0, 0);
+  const pad = n => String(n).padStart(2, '0');
+  $('cutTime').value =
+    now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
+    'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+}
+initCutoverDefault();
+
+function seconds(v, unit) { return parseFloat(v) * parseFloat(unit); }
+function readSeconds(idV, idU) { return seconds($(idV).value, $(idU).value); }
+
+function humanDuration(sec) {
+  if (!isFinite(sec) || sec <= 0) return '0 s';
+  const units = [['d', 86400], ['h', 3600], ['m', 60], ['s', 1]];
+  const parts = [];
+  let rem = Math.round(sec);
+  for (const [lbl, size] of units) {
+    if (rem >= size) { const n = Math.floor(rem / size); parts.push(n + ' ' + lbl); rem -= n * size; }
+    if (parts.length >= 2) break;
+  }
+  return parts.join(' ') || sec + ' s';
+}
+
+function fmtDate(d, tz) {
+  const pad = n => String(n).padStart(2, '0');
+  if (tz === 'utc') {
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) +
+      ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ' UTC';
+  }
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+    ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' local';
+}
+
+function parseCutover() {
+  const raw = $('cutTime').value;
+  if (!raw) return null;
+  const tz = $('tz').value;
+  if (tz === 'utc') return new Date(raw + ':00Z');
+  return new Date(raw);
+}
+
+let LAST_PLAN = null;
+
+function run() {
+  const rec = $('record').value.trim() || 'record';
+  const rtype = $('rtype').value;
+  const oldVal = $('oldVal').value.trim();
+  const newVal = $('newVal').value.trim();
+
+  const curTtl = readSeconds('curTtl', 'curTtlUnit');
+  const loTtl = readSeconds('loTtl', 'loTtlUnit');
+  const hiTtl = readSeconds('hiTtl', 'hiTtlUnit');
+  const safety = readSeconds('safety', 'safetyUnit');
+  const cut = parseCutover();
+
+  if (!isFinite(curTtl) || !isFinite(loTtl) || !isFinite(hiTtl) || !cut) {
+    $('summary').innerHTML = '<div class="badge err">Fill in TTLs and cutover time.</div>';
+    $('timeline').innerHTML = ''; $('runbook').innerHTML = ''; $('script').textContent = '';
+    return;
+  }
+
+  const tz = $('tz').value;
+  const now = new Date();
+
+  // Step 1: lower TTL from curTtl → loTtl. Must land at least (curTtl + safety) before cutover.
+  const lead = curTtl + safety;
+  const lowerAt = new Date(cut.getTime() - lead * 1000);
+
+  // Step 2: cutover — swap old → new.
+  // Step 3: restore TTL — safely at cutover + loTtl + safety.
+  const restoreAt = new Date(cut.getTime() + (loTtl + safety) * 1000);
+
+  const staleWindow = loTtl; // max seconds after cutover a client can still see old value
+  const totalWindow = (restoreAt - lowerAt) / 1000;
+
+  // Warnings
+  const warnings = [];
+  if (lowerAt < now) warnings.push({ level: 'warn', msg: 'Lower-TTL step is already in the past — either push the cutover later, or accept that the pre-cutover window will be shorter than one current TTL.' });
+  if (loTtl >= curTtl) warnings.push({ level: 'warn', msg: 'Lowered TTL (' + humanDuration(loTtl) + ') is not lower than the current TTL (' + humanDuration(curTtl) + '). Step 1 provides no benefit — drop the lowered value.' });
+  if (loTtl < 30) warnings.push({ level: 'warn', msg: 'Lowered TTL is under 30 s — some resolvers clamp low TTLs. Your safety margin absorbs this, but verify with `dig` from a few public resolvers first.' });
+  if (hiTtl < loTtl) warnings.push({ level: 'warn', msg: 'Restored TTL is below the lowered TTL. That is legal but usually a mistake — pick a longer TTL for step 3 to reduce authoritative load.' });
+  if (curTtl > 86400) warnings.push({ level: 'warn', msg: 'Current TTL is over 24 h. Step 1 will need to run more than a day before cutover — plan accordingly.' });
+  if (!oldVal || !newVal) warnings.push({ level: 'err', msg: 'Missing old or new value.' });
+
+  LAST_PLAN = { rec, rtype, oldVal, newVal, curTtl, loTtl, hiTtl, safety, lowerAt, cut, restoreAt, staleWindow, tz, warnings, lead };
+
+  renderSummary();
+  renderTimeline();
+  renderSteps();
+  renderScript();
+}
+
+function renderSummary() {
+  const p = LAST_PLAN;
+  const s = $('summary');
+  const badges = [
+    `<span class="badge">lead time <b>${humanDuration(p.lead)}</b></span>`,
+    `<span class="badge warn">worst-case stale <b>${humanDuration(p.staleWindow)}</b></span>`,
+    `<span class="badge">restore in <b>${humanDuration((p.restoreAt - p.cut) / 1000)}</b> after cut</span>`,
+    `<span class="badge ok">final TTL <b>${humanDuration(p.hiTtl)}</b></span>`,
+  ];
+  s.innerHTML = `<div style="font-size:.9rem;line-height:1.6"><b>${p.rec}</b> <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:.82rem">${p.rtype}</code>: <span style="font-family:var(--mono)">${p.oldVal || '—'} → ${p.newVal || '—'}</span></div>` +
+    `<div class="badges">${badges.join('')}</div>` +
+    p.warnings.map(w => `<div class="badge ${w.level}" style="margin-top:8px;padding:6px 12px;font-size:.82rem">${w.msg}</div>`).join('');
+}
+
+function renderTimeline() {
+  const p = LAST_PLAN;
+  const el = $('timeline');
+  const start = Math.min(p.lowerAt.getTime(), Date.now());
+  const end = p.restoreAt.getTime();
+  const span = end - start;
+  if (span <= 0) { el.innerHTML = ''; return; }
+  const pct = t => Math.max(0, Math.min(100, ((t - start) / span) * 100));
+
+  const lowerPct = pct(p.lowerAt.getTime());
+  const cutPct = pct(p.cut.getTime());
+  const restorePct = pct(p.restoreAt.getTime());
+  const nowPct = pct(Date.now());
+
+  el.innerHTML =
+    `<div class="tl-bar pre" style="left:${lowerPct}%;width:${cutPct - lowerPct}%" title="TTL is low — old caches expiring"></div>` +
+    `<div class="tl-bar risk" style="left:${cutPct}%;width:${Math.min(pct(p.cut.getTime() + p.staleWindow * 1000), restorePct) - cutPct}%" title="Stale-answer window (worst case)"></div>` +
+    `<div class="tl-bar post" style="left:${pct(p.cut.getTime() + p.staleWindow * 1000)}%;width:${restorePct - pct(p.cut.getTime() + p.staleWindow * 1000)}%" title="Safe to restore long TTL"></div>` +
+    `<div class="tl-tick event" style="left:${lowerPct}%"><label>lower</label></div>` +
+    `<div class="tl-tick event" style="left:${cutPct}%"><label>cut</label></div>` +
+    `<div class="tl-tick event" style="left:${restorePct}%"><label>restore</label></div>` +
+    (nowPct >= 0 && nowPct <= 100 ? `<div class="tl-tick" style="left:${nowPct}%;background:#c41e1e"><label style="color:#c41e1e">now</label></div>` : '');
+}
+
+function stepClass(when) {
+  const now = Date.now();
+  if (when.getTime() < now - 60_000) return 'past';
+  if (Math.abs(when.getTime() - now) < 15 * 60_000) return 'now';
+  return '';
+}
+
+function renderSteps() {
+  const p = LAST_PLAN;
+  const tz = p.tz;
+  const el = $('runbook');
+  const steps = [
+    {
+      n: 1, when: p.lowerAt,
+      title: 'Lower TTL',
+      body: `In the zone editor, change the <code>${p.rtype}</code> record for <code>${p.rec}</code> so its TTL is <b>${humanDuration(p.loTtl)}</b> (${Math.round(p.loTtl)} s). Do <b>not</b> change the value yet. Wait at least <b>${humanDuration(p.lead)}</b> — one current TTL (${humanDuration(p.curTtl)}) plus a safety margin of ${humanDuration(p.safety)} — before proceeding.`,
+      cls: '',
+    },
+    {
+      n: 2, when: p.cut,
+      title: 'Cut over',
+      body: `Update the <code>${p.rtype}</code> record for <code>${p.rec}</code> from <code>${p.oldVal || '—'}</code> to <code>${p.newVal || '—'}</code>, keeping TTL at <b>${humanDuration(p.loTtl)}</b>. From this instant, the worst-case time a client still sees the old value is one lowered TTL: <b>${humanDuration(p.staleWindow)}</b>. Keep the old endpoint serving traffic until step 3 completes.`,
+      cls: 'risk',
+    },
+    {
+      n: 3, when: p.restoreAt,
+      title: 'Restore TTL',
+      body: `Raise the TTL on the <code>${p.rtype}</code> record for <code>${p.rec}</code> back to <b>${humanDuration(p.hiTtl)}</b>. All resolvers should now be serving the new value from cache. It is safe to take the old endpoint offline any time after this step.`,
+      cls: '',
+    },
+  ];
+
+  el.innerHTML = steps.map(s => {
+    const cls = [stepClass(s.when), s.cls].filter(Boolean).join(' ');
+    const nCls = s.cls === 'risk' ? ' risk' : '';
+    return `<div class="step ${cls}">
+      <div class="step-num${nCls}">${s.n}</div>
+      <div>
+        <h4>${s.title}</h4>
+        <div class="when">
+          <b>${fmtDate(s.when, tz)}</b> &middot;
+          ${s.when.getTime() > Date.now() ? 'in ' + humanDuration((s.when - Date.now()) / 1000) : humanDuration((Date.now() - s.when) / 1000) + ' ago'}
+        </div>
+        <div class="body">${s.body}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderScript() {
+  const p = LAST_PLAN;
+  const tz = p.tz;
+  const lines = [
+    `# DNS cutover: ${p.rec} ${p.rtype}   ${p.oldVal || '(old)'}  →  ${p.newVal || '(new)'}`,
+    `# All times in ${tz === 'utc' ? 'UTC' : 'local time'}. Worst-case stale window after cutover: ${humanDuration(p.staleWindow)}.`,
+    ``,
+    `[T-${humanDuration(p.lead)}]  ${fmtDate(p.lowerAt, tz)}`,
+    `  * In zone editor: set ${p.rec} ${p.rtype} TTL = ${Math.round(p.loTtl)} s (${humanDuration(p.loTtl)}); keep value = ${p.oldVal || '(unchanged)'}`,
+    `  * Verify: dig +short ${p.rec} ${p.rtype} @1.1.1.1  (record should still be ${p.oldVal || 'old'})`,
+    `  * Verify TTL:  dig +noall +answer ${p.rec} ${p.rtype} @1.1.1.1  → TTL column should count down from ${Math.round(p.loTtl)}`,
+    ``,
+    `[T = 0]  ${fmtDate(p.cut, tz)}   ***  CUTOVER  ***`,
+    `  * In zone editor: change ${p.rec} ${p.rtype}: ${p.oldVal || '(old)'}  →  ${p.newVal || '(new)'}`,
+    `  * TTL stays at ${Math.round(p.loTtl)} s`,
+    `  * Keep OLD endpoint (${p.oldVal || '?'}) serving traffic — some clients will still hit it for up to ${humanDuration(p.staleWindow)}.`,
+    `  * Monitor: connections to old vs new endpoint, error rate, latency p50 & p99.`,
+    ``,
+    `[T+${humanDuration((p.restoreAt - p.cut) / 1000)}]  ${fmtDate(p.restoreAt, tz)}`,
+    `  * In zone editor: set ${p.rec} ${p.rtype} TTL = ${Math.round(p.hiTtl)} s (${humanDuration(p.hiTtl)}); value stays ${p.newVal || '(new)'}`,
+    `  * Verify: dig +noall +answer ${p.rec} ${p.rtype} @1.1.1.1  → TTL should be up to ${Math.round(p.hiTtl)}`,
+    `  * Safe to decommission old endpoint (${p.oldVal || '?'}) after this line.`,
+  ];
+  $('script').textContent = lines.join('\n');
+}
+
+function copyScript() { navigator.clipboard.writeText($('script').textContent).catch(() => {}); }
+
+function loadPreset(name) {
+  const presets = {
+    a:          { rec: 'www.example.com',       rtype: 'A',     old: '203.0.113.10', neu: '198.51.100.20', cur: 24, cu: '3600', lo: 60, lou: '1', hi: 4, hu: '3600' },
+    cname:      { rec: 'api.example.com',       rtype: 'CNAME', old: 'old-lb.example.net.', neu: 'new-lb.example.net.', cur: 12, cu: '3600', lo: 5, lou: '60', hi: 1, hu: '86400' },
+    mx:         { rec: 'example.com',           rtype: 'MX',    old: '10 mx1.old.mail.', neu: '10 mx1.new.mail.', cur: 4, cu: '3600', lo: 5, lou: '60', hi: 6, hu: '3600' },
+    nameserver: { rec: 'example.com',           rtype: 'NS',    old: 'ns1.oldprovider.net.', neu: 'ns1.newprovider.net.', cur: 2, cu: '86400', lo: 1, lou: '3600', hi: 2, hu: '86400' },
+  };
+  const p = presets[name]; if (!p) return;
+  $('record').value = p.rec; $('rtype').value = p.rtype;
+  $('oldVal').value = p.old; $('newVal').value = p.neu;
+  $('curTtl').value = p.cur; $('curTtlUnit').value = p.cu;
+  $('loTtl').value = p.lo; $('loTtlUnit').value = p.lou;
+  $('hiTtl').value = p.hi; $('hiTtlUnit').value = p.hu;
+  run();
+}
+
+run();
+</script>
+</body>
+</html>
