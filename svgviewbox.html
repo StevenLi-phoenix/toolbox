@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVG viewBox Editor — Free Online Tool</title>
+<meta name="description" content="Paste any SVG and interactively tune its viewBox and preserveAspectRatio — drag the crop rectangle, zoom, pan, snap to bounding box, and see how the nine align keywords (xMidYMid, xMinYMax, meet, slice) reflow the drawing inside its container.">
+<meta name="keywords" content="svg viewbox editor, preserveaspectratio, svg crop, svg viewport, svg align, meet slice, svg zoom, svg pan, svg bounding box, svg optimizer">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/svgviewbox.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  textarea.src {
+    width: 100%; min-height: 220px; padding: 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: .85rem; box-sizing: border-box; resize: vertical;
+    line-height: 1.5;
+  }
+
+  .stage-wrap {
+    position: relative; border: 1px solid var(--border); border-radius: var(--radius);
+    background:
+      linear-gradient(45deg, rgba(128,128,128,.12) 25%, transparent 25%, transparent 75%, rgba(128,128,128,.12) 75%),
+      linear-gradient(45deg, rgba(128,128,128,.12) 25%, transparent 25%, transparent 75%, rgba(128,128,128,.12) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+    overflow: hidden;
+    min-height: 320px;
+  }
+  .stage { width: 100%; height: 100%; display: block; }
+  .stage-svg { width: 100%; height: 320px; display: block; }
+
+  .aspect-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; align-items: center; font-size: .82rem; }
+  .aspect-row label { color: var(--muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+  .chip {
+    padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); cursor: pointer; font-family: var(--mono); font-size: .78rem;
+  }
+  .chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .grid-row {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px; margin-bottom: 8px;
+  }
+  .grid-row .field { display: flex; flex-direction: column; gap: 3px; }
+  .grid-row label {
+    font-size: .72rem; text-transform: uppercase; color: var(--muted); letter-spacing: .04em;
+  }
+  .grid-row input {
+    padding: 6px 9px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .88rem;
+    width: 100%; box-sizing: border-box;
+  }
+
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px; margin-top: 10px;
+  }
+  .stat-card {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .stat-card .lbl { font-size: .68rem; text-transform: uppercase; color: var(--muted); letter-spacing: .05em; }
+  .stat-card .val { font-family: var(--mono); font-size: .95rem; color: var(--text); word-break: break-all; }
+
+  .align-grid {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+    max-width: 240px; margin-top: 6px;
+  }
+  .align-grid button {
+    padding: 8px 6px; border: 1px solid var(--border); background: var(--surface);
+    border-radius: var(--radius); font-family: var(--mono); font-size: .74rem; cursor: pointer;
+    color: var(--text);
+  }
+  .align-grid button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); cursor: pointer; color: var(--text); font-size: .82rem;
+  }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn:hover { border-color: var(--accent); }
+
+  .err { color: var(--error); font-size: .82rem; margin-top: 6px; min-height: 1em; }
+  .about { font-size: .88rem; color: var(--muted); line-height: 1.65; }
+  .about code { color: var(--text); background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+
+  code.mono { font-family: var(--mono); background: var(--surface2); padding: 1px 5px; border-radius: 3px; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>SVG viewBox Editor</h1>
+<p class="subtitle">Paste any SVG and reshape its <code class="mono">viewBox</code> and <code class="mono">preserveAspectRatio</code> live. Auto-fit to the drawing's bounding box, crop with the four number fields, and toggle each of the nine align keywords with <em>meet</em> or <em>slice</em> to see exactly which pixels the container keeps and which it letterboxes.</p>
+
+<div class="layout">
+  <div class="card">
+    <div class="btn-row" style="margin-bottom:8px">
+      <button class="btn primary" onclick="loadSample()">Load sample</button>
+      <button class="btn" onclick="fitToContent()">Fit to bbox</button>
+      <button class="btn" onclick="resetView()">Reset</button>
+    </div>
+    <label class="head" for="src" style="display:block;font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">SVG source</label>
+    <textarea id="src" class="src" oninput="onSrcChange()" spellcheck="false"></textarea>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="card">
+    <div class="stage-wrap">
+      <div id="stage" class="stage"></div>
+    </div>
+
+    <div class="grid-row" style="margin-top:12px">
+      <div class="field"><label>min-x</label><input type="number" id="vbX" step="1" oninput="applyVB()"></div>
+      <div class="field"><label>min-y</label><input type="number" id="vbY" step="1" oninput="applyVB()"></div>
+      <div class="field"><label>width</label><input type="number" id="vbW" step="1" min="1" oninput="applyVB()"></div>
+      <div class="field"><label>height</label><input type="number" id="vbH" step="1" min="1" oninput="applyVB()"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="zoom(1/1.25)">Zoom out</button>
+      <button class="btn" onclick="zoom(1.25)">Zoom in</button>
+      <button class="btn" onclick="pan(0, -0.1)">Pan &uarr;</button>
+      <button class="btn" onclick="pan(0, 0.1)">Pan &darr;</button>
+      <button class="btn" onclick="pan(-0.1, 0)">Pan &larr;</button>
+      <button class="btn" onclick="pan(0.1, 0)">Pan &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>preserveAspectRatio</h2>
+  <div class="aspect-row">
+    <label>Align:</label>
+  </div>
+  <div class="align-grid" id="alignGrid"></div>
+  <div class="aspect-row" style="margin-top:12px">
+    <label>Meet-or-slice:</label>
+    <span class="chip" data-ms="meet" onclick="setMS('meet')">meet</span>
+    <span class="chip" data-ms="slice" onclick="setMS('slice')">slice</span>
+    <span class="chip" data-ms="none-only" title="Only valid with align=none">n/a (align=none)</span>
+  </div>
+  <p style="font-size:.82rem;color:var(--muted);margin-top:8px;line-height:1.6">
+    <b>meet</b> = scale the drawing until it fits entirely inside the viewport (may leave bars). <b>slice</b> = scale until it fills the viewport (may crop). <b>none</b> = ignore aspect ratio and stretch to fill. Align controls which edge or corner anchors the residual space.
+  </p>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="lbl">viewBox</div><div class="val" id="outVB">—</div></div>
+    <div class="stat-card"><div class="lbl">preserveAspectRatio</div><div class="val" id="outPAR">xMidYMid meet</div></div>
+    <div class="stat-card"><div class="lbl">viewBox aspect</div><div class="val" id="outVBAsp">—</div></div>
+    <div class="stat-card"><div class="lbl">content bbox</div><div class="val" id="outBBox">—</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Output SVG</h2>
+  <textarea id="out" class="src" readonly style="min-height:180px"></textarea>
+  <div class="btn-row" style="margin-top:8px">
+    <button class="btn primary" onclick="copyOut()">Copy SVG</button>
+    <button class="btn" onclick="downloadOut()">Download .svg</button>
+    <span id="copied" style="font-size:.82rem;color:var(--success);align-self:center"></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About viewBox &amp; preserveAspectRatio</h2>
+  <p class="about">
+    <code>viewBox="min-x min-y width height"</code> defines the user-space rectangle that maps onto the SVG's own <code>width</code> / <code>height</code> (or its rendered container). The four numbers are in <em>user units</em>, not pixels &mdash; SVG scales the coordinate system so those user units fit the viewport. Shrinking width and height <em>zooms in</em>; moving min-x and min-y <em>pans</em>.
+  </p>
+  <p class="about">
+    When the viewBox's aspect ratio doesn't match the viewport's, <code>preserveAspectRatio</code> decides what to do. It takes two tokens: one of the nine align keywords (<code>xMin</code>/<code>xMid</code>/<code>xMax</code> &times; <code>YMin</code>/<code>YMid</code>/<code>YMax</code>) plus <code>meet</code> (letterbox) or <code>slice</code> (crop). The special value <code>none</code> stretches the image to fill the viewport and drops the second token.
+  </p>
+  <p class="about">
+    Common uses: <b>Fit-to-bbox</b> removes empty padding around a drawing. <b>Crop</b> zooms in on a region by shrinking width/height. <b>Icon symbol</b> defs typically use <code>xMidYMid meet</code> so the icon centers and never distorts. <b>Backgrounds</b> often use <code>xMidYMid slice</code> to always cover the viewport. Every &lt;svg&gt; can override its parent's setting on nested <code>&lt;svg&gt;</code>, <code>&lt;symbol&gt;</code>, <code>&lt;image&gt;</code>, <code>&lt;pattern&gt;</code>, <code>&lt;marker&gt;</code>, and <code>&lt;view&gt;</code> elements.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const SAMPLE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+  <rect x="0" y="0" width="200" height="100" fill="#fef3c7"/>
+  <circle cx="50" cy="50" r="30" fill="#ef4444"/>
+  <circle cx="150" cy="50" r="30" fill="#3b82f6"/>
+  <path d="M20 80 Q100 20 180 80" stroke="#111" stroke-width="4" fill="none"/>
+  <text x="100" y="95" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#111">SVG viewBox demo</text>
+</svg>`;
+
+const ALIGNS = [
+  'xMinYMin','xMidYMin','xMaxYMin',
+  'xMinYMid','xMidYMid','xMaxYMid',
+  'xMinYMax','xMidYMax','xMaxYMax'
+];
+
+let state = {
+  align: 'xMidYMid',
+  meetSlice: 'meet',
+  useNone: false,
+  vb: null,
+  bbox: null,
+  parsedSvg: null,
+};
+
+function buildAlignGrid() {
+  const box = $('alignGrid');
+  ALIGNS.forEach(a => {
+    const b = document.createElement('button');
+    b.textContent = a.replace(/^x/, 'x').replace(/Y/, ' Y');
+    b.title = a;
+    b.dataset.align = a;
+    b.onclick = () => setAlign(a);
+    box.appendChild(b);
+  });
+  const none = document.createElement('button');
+  none.textContent = 'none (stretch)';
+  none.style.gridColumn = 'span 3';
+  none.style.marginTop = '6px';
+  none.dataset.align = 'none';
+  none.onclick = () => setAlign('none');
+  box.appendChild(none);
+  updateAlignUI();
+}
+
+function updateAlignUI() {
+  const btns = $('alignGrid').querySelectorAll('button');
+  btns.forEach(b => {
+    const a = b.dataset.align;
+    b.classList.toggle('on', state.useNone ? a === 'none' : a === state.align);
+  });
+  document.querySelectorAll('.chip[data-ms]').forEach(c => {
+    const ms = c.dataset.ms;
+    if (state.useNone) c.classList.toggle('on', ms === 'none-only');
+    else c.classList.toggle('on', ms === state.meetSlice);
+  });
+}
+
+function setAlign(a) {
+  if (a === 'none') { state.useNone = true; }
+  else { state.useNone = false; state.align = a; }
+  updateAlignUI();
+  render();
+}
+
+function setMS(ms) {
+  if (state.useNone) return;
+  state.meetSlice = ms;
+  updateAlignUI();
+  render();
+}
+
+function loadSample() {
+  $('src').value = SAMPLE;
+  onSrcChange();
+}
+
+function parseSVG(text) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, 'image/svg+xml');
+  const err = doc.querySelector('parsererror');
+  if (err) throw new Error(err.textContent.split('\n')[0]);
+  const svg = doc.documentElement;
+  if (svg.nodeName.toLowerCase() !== 'svg') throw new Error('Root element is not <svg>');
+  return svg;
+}
+
+function readInitialVB(svg) {
+  const vb = svg.getAttribute('viewBox');
+  if (vb) {
+    const p = vb.trim().split(/[\s,]+/).map(Number);
+    if (p.length === 4 && p.every(n => Number.isFinite(n))) return { x: p[0], y: p[1], w: p[2], h: p[3] };
+  }
+  const w = parseFloat(svg.getAttribute('width')) || 300;
+  const h = parseFloat(svg.getAttribute('height')) || 150;
+  return { x: 0, y: 0, w, h };
+}
+
+function measureBBox(svg) {
+  const clone = svg.cloneNode(true);
+  clone.style.position = 'absolute';
+  clone.style.visibility = 'hidden';
+  clone.style.left = '-99999px';
+  clone.setAttribute('width', '400');
+  clone.setAttribute('height', '400');
+  document.body.appendChild(clone);
+  let box = null;
+  try {
+    box = clone.getBBox();
+  } catch (e) {}
+  document.body.removeChild(clone);
+  if (!box || !isFinite(box.width) || box.width === 0) return null;
+  return { x: box.x, y: box.y, w: box.width, h: box.height };
+}
+
+function onSrcChange() {
+  const src = $('src').value.trim();
+  $('err').textContent = '';
+  if (!src) { $('stage').innerHTML = ''; $('out').value = ''; return; }
+  try {
+    const svg = parseSVG(src);
+    state.parsedSvg = svg;
+    state.vb = readInitialVB(svg);
+    setInputs(state.vb);
+    render();
+    setTimeout(() => {
+      state.bbox = measureBBox(svg);
+      updateStats();
+    }, 0);
+  } catch (e) {
+    $('err').textContent = 'Parse error: ' + e.message;
+  }
+}
+
+function setInputs(vb) {
+  $('vbX').value = round(vb.x);
+  $('vbY').value = round(vb.y);
+  $('vbW').value = round(vb.w);
+  $('vbH').value = round(vb.h);
+}
+
+function round(n) { return Math.round(n * 100) / 100; }
+
+function applyVB() {
+  const x = parseFloat($('vbX').value);
+  const y = parseFloat($('vbY').value);
+  const w = parseFloat($('vbW').value);
+  const h = parseFloat($('vbH').value);
+  if (![x, y, w, h].every(Number.isFinite)) return;
+  if (w <= 0 || h <= 0) return;
+  state.vb = { x, y, w, h };
+  render();
+}
+
+function fitToContent() {
+  if (!state.parsedSvg) return;
+  const b = state.bbox || measureBBox(state.parsedSvg);
+  if (!b) { $('err').textContent = 'Could not measure content bbox.'; return; }
+  const pad = Math.max(b.w, b.h) * 0.02;
+  state.vb = { x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 };
+  setInputs(state.vb);
+  render();
+}
+
+function resetView() {
+  if (!state.parsedSvg) return;
+  state.vb = readInitialVB(state.parsedSvg);
+  setInputs(state.vb);
+  render();
+}
+
+function zoom(factor) {
+  if (!state.vb) return;
+  const { x, y, w, h } = state.vb;
+  const cx = x + w / 2, cy = y + h / 2;
+  const nw = w / factor, nh = h / factor;
+  state.vb = { x: cx - nw / 2, y: cy - nh / 2, w: nw, h: nh };
+  setInputs(state.vb);
+  render();
+}
+
+function pan(dx, dy) {
+  if (!state.vb) return;
+  state.vb.x += state.vb.w * dx;
+  state.vb.y += state.vb.h * dy;
+  setInputs(state.vb);
+  render();
+}
+
+function computePAR() {
+  return state.useNone ? 'none' : `${state.align} ${state.meetSlice}`;
+}
+
+function render() {
+  if (!state.parsedSvg || !state.vb) return;
+  const clone = state.parsedSvg.cloneNode(true);
+  const vb = state.vb;
+  clone.setAttribute('viewBox', `${round(vb.x)} ${round(vb.y)} ${round(vb.w)} ${round(vb.h)}`);
+  clone.setAttribute('preserveAspectRatio', computePAR());
+  clone.setAttribute('width', '100%');
+  clone.setAttribute('height', '320');
+  clone.classList.add('stage-svg');
+  clone.style.background = 'rgba(255,255,255,0.5)';
+  $('stage').innerHTML = '';
+  $('stage').appendChild(clone);
+
+  const serializer = new XMLSerializer();
+  const out = serializer.serializeToString(clone);
+  $('out').value = out.replace(/><(?!\/)/g, '>\n  <').replace(/></g, '>\n<');
+
+  updateStats();
+}
+
+function updateStats() {
+  const vb = state.vb;
+  if (!vb) return;
+  $('outVB').textContent = `${round(vb.x)} ${round(vb.y)} ${round(vb.w)} ${round(vb.h)}`;
+  $('outPAR').textContent = computePAR();
+  $('outVBAsp').textContent = (vb.w / vb.h).toFixed(3) + ' : 1';
+  if (state.bbox) {
+    const b = state.bbox;
+    $('outBBox').textContent = `${round(b.x)},${round(b.y)} · ${round(b.w)}×${round(b.h)}`;
+  } else {
+    $('outBBox').textContent = '—';
+  }
+}
+
+function copyOut() {
+  const t = $('out').value;
+  if (!t) return;
+  navigator.clipboard.writeText(t).then(() => {
+    $('copied').textContent = 'Copied ✓';
+    setTimeout(() => $('copied').textContent = '', 1500);
+  });
+}
+
+function downloadOut() {
+  const t = $('out').value;
+  if (!t) return;
+  const blob = new Blob([t], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'viewbox.svg';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+buildAlignGrid();
+loadSample();
+</script>
+</body>
+</html>

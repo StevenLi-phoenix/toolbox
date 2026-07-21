@@ -47,6 +47,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [CSS Angle Converter](cssangle.html) | Convert between CSS's four angle units — `deg`, `rad`, `grad`, `turn` — with a draggable compass dial, live `rotate()` and `conic-gradient()` preview, toggle between the CSS clockwise-from-top convention and the `atan2` math convention, and a reference chart of common angles (0°, 45°, 90°, 180°, 360°). |
 | [CSS clamp() Fluid Value Builder](clamp.html) | Give me a value at two viewport widths and I'll fit `clamp(min, preferred, max)` — slope in `vw`, intercept in `rem`, live curve plot, and a viewport-slider preview. Presets for fluid H1, body, gap, radius, and button padding. |
 | [CSS :has() Selector Playground](cshas.html) | Type any `:has()` parent-selector expression and see exactly which elements in your HTML match — with live preview, ready-made recipes, generated CSS, and a Selectors 4 specificity breakdown. |
 | [CSS :nth-child Tester](nthchild.html) | Type an `an+b` formula and watch matched children highlight in real time. Switch between `:nth-child`, `:nth-of-type`, `:nth-last-child`, and `:nth-last-of-type`; mix child types to see how *of-type* changes the count; try Selectors 4's `of S` filter syntax. |
@@ -114,6 +115,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [SVG viewBox Editor](svgviewbox.html) | Paste any SVG and interactively tune its `viewBox` and `preserveAspectRatio` — auto-fit to the drawing's bounding box, zoom, pan, and toggle each of the nine align keywords (xMinYMax, xMidYMid, …) with `meet` or `slice` to see exactly which pixels the container keeps and which it letterboxes. |
 | [Image Convolution Kernel Playground](imgkernel.html) | Apply 3×3, 5×5, or 7×7 convolution kernels (sharpen, blur, Sobel, Laplacian, Gaussian, emboss…) to an image. Edit any cell, tweak divisor/bias/edge mode, and see the result in real time. |
 | [Image Histogram Viewer](imagehistogram.html) | Inspect any image's RGB and BT.709 luminance histograms with stats, clipping warnings, and linear/log/√ Y-scale. |
 | [Image to Base64](img2base64.html) | Convert images to Base64 data URIs for embedding in HTML & CSS. |
@@ -143,6 +145,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Greek Letter Reference](greek.html) | All 24 Greek letters (uppercase, lowercase, plus the seven Unicode-encoded math-italic variants like ϐ, ϑ, ϖ, ϱ, ϵ, ϕ, ϰ, and final sigma ς) with their LaTeX command, HTML entity, Unicode codepoint, transliteration, and the physics / statistics / math contexts where you'll actually meet them. Click any value to copy. |
 | [Scrabble & Word Score Calculator](scrabble.html) | Compute the score of any word in Scrabble (TWL/SOWPODS), Words With Friends, or Boggle. Tap tile multipliers (DL, TL, DW, TW) per letter, flag blank wildcards as zero-point tiles, and add the 50-point *bingo* bonus for laying down all seven rack tiles in one turn. |
 | [Jaro-Winkler Similarity Calculator](jarowinkler.html) | Compute Jaro and Jaro-Winkler scores between two strings with adjustable prefix length and scaling factor — plus Jaro distance, Sørensen-Dice on bigrams, and normalized Levenshtein — with a character match map that highlights prefix, matched, and transposed letters. |
 | [ICU MessageFormat Playground](icumessage.html) | Type an ICU MessageFormat string — `{count, plural, one {# item} other {# items}}`, `select`, `selectordinal`, currency, and date placeholders — set variables and watch the rendered output update side-by-side across English, Spanish, French, German, Polish, Arabic, Chinese, and more, powered by `Intl.PluralRules`. |
