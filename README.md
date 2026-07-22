@@ -266,6 +266,7 @@
 | [Query String Builder & Parser](querystring.html) | Edit URL query strings as key/value pairs. Switch between repeat, bracket, indexed, and comma array styles, with JS, Python, and curl snippets. |
 | [gRPC Status Codes Reference](grpcstatus.html) | All 17 canonical gRPC codes with HTTP mapping, retry guidance, and ready-to-paste handler snippets in Go, Python, Node, and Java. |
 | [PostgreSQL Connection String Parser](pgconnstr.html) | Parse and round-trip libpq `postgres://` URIs and keyword=value DSNs into structured fields — multi-host failover, percent-encoded Unix sockets, sslmode warnings (disable/require → MITM risk), and converters to JDBC, Npgsql, Node `pg`, `psql` CLI, `PG*` env vars, `~/.pgpass`, and Docker Compose. |
+| [HTTP Retry Budget Calculator](retrybudget.html) | Bound retry amplification the Google-SRE / Envoy / gRPC way — cap retries at `budget × successful RPS` over a rolling window, with a minimum floor for low-volume clients. Simulates a partial outage side-by-side (naïve vs budgeted), shows the origin-load blowout you avoid, and prints copy-ready policy for Envoy, gRPC-Java, Istio + JS / Python client budgets. |
 
 ## Developer Tools
 
@@ -430,6 +431,8 @@
 | [EAN / UPC / GTIN Check Digit Calculator](ean13.html) | Generate or verify the check digit for EAN-13, EAN-8, UPC-A, UPC-E, and GTIN-14 barcodes — step-by-step mod-10 weighted sum, schematic bar preview, and bulk validation of mixed-format codes pasted one per line. |
 | [Scientific & Engineering Notation Converter](scinotation.html) | Convert any number between standard decimal, scientific (1.23×10⁶), engineering (multiples of 3), SI prefix (k, M, μ, n, …), and E-notation — arbitrary precision via string arithmetic so values like `0.1 + 0.2` stay exact, with sig-fig control and bulk conversion. |
 | [Sun Position & Solar Times](sunposition.html) | Compute the sun's altitude and azimuth for any latitude / longitude / instant, plus the day's sunrise, sunset, solar noon, golden &amp; blue hours, and civil / nautical / astronomical twilight — using NOAA's solar position algorithm, with refraction correction, a live south-facing sky dome, a coloured day-phase bar, and a full-day altitude arc. Handles polar latitudes (no-event days return "—"). |
+| [Cron Jitter Randomizer](cronjitter.html) | Stagger N scheduled jobs across a jitter window using a deterministic hash of the job ID — every job keeps the same offset every fire, so retries hit the same slot and the aggregate load flattens instead of stampeding at `:00`. FNV-1a / djb2 / murmur3-32, bucket histogram, per-second peak, and copy-ready Python / Node / Go / bash snippets. |
+| [API Key Rotation Planner](keyrotation.html) | Plan a zero-downtime rotation for JWT signing keys, webhook secrets, API tokens, DB credentials, or OAuth client secrets. Wall-clock timeline for issue → dual-accept deploy → cutover → verify soak → revoke, with rollback budget, per-fleet rollout math, dual-verify code snippet, Markdown runbook, and `.ics` calendar export. |
 
 ## AI & PM Tools
 

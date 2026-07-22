@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cron Jitter Randomizer — Stagger Scheduled Jobs to Avoid Thundering Herd</title>
+<meta name="description" content="Distribute N recurring jobs across a jitter window using deterministic hashing. Every job keeps the same offset every fire, so retries are idempotent and load stays flat.">
+<meta name="keywords" content="cron jitter, thundering herd, stagger jobs, cron randomizer, deterministic offset, cron schedule, load spreading">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cronjitter.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+  .controls label { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .controls input, .controls select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; box-sizing: border-box;
+  }
+  textarea {
+    width: 100%; min-height: 180px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .88rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  label.head { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+  .stat { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-size: 1.1rem; font-weight: 700; font-family: var(--mono); margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  th { background: var(--surface2); font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.num { text-align: right; }
+  .bar-wrap { position: relative; height: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 99px; overflow: hidden; }
+  .bar { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 99px; }
+  .hist { display: grid; grid-template-columns: repeat(60, 1fr); gap: 2px; align-items: end; height: 90px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .hist .col { background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; opacity: .85; }
+  .hist .col:hover { opacity: 1; }
+  .hist-legend { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+  .snippet { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; font-family: var(--mono); font-size: .82rem; white-space: pre; overflow-x: auto; }
+  .btn { padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; font-size: .85rem; }
+  .btn:hover { border-color: var(--accent); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .tab { padding: 6px 14px; border: none; background: transparent; cursor: pointer; font-size: .84rem; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .warn { color: var(--warning); font-size: .82rem; margin-top: 6px; }
+  @media (max-width: 768px) { .controls, .stats { grid-template-columns: 1fr 1fr; } .hist { grid-template-columns: repeat(20, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Cron Jitter Randomizer</h1>
+<p class="subtitle">Cron at <code>0&nbsp;*&nbsp;*&nbsp;*&nbsp;*</code> fires every job on the same second. A thousand webhook-poll workers hammering upstream at :00:00 is a thundering herd. Paste your job IDs and pick a jitter window — each job gets a <b>deterministic</b> offset from a stable hash, so its fire time is the same every hour, retries hit the same slot, and the aggregate load flattens out.</p>
+
+<div class="card">
+  <div class="controls">
+    <div>
+      <label for="baseCron">Base cron</label>
+      <input id="baseCron" type="text" value="0 * * * *" oninput="run()">
+    </div>
+    <div>
+      <label for="window">Jitter window</label>
+      <select id="window" onchange="run()">
+        <option value="60">60 s (1 min)</option>
+        <option value="300" selected>300 s (5 min)</option>
+        <option value="600">600 s (10 min)</option>
+        <option value="1800">1800 s (30 min)</option>
+        <option value="3600">3600 s (1 h)</option>
+      </select>
+    </div>
+    <div>
+      <label for="algo">Hash</label>
+      <select id="algo" onchange="run()">
+        <option value="fnv1a" selected>FNV-1a 32</option>
+        <option value="djb2">djb2</option>
+        <option value="murmur3">murmur3-32</option>
+      </select>
+    </div>
+    <div>
+      <label for="salt">Salt (optional)</label>
+      <input id="salt" type="text" value="" placeholder="e.g. tenant-42" oninput="run()">
+    </div>
+  </div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+    <div>
+      <label class="head" for="jobs">Job identifiers (one per line)</label>
+      <textarea id="jobs" oninput="run()" spellcheck="false">poll-webhook-tenant-1
+poll-webhook-tenant-2
+poll-webhook-tenant-3
+poll-webhook-tenant-4
+poll-webhook-tenant-5
+poll-webhook-tenant-6
+poll-webhook-tenant-7
+poll-webhook-tenant-8
+send-digest-org-alpha
+send-digest-org-beta
+send-digest-org-gamma
+send-digest-org-delta
+refresh-oauth-user-1001
+refresh-oauth-user-1002
+refresh-oauth-user-1003
+refresh-oauth-user-1004
+cleanup-tmp-worker-a
+cleanup-tmp-worker-b
+sync-crm-tenant-42
+sync-crm-tenant-99</textarea>
+    </div>
+    <div>
+      <label class="head">Bucket histogram</label>
+      <div class="hist" id="hist"></div>
+      <div class="hist-legend"><span>0s</span><span id="histMid">150s</span><span id="histMax">300s</span></div>
+      <div style="margin-top:12px">
+        <label class="head">Load flatness</label>
+        <div class="bar-wrap"><div class="bar" id="flatnessBar" style="width:0%"></div></div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:4px" id="flatnessTxt">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="stats">
+    <div class="stat"><div class="k">Jobs</div><div class="v" id="stJobs">0</div></div>
+    <div class="stat"><div class="k">Window</div><div class="v" id="stWindow">0 s</div></div>
+    <div class="stat"><div class="k">Peak / sec</div><div class="v" id="stPeak">0</div></div>
+    <div class="stat"><div class="k">Herd factor</div><div class="v" id="stHerd">—</div></div>
+  </div>
+  <div class="warn" id="warn"></div>
+  <div style="overflow-x:auto;max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)">
+    <table>
+      <thead><tr><th>Job ID</th><th class="num">Hash</th><th class="num">Offset (s)</th><th>Fires at</th><th>Bar</th></tr></thead>
+      <tbody id="scheduleBody"></tbody>
+    </table>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:8px">
+    <button class="btn" onclick="copyCSV()">Copy CSV</button>
+    <button class="btn" onclick="copyJSON()">Copy JSON</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Wire it up</h2>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(event,'py')">Python</button>
+    <button class="tab" onclick="showTab(event,'js')">Node.js</button>
+    <button class="tab" onclick="showTab(event,'go')">Go</button>
+    <button class="tab" onclick="showTab(event,'bash')">Shell (sleep)</button>
+  </div>
+  <div id="snip-py" class="snippet"></div>
+  <div id="snip-js" class="snippet" style="display:none"></div>
+  <div id="snip-go" class="snippet" style="display:none"></div>
+  <div id="snip-bash" class="snippet" style="display:none"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Why deterministic jitter?</h2>
+  <p style="font-size:.9rem;color:var(--muted);line-height:1.7">
+    Random <code>sleep(rand(0,window))</code> at the top of a handler does spread load, but it also makes every run start at a different second — you lose the guarantee that job <code>tenant-42</code> always runs at <code>:04:17</code>. That matters when a run crashes and a supervisor retries it: you want the retry to hit the same bucket, not pile onto the already-crowded <code>:00</code> spike. It also matters for observability — a stable offset makes dashboards, alerts, and log correlation actually mean something.
+  </p>
+  <p style="font-size:.9rem;color:var(--muted);line-height:1.7;margin-top:8px">
+    The formula is <code>offset = hash(salt + job_id) mod window</code>. The salt is optional but useful when the same job identifier is scheduled on two different queues — a different salt per queue lets each queue independently smooth its load without leaking any bucket-alignment between them.
+  </p>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+function djb2(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) {
+    h = (Math.imul(h, 33) + str.charCodeAt(i)) | 0;
+  }
+  return h >>> 0;
+}
+function murmur3(str, seed) {
+  seed = seed || 0;
+  let h1 = seed >>> 0;
+  const c1 = 0xcc9e2d51, c2 = 0x1b873593;
+  let i = 0;
+  for (; i + 4 <= str.length; i += 4) {
+    let k1 = (str.charCodeAt(i) & 0xff) | ((str.charCodeAt(i+1) & 0xff) << 8) | ((str.charCodeAt(i+2) & 0xff) << 16) | ((str.charCodeAt(i+3) & 0xff) << 24);
+    k1 = Math.imul(k1, c1); k1 = (k1 << 15) | (k1 >>> 17); k1 = Math.imul(k1, c2);
+    h1 ^= k1; h1 = (h1 << 13) | (h1 >>> 19); h1 = (Math.imul(h1, 5) + 0xe6546b64) | 0;
+  }
+  let k1 = 0;
+  switch (str.length - i) {
+    case 3: k1 ^= (str.charCodeAt(i+2) & 0xff) << 16;
+    case 2: k1 ^= (str.charCodeAt(i+1) & 0xff) << 8;
+    case 1: k1 ^= (str.charCodeAt(i) & 0xff);
+      k1 = Math.imul(k1, c1); k1 = (k1 << 15) | (k1 >>> 17); k1 = Math.imul(k1, c2); h1 ^= k1;
+  }
+  h1 ^= str.length;
+  h1 ^= h1 >>> 16; h1 = Math.imul(h1, 0x85ebca6b);
+  h1 ^= h1 >>> 13; h1 = Math.imul(h1, 0xc2b2ae35);
+  h1 ^= h1 >>> 16;
+  return h1 >>> 0;
+}
+
+function hashFn() {
+  const a = $('algo').value;
+  if (a === 'djb2') return djb2;
+  if (a === 'murmur3') return s => murmur3(s, 0);
+  return fnv1a;
+}
+
+function pad(n, w) { return String(n).padStart(w, '0'); }
+function fmtTime(sec) {
+  sec = sec % 3600;
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return ':' + pad(m, 2) + ':' + pad(s, 2);
+}
+
+let lastSchedule = [];
+
+function run() {
+  const lines = $('jobs').value.split('\n').map(l => l.trim()).filter(Boolean);
+  const window = parseInt($('window').value, 10);
+  const salt = $('salt').value;
+  const H = hashFn();
+  const schedule = lines.map(j => {
+    const h = H(salt + j);
+    const offset = h % window;
+    return { job: j, hash: h, offset };
+  }).sort((a, b) => a.offset - b.offset);
+  lastSchedule = schedule;
+
+  $('stJobs').textContent = schedule.length;
+  $('stWindow').textContent = window + ' s';
+
+  // buckets = 60 columns for histogram
+  const buckets = 60;
+  const bucketSize = window / buckets;
+  const counts = new Array(buckets).fill(0);
+  schedule.forEach(r => {
+    const b = Math.min(buckets - 1, Math.floor(r.offset / bucketSize));
+    counts[b]++;
+  });
+  const maxCount = Math.max(1, ...counts);
+  const hist = $('hist');
+  hist.innerHTML = '';
+  counts.forEach((c, i) => {
+    const div = document.createElement('div');
+    div.className = 'col';
+    div.style.height = (c / maxCount * 100) + '%';
+    const rangeStart = Math.floor(i * bucketSize);
+    const rangeEnd = Math.floor((i + 1) * bucketSize);
+    div.title = 'offset ' + rangeStart + '–' + rangeEnd + 's · ' + c + ' job' + (c === 1 ? '' : 's');
+    hist.appendChild(div);
+  });
+  $('histMid').textContent = Math.round(window / 2) + 's';
+  $('histMax').textContent = window + 's';
+
+  // per-second peak (harshest measure)
+  const secCounts = new Array(window).fill(0);
+  schedule.forEach(r => { secCounts[r.offset]++; });
+  const peakSec = Math.max(...secCounts);
+  const meanSec = schedule.length / window;
+  const herd = meanSec > 0 ? (peakSec / meanSec).toFixed(2) + '×' : '—';
+  $('stPeak').textContent = peakSec + '/s';
+  $('stHerd').textContent = herd;
+
+  // flatness = 1 − (peak − mean)/max(1, count) mapped to 0-100
+  const spread = maxCount - Math.min(...counts.filter(c => true));
+  const flat = Math.max(0, Math.round(100 * (1 - (maxCount - counts.reduce((a,b)=>a+b,0)/buckets) / Math.max(1, schedule.length))));
+  $('flatnessBar').style.width = flat + '%';
+  $('flatnessTxt').textContent = flat + '% flat · peak bucket has ' + maxCount + ' job' + (maxCount === 1 ? '' : 's') + ' vs mean ' + (schedule.length / buckets).toFixed(2);
+
+  // warn
+  const warn = $('warn');
+  if (schedule.length > window) {
+    warn.textContent = '⚠ ' + schedule.length + ' jobs into a ' + window + 's window — expect ≥' + Math.ceil(schedule.length / window) + ' collisions per second on average.';
+  } else if (peakSec > 3 && peakSec > meanSec * 3) {
+    warn.textContent = '⚠ Peak second holds ' + peakSec + ' jobs. Widen the window or switch hash if a downstream single-flight limit is < ' + peakSec + '/s.';
+  } else {
+    warn.textContent = '';
+  }
+
+  // table
+  const body = $('scheduleBody');
+  body.innerHTML = '';
+  schedule.forEach(r => {
+    const tr = document.createElement('tr');
+    const pct = (r.offset / window * 100);
+    tr.innerHTML = '<td>' + escapeHtml(r.job) + '</td>' +
+                   '<td class="num">' + r.hash.toString(16).padStart(8, '0') + '</td>' +
+                   '<td class="num">' + r.offset + '</td>' +
+                   '<td>' + fmtTime(r.offset) + '</td>' +
+                   '<td style="min-width:120px"><div class="bar-wrap"><div class="bar" style="left:' + pct + '%;width:3px"></div></div></td>';
+    body.appendChild(tr);
+  });
+
+  renderSnippets(window, salt);
+}
+
+function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderSnippets(window, salt) {
+  const algo = $('algo').value;
+  const cron = $('baseCron').value.trim();
+  $('snip-py').textContent =
+`# Deterministic per-job jitter (${algo}, window=${window}s)
+import time, hashlib, zlib
+
+WINDOW = ${window}
+SALT = ${JSON.stringify(salt)}
+
+def offset_for(job_id: str) -> int:
+    # FNV-1a keeps the offset stable across processes and languages
+    h = 2166136261
+    for b in (SALT + job_id).encode():
+        h ^= b
+        h = (h * 16777619) & 0xFFFFFFFF
+    return h % WINDOW
+
+def wait_slot(job_id: str):
+    now = int(time.time())
+    slot_start = now - (now % 3600)              # top of hour (cron: ${cron})
+    fire_at = slot_start + offset_for(job_id)
+    if fire_at <= now:
+        fire_at += 3600
+    time.sleep(fire_at - now)
+
+if __name__ == "__main__":
+    wait_slot("poll-webhook-tenant-1")
+    do_work()`;
+  $('snip-js').textContent =
+`// Deterministic per-job jitter (${algo}, window=${window}s)
+const WINDOW = ${window};
+const SALT = ${JSON.stringify(salt)};
+
+function offsetFor(jobId) {
+  let h = 0x811c9dc5;
+  const s = SALT + jobId;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) % WINDOW;
+}
+
+async function waitSlot(jobId) {
+  const now = Math.floor(Date.now() / 1000);
+  const slotStart = now - (now % 3600);         // top of hour (cron: ${cron})
+  let fireAt = slotStart + offsetFor(jobId);
+  if (fireAt <= now) fireAt += 3600;
+  await new Promise(r => setTimeout(r, (fireAt - now) * 1000));
+}`;
+  $('snip-go').textContent =
+`// Deterministic per-job jitter (${algo}, window=${window}s)
+package main
+
+import (
+    "hash/fnv"
+    "time"
+)
+
+const window = ${window}
+const salt = ${JSON.stringify(salt)}
+
+func offsetFor(jobID string) int {
+    h := fnv.New32a()
+    h.Write([]byte(salt + jobID))
+    return int(h.Sum32() % uint32(window))
+}
+
+func waitSlot(jobID string) {
+    now := time.Now().Unix()
+    slotStart := now - (now % 3600)             // top of hour (cron: ${cron})
+    fireAt := slotStart + int64(offsetFor(jobID))
+    if fireAt <= now {
+        fireAt += 3600
+    }
+    time.Sleep(time.Duration(fireAt-now) * time.Second)
+}`;
+  $('snip-bash').textContent =
+`#!/usr/bin/env bash
+# In crontab: ${cron} JOB_ID=poll-webhook-tenant-1 /usr/local/bin/staggered.sh
+WINDOW=${window}
+SALT=${JSON.stringify(salt)}
+JOB_ID="\${JOB_ID:?}"
+
+# stable FNV-1a offset via python one-liner (no build dep)
+OFFSET=\$(python3 -c 'import sys; h=0x811c9dc5; s=sys.argv[1]+sys.argv[2]
+for b in s.encode():
+  h ^= b; h = (h*16777619)&0xFFFFFFFF
+print(h % int(sys.argv[3]))' "\$SALT" "\$JOB_ID" "\$WINDOW")
+
+echo "sleeping \$OFFSET s before running \$JOB_ID"
+sleep "\$OFFSET"
+exec /path/to/real_job "\$JOB_ID"`;
+}
+
+function showTab(e, id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  e.currentTarget.classList.add('active');
+  ['py','js','go','bash'].forEach(k => {
+    $('snip-' + k).style.display = k === id ? 'block' : 'none';
+  });
+}
+
+function copyCSV() {
+  const rows = [['job','hash','offset_sec','fires_at']];
+  lastSchedule.forEach(r => rows.push([r.job, r.hash.toString(16), r.offset, fmtTime(r.offset)]));
+  navigator.clipboard.writeText(rows.map(r => r.join(',')).join('\n'));
+}
+function copyJSON() {
+  navigator.clipboard.writeText(JSON.stringify(lastSchedule.map(r => ({
+    job: r.job, hash: r.hash, offset_sec: r.offset, fires_at: fmtTime(r.offset)
+  })), null, 2));
+}
+
+run();
+</script>
+</body>
+</html>

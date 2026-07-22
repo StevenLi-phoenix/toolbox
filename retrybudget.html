@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP Retry Budget Calculator — Bound Retry Amplification (Google SRE)</title>
+<meta name="description" content="Compute a client-side retry budget as a bounded fraction of successful RPS. Simulates a partial outage to show how much amplification a naïve retry policy adds — and how a budget caps it.">
+<meta name="keywords" content="retry budget, retry amplification, google sre, envoy retry budget, circuit breaker, thundering herd, cascading failure, retry policy">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/retrybudget.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
+  .controls label { display: block; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .controls input, .controls select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; box-sizing: border-box;
+  }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+  .stat { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-size: 1.15rem; font-weight: 700; font-family: var(--mono); margin-top: 2px; }
+  .stat.warn { border-color: var(--warning); background: rgba(154, 103, 0, 0.06); }
+  .stat.warn .v { color: var(--warning); }
+  .stat.bad { border-color: var(--error); background: rgba(196, 30, 30, 0.06); }
+  .stat.bad .v { color: var(--error); }
+  .stat.good { border-color: var(--success); background: rgba(26, 140, 63, 0.05); }
+  .chart { width: 100%; height: 260px; margin-top: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .8rem; margin-top: 6px; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; border-radius: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: .84rem; margin-top: 10px; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  th { background: var(--surface2); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.num { text-align: right; }
+  .snippet { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; font-family: var(--mono); font-size: .82rem; white-space: pre; overflow-x: auto; margin-top: 8px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .tab { padding: 6px 14px; border: none; background: transparent; cursor: pointer; font-size: .84rem; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .verdict { padding: 12px; border-radius: var(--radius); margin-top: 12px; font-size: .9rem; line-height: 1.6; }
+  .verdict.good { border: 1px solid var(--success); background: rgba(26, 140, 63, 0.05); color: var(--text); }
+  .verdict.warn { border: 1px solid var(--warning); background: rgba(154, 103, 0, 0.06); }
+  .verdict.bad  { border: 1px solid var(--error); background: rgba(196, 30, 30, 0.06); }
+  @media (max-width: 768px) { .controls, .stats { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>HTTP Retry Budget Calculator</h1>
+<p class="subtitle">Retries are how a healthy service turns a partial outage into a total one. The Google SRE fix — later shipped in Envoy and gRPC — is a <em>retry budget</em>: allow no more than <code>budget × successful RPS</code> retries per client per rolling window, with a minimum floor. When the origin is healthy, the ratio is negligible. When the origin is dying, retries are capped at the fraction the origin can spare — no cascading failure, and the client still gets the tail-latency win under normal conditions.</p>
+
+<div class="card">
+  <div class="controls">
+    <div>
+      <label for="rps">Normal client RPS</label>
+      <input id="rps" type="number" min="1" value="1000" oninput="run()">
+    </div>
+    <div>
+      <label for="baseErr">Baseline error rate (%)</label>
+      <input id="baseErr" type="number" min="0" max="100" step="0.1" value="0.5" oninput="run()">
+    </div>
+    <div>
+      <label for="maxAttempts">Max attempts per request</label>
+      <input id="maxAttempts" type="number" min="1" max="10" value="3" oninput="run()">
+    </div>
+    <div>
+      <label for="budget">Retry budget (% of successes)</label>
+      <input id="budget" type="number" min="0" max="200" step="1" value="20" oninput="run()">
+    </div>
+    <div>
+      <label for="minRetries">Min retries / window</label>
+      <input id="minRetries" type="number" min="0" value="3" oninput="run()">
+    </div>
+    <div>
+      <label for="window">Window (s)</label>
+      <input id="window" type="number" min="1" value="10" oninput="run()">
+    </div>
+    <div>
+      <label for="outageStart">Outage error rate (%)</label>
+      <input id="outageStart" type="number" min="0" max="100" step="1" value="40" oninput="run()">
+    </div>
+    <div>
+      <label for="outageDur">Outage duration (s)</label>
+      <input id="outageDur" type="number" min="10" value="60" oninput="run()">
+    </div>
+    <div>
+      <label for="preset">Preset</label>
+      <select id="preset" onchange="applyPreset()">
+        <option value="">— custom —</option>
+        <option value="envoy">Envoy default (20% + 3)</option>
+        <option value="grpc">gRPC-Java (10% + 10)</option>
+        <option value="conservative">Conservative (10% + 3)</option>
+        <option value="aggressive">Aggressive (50% + 10)</option>
+        <option value="none">No budget (naïve)</option>
+      </select>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat" id="stEffRPS"><div class="k">Origin load, normal</div><div class="v">—</div></div>
+    <div class="stat" id="stOutageRPS"><div class="k">Origin load, outage</div><div class="v">—</div></div>
+    <div class="stat" id="stAmp"><div class="k">Amplification factor</div><div class="v">—</div></div>
+    <div class="stat" id="stSuccess"><div class="k">Effective success rate</div><div class="v">—</div></div>
+  </div>
+  <svg id="chart" class="chart" viewBox="0 0 900 260" preserveAspectRatio="none"></svg>
+  <div class="legend">
+    <span><span class="sw" style="background:#111"></span>Origin RPS (naïve retries)</span>
+    <span><span class="sw" style="background:#1a8c3f"></span>Origin RPS (with budget)</span>
+    <span><span class="sw" style="background:#c41e1e"></span>Budget cap</span>
+    <span><span class="sw" style="background:#666"></span>Baseline / outage rate</span>
+  </div>
+  <div id="verdict"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Per-window breakdown</h2>
+  <div style="overflow-x:auto"><table id="windowTable">
+    <thead><tr><th>t (s)</th><th class="num">Error %</th><th class="num">Requests</th><th class="num">Retries wanted</th><th class="num">Retries allowed</th><th class="num">Retries dropped</th><th class="num">Origin RPS</th><th class="num">User success %</th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Wire it up</h2>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(event,'envoy')">Envoy</button>
+    <button class="tab" onclick="showTab(event,'grpc')">gRPC-Java</button>
+    <button class="tab" onclick="showTab(event,'istio')">Istio</button>
+    <button class="tab" onclick="showTab(event,'js')">JavaScript</button>
+    <button class="tab" onclick="showTab(event,'py')">Python</button>
+  </div>
+  <div id="snip-envoy" class="snippet"></div>
+  <div id="snip-grpc" class="snippet" style="display:none"></div>
+  <div id="snip-istio" class="snippet" style="display:none"></div>
+  <div id="snip-js" class="snippet" style="display:none"></div>
+  <div id="snip-py" class="snippet" style="display:none"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">How to read the numbers</h2>
+  <ul style="font-size:.9rem;color:var(--muted);line-height:1.75;padding-left:20px">
+    <li><b>Amplification factor</b> is <code>origin_rps / client_rps</code> during the outage. A naïve <code>max_attempts=3</code> policy hits 3× when every request fails and retries twice. A retry budget caps this at <code>1 + budget</code> ≈ 1.2× for a 20% budget.</li>
+    <li><b>Min-retries floor</b> matters when the client is low-volume — with 5 RPS at 20%, the budget alone allows only 1 retry/sec, so a single flaky burst can't retry at all. The floor lets small clients still get transient-error retries without penalising the origin at scale.</li>
+    <li><b>Rolling window</b> should be short (5–30 s) — longer windows let retries "borrow" from stale success history and let cascade recovery lag behind reality.</li>
+    <li><b>Effective success rate</b> is the % of user requests that eventually succeed, including exhausted retries. A budget trades a small drop here (during outage) for a big drop in origin load — the point is <em>keep the origin alive so it can recover</em>, not maximise short-term success.</li>
+  </ul>
+</div>
+
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const PRESETS = {
+  envoy:        { budget: 20, min: 3 },
+  grpc:         { budget: 10, min: 10 },
+  conservative: { budget: 10, min: 3 },
+  aggressive:   { budget: 50, min: 10 },
+  none:         { budget: 10000, min: 100000 },
+};
+function applyPreset() {
+  const p = PRESETS[$('preset').value];
+  if (!p) return;
+  $('budget').value = p.budget;
+  $('minRetries').value = p.min;
+  run();
+}
+
+function simulate() {
+  const rps = +$('rps').value;
+  const base = +$('baseErr').value / 100;
+  const maxA = +$('maxAttempts').value;
+  const budgetPct = +$('budget').value / 100;
+  const minRetries = +$('minRetries').value;
+  const window = +$('window').value;
+  const oErr = +$('outageStart').value / 100;
+  const oDur = +$('outageDur').value;
+
+  const preSteady = 30;
+  const total = preSteady + oDur + 60;                  // seconds
+  const bins = Math.ceil(total / window);
+  const rows = [];
+  const recentSuccess = [];                             // sliding successes-per-window history
+
+  for (let b = 0; b < bins; b++) {
+    const tMid = b * window + window / 2;
+    const inOutage = tMid >= preSteady && tMid < preSteady + oDur;
+    const err = inOutage ? oErr : base;
+    const reqs = rps * window;
+    // Budget = budgetPct × successes-in-previous-window, floored by minRetries
+    const recent = recentSuccess.length ? recentSuccess[recentSuccess.length - 1] : reqs * (1 - base);
+    const allowed = Math.max(minRetries, Math.round(recent * budgetPct));
+
+    // Simulate attempts. Each request tries up to maxA times.
+    // With budget: cap total retries at "allowed".
+    const failuresFirstAttempt = Math.round(reqs * err);
+    const wanted = failuresFirstAttempt * (maxA - 1);   // pretend every retry re-fails at same rate ⇒ we retry until success or exhausted
+
+    // Retries actually issued (both models):
+    // For each retry issued, it re-fails at same rate. So origin_rps = reqs + retries_issued.
+    // User success = successes on first attempt + successes on any retry attempt.
+    let issuedNaive = 0, issuedBudget = 0;
+    let userSuccess = failuresFirstAttempt;             // gets updated
+    // Naïve
+    let stillFailing = failuresFirstAttempt;
+    for (let a = 2; a <= maxA; a++) {
+      issuedNaive += stillFailing;
+      const succ = Math.round(stillFailing * (1 - err));
+      stillFailing = stillFailing - succ;
+    }
+    const userSuccessNaive = reqs - stillFailing;
+
+    // Budget
+    let remainingBudget = allowed;
+    let sf = failuresFirstAttempt;
+    for (let a = 2; a <= maxA; a++) {
+      const retry = Math.min(sf, remainingBudget);
+      issuedBudget += retry;
+      remainingBudget -= retry;
+      const succ = Math.round(retry * (1 - err));
+      sf = (sf - retry) + (retry - succ);   // dropped + failed-again
+      if (remainingBudget <= 0) break;
+    }
+    const userSuccessBudget = reqs - sf;
+
+    const originNaive = reqs + issuedNaive;
+    const originBudget = reqs + issuedBudget;
+
+    recentSuccess.push(reqs - failuresFirstAttempt);
+    if (recentSuccess.length > 3) recentSuccess.shift();
+
+    rows.push({
+      t: b * window,
+      err, reqs,
+      wanted,
+      allowed,
+      dropped: Math.max(0, issuedNaive - issuedBudget),
+      originNaive, originBudget,
+      userSuccessNaive: userSuccessNaive / reqs,
+      userSuccessBudget: userSuccessBudget / reqs,
+      inOutage,
+    });
+  }
+  return { rows, window, rps, preSteady, oDur };
+}
+
+function fmtInt(n) { return Math.round(n).toLocaleString(); }
+function fmtPct(f) { return (f * 100).toFixed(f < 0.1 ? 2 : 1) + '%'; }
+
+let sim;
+
+function run() {
+  sim = simulate();
+  const outageRows = sim.rows.filter(r => r.inOutage);
+  const steadyRows = sim.rows.filter(r => !r.inOutage && r.t < sim.preSteady);
+  const steady = steadyRows[steadyRows.length - 1] || sim.rows[0];
+  const peak = outageRows.reduce((a, r) => r.originBudget > a.originBudget ? r : a, outageRows[0] || sim.rows[0]);
+  const peakNaive = outageRows.reduce((a, r) => r.originNaive > a.originNaive ? r : a, outageRows[0] || sim.rows[0]);
+
+  const normalRPS = steady.originBudget / sim.window;
+  const outageRPS = peak.originBudget / sim.window;
+  const outageNaiveRPS = peakNaive.originNaive / sim.window;
+  const amp = outageNaiveRPS / sim.rps;
+
+  const setStat = (id, val, cls) => {
+    const el = $(id);
+    el.querySelector('.v').textContent = val;
+    el.className = 'stat' + (cls ? ' ' + cls : '');
+  };
+  setStat('stEffRPS', fmtInt(normalRPS) + ' RPS', 'good');
+  setStat('stOutageRPS', fmtInt(outageRPS) + ' vs ' + fmtInt(outageNaiveRPS) + ' RPS',
+          outageRPS < outageNaiveRPS * 0.6 ? 'good' : 'warn');
+  setStat('stAmp', amp.toFixed(2) + '× (naïve)', amp > 2 ? 'bad' : amp > 1.5 ? 'warn' : 'good');
+  const userSuccessAvg = outageRows.length ?
+    outageRows.reduce((a, r) => a + r.userSuccessBudget, 0) / outageRows.length : 1;
+  setStat('stSuccess', fmtPct(userSuccessAvg),
+          userSuccessAvg > 0.95 ? 'good' : userSuccessAvg > 0.85 ? 'warn' : 'bad');
+
+  renderTable();
+  renderChart();
+  renderVerdict(amp, outageRPS, outageNaiveRPS, userSuccessAvg);
+  renderSnippets();
+}
+
+function renderTable() {
+  const body = $('windowTable').querySelector('tbody');
+  body.innerHTML = '';
+  sim.rows.forEach(r => {
+    const tr = document.createElement('tr');
+    if (r.inOutage) tr.style.background = 'rgba(196, 30, 30, 0.05)';
+    tr.innerHTML =
+      '<td>' + r.t + '</td>' +
+      '<td class="num">' + (r.err * 100).toFixed(1) + '</td>' +
+      '<td class="num">' + fmtInt(r.reqs) + '</td>' +
+      '<td class="num">' + fmtInt(r.wanted) + '</td>' +
+      '<td class="num">' + fmtInt(r.allowed) + '</td>' +
+      '<td class="num">' + fmtInt(r.dropped) + '</td>' +
+      '<td class="num">' + fmtInt(r.originBudget / sim.window) + '</td>' +
+      '<td class="num">' + fmtPct(r.userSuccessBudget) + '</td>';
+    body.appendChild(tr);
+  });
+}
+
+function renderChart() {
+  const svg = $('chart');
+  const w = 900, h = 260, pad = { l: 50, r: 20, t: 12, b: 30 };
+  const maxRps = Math.max(...sim.rows.map(r => Math.max(r.originNaive, r.originBudget))) / sim.window;
+  const yMax = maxRps * 1.1;
+  const totalT = sim.rows[sim.rows.length - 1].t + sim.window;
+  const x = t => pad.l + (t / totalT) * (w - pad.l - pad.r);
+  const y = v => h - pad.b - (v / yMax) * (h - pad.b - pad.t);
+
+  const path = (getter) => 'M ' + sim.rows.map(r => x(r.t + sim.window / 2) + ' ' + y(getter(r) / sim.window)).join(' L ');
+
+  // Axes
+  const yTicks = 5;
+  let axes = '';
+  for (let i = 0; i <= yTicks; i++) {
+    const v = (yMax * i / yTicks);
+    axes += '<line x1="' + pad.l + '" y1="' + y(v) + '" x2="' + (w - pad.r) + '" y2="' + y(v) + '" stroke="#eee"/>';
+    axes += '<text x="' + (pad.l - 6) + '" y="' + (y(v) + 4) + '" font-size="10" text-anchor="end" fill="#666" font-family="ui-monospace, monospace">' + Math.round(v) + '</text>';
+  }
+  const xTicks = 6;
+  for (let i = 0; i <= xTicks; i++) {
+    const t = totalT * i / xTicks;
+    axes += '<text x="' + x(t) + '" y="' + (h - 10) + '" font-size="10" text-anchor="middle" fill="#666" font-family="ui-monospace, monospace">' + Math.round(t) + 's</text>';
+  }
+
+  // Outage shading
+  const oStart = x(sim.preSteady), oEnd = x(sim.preSteady + sim.oDur);
+  const outageBox = '<rect x="' + oStart + '" y="' + pad.t + '" width="' + (oEnd - oStart) + '" height="' + (h - pad.t - pad.b) + '" fill="#c41e1e" opacity="0.06"/>';
+  const outageLabel = '<text x="' + ((oStart+oEnd)/2) + '" y="' + (pad.t + 12) + '" font-size="10" text-anchor="middle" fill="#c41e1e">outage</text>';
+
+  // Budget cap line
+  const budgetCapPath = 'M ' + sim.rows.map(r => x(r.t + sim.window / 2) + ' ' + y((r.reqs + r.allowed) / sim.window)).join(' L ');
+
+  svg.innerHTML = axes + outageBox + outageLabel +
+    '<path d="' + path(r => r.originNaive) + '" stroke="#111" stroke-width="1.8" fill="none"/>' +
+    '<path d="' + path(r => r.originBudget) + '" stroke="#1a8c3f" stroke-width="2" fill="none"/>' +
+    '<path d="' + budgetCapPath + '" stroke="#c41e1e" stroke-width="1.2" stroke-dasharray="4,3" fill="none"/>';
+}
+
+function renderVerdict(amp, outageBudget, outageNaive, userSuccessAvg) {
+  const el = $('verdict');
+  const budgetPct = +$('budget').value;
+  const saved = outageNaive - outageBudget;
+  const savedPct = outageNaive > 0 ? (saved / outageNaive * 100).toFixed(0) : 0;
+  let cls, txt;
+  if (budgetPct >= 100) {
+    cls = 'bad';
+    txt = 'A budget ≥100% means retries can equal or exceed original traffic — that\'s not a budget, that\'s permission to hammer. Real-world defaults sit around 10–20%.';
+  } else if (amp > 2.5) {
+    cls = 'bad';
+    txt = 'Naïve amplification is ' + amp.toFixed(2) + '× — a bad outage on this policy would push origin load to ' + fmtInt(outageNaive) + ' RPS. The budget shaves that to ' + fmtInt(outageBudget) + ' RPS (' + savedPct + '% reduction). Ship the budget.';
+  } else if (userSuccessAvg < 0.85) {
+    cls = 'warn';
+    txt = 'Budget is holding the origin at ' + fmtInt(outageBudget) + ' RPS, but effective success drops to ' + fmtPct(userSuccessAvg) + '. Consider raising max attempts once the origin has more headroom, or reducing the outage error assumption if it\'s pessimistic.';
+  } else {
+    cls = 'good';
+    txt = 'Origin load stays under ' + fmtInt(outageBudget) + ' RPS during the outage while users still see ' + fmtPct(userSuccessAvg) + ' effective success. The budget is doing its job.';
+  }
+  el.className = 'verdict ' + cls;
+  el.textContent = txt;
+}
+
+function renderSnippets() {
+  const budget = +$('budget').value;
+  const min = +$('minRetries').value;
+  const maxA = +$('maxAttempts').value;
+  $('snip-envoy').textContent =
+`# Envoy retry policy with budget (route-level)
+route:
+  cluster: upstream_service
+  retry_policy:
+    retry_on: "5xx,reset,connect-failure,refused-stream"
+    num_retries: ${maxA - 1}
+    per_try_timeout: 2s
+    retry_budget:
+      budget_percent:
+        value: ${budget}
+      min_retry_concurrency: ${min}`;
+  $('snip-grpc').textContent =
+`// gRPC-Java service config with retryThrottling
+{
+  "methodConfig": [{
+    "name": [{ "service": "example.EchoService" }],
+    "retryPolicy": {
+      "maxAttempts": ${maxA},
+      "initialBackoff": "0.1s",
+      "maxBackoff": "1s",
+      "backoffMultiplier": 2,
+      "retryableStatusCodes": ["UNAVAILABLE", "DEADLINE_EXCEEDED"]
+    }
+  }],
+  "retryThrottling": {
+    "maxTokens": ${min * 2},
+    "tokenRatio": ${(budget / 100).toFixed(2)}
+  }
+}`;
+  $('snip-istio').textContent =
+`# Istio VirtualService — retries + DestinationRule circuit breaker.
+# Istio has no first-class retry-budget; pair retries with an outlier detector
+# that pulls the endpoint out of load balancing once retry pressure climbs.
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+spec:
+  http:
+  - retries:
+      attempts: ${maxA - 1}
+      perTryTimeout: 2s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+spec:
+  trafficPolicy:
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50`;
+  $('snip-js').textContent =
+`// Client-side retry budget (rolling ${$('window').value}s window).
+class RetryBudget {
+  constructor({ ratio = ${(budget/100).toFixed(2)}, minRetries = ${min}, windowMs = ${$('window').value * 1000} }) {
+    this.ratio = ratio;
+    this.minRetries = minRetries;
+    this.windowMs = windowMs;
+    this.successes = [];   // timestamps
+    this.retries = [];
+  }
+  _sweep(arr, now) {
+    while (arr.length && arr[0] < now - this.windowMs) arr.shift();
+  }
+  recordSuccess() { this.successes.push(Date.now()); }
+  tryRetry() {
+    const now = Date.now();
+    this._sweep(this.successes, now);
+    this._sweep(this.retries, now);
+    const allowed = Math.max(this.minRetries, Math.floor(this.successes.length * this.ratio));
+    if (this.retries.length >= allowed) return false;
+    this.retries.push(now);
+    return true;
+  }
+}
+
+const budget = new RetryBudget({});
+async function callWithBudget(fn) {
+  for (let attempt = 1; attempt <= ${maxA}; attempt++) {
+    try {
+      const r = await fn();
+      budget.recordSuccess();
+      return r;
+    } catch (e) {
+      if (attempt === ${maxA} || !budget.tryRetry()) throw e;
+      await new Promise(r => setTimeout(r, 100 * 2 ** (attempt - 1) * (0.5 + Math.random())));
+    }
+  }
+}`;
+  $('snip-py').textContent =
+`# Client-side retry budget (thread-safe, rolling ${$('window').value}s window).
+import time, random, threading
+from collections import deque
+
+class RetryBudget:
+    def __init__(self, ratio=${(budget/100).toFixed(2)}, min_retries=${min}, window_s=${$('window').value}):
+        self.ratio, self.min_retries, self.window_s = ratio, min_retries, window_s
+        self.successes: deque[float] = deque()
+        self.retries:   deque[float] = deque()
+        self.lock = threading.Lock()
+
+    def _sweep(self, dq, now):
+        while dq and dq[0] < now - self.window_s:
+            dq.popleft()
+
+    def record_success(self):
+        with self.lock:
+            self.successes.append(time.monotonic())
+
+    def try_retry(self) -> bool:
+        with self.lock:
+            now = time.monotonic()
+            self._sweep(self.successes, now); self._sweep(self.retries, now)
+            allowed = max(self.min_retries, int(len(self.successes) * self.ratio))
+            if len(self.retries) >= allowed:
+                return False
+            self.retries.append(now)
+            return True
+
+budget = RetryBudget()
+
+def call_with_budget(fn, *, max_attempts=${maxA}):
+    for attempt in range(1, max_attempts + 1):
+        try:
+            r = fn()
+            budget.record_success()
+            return r
+        except Exception:
+            if attempt == max_attempts or not budget.try_retry():
+                raise
+            time.sleep(0.1 * (2 ** (attempt - 1)) * (0.5 + random.random()))`;
+}
+
+function showTab(e, id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  e.currentTarget.classList.add('active');
+  ['envoy','grpc','istio','js','py'].forEach(k => {
+    $('snip-' + k).style.display = k === id ? 'block' : 'none';
+  });
+}
+
+run();
+</script>
+</body>
+</html>
