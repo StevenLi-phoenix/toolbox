@@ -145,6 +145,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Damerau-Levenshtein Distance](damerau.html) | Edit distance that also counts adjacent transpositions — one operation for the classic *teh → the* typo instead of two. Colour-coded DP matrix with the optimal path, per-op traceback (match / substitute / insert / delete / transpose), Unicode-code-point mode, and case-insensitive toggle. |
 | [Greek Letter Reference](greek.html) | All 24 Greek letters (uppercase, lowercase, plus the seven Unicode-encoded math-italic variants like ϐ, ϑ, ϖ, ϱ, ϵ, ϕ, ϰ, and final sigma ς) with their LaTeX command, HTML entity, Unicode codepoint, transliteration, and the physics / statistics / math contexts where you'll actually meet them. Click any value to copy. |
 | [Scrabble & Word Score Calculator](scrabble.html) | Compute the score of any word in Scrabble (TWL/SOWPODS), Words With Friends, or Boggle. Tap tile multipliers (DL, TL, DW, TW) per letter, flag blank wildcards as zero-point tiles, and add the 50-point *bingo* bonus for laying down all seven rack tiles in one turn. |
 | [Jaro-Winkler Similarity Calculator](jarowinkler.html) | Compute Jaro and Jaro-Winkler scores between two strings with adjustable prefix length and scaling factor — plus Jaro distance, Sørensen-Dice on bigrams, and normalized Levenshtein — with a character match map that highlights prefix, matched, and transposed letters. |
@@ -179,6 +180,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Shamir's Secret Sharing](shamir.html) | Split a secret into `N` shares of which any `K` can rebuild it — one byte at a time over `GF(2⁸)` (the AES field). Text / hex / base64 secrets, share format `XX-HEX`, and a round-trip combiner that verifies Lagrange interpolation reconstructs the original. Uses `crypto.getRandomValues` for share randomness. |
 | [Damm Check Digit Calculator](damm.html) | Compute and validate Damm check digits — a decimal checksum built on a weakly totally anti-symmetric 10×10 quasigroup. Catches every single-digit substitution and every adjacent-digit transposition (unlike Luhn), needs only one lookup table (unlike Verhoeff's three), and the check digit falls out as the interim value itself. Step-by-step trace, generator, and side-by-side comparison with Luhn and Verhoeff. |
 | [Fletcher Checksum Calculator](fletcher.html) | Compute Fletcher-16, Fletcher-32, and Fletcher-64 with a live block-by-block accumulator trace, hex / text / ASCII input, tail-padding options, and side-by-side comparison against Adler-32, XOR sum, and the RFC 1071 IP checksum. Used by OSI CLNP, DECnet, TLS, and ZFS. |
 | [BCD (Binary-Coded Decimal) Converter](bcd.html) | Convert decimal numbers to and from packed BCD (COBOL COMP-3), unpacked BCD, Excess-3, and Aiken 2-4-2-1 encodings — with per-digit nibble grid, hex-byte layout that highlights the sign nibble (`C`, `D`, `F`), and a reverse hex-bytes-to-decimal decoder that catches illegal `A`–`F` nibbles. |
@@ -272,6 +274,7 @@
 
 | Tool | Description |
 |------|-------------|
+| [Cuckoo Filter Visualizer](cuckoofilter.html) | Bloom-style approximate-membership filter with true *delete* support. Watch fingerprints slot into one of two candidate buckets (`i₁` and `i₁ ⊕ h(fp)`), see the kick chain cascade when both are full, and tune bucket count, slots-per-bucket, and fingerprint bits against the `2b / 2ᶠ` false-positive bound. |
 | [Erlang C / M/M/c Queue Calculator](mmc.html) | Size call centres, thread pools, and connection pools with the Erlang C formula. Given arrival rate λ, mean service time, and *c* servers, get utilization, probability of any wait, average wait time, queue length, service level `P(wait ≤ t)`, and the minimum staffing to hit a wait-time SLA — with a per-`c` staffing sweep. |
 | [Count-Min Sketch Visualizer](countminsketch.html) | Stream items into a `d × w` Count-Min counter grid, watch each row's independent hash light up its bucket, query point frequencies with the min-over-rows rule, and compare estimates against exact top-K to see the one-sided `εN` over-count bound in action. Tune `w` for `ε`, `d` for `δ`. |
 | [Tarjan's Strongly Connected Components](tarjan.html) | Walk a directed graph in one DFS pass — every vertex gets a DFS `index` and a `lowlink` (the smallest index reachable via any tree or back edge). When `lowlink[v] == index[v]`, everything on the open-vertex stack down to `v` is one SCC. See the stack grow, back edges pull low-link down, and every component pop in reverse topological order. |

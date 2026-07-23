@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shamir's Secret Sharing — Split &amp; Combine | DevToolbox</title>
+<meta name="description" content="Split a secret into N shares over GF(256) with a K-of-N threshold using Shamir's Secret Sharing. Combine any K shares to recover the original — all local in your browser.">
+<meta name="keywords" content="shamir, secret sharing, threshold, sss, GF(256), lagrange, key backup, split secret, recovery">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="Shamir's Secret Sharing">
+<meta property="og:description" content="Split a secret into K-of-N shares in your browser using Shamir's Secret Sharing over GF(256).">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/shamir.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/shamir.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.mode-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; max-width: 460px; }
+.mode-btn { flex: 1; padding: 10px; border: none; background: var(--surface); color: var(--muted); font-weight: 600; font-size: .82rem; cursor: pointer; }
+.mode-btn.active { background: var(--accent); color: #fff; }
+.pane { display: none; }
+.pane.active { display: block; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 6px; }
+.field .hint { font-size: .72rem; color: var(--muted); margin-top: 4px; }
+.field input, .field textarea, .field select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; box-sizing: border-box; }
+.field textarea { min-height: 100px; resize: vertical; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 16px; }
+.btn { padding: 10px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-weight: 600; font-size: .85rem; cursor: pointer; }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.shares { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.share { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+.share .tag { font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: .8rem; min-width: 44px; }
+.share .val { flex: 1; font-family: var(--mono); font-size: .82rem; word-break: break-all; color: var(--text); }
+.share .copy { padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--muted); cursor: pointer; font-size: .72rem; }
+.recovered { padding: 14px; border: 1px solid var(--success); border-radius: var(--radius); background: rgba(34, 197, 94, .07); margin-top: 12px; }
+.recovered .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.recovered .value { font-family: var(--mono); word-break: break-all; color: var(--text); }
+.err { padding: 12px 14px; border: 1px solid var(--error); border-radius: var(--radius); background: rgba(239, 68, 68, .07); color: var(--error); font-size: .85rem; margin-top: 12px; }
+.info { padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-size: .82rem; line-height: 1.6; margin-top: 24px; }
+.info h3 { margin: 0 0 8px; font-size: .9rem; }
+.info code { font-family: var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: .82rem; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<header>
+<h1>🔐 Shamir's Secret Sharing</h1>
+<p class="subtitle">Split a secret into N shares of which any K can rebuild it — one byte at a time over GF(2⁸), the same field AES uses.</p>
+</header>
+
+<div class="mode-toggle" id="modeToggle">
+<button class="mode-btn active" data-mode="split">Split → Shares</button>
+<button class="mode-btn" data-mode="combine">Shares → Secret</button>
+</div>
+
+<div class="pane active" id="paneSplit">
+<div class="field">
+<label for="secret">Secret</label>
+<textarea id="secret" placeholder="Enter the secret to split (text, password, or key)">correct horse battery staple</textarea>
+</div>
+<div class="field">
+<label>Input format</label>
+<select id="fmt">
+<option value="utf8" selected>UTF-8 text</option>
+<option value="hex">Hex bytes</option>
+<option value="b64">Base64</option>
+</select>
+</div>
+<div class="row">
+<div class="field">
+<label for="n">Total shares (N)</label>
+<input type="number" id="n" value="5" min="2" max="255">
+<div class="hint">2–255</div>
+</div>
+<div class="field">
+<label for="k">Threshold (K)</label>
+<input type="number" id="k" value="3" min="2" max="255">
+<div class="hint">Any K of N recover the secret</div>
+</div>
+</div>
+<div class="btnrow">
+<button class="btn primary" id="btnSplit">Generate Shares</button>
+<button class="btn" id="btnCopyAll">Copy All</button>
+</div>
+<div id="splitErr"></div>
+<div class="shares" id="shares"></div>
+</div>
+
+<div class="pane" id="paneCombine">
+<div class="field">
+<label for="pasted">Paste K or more shares (one per line)</label>
+<textarea id="pasted" placeholder="01-a3f2...&#10;03-4b18...&#10;05-e77c..."></textarea>
+</div>
+<div class="field">
+<label>Output format</label>
+<select id="outFmt">
+<option value="utf8" selected>UTF-8 text</option>
+<option value="hex">Hex bytes</option>
+<option value="b64">Base64</option>
+</select>
+</div>
+<div class="btnrow">
+<button class="btn primary" id="btnCombine">Recover Secret</button>
+</div>
+<div id="combineErr"></div>
+<div id="recovered"></div>
+</div>
+
+<div class="info">
+<h3>How it works</h3>
+<p>For each byte of the secret, a random degree-<code>K−1</code> polynomial <code>P(x)</code> is generated in <code>GF(2⁸)</code> (irreducible polynomial <code>0x11B</code>, same as AES), with the secret byte as the constant term <code>P(0)</code>. Share <code>i</code> stores <code>P(i)</code>. Any <code>K</code> shares recover <code>P(0)</code> by Lagrange interpolation; fewer reveal <em>nothing</em> — every possible secret byte is equally likely.</p>
+<p>Share format: <code>XX-HEX</code> where <code>XX</code> is the x-coordinate (1–255, hex) and <code>HEX</code> is the concatenated <code>P(x)</code> byte string.</p>
+<p><strong>Security notes:</strong> randomness comes from <code>crypto.getRandomValues</code>. Keep shares separately, never on the same device. Loss of any <code>N − K + 1</code> shares makes recovery impossible.</p>
+</div>
+
+<footer style="margin-top:32px; text-align:center; font-size:.82rem; color:var(--muted);">
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// GF(256) with irreducible polynomial 0x11B (AES) and generator 3 = x + 1.
+const EXP = new Uint8Array(512);
+const LOG = new Uint8Array(256);
+(function() {
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    EXP[i] = x;
+    LOG[x] = i;
+    // multiply by 3 (= x + 1): x*3 = 2*x XOR x, with 2*x reduced mod 0x11B
+    let dbl = x << 1;
+    if (dbl & 0x100) dbl ^= 0x11B;
+    x = dbl ^ x;
+  }
+  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+})();
+
+function gfMul(a, b) {
+  if (a === 0 || b === 0) return 0;
+  return EXP[LOG[a] + LOG[b]];
+}
+function gfDiv(a, b) {
+  if (a === 0) return 0;
+  if (b === 0) throw new Error('divide by zero');
+  return EXP[(LOG[a] - LOG[b] + 255) % 255];
+}
+function evalPoly(coef, x) {
+  let acc = 0;
+  for (let i = coef.length - 1; i >= 0; i--) {
+    acc = gfMul(acc, x) ^ coef[i];
+  }
+  return acc;
+}
+function interpolateAtZero(xs, ys) {
+  const k = xs.length;
+  let acc = 0;
+  for (let i = 0; i < k; i++) {
+    let num = 1, den = 1;
+    for (let j = 0; j < k; j++) {
+      if (i === j) continue;
+      num = gfMul(num, xs[j]);
+      den = gfMul(den, xs[i] ^ xs[j]);
+    }
+    acc ^= gfMul(ys[i], gfDiv(num, den));
+  }
+  return acc;
+}
+
+function toBytes(str, fmt) {
+  if (fmt === 'utf8') {
+    return new TextEncoder().encode(str);
+  }
+  if (fmt === 'hex') {
+    const clean = str.replace(/[^0-9a-fA-F]/g, '');
+    if (clean.length % 2) throw new Error('Hex must have an even number of digits');
+    const out = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
+    return out;
+  }
+  if (fmt === 'b64') {
+    const clean = str.trim();
+    const bin = atob(clean);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  throw new Error('Unknown format');
+}
+
+function fromBytes(bytes, fmt) {
+  if (fmt === 'utf8') return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  if (fmt === 'hex') return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+  if (fmt === 'b64') {
+    let s = '';
+    for (const b of bytes) s += String.fromCharCode(b);
+    return btoa(s);
+  }
+}
+
+function hex1(n) { return n.toString(16).padStart(2, '0'); }
+
+function split(secretBytes, n, k) {
+  if (n < 2 || n > 255) throw new Error('N must be 2–255');
+  if (k < 2 || k > n) throw new Error('K must be 2..N');
+  const rand = new Uint8Array(secretBytes.length * (k - 1));
+  crypto.getRandomValues(rand);
+  const shares = [];
+  for (let s = 1; s <= n; s++) {
+    const out = new Uint8Array(secretBytes.length);
+    for (let bi = 0; bi < secretBytes.length; bi++) {
+      const coef = new Uint8Array(k);
+      coef[0] = secretBytes[bi];
+      for (let ci = 1; ci < k; ci++) {
+        coef[ci] = rand[bi * (k - 1) + (ci - 1)];
+      }
+      out[bi] = evalPoly(coef, s);
+    }
+    shares.push({ x: s, y: out });
+  }
+  return shares;
+}
+
+function combine(shares) {
+  if (shares.length < 2) throw new Error('Need at least 2 shares');
+  const len = shares[0].y.length;
+  for (const s of shares) if (s.y.length !== len) throw new Error('Shares have differing lengths');
+  const xs = shares.map(s => s.x);
+  const seen = new Set();
+  for (const x of xs) { if (seen.has(x)) throw new Error('Duplicate x-coordinate: ' + x); seen.add(x); }
+  const out = new Uint8Array(len);
+  for (let bi = 0; bi < len; bi++) {
+    const ys = shares.map(s => s.y[bi]);
+    out[bi] = interpolateAtZero(xs, ys);
+  }
+  return out;
+}
+
+function encodeShare(s) {
+  return hex1(s.x) + '-' + [...s.y].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function parseShare(line) {
+  const m = line.trim().match(/^([0-9a-fA-F]{2})-([0-9a-fA-F]+)$/);
+  if (!m) throw new Error('Bad share format: ' + line);
+  const x = parseInt(m[1], 16);
+  if (x === 0) throw new Error('Share x-coordinate cannot be 0');
+  const hex = m[2];
+  if (hex.length % 2) throw new Error('Share payload must have even hex length');
+  const y = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < y.length; i++) y[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return { x, y };
+}
+
+function setMode(mode) {
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  $('paneSplit').classList.toggle('active', mode === 'split');
+  $('paneCombine').classList.toggle('active', mode === 'combine');
+}
+document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+$('btnSplit').addEventListener('click', () => {
+  const errBox = $('splitErr');
+  const shBox = $('shares');
+  errBox.innerHTML = '';
+  shBox.innerHTML = '';
+  try {
+    const bytes = toBytes($('secret').value, $('fmt').value);
+    if (bytes.length === 0) throw new Error('Secret is empty');
+    const n = parseInt($('n').value, 10);
+    const k = parseInt($('k').value, 10);
+    const shares = split(bytes, n, k);
+    for (const s of shares) {
+      const enc = encodeShare(s);
+      const row = document.createElement('div');
+      row.className = 'share';
+      row.innerHTML = '<div class="tag">Share ' + s.x + '</div><div class="val"></div><button class="copy">Copy</button>';
+      row.querySelector('.val').textContent = enc;
+      row.querySelector('.copy').addEventListener('click', () => {
+        navigator.clipboard.writeText(enc);
+        row.querySelector('.copy').textContent = 'Copied';
+        setTimeout(() => row.querySelector('.copy').textContent = 'Copy', 900);
+      });
+      shBox.appendChild(row);
+    }
+  } catch (e) {
+    errBox.innerHTML = '<div class="err">' + e.message + '</div>';
+  }
+});
+
+$('btnCopyAll').addEventListener('click', () => {
+  const lines = [...document.querySelectorAll('#shares .val')].map(v => v.textContent).join('\n');
+  if (lines) navigator.clipboard.writeText(lines);
+});
+
+$('btnCombine').addEventListener('click', () => {
+  const errBox = $('combineErr');
+  const outBox = $('recovered');
+  errBox.innerHTML = '';
+  outBox.innerHTML = '';
+  try {
+    const lines = $('pasted').value.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) throw new Error('Paste at least 2 shares (one per line)');
+    const shares = lines.map(parseShare);
+    const bytes = combine(shares);
+    const fmt = $('outFmt').value;
+    const text = fromBytes(bytes, fmt);
+    outBox.innerHTML = '<div class="recovered"><div class="label">Recovered secret</div><div class="value"></div></div>';
+    outBox.querySelector('.value').textContent = text;
+  } catch (e) {
+    errBox.innerHTML = '<div class="err">' + e.message + '</div>';
+  }
+});
+
+$('btnSplit').click();
+</script>
+</body>
+</html>

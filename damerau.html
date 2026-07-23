@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Damerau-Levenshtein Distance Calculator — Free Online Tool</title>
+<meta name="description" content="Compute the Damerau-Levenshtein edit distance between two strings — insert, delete, substitute, and adjacent-transpose — with a colour-coded DP matrix and traceback of the exact operations.">
+<meta name="keywords" content="damerau, levenshtein, edit distance, transposition, fuzzy match, spell check, DP, dynamic programming">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="Damerau-Levenshtein Distance Calculator">
+<meta property="og:description" content="Damerau-Levenshtein edit distance with DP matrix and step-by-step traceback.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/damerau.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/damerau.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.field label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 6px; }
+.field input, .field select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .95rem; box-sizing: border-box; }
+.opts { display: flex; gap: 20px; flex-wrap: wrap; margin: 8px 0 16px; font-size: .85rem; }
+.opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.results { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.result { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.result .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.result .value { font-family: var(--mono); font-weight: 700; font-size: 1.15rem; color: var(--text); word-break: break-all; }
+.result.highlight { border-color: var(--accent); background: rgba(99, 102, 241, .06); }
+.matrix-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--surface2); margin-bottom: 16px; }
+table.matrix { border-collapse: collapse; font-family: var(--mono); font-size: .82rem; }
+table.matrix th, table.matrix td { border: 1px solid var(--border); padding: 5px 8px; text-align: center; min-width: 30px; background: var(--bg); }
+table.matrix th { background: var(--surface); color: var(--muted); font-weight: 600; }
+table.matrix td.on-path { background: rgba(99, 102, 241, .18); color: var(--accent); font-weight: 700; }
+table.matrix td.transpose { background: rgba(34, 197, 94, .22); }
+.trace { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 16px; }
+.trace h3 { margin: 0 0 8px; font-size: .9rem; }
+.trace ol { margin: 0; padding-left: 22px; font-size: .85rem; line-height: 1.55; }
+.trace .op { display: inline-block; min-width: 76px; font-weight: 700; font-family: var(--mono); font-size: .72rem; padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.op.match { background: rgba(148, 163, 184, .2); color: var(--muted); }
+.op.sub   { background: rgba(234, 179, 8, .22); color: var(--warning); }
+.op.ins   { background: rgba(99, 102, 241, .2); color: var(--accent); }
+.op.del   { background: rgba(239, 68, 68, .2); color: var(--error); }
+.op.trans { background: rgba(34, 197, 94, .22); color: var(--success); }
+.info { padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-size: .82rem; line-height: 1.6; }
+.info h3 { margin: 0 0 8px; font-size: .9rem; }
+.info code { font-family: var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: .82rem; }
+@media (max-width: 640px) { .inputs { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<header>
+<h1>🔀 Damerau-Levenshtein Distance</h1>
+<p class="subtitle">Edit distance that also counts adjacent transpositions — one op instead of two for the classic <em>teh → the</em> typo.</p>
+</header>
+
+<div class="inputs">
+<div class="field">
+<label for="a">String A</label>
+<input type="text" id="a" value="acidental">
+</div>
+<div class="field">
+<label for="b">String B</label>
+<input type="text" id="b" value="accidental">
+</div>
+</div>
+<div class="opts">
+<label><input type="checkbox" id="ci"> Case-insensitive</label>
+<label><input type="checkbox" id="unicode" checked> Unicode-aware (code points)</label>
+</div>
+
+<div class="results">
+<div class="result highlight"><div class="label">Distance</div><div class="value" id="rDist">—</div></div>
+<div class="result"><div class="label">Similarity</div><div class="value" id="rSim">—</div></div>
+<div class="result"><div class="label">|A|</div><div class="value" id="rLenA">—</div></div>
+<div class="result"><div class="label">|B|</div><div class="value" id="rLenB">—</div></div>
+<div class="result"><div class="label">Transpositions</div><div class="value" id="rTrans">—</div></div>
+</div>
+
+<div class="matrix-wrap">
+<table class="matrix" id="mat"></table>
+</div>
+
+<div class="trace">
+<h3>Edit Script (optimal traceback)</h3>
+<ol id="script"></ol>
+</div>
+
+<div class="info">
+<h3>About</h3>
+<p>The <em>Damerau-Levenshtein</em> distance is the minimum number of insertions, deletions, substitutions, <strong>and adjacent transpositions</strong> to turn one string into another. It counts <code>ab → ba</code> as one operation, matching how humans actually mistype. Standard Levenshtein counts the same swap as two (substitute + substitute).</p>
+<p>This tool uses the <em>optimal string alignment</em> variant (a.k.a. restricted DL): each substring may be edited only once, so <code>CA → ABC</code> is 3 rather than the true DL distance of 2. That variant is O(mn) time and space, exactly matching the DP recurrence shown in the matrix.</p>
+<p>Cell colouring: purple = cells on one optimal path; green = cells where a transposition was taken.</p>
+</div>
+
+<footer style="margin-top:32px; text-align:center; font-size:.82rem; color:var(--muted);">
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function toChars(s, unicode) {
+  if (!unicode) return s.split('');
+  return Array.from(s);
+}
+
+function dl(a, b) {
+  const m = a.length, n = b.length;
+  const d = [];
+  for (let i = 0; i <= m; i++) {
+    d.push(new Array(n + 1).fill(0));
+    d[i][0] = i;
+  }
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let v = Math.min(
+        d[i - 1][j] + 1,        // deletion
+        d[i][j - 1] + 1,        // insertion
+        d[i - 1][j - 1] + cost  // substitution / match
+      );
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        v = Math.min(v, d[i - 2][j - 2] + 1);
+      }
+      d[i][j] = v;
+    }
+  }
+  return d;
+}
+
+function traceback(a, b, d) {
+  const m = a.length, n = b.length;
+  const path = new Set([m + ',' + n]);
+  const trans = new Set();
+  const ops = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1] && d[i][j] === d[i - 2][j - 2] + 1) {
+      ops.push({ op: 'transpose', ch: a[i - 2] + a[i - 1] + ' ⇄ ' + b[j - 2] + b[j - 1], i, j });
+      trans.add(i + ',' + j);
+      i -= 2; j -= 2;
+      path.add(i + ',' + j);
+      continue;
+    }
+    if (i > 0 && j > 0) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      if (d[i][j] === d[i - 1][j - 1] + cost) {
+        ops.push({ op: cost === 0 ? 'match' : 'sub', ch: a[i - 1] + (cost ? ' → ' + b[j - 1] : ''), i, j });
+        i--; j--;
+        path.add(i + ',' + j);
+        continue;
+      }
+    }
+    if (i > 0 && d[i][j] === d[i - 1][j] + 1) {
+      ops.push({ op: 'delete', ch: a[i - 1], i, j });
+      i--;
+      path.add(i + ',' + j);
+      continue;
+    }
+    if (j > 0 && d[i][j] === d[i][j - 1] + 1) {
+      ops.push({ op: 'insert', ch: b[j - 1], i, j });
+      j--;
+      path.add(i + ',' + j);
+      continue;
+    }
+    break;
+  }
+  ops.reverse();
+  return { ops, path, trans };
+}
+
+function opClass(op) {
+  return { match: 'match', sub: 'sub', insert: 'ins', delete: 'del', transpose: 'trans' }[op];
+}
+function opLabel(op) {
+  return { match: 'MATCH', sub: 'SUBSTITUTE', insert: 'INSERT', delete: 'DELETE', transpose: 'TRANSPOSE' }[op];
+}
+function escape(ch) {
+  if (ch === ' ') return '␠';
+  if (ch === '\t') return '⇥';
+  return ch;
+}
+
+function render() {
+  let sa = $('a').value, sb = $('b').value;
+  if ($('ci').checked) { sa = sa.toLowerCase(); sb = sb.toLowerCase(); }
+  const A = toChars(sa, $('unicode').checked);
+  const B = toChars(sb, $('unicode').checked);
+  const d = dl(A, B);
+  const { ops, path, trans } = traceback(A, B, d);
+  const dist = d[A.length][B.length];
+  const maxLen = Math.max(A.length, B.length);
+  const sim = maxLen === 0 ? 1 : 1 - dist / maxLen;
+
+  $('rDist').textContent = dist;
+  $('rSim').textContent = (sim * 100).toFixed(1) + '%';
+  $('rLenA').textContent = A.length;
+  $('rLenB').textContent = B.length;
+  $('rTrans').textContent = ops.filter(o => o.op === 'transpose').length;
+
+  const tbl = $('mat');
+  tbl.innerHTML = '';
+  const head = document.createElement('tr');
+  head.innerHTML = '<th></th><th>ε</th>' + B.map(c => '<th>' + escape(c) + '</th>').join('');
+  tbl.appendChild(head);
+  for (let i = 0; i <= A.length; i++) {
+    const tr = document.createElement('tr');
+    const label = i === 0 ? 'ε' : escape(A[i - 1]);
+    tr.innerHTML = '<th>' + label + '</th>';
+    for (let j = 0; j <= B.length; j++) {
+      const td = document.createElement('td');
+      td.textContent = d[i][j];
+      const key = i + ',' + j;
+      if (path.has(key)) td.classList.add('on-path');
+      if (trans.has(key)) td.classList.add('transpose');
+      tr.appendChild(td);
+    }
+    tbl.appendChild(tr);
+  }
+
+  const scr = $('script');
+  scr.innerHTML = '';
+  if (ops.length === 0) {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="op match">MATCH</span>strings are identical';
+    scr.appendChild(li);
+  }
+  for (const o of ops) {
+    const li = document.createElement('li');
+    const label = opLabel(o.op);
+    li.innerHTML = '<span class="op ' + opClass(o.op) + '">' + label + '</span>' + escape(o.ch);
+    scr.appendChild(li);
+  }
+}
+
+['a', 'b', 'ci', 'unicode'].forEach(id => $(id).addEventListener('input', render));
+render();
+</script>
+</body>
+</html>

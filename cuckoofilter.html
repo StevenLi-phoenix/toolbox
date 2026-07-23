@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cuckoo Filter Visualizer — Insert, Lookup &amp; Delete | DevToolbox</title>
+<meta name="description" content="Interactive Cuckoo filter visualizer — watch fingerprints slot into buckets, kick chains cascade to alternate locations, and delete work (unlike Bloom). Tune bucket count, slots, and fingerprint bits.">
+<meta name="keywords" content="cuckoo filter, visualizer, probabilistic data structure, bloom alternative, fingerprint, kick chain, false positive">
+<meta name="author" content="Steven Li">
+<meta property="og:title" content="Cuckoo Filter Visualizer">
+<meta property="og:description" content="Interactive Cuckoo filter — fingerprint buckets, kick chains, and true deletion.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevenli-phoenix.github.io/toolbox/cuckoofilter.html">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/cuckoofilter.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 16px; }
+.field label { display: block; font-size: .78rem; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+.field input, .field select { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .85rem; box-sizing: border-box; }
+.opsrow { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: flex-end; }
+.opsrow .field { flex: 1 1 220px; }
+.btn { padding: 9px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-weight: 600; font-size: .85rem; cursor: pointer; white-space: nowrap; }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.danger { background: var(--error); color: #fff; border-color: var(--error); }
+.btn.ghost { background: transparent; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.stat { padding: 11px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.stat .label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+.stat .value { font-family: var(--mono); font-weight: 700; font-size: 1.05rem; }
+.log { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); max-height: 160px; overflow-y: auto; font-family: var(--mono); font-size: .78rem; line-height: 1.55; margin-bottom: 16px; }
+.log .line { padding: 2px 0; }
+.log .ok { color: var(--success); }
+.log .warn { color: var(--warning); }
+.log .err { color: var(--error); }
+.log .info { color: var(--muted); }
+.grid-wrap { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); margin-bottom: 20px; overflow-x: auto; }
+.buckets { display: grid; gap: 6px; }
+.bucket { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+.bucket .idx { font-family: var(--mono); font-size: .7rem; color: var(--muted); min-width: 42px; text-align: right; padding-right: 6px; }
+.slot { flex: 1; min-width: 40px; padding: 6px 4px; text-align: center; font-family: var(--mono); font-size: .72rem; font-weight: 700; border: 1px dashed var(--border); border-radius: 4px; background: var(--surface); color: var(--muted); }
+.slot.filled { border: 1px solid var(--accent); background: rgba(99, 102, 241, .12); color: var(--accent); }
+.slot.pulse { animation: pulse 700ms ease-out; }
+.slot.kicked { background: rgba(239, 68, 68, .22); border-color: var(--error); color: var(--error); }
+.slot.hit { background: rgba(34, 197, 94, .2); border-color: var(--success); color: var(--success); }
+@keyframes pulse { 0% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(99, 102, 241, .25); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); } }
+.info { padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); font-size: .82rem; line-height: 1.6; }
+.info h3 { margin: 0 0 8px; font-size: .9rem; }
+.info code { font-family: var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: .82rem; }
+.info ul { margin: 6px 0 0 18px; padding: 0; }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<header>
+<h1>🐦 Cuckoo Filter Visualizer</h1>
+<p class="subtitle">A Bloom-style approximate-membership filter that also supports <em>delete</em> — fingerprints live in one of two buckets and get kicked around when things get tight.</p>
+</header>
+
+<div class="controls">
+<div class="field">
+<label for="m">Buckets (m, power of 2)</label>
+<select id="m">
+<option value="8">8</option>
+<option value="16" selected>16</option>
+<option value="32">32</option>
+<option value="64">64</option>
+<option value="128">128</option>
+</select>
+</div>
+<div class="field">
+<label for="b">Slots per bucket (b)</label>
+<input type="number" id="b" value="4" min="1" max="8">
+</div>
+<div class="field">
+<label for="fbits">Fingerprint bits (f)</label>
+<input type="number" id="fbits" value="8" min="4" max="16">
+</div>
+<div class="field">
+<label for="maxk">Max kicks</label>
+<input type="number" id="maxk" value="20" min="1" max="500">
+</div>
+<div class="field">
+<label>&nbsp;</label>
+<button class="btn danger" id="btnReset">Reset filter</button>
+</div>
+</div>
+
+<div class="opsrow">
+<div class="field">
+<label for="key">Item</label>
+<input type="text" id="key" placeholder="e.g. alice@example.com">
+</div>
+<button class="btn primary" id="btnInsert">Insert</button>
+<button class="btn" id="btnLookup">Lookup</button>
+<button class="btn" id="btnDelete">Delete</button>
+<button class="btn ghost" id="btnBulk">Insert 10 random</button>
+</div>
+
+<div class="stats">
+<div class="stat"><div class="label">Items</div><div class="value" id="sItems">0</div></div>
+<div class="stat"><div class="label">Capacity</div><div class="value" id="sCap">—</div></div>
+<div class="stat"><div class="label">Load factor</div><div class="value" id="sLoad">0.00</div></div>
+<div class="stat"><div class="label">Kicks total</div><div class="value" id="sKicks">0</div></div>
+<div class="stat"><div class="label">FPR (upper bound)</div><div class="value" id="sFpr">—</div></div>
+</div>
+
+<div class="log" id="log"></div>
+
+<div class="grid-wrap">
+<div class="buckets" id="buckets"></div>
+</div>
+
+<div class="info">
+<h3>How a Cuckoo filter works</h3>
+<ul>
+<li>Each item has a compact <em>fingerprint</em> <code>f</code> of a few bits. Two candidate buckets: <code>i₁ = h(x) &amp; (m − 1)</code> and <code>i₂ = i₁ ⊕ h(f)</code>. Note <code>i₁ = i₂ ⊕ h(f)</code>, so from either bucket you can find the other <em>without</em> knowing <code>x</code> — that's what makes eviction and deletion work. This XOR trick only preserves the round-trip when <code>m</code> is a power of two, which is why the picker snaps to one.</li>
+<li>On insert, try either candidate bucket. If both are full, evict a random occupant, put ours there, then try to relocate the evicted fingerprint to <em>its</em> alternate bucket. Repeat up to <code>MaxKicks</code>; if that fails, the filter is effectively full.</li>
+<li>Lookup checks the two candidate buckets for the fingerprint. Delete removes one matching fingerprint from one of them — a Bloom filter can't do that.</li>
+<li>False-positive rate is bounded by roughly <code>2b/2ᶠ</code> — bigger fingerprints or fewer slots-per-bucket = fewer false positives. Practical load factor before insert failure hovers around 95 % at <code>b = 4</code>.</li>
+</ul>
+</div>
+
+<footer style="margin-top:32px; text-align:center; font-size:.82rem; color:var(--muted);">
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function fnv1a(s, seed) {
+  let h = seed >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h >>> 0;
+}
+function fpHash(fp, seed) {
+  const s = String.fromCharCode(fp & 0xff, (fp >>> 8) & 0xff);
+  return fnv1a(s, seed);
+}
+
+let filter = null;
+let totalKicks = 0;
+let logLines = [];
+
+function make(m, b, fbits, maxk) {
+  const buckets = [];
+  for (let i = 0; i < m; i++) buckets.push(new Array(b).fill(0));
+  return { m, b, fbits, maxk, buckets };
+}
+
+function fingerprint(x) {
+  const mask = (1 << filter.fbits) - 1;
+  let f = fnv1a(x, 0x9E3779B1) & mask;
+  if (f === 0) f = 1;
+  return f;
+}
+function altBucket(i, fp) {
+  return ((i ^ fpHash(fp, 0xBADF00D)) >>> 0) & (filter.m - 1);
+}
+function primaryBucket(x) {
+  return (fnv1a(x, 0xDEADBEEF) >>> 0) & (filter.m - 1);
+}
+
+function log(msg, cls) {
+  logLines.push({ msg, cls });
+  if (logLines.length > 40) logLines.shift();
+  const el = $('log');
+  el.innerHTML = logLines.map(l => '<div class="line ' + (l.cls || '') + '">' + l.msg + '</div>').join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function insert(x, animate) {
+  const fp = fingerprint(x);
+  const i1 = primaryBucket(x);
+  const i2 = altBucket(i1, fp);
+
+  log('insert "' + x + '" → fp=' + fp.toString(16).padStart(2, '0') + ', buckets [' + i1 + ', ' + i2 + ']', 'info');
+
+  for (const cand of [i1, i2]) {
+    const slot = filter.buckets[cand].indexOf(0);
+    if (slot >= 0) {
+      filter.buckets[cand][slot] = fp;
+      if (animate) pulseSlot(cand, slot, 'pulse');
+      log('  → placed in bucket ' + cand + ' slot ' + slot, 'ok');
+      return true;
+    }
+  }
+
+  let cur = fp;
+  let idx = Math.random() < 0.5 ? i1 : i2;
+  for (let k = 0; k < filter.maxk; k++) {
+    const slot = Math.floor(Math.random() * filter.b);
+    const evicted = filter.buckets[idx][slot];
+    filter.buckets[idx][slot] = cur;
+    if (animate) pulseSlot(idx, slot, 'kicked');
+    totalKicks++;
+    cur = evicted;
+    idx = altBucket(idx, cur);
+    log('  kick #' + (k + 1) + ' → moved fp ' + evicted.toString(16).padStart(2, '0') + ' onward, trying bucket ' + idx, 'warn');
+    const emptySlot = filter.buckets[idx].indexOf(0);
+    if (emptySlot >= 0) {
+      filter.buckets[idx][emptySlot] = cur;
+      if (animate) pulseSlot(idx, emptySlot, 'pulse');
+      log('  → settled in bucket ' + idx + ' slot ' + emptySlot + ' after ' + (k + 1) + ' kick' + (k ? 's' : ''), 'ok');
+      return true;
+    }
+  }
+  log('  ✗ filter is full (MaxKicks reached) — item rejected', 'err');
+  return false;
+}
+
+function lookup(x, animate) {
+  const fp = fingerprint(x);
+  const i1 = primaryBucket(x);
+  const i2 = altBucket(i1, fp);
+  for (const cand of [i1, i2]) {
+    const slot = filter.buckets[cand].indexOf(fp);
+    if (slot >= 0) {
+      if (animate) pulseSlot(cand, slot, 'hit');
+      log('lookup "' + x + '" → fp=' + fp.toString(16).padStart(2, '0') + ' HIT at bucket ' + cand + ' slot ' + slot, 'ok');
+      return true;
+    }
+  }
+  log('lookup "' + x + '" → fp=' + fp.toString(16).padStart(2, '0') + ' MISS (checked buckets ' + i1 + ', ' + i2 + ')', 'warn');
+  return false;
+}
+
+function del(x, animate) {
+  const fp = fingerprint(x);
+  const i1 = primaryBucket(x);
+  const i2 = altBucket(i1, fp);
+  for (const cand of [i1, i2]) {
+    const slot = filter.buckets[cand].indexOf(fp);
+    if (slot >= 0) {
+      filter.buckets[cand][slot] = 0;
+      if (animate) pulseSlot(cand, slot, 'kicked');
+      log('delete "' + x + '" → removed fp=' + fp.toString(16).padStart(2, '0') + ' from bucket ' + cand + ' slot ' + slot, 'ok');
+      return true;
+    }
+  }
+  log('delete "' + x + '" → fp=' + fp.toString(16).padStart(2, '0') + ' not present', 'warn');
+  return false;
+}
+
+function render() {
+  const el = $('buckets');
+  el.innerHTML = '';
+  for (let i = 0; i < filter.m; i++) {
+    const row = document.createElement('div');
+    row.className = 'bucket';
+    row.innerHTML = '<div class="idx">#' + i + '</div>';
+    for (let s = 0; s < filter.b; s++) {
+      const v = filter.buckets[i][s];
+      const slot = document.createElement('div');
+      slot.className = 'slot' + (v ? ' filled' : '');
+      slot.dataset.i = i; slot.dataset.s = s;
+      slot.textContent = v ? v.toString(16).padStart(Math.ceil(filter.fbits / 4), '0') : '·';
+      row.appendChild(slot);
+    }
+    el.appendChild(row);
+  }
+  renderStats();
+}
+
+function renderStats() {
+  const cap = filter.m * filter.b;
+  let used = 0;
+  for (const row of filter.buckets) for (const v of row) if (v) used++;
+  const load = used / cap;
+  const fpr = 1 - Math.pow(1 - Math.pow(2, -filter.fbits), 2 * filter.b);
+  $('sItems').textContent = used;
+  $('sCap').textContent = cap;
+  $('sLoad').textContent = (load * 100).toFixed(1) + '%';
+  $('sKicks').textContent = totalKicks;
+  $('sFpr').textContent = (fpr * 100).toFixed(3) + '%';
+}
+
+function pulseSlot(i, s, cls) {
+  const el = document.querySelector('.slot[data-i="' + i + '"][data-s="' + s + '"]');
+  if (!el) return;
+  el.classList.remove('pulse', 'kicked', 'hit');
+  void el.offsetWidth;
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 700);
+}
+
+function reset() {
+  let m = parseInt($('m').value, 10) || 16;
+  // snap to nearest power of two (alt-bucket symmetry needs it)
+  m = 1 << Math.round(Math.log2(m));
+  if (m < 8) m = 8; if (m > 128) m = 128;
+  const b = Math.max(1, Math.min(8, parseInt($('b').value, 10) || 4));
+  const fbits = Math.max(4, Math.min(16, parseInt($('fbits').value, 10) || 8));
+  const maxk = Math.max(1, Math.min(500, parseInt($('maxk').value, 10) || 20));
+  filter = make(m, b, fbits, maxk);
+  totalKicks = 0;
+  logLines = [];
+  log('filter reset — m=' + m + ', b=' + b + ', f=' + fbits + ' bits, MaxKicks=' + maxk, 'info');
+  render();
+}
+
+$('btnReset').addEventListener('click', reset);
+$('btnInsert').addEventListener('click', () => {
+  const k = $('key').value.trim();
+  if (!k) return;
+  insert(k, true);
+  render();
+});
+$('btnLookup').addEventListener('click', () => {
+  const k = $('key').value.trim();
+  if (!k) return;
+  lookup(k, true);
+});
+$('btnDelete').addEventListener('click', () => {
+  const k = $('key').value.trim();
+  if (!k) return;
+  del(k, true);
+  render();
+});
+$('btnBulk').addEventListener('click', () => {
+  const names = ['alice', 'bob', 'carol', 'dave', 'eve', 'frank', 'grace', 'heidi', 'ivan', 'judy', 'mallory', 'oscar', 'peggy', 'sybil', 'trent', 'walter'];
+  const shuffled = names.slice().sort(() => Math.random() - 0.5).slice(0, 10);
+  for (const n of shuffled) insert(n + '@example.com', false);
+  render();
+});
+['m', 'b', 'fbits', 'maxk'].forEach(id => $(id).addEventListener('change', reset));
+
+reset();
+</script>
+</body>
+</html>
