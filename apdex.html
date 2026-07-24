@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apdex Score Calculator — Free Online Tool</title>
+<meta name="description" content="Compute an Apdex (Application Performance Index) score from a latency target T. Enter satisfied / tolerating / frustrated counts or paste raw latencies to get Apdex, verdict, and the shape of the histogram.">
+<meta name="keywords" content="apdex, apdex score, application performance index, sre, latency slo, response time, apdex calculator">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/apdex.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+  .controls label { display: block; font-size: .74rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .controls input, .controls select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; box-sizing: border-box;
+  }
+  textarea {
+    width: 100%; min-height: 120px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .88rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+  .stat { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat .k { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-size: 1.35rem; font-weight: 700; font-family: var(--mono); margin-top: 2px; }
+  .stat.good { border-color: var(--success); background: rgba(26,140,63,0.06); }
+  .stat.good .v { color: var(--success); }
+  .stat.warn { border-color: var(--warning); background: rgba(154,103,0,0.06); }
+  .stat.warn .v { color: var(--warning); }
+  .stat.bad  { border-color: var(--error); background: rgba(196,30,30,0.06); }
+  .stat.bad  .v { color: var(--error); }
+  .verdict { padding: 12px; border-radius: var(--radius); margin-top: 12px; font-size: .95rem; line-height: 1.55; }
+  .verdict.excellent { border: 1px solid var(--success); background: rgba(26,140,63,0.06); }
+  .verdict.good     { border: 1px solid var(--success); background: rgba(26,140,63,0.03); }
+  .verdict.fair     { border: 1px solid var(--warning); background: rgba(154,103,0,0.06); }
+  .verdict.poor     { border: 1px solid var(--error);   background: rgba(196,30,30,0.06); }
+  .verdict.unaccept { border: 1px solid var(--error);   background: rgba(196,30,30,0.10); }
+  .bars { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 12px; }
+  .bar-row { display: grid; grid-template-columns: 130px 1fr 90px; gap: 8px; align-items: center; font-size: .86rem; }
+  .bar { height: 22px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; position: relative; }
+  .bar > span { display: block; height: 100%; }
+  .bar .sat { background: var(--success); }
+  .bar .tol { background: var(--warning); }
+  .bar .fru { background: var(--error); }
+  .bar-count { text-align: right; font-family: var(--mono); font-size: .82rem; color: var(--muted); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .tab { padding: 6px 14px; border: none; background: transparent; cursor: pointer; font-size: .84rem; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .hist { width: 100%; height: 220px; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: .84rem; margin-top: 10px; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  th { background: var(--surface2); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.num { text-align: right; }
+  .formula { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; font-family: var(--mono); font-size: .84rem; margin-top: 10px; overflow-x: auto; }
+  @media (max-width: 768px) {
+    .controls, .stats { grid-template-columns: 1fr 1fr; }
+    .grid2 { grid-template-columns: 1fr; }
+    .bar-row { grid-template-columns: 90px 1fr 70px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Apdex Score Calculator</h1>
+<p class="subtitle">Apdex (Application Performance Index) collapses a whole latency distribution to a single number between 0 and 1. Pick a target time <code>T</code> that means "fast enough" &mdash; requests at or under <code>T</code> are <em>satisfied</em>, requests between <code>T</code> and <code>4T</code> are <em>tolerating</em>, and everything above <code>4T</code> is <em>frustrated</em>. The score is <code>(satisfied + tolerating/2) / total</code>. Enter counts directly or paste a list of latencies and the tool bins them for you.</p>
+
+<div class="card">
+  <div class="controls">
+    <div>
+      <label for="target">Target T</label>
+      <input id="target" type="number" min="1" step="1" value="500" oninput="run()">
+    </div>
+    <div>
+      <label for="unit">Unit</label>
+      <select id="unit" onchange="run()">
+        <option value="ms" selected>milliseconds</option>
+        <option value="s">seconds</option>
+      </select>
+    </div>
+    <div>
+      <label>Tolerating band</label>
+      <input id="band" type="text" value="T .. 4T" disabled>
+    </div>
+    <div>
+      <label>Frustrated band</label>
+      <input id="fband" type="text" value="> 4T" disabled>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="counts" onclick="switchTab('counts')">By count</button>
+    <button class="tab" data-tab="samples" onclick="switchTab('samples')">Paste samples</button>
+  </div>
+
+  <div id="tab-counts">
+    <div class="controls">
+      <div>
+        <label for="sat">Satisfied count (≤ T)</label>
+        <input id="sat" type="number" min="0" value="8200" oninput="run()">
+      </div>
+      <div>
+        <label for="tol">Tolerating count (T .. 4T)</label>
+        <input id="tol" type="number" min="0" value="1500" oninput="run()">
+      </div>
+      <div>
+        <label for="fru">Frustrated count (&gt; 4T)</label>
+        <input id="fru" type="number" min="0" value="300" oninput="run()">
+      </div>
+      <div>
+        <label>Total</label>
+        <input id="tot" type="text" value="10000" disabled>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-samples" style="display:none">
+    <label for="samples" style="display:block;font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Latency samples — one per line, comma, or space separated</label>
+    <textarea id="samples" oninput="run()" spellcheck="false">120 240 310 480 490 510 540 620 640 700
+730 800 890 940 1120 1400 1650 1800 2100 2600</textarea>
+  </div>
+
+  <div class="stats">
+    <div class="stat" id="s-apdex"><div class="k">Apdex T</div><div class="v" id="v-apdex">–</div></div>
+    <div class="stat" id="s-sat"><div class="k">Satisfied</div><div class="v" id="v-sat">–</div></div>
+    <div class="stat" id="s-tol"><div class="k">Tolerating</div><div class="v" id="v-tol">–</div></div>
+    <div class="stat" id="s-fru"><div class="k">Frustrated</div><div class="v" id="v-fru">–</div></div>
+  </div>
+
+  <div id="verdict" class="verdict good">–</div>
+
+  <div class="bars" id="bars"></div>
+</div>
+
+<div class="card">
+  <h2>Distribution</h2>
+  <div class="grid2">
+    <div>
+      <p style="font-size:.86rem;color:var(--muted);margin:0 0 6px">Zone breakdown</p>
+      <svg id="chart" class="hist" viewBox="0 0 400 220" preserveAspectRatio="none"></svg>
+    </div>
+    <div>
+      <p style="font-size:.86rem;color:var(--muted);margin:0 0 6px">Reference bands</p>
+      <table>
+        <thead><tr><th>Zone</th><th>Range</th><th>Weight</th></tr></thead>
+        <tbody>
+          <tr><td><span style="display:inline-block;width:10px;height:10px;background:var(--success);border-radius:2px;margin-right:6px"></span>Satisfied</td><td id="rng-sat">–</td><td>1.0</td></tr>
+          <tr><td><span style="display:inline-block;width:10px;height:10px;background:var(--warning);border-radius:2px;margin-right:6px"></span>Tolerating</td><td id="rng-tol">–</td><td>0.5</td></tr>
+          <tr><td><span style="display:inline-block;width:10px;height:10px;background:var(--error);border-radius:2px;margin-right:6px"></span>Frustrated</td><td id="rng-fru">–</td><td>0.0</td></tr>
+        </tbody>
+      </table>
+      <div class="formula" id="formula">Apdex = (satisfied + tolerating / 2) / total</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>About Apdex</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Apdex was standardised in 2004 by an industry group (New Relic, HP, Compuware and others) as a way to summarise the user-perceived responsiveness of a web application in one number that is safe to average across services and teams. The three-zone bucketing is deliberately coarse &mdash; it maps to the classic <em>fast enough</em>, <em>slow but usable</em>, <em>abandoned</em> mental model &mdash; and the 4× tolerating multiplier reflects Jakob Nielsen's usability finding that response times above roughly four seconds are what break users' flow. Modern SRE tooling still exposes it: Datadog, New Relic, Dynatrace, and Grafana all offer Apdex-style widgets, and it remains a common SLO target for interactive user-facing services (typically ≥ 0.90). The score's weakness is the same as its strength: any bucketing scheme hides tail-latency drift and multi-modal distributions, so pair it with a p95 / p99 line chart.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = 'counts';
+
+function switchTab(t) {
+  mode = t;
+  document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.tab === t));
+  $('tab-counts').style.display = t === 'counts' ? '' : 'none';
+  $('tab-samples').style.display = t === 'samples' ? '' : 'none';
+  run();
+}
+
+function parseSamples(txt) {
+  return txt.split(/[\s,;]+/).map(s => Number(s)).filter(n => Number.isFinite(n) && n >= 0);
+}
+
+function fmtPct(x) {
+  if (!isFinite(x)) return '—';
+  return (x * 100).toFixed(1) + '%';
+}
+
+function fmtInt(n) {
+  return n.toLocaleString('en-US');
+}
+
+function classify(apdex) {
+  if (apdex >= 0.94) return { cls: 'excellent', label: 'Excellent', text: 'Effectively no user friction. Watch your target T isn\'t set so loose that a real regression could still land here.' };
+  if (apdex >= 0.85) return { cls: 'good',      label: 'Good',      text: 'Healthy zone. Roughly the industry-typical SLO band for interactive user-facing services.' };
+  if (apdex >= 0.70) return { cls: 'fair',      label: 'Fair',      text: 'Users are starting to notice. Investigate p95 and the slow-request tail before it drifts further.' };
+  if (apdex >= 0.50) return { cls: 'poor',      label: 'Poor',      text: 'Half or more of requests are outside the "fast" band. Users will report the app as sluggish.' };
+  return                    { cls: 'unaccept',  label: 'Unacceptable', text: 'Sustained frustration for most users. This is an incident-grade signal, not a latency ticket.' };
+}
+
+function run() {
+  const T = Math.max(0, Number($('target').value) || 0);
+  const unit = $('unit').value;
+  let sat = 0, tol = 0, fru = 0, total = 0;
+
+  if (mode === 'counts') {
+    sat = Math.max(0, Math.floor(Number($('sat').value) || 0));
+    tol = Math.max(0, Math.floor(Number($('tol').value) || 0));
+    fru = Math.max(0, Math.floor(Number($('fru').value) || 0));
+    total = sat + tol + fru;
+    $('tot').value = fmtInt(total);
+  } else {
+    const s = parseSamples($('samples').value);
+    for (const v of s) {
+      if (v <= T) sat++;
+      else if (v <= 4 * T) tol++;
+      else fru++;
+    }
+    total = s.length;
+    $('sat').value = sat;
+    $('tol').value = tol;
+    $('fru').value = fru;
+    $('tot').value = fmtInt(total);
+  }
+
+  const apdex = total > 0 ? (sat + tol / 2) / total : 0;
+  $('v-apdex').textContent = total > 0 ? apdex.toFixed(3) : '—';
+  $('v-sat').textContent = fmtInt(sat) + '  (' + fmtPct(total ? sat / total : 0) + ')';
+  $('v-tol').textContent = fmtInt(tol) + '  (' + fmtPct(total ? tol / total : 0) + ')';
+  $('v-fru').textContent = fmtInt(fru) + '  (' + fmtPct(total ? fru / total : 0) + ')';
+
+  const v = classify(apdex);
+  const verdict = $('verdict');
+  verdict.className = 'verdict ' + v.cls;
+  verdict.innerHTML = '<strong>' + v.label + ' &middot; Apdex ' + (total ? apdex.toFixed(3) : '—') + '</strong><br>' + v.text;
+
+  $('rng-sat').textContent = '0 .. ' + T + ' ' + unit;
+  $('rng-tol').textContent = T + ' .. ' + (4 * T) + ' ' + unit;
+  $('rng-fru').textContent = '> ' + (4 * T) + ' ' + unit;
+  $('formula').textContent = 'Apdex_T = (' + fmtInt(sat) + ' + ' + fmtInt(tol) + ' / 2) / ' + fmtInt(total) + ' = ' + (total ? apdex.toFixed(4) : 'n/a');
+
+  drawBars(sat, tol, fru, total);
+  drawChart(sat, tol, fru, total);
+}
+
+function drawBars(sat, tol, fru, total) {
+  const bars = $('bars');
+  bars.innerHTML = '';
+  const rows = [
+    { label: 'Satisfied', cls: 'sat', n: sat },
+    { label: 'Tolerating', cls: 'tol', n: tol },
+    { label: 'Frustrated', cls: 'fru', n: fru },
+  ];
+  for (const r of rows) {
+    const pct = total ? (r.n / total) * 100 : 0;
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML = '<div>' + r.label + '</div><div class="bar"><span class="' + r.cls + '" style="width:' + pct.toFixed(2) + '%"></span></div><div class="bar-count">' + fmtInt(r.n) + '  ' + pct.toFixed(1) + '%</div>';
+    bars.appendChild(row);
+  }
+}
+
+function drawChart(sat, tol, fru, total) {
+  const svg = $('chart');
+  svg.innerHTML = '';
+  if (!total) return;
+  const W = 400, H = 220, pad = 24, gap = 16;
+  const barW = (W - pad * 2 - gap * 2) / 3;
+  const parts = [
+    { label: 'Sat', n: sat, color: 'var(--success)' },
+    { label: 'Tol', n: tol, color: 'var(--warning)' },
+    { label: 'Fru', n: fru, color: 'var(--error)' },
+  ];
+  const max = Math.max(...parts.map(p => p.n), 1);
+  parts.forEach((p, i) => {
+    const h = (p.n / max) * (H - pad * 2 - 18);
+    const x = pad + i * (barW + gap);
+    const y = H - pad - h;
+    svg.innerHTML += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + h + '" fill="' + p.color + '" rx="3"></rect>';
+    svg.innerHTML += '<text x="' + (x + barW / 2) + '" y="' + (H - pad + 14) + '" fill="var(--muted)" font-size="11" text-anchor="middle" font-family="var(--sans)">' + p.label + '</text>';
+    svg.innerHTML += '<text x="' + (x + barW / 2) + '" y="' + (y - 4) + '" fill="var(--text)" font-size="11" text-anchor="middle" font-family="var(--mono)">' + fmtInt(p.n) + '</text>';
+  });
+  svg.innerHTML += '<line x1="' + pad + '" x2="' + (W - pad) + '" y1="' + (H - pad) + '" y2="' + (H - pad) + '" stroke="var(--border)"></line>';
+}
+
+run();
+</script>
+</body>
+</html>

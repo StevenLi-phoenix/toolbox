@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess Elo Rating Calculator — Free Online Tool</title>
+<meta name="description" content="Compute expected score, K-factor rating change, and updated Elo after a game or a batch of games. Supports FIDE K-factor rules (10 / 20 / 40), USCF K, and any custom K. Shows the sensitivity curve.">
+<meta name="keywords" content="elo rating calculator, chess elo, fide k-factor, uscf, expected score, elo change, rating change">
+<link rel="canonical" href="https://stevenli-phoenix.github.io/toolbox/elo.html">
+<link rel="stylesheet" href="toolbox.css">
+<style>
+  .controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+  .controls label { display: block; font-size: .74rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .controls input, .controls select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .9rem; box-sizing: border-box;
+  }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+  .stat { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); }
+  .stat .k { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-size: 1.3rem; font-weight: 700; font-family: var(--mono); margin-top: 2px; }
+  .stat.up   { border-color: var(--success); background: rgba(26,140,63,0.06); }
+  .stat.up   .v { color: var(--success); }
+  .stat.down { border-color: var(--error);   background: rgba(196,30,30,0.06); }
+  .stat.down .v { color: var(--error); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .tab { padding: 6px 14px; border: none; background: transparent; cursor: pointer; font-size: .84rem; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: .84rem; margin-top: 10px; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  th { background: var(--surface2); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.num { text-align: right; }
+  .chart { width: 100%; height: 260px; margin-top: 10px; }
+  .formula { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; font-family: var(--mono); font-size: .84rem; margin-top: 10px; overflow-x: auto; white-space: pre-wrap; }
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .btn-row button {
+    padding: 6px 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    border-radius: var(--radius); cursor: pointer; font-size: .84rem;
+  }
+  .btn-row button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--surface2); border: 1px solid var(--border); font-size: .74rem; color: var(--muted); }
+  textarea {
+    width: 100%; min-height: 110px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--mono); font-size: .86rem; background: var(--bg);
+    color: var(--text); box-sizing: border-box; resize: vertical;
+  }
+  @media (max-width: 768px) {
+    .controls, .stats { grid-template-columns: 1fr 1fr; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<a href="index.html" class="back">&larr; All Tools</a>
+<h1>Elo Rating Calculator</h1>
+<p class="subtitle">Elo turns a rating gap into an expected win probability, then nudges both players' ratings by <code>K × (actual − expected)</code>. FIDE uses K=40 for new players, K=20 for established sub-2400s, and K=10 for anyone rated 2400+; the USCF and online sites use their own K schedules. Enter a single game or a batch of results and see where each rating moves.</p>
+
+<div class="tabs">
+  <button class="tab active" data-tab="single" onclick="switchTab('single')">Single game</button>
+  <button class="tab" data-tab="batch" onclick="switchTab('batch')">Batch of games</button>
+</div>
+
+<div class="card" id="pane-single">
+  <div class="controls">
+    <div>
+      <label for="ra">Player A rating</label>
+      <input id="ra" type="number" min="0" step="1" value="1500" oninput="run()">
+    </div>
+    <div>
+      <label for="rb">Player B rating</label>
+      <input id="rb" type="number" min="0" step="1" value="1650" oninput="run()">
+    </div>
+    <div>
+      <label for="result">Result (A's score)</label>
+      <select id="result" onchange="run()">
+        <option value="1" selected>1 &mdash; A wins</option>
+        <option value="0.5">½ &mdash; Draw</option>
+        <option value="0">0 &mdash; B wins</option>
+      </select>
+    </div>
+    <div>
+      <label for="kmode">K-factor</label>
+      <select id="kmode" onchange="run()">
+        <option value="fide" selected>FIDE (auto: 40 / 20 / 10)</option>
+        <option value="k10">Fixed K=10</option>
+        <option value="k20">Fixed K=20</option>
+        <option value="k32">Fixed K=32 (online default)</option>
+        <option value="k40">Fixed K=40</option>
+        <option value="custom">Custom…</option>
+      </select>
+    </div>
+    <div id="kcustom-wrap" style="display:none">
+      <label for="kcustom">Custom K</label>
+      <input id="kcustom" type="number" min="1" max="128" step="1" value="24" oninput="run()">
+    </div>
+    <div>
+      <label for="gamesA">A: games played (for FIDE K)</label>
+      <input id="gamesA" type="number" min="0" step="1" value="30" oninput="run()">
+    </div>
+    <div>
+      <label for="gamesB">B: games played (for FIDE K)</label>
+      <input id="gamesB" type="number" min="0" step="1" value="30" oninput="run()">
+    </div>
+    <div>
+      <label>Scale D</label>
+      <input type="text" value="400 (Elo standard)" disabled>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Expected: A</div><div class="v" id="v-ea">–</div></div>
+    <div class="stat"><div class="k">Expected: B</div><div class="v" id="v-eb">–</div></div>
+    <div class="stat" id="s-da"><div class="k">A rating change</div><div class="v" id="v-da">–</div></div>
+    <div class="stat" id="s-db"><div class="k">B rating change</div><div class="v" id="v-db">–</div></div>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h3 style="margin:0 0 6px;font-size:.95rem">New ratings</h3>
+      <table>
+        <thead><tr><th>Player</th><th>Old</th><th>Δ</th><th>New</th><th>K</th></tr></thead>
+        <tbody id="tbl-new"></tbody>
+      </table>
+      <div class="formula" id="formula">–</div>
+    </div>
+    <div>
+      <h3 style="margin:0 0 6px;font-size:.95rem">Sensitivity: A's Δ vs. actual score</h3>
+      <p style="font-size:.82rem;color:var(--muted);margin:0 0 6px">The blue dot shows the current result. Curve = K × (S − Eₐ) for S ∈ {0, ½, 1}.</p>
+      <svg id="chart" class="chart" viewBox="0 0 400 220" preserveAspectRatio="none"></svg>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="pane-batch" style="display:none">
+  <div class="controls">
+    <div>
+      <label for="myRating">My rating</label>
+      <input id="myRating" type="number" min="0" step="1" value="1500" oninput="runBatch()">
+    </div>
+    <div>
+      <label for="myK">My K-factor</label>
+      <input id="myK" type="number" min="1" max="128" step="1" value="20" oninput="runBatch()">
+    </div>
+    <div>
+      <label>Format</label>
+      <input type="text" value="opponent_rating,result" disabled>
+    </div>
+    <div>
+      <label>Result codes</label>
+      <input type="text" value="1 / 0.5 / 0" disabled>
+    </div>
+  </div>
+
+  <label for="batch" style="display:block;font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Batch results — one game per line, <code>opponent_rating,result</code></label>
+  <textarea id="batch" oninput="runBatch()" spellcheck="false">1650,0.5
+1580,1
+1720,0
+1490,1
+1610,0.5</textarea>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Games</div><div class="v" id="b-n">–</div></div>
+    <div class="stat"><div class="k">Actual score</div><div class="v" id="b-s">–</div></div>
+    <div class="stat"><div class="k">Expected score</div><div class="v" id="b-e">–</div></div>
+    <div class="stat" id="s-b-d"><div class="k">Total rating change</div><div class="v" id="b-d">–</div></div>
+  </div>
+
+  <table>
+    <thead><tr><th>#</th><th class="num">Opp rating</th><th class="num">Result</th><th class="num">Expected</th><th class="num">Δ</th><th class="num">Running</th></tr></thead>
+    <tbody id="b-tbl"></tbody>
+  </table>
+  <p style="font-size:.82rem;color:var(--muted);margin-top:8px">Two update conventions ship in the wild: <em>sequential</em> (rating updates between each game) and <em>batched</em> (all games use the pre-round rating). FIDE and USCF use batched — that's what this table shows. Sequential just re-orders the total by a few points.</p>
+</div>
+
+<div class="card">
+  <h2>About Elo</h2>
+  <p style="font-size:.88rem;color:var(--muted);line-height:1.6">
+    Arpad Elo devised the system in the 1950s to replace the USCF's earlier Harkness rating, and FIDE adopted it in 1970. The <em>expected score</em> is a logistic function of the rating gap: <code>E<sub>A</sub> = 1 / (1 + 10<sup>(R<sub>B</sub> − R<sub>A</sub>) / 400</sup>)</code>, which puts a 400-point favourite at ≈ 91% expected. After the game each player moves toward their actual score by a factor of K &mdash; the "responsiveness" knob. Big K reacts quickly (helpful for new players still finding their level) but jitters an established rating; small K is stable but slow to catch a genuine improvement. FIDE's current schedule: K = 40 for players with fewer than 30 rated games <em>and</em> under age 18, K = 10 once you hit rating 2400+ at any point, K = 20 for everyone else. Modern derivatives (Glicko-2, TrueSkill) add rating uncertainty and volatility, but classical Elo remains the lingua franca of two-player skill rating.
+  </p>
+</div>
+</div>
+
+<footer>
+Built with &#9749; by <a href="https://buymeacoffee.com/stevenli.phoenix">Steven Li</a> &middot; No data leaves your browser
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const D = 400;
+
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.tab === t));
+  $('pane-single').style.display = t === 'single' ? '' : 'none';
+  $('pane-batch').style.display  = t === 'batch'  ? '' : 'none';
+  if (t === 'batch') runBatch(); else run();
+}
+
+function expected(ra, rb) {
+  return 1 / (1 + Math.pow(10, (rb - ra) / D));
+}
+
+function fideK(rating, games, peaked2400) {
+  if (peaked2400) return 10;
+  if (games < 30) return 40;
+  if (rating >= 2400) return 10;
+  return 20;
+}
+
+function pickK(rating, games) {
+  const mode = $('kmode').value;
+  if (mode === 'fide') return fideK(rating, games, rating >= 2400);
+  if (mode === 'k10') return 10;
+  if (mode === 'k20') return 20;
+  if (mode === 'k32') return 32;
+  if (mode === 'k40') return 40;
+  return Math.max(1, Number($('kcustom').value) || 24);
+}
+
+function fmtDelta(x) {
+  if (x > 0) return '+' + x.toFixed(2);
+  return x.toFixed(2);
+}
+
+function run() {
+  $('kcustom-wrap').style.display = $('kmode').value === 'custom' ? '' : 'none';
+
+  const ra = Number($('ra').value) || 0;
+  const rb = Number($('rb').value) || 0;
+  const sA = Number($('result').value);
+  const sB = 1 - sA;
+  const gA = Math.max(0, Number($('gamesA').value) || 0);
+  const gB = Math.max(0, Number($('gamesB').value) || 0);
+
+  const ea = expected(ra, rb);
+  const eb = 1 - ea;
+  const kA = pickK(ra, gA);
+  const kB = pickK(rb, gB);
+
+  const dA = kA * (sA - ea);
+  const dB = kB * (sB - eb);
+  const nA = ra + dA;
+  const nB = rb + dB;
+
+  $('v-ea').textContent = (ea * 100).toFixed(1) + '%';
+  $('v-eb').textContent = (eb * 100).toFixed(1) + '%';
+  $('v-da').textContent = fmtDelta(dA);
+  $('v-db').textContent = fmtDelta(dB);
+  const sda = $('s-da');
+  const sdb = $('s-db');
+  sda.classList.remove('up','down');
+  sdb.classList.remove('up','down');
+  if (dA > 0.01) sda.classList.add('up');
+  else if (dA < -0.01) sda.classList.add('down');
+  if (dB > 0.01) sdb.classList.add('up');
+  else if (dB < -0.01) sdb.classList.add('down');
+
+  const tbody = $('tbl-new');
+  tbody.innerHTML = '';
+  const rows = [
+    { name: 'A', old: ra, d: dA, nw: nA, k: kA },
+    { name: 'B', old: rb, d: dB, nw: nB, k: kB },
+  ];
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + r.name + '</td><td>' + r.old.toFixed(0) + '</td><td>' + fmtDelta(r.d) + '</td><td><strong>' + r.nw.toFixed(2) + '</strong></td><td>' + r.k + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  $('formula').textContent =
+    'Eₐ = 1 / (1 + 10^((' + rb + ' − ' + ra + ') / 400)) = ' + ea.toFixed(4) + '\n' +
+    'E_b = 1 − Eₐ = ' + eb.toFixed(4) + '\n' +
+    'ΔA = K × (S − Eₐ) = ' + kA + ' × (' + sA + ' − ' + ea.toFixed(4) + ') = ' + dA.toFixed(3) + '\n' +
+    'ΔB = K × ((1−S) − E_b) = ' + kB + ' × (' + sB + ' − ' + eb.toFixed(4) + ') = ' + dB.toFixed(3);
+
+  drawChart(ea, kA, sA);
+}
+
+function drawChart(ea, k, s) {
+  const svg = $('chart');
+  svg.innerHTML = '';
+  const W = 400, H = 220, padL = 40, padR = 12, padT = 12, padB = 30;
+  const xMin = 0, xMax = 1;
+  const dvals = [0, 0.5, 1].map(v => k * (v - ea));
+  const yAbs = Math.max(Math.abs(k), Math.abs(dvals[0]), Math.abs(dvals[2])) + 1;
+  const yMin = -yAbs, yMax = yAbs;
+  const x = v => padL + (v - xMin) / (xMax - xMin) * (W - padL - padR);
+  const y = v => padT + (yMax - v) / (yMax - yMin) * (H - padT - padB);
+
+  const y0 = y(0);
+  svg.innerHTML += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y0 + '" y2="' + y0 + '" stroke="var(--border)"></line>';
+  const xEa = x(ea);
+  svg.innerHTML += '<line x1="' + xEa + '" x2="' + xEa + '" y1="' + padT + '" y2="' + (H - padB) + '" stroke="var(--muted)" stroke-dasharray="3,3" opacity=".5"></line>';
+  svg.innerHTML += '<text x="' + xEa + '" y="' + (padT + 10) + '" fill="var(--muted)" font-size="10" text-anchor="middle" font-family="var(--sans)">Eₐ = ' + ea.toFixed(2) + '</text>';
+
+  // Line: y = K*(x - Ea)
+  const x1 = x(0), y1 = y(k * (0 - ea));
+  const x2 = x(1), y2 = y(k * (1 - ea));
+  svg.innerHTML += '<line x1="' + x1 + '" x2="' + x2 + '" y1="' + y1 + '" y2="' + y2 + '" stroke="var(--accent)" stroke-width="2"></line>';
+
+  // Result dots
+  [0, 0.5, 1].forEach(v => {
+    const dY = k * (v - ea);
+    svg.innerHTML += '<circle cx="' + x(v) + '" cy="' + y(dY) + '" r="3" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"></circle>';
+  });
+  svg.innerHTML += '<circle cx="' + x(s) + '" cy="' + y(k * (s - ea)) + '" r="5" fill="var(--accent)"></circle>';
+
+  // Axes labels
+  ['0 (loss)', '½ (draw)', '1 (win)'].forEach((lbl, i) => {
+    const xv = [0, 0.5, 1][i];
+    svg.innerHTML += '<text x="' + x(xv) + '" y="' + (H - padB + 14) + '" fill="var(--muted)" font-size="11" text-anchor="middle" font-family="var(--sans)">' + lbl + '</text>';
+  });
+  const yTicks = [-k, 0, k];
+  yTicks.forEach(t => {
+    svg.innerHTML += '<text x="' + (padL - 6) + '" y="' + (y(t) + 3) + '" fill="var(--muted)" font-size="10" text-anchor="end" font-family="var(--mono)">' + (t > 0 ? '+' : '') + t + '</text>';
+  });
+  svg.innerHTML += '<text x="' + padL + '" y="' + (padT + 10) + '" fill="var(--muted)" font-size="10" font-family="var(--sans)">Δ rating</text>';
+}
+
+function runBatch() {
+  const my = Number($('myRating').value) || 0;
+  const k = Math.max(1, Number($('myK').value) || 20);
+  const lines = $('batch').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let totalD = 0, totalE = 0, totalS = 0, n = 0, running = my;
+  const tbody = $('b-tbl');
+  tbody.innerHTML = '';
+  lines.forEach((line, i) => {
+    const parts = line.split(/[,\s;]+/).filter(Boolean);
+    if (parts.length < 2) return;
+    const opp = Number(parts[0]);
+    const s = Number(parts[1]);
+    if (!isFinite(opp) || !isFinite(s) || s < 0 || s > 1) return;
+    const e = expected(my, opp);
+    const d = k * (s - e);
+    running += d;
+    totalD += d; totalE += e; totalS += s; n++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + (i + 1) + '</td><td class="num">' + opp + '</td><td class="num">' + (s === 1 ? '1' : s === 0 ? '0' : '½') + '</td><td class="num">' + e.toFixed(3) + '</td><td class="num">' + fmtDelta(d) + '</td><td class="num">' + running.toFixed(1) + '</td>';
+    tbody.appendChild(tr);
+  });
+  $('b-n').textContent = n;
+  $('b-s').textContent = n ? totalS.toFixed(1) + ' / ' + n : '–';
+  $('b-e').textContent = n ? totalE.toFixed(2) : '–';
+  $('b-d').textContent = n ? fmtDelta(totalD) + '  (new: ' + (my + totalD).toFixed(1) + ')' : '–';
+  const s = $('s-b-d');
+  s.classList.remove('up','down');
+  if (totalD > 0.01) s.classList.add('up');
+  else if (totalD < -0.01) s.classList.add('down');
+}
+
+run();
+</script>
+</body>
+</html>
